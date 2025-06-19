@@ -1,0 +1,765 @@
+/* General Body and Container Styling */
+body {
+    font-family: 'Inter', sans-serif;
+    line-height: 1.6;
+    margin: 0;
+    padding: 0;
+    background-color: #f8f9fa; /* Very light grey/off-white background for the whole page */
+    color: #343a40; /* Darker grey for primary text */
+    display: flex;
+    justify-content: center;
+    min-height: 100vh;
+    box-sizing: border-box;
+    font-size: 16px; /* Base font size */
+}
+
+/* The container will now primarily manage max-width and centering, without a distinct box background/shadow */
+.container {
+    width: 95%;
+    max-width: 1400px; /* Still wide for content */
+    margin: 20px auto;
+    padding: 0; /* Remove padding from container, elements inside will handle their own spacing */
+    background: none; /* No distinct background for the container itself */
+    box-shadow: none; /* No shadow for the container */
+    border-radius: 0; /* No border-radius for the container */
+    display: flex;
+    flex-direction: column;
+    min-height: calc(100vh - 40px);
+    box-sizing: border-box;
+}
+
+/* Header and Navigation - Integrated with the background, subtle separation */
+header {
+    background-color: #ffffff; /* White background for header */
+    color: #343a40;
+    padding: 15px 30px; /* Slightly reduced padding */
+    border-bottom: 1px solid #e9ecef; /* Subtle bottom border for separation */
+    border-radius: 8px; /* Slightly rounded corners for a softer look */
+    margin-bottom: 30px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05); /* Very subtle shadow */
+}
+
+header h1 {
+    margin: 0;
+    font-size: 2em; /* Slightly smaller, proportional to body font */
+    font-weight: 700;
+    color: #007bff; /* Primary blue for main title */
+    text-shadow: none; /* Remove text shadow */
+}
+
+nav ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+nav ul li {
+    margin-left: 25px;
+}
+
+nav ul li a {
+    color: #495057; /* Darker grey for nav links */
+    text-decoration: none;
+    font-weight: 500;
+    padding: 8px 12px;
+    border-radius: 6px; /* Softly rounded buttons */
+    transition: background-color 0.2s ease, color 0.2s ease;
+    text-transform: none; /* No uppercase for links */
+    letter-spacing: normal;
+    font-size: 0.95em; /* Slightly smaller for nav */
+}
+
+nav ul li a:hover {
+    background-color: #e2e6ea; /* Light hover background */
+    color: #0056b3; /* Darker blue on hover */
+}
+
+.user-info {
+    color: #6c757d; /* Muted grey for user info */
+    font-size: 0.9em;
+    margin-left: 25px;
+    white-space: nowrap;
+    background-color: transparent; /* No distinct background */
+    padding: 0;
+    border-radius: 0;
+    display: flex; /* Use flexbox to align icon and text */
+    align-items: center; /* Vertically center icon and text */
+    position: relative; /* Crucial for positioning the bubble */
+    cursor: pointer; /* Indicate it's clickable */
+}
+
+.profile-icon {
+    font-size: 1.5em; /* Larger icon size */
+    margin-right: 8px; /* Space between icon and text */
+    color: #007bff; /* Primary blue color for the icon */
+}
+
+/* Profile Info Bubble Styling */
+.profile-info-bubble {
+    position: absolute;
+    top: 100%; /* Position below the icon/li */
+    right: 0; /* Align to the right of the icon/li */
+    background-color: #ffffff;
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    padding: 10px 15px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    z-index: 1000; /* Ensure it's above other content */
+    min-width: 200px;
+    text-align: left; /* Align text within the bubble */
+
+    /* Initial hidden state with transition for smooth appearance */
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(10px) scale(0.95);
+    transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s ease;
+}
+
+.profile-info-bubble.show-bubble {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0) scale(1);
+}
+
+/* Bubble Arrow */
+.profile-info-bubble .bubble-arrow {
+    position: absolute;
+    top: -8px; /* Position above the bubble */
+    right: 15px; /* Adjust based on desired arrow position */
+    width: 0;
+    height: 0;
+    border-left: 8px solid transparent;
+    border-right: 8px solid transparent;
+    border-bottom: 8px solid #ffffff; /* Matches bubble background */
+    filter: drop-shadow(0 -2px 1px rgba(0, 0, 0, 0.05)); /* Subtle shadow for the arrow */
+    z-index: 1001; /* Above the bubble, for shadow effect */
+}
+
+
+.logout-link {
+    background-color: #dc3545 !important; /* Red for logout */
+    color: white !important;
+    padding: 8px 15px !important;
+    border-radius: 6px;
+    box-shadow: none; /* No shadow */
+}
+
+.logout-link:hover {
+    background-color: #c82333 !important;
+    transform: translateY(-1px); /* Subtle lift */
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Flash Messages */
+.flash-messages {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 20px 0;
+}
+
+.flash-messages li {
+    padding: 12px 20px;
+    margin-bottom: 10px;
+    border-radius: 8px;
+    font-weight: 500;
+    word-break: break-word;
+    border: 1px solid;
+    opacity: 1; /* Full opacity */
+    font-size: 0.95em;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08); /* Subtle shadow */
+}
+
+.flash-messages .success {
+    background-color: #d4edda;
+    color: #155724;
+    border-color: #c3e6cb;
+}
+
+.flash-messages .error {
+    background-color: #f8d7da;
+    color: #721c24;
+    border-color: #f5c6cb;
+}
+.flash-messages .info {
+    background-color: #d1ecf1;
+    color: #0c5460;
+    border-color: #bee5eb;
+}
+
+/* Main Content Area */
+main {
+    flex-grow: 1;
+    padding: 0 15px; /* Add horizontal padding inside main content */
+}
+
+.main-content-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 25px;
+    flex-wrap: wrap;
+    padding: 0 5px; /* Small padding to align with content */
+}
+
+.main-content-header h2 {
+    margin: 0;
+    color: #343a40;
+    font-size: 2.2em;
+    font-weight: 600;
+    text-align: left;
+}
+
+.add-new-ticket {
+    background-color: #28a745 !important; /* Green button */
+    padding: 10px 20px !important;
+    font-size: 1em !important;
+    border-radius: 6px !important;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.add-new-ticket:hover {
+    background-color: #218838 !important;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* Ticket Grid/Cards (index.html) - Subtle elevation */
+.tickets-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 20px; /* Standard gap */
+    margin-top: 15px;
+}
+
+.ticket-card {
+    background: #ffffff; /* White background for cards */
+    border: 1px solid #e9ecef; /* Very light border */
+    border-radius: 10px; /* Softly rounded */
+    padding: 20px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.06); /* Subtle shadow for elevation */
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.ticket-card:hover {
+    transform: translateY(-3px); /* Subtle lift */
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1); /* Slightly more pronounced shadow on hover */
+}
+
+.ticket-card .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+}
+
+.ticket-card .ticket-title {
+    margin-top: 0;
+    font-size: 1.4em;
+    color: #007bff; /* Primary blue for title */
+    line-height: 1.3;
+    flex-basis: 100%;
+    margin-bottom: 8px;
+}
+.ticket-card .ticket-title a {
+    text-decoration: none;
+    color: inherit;
+    transition: color 0.2s ease;
+}
+.ticket-card .ticket-title a:hover {
+    color: #0056b3; /* Darker blue on hover for title */
+}
+
+.ticket-card .ticket-badges {
+    display: flex;
+    gap: 6px; /* Smaller space between badges */
+    flex-wrap: wrap;
+}
+
+.badge {
+    display: inline-block;
+    padding: 4px 9px; /* Smaller badges */
+    border-radius: 16px; /* More pill-shaped */
+    font-size: 0.75em; /* Smaller font in badges */
+    font-weight: 600;
+    color: #fff;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+/* Status Badges - Coordinated, softer colors */
+.status-open { background-color: #28a745; } /* Green */
+.status-in-progress { background-color: #ffc107; color: #343a40; } /* Amber */
+.status-closed { background-color: #6c757d; } /* Grey */
+
+/* Priority Badges - Coordinated, softer colors */
+.priority-low { background-color: #17a2b8; } /* Info Blue */
+.priority-medium { background-color: #fd7e14; } /* Orange */
+.priority-high { background-color: #dc3545; } /* Red */
+.priority-critical { background-color: #6f42c1; } /* Purple */
+
+.ticket-card .card-body p {
+    margin-bottom: 8px;
+    font-size: 0.9em; /* Slightly smaller body text */
+    color: #495057;
+    border-bottom: 1px solid #f0f2f5; /* Very light solid line */
+    padding-bottom: 5px;
+}
+
+.ticket-card .card-body p:last-of-type {
+    border-bottom: none;
+    margin-bottom: 0;
+}
+
+.no-tickets-message {
+    text-align: center;
+    font-size: 1.1em;
+    color: #6c757d;
+    padding: 30px;
+    border: 1px dashed #ced4da; /* Subtle dashed border */
+    border-radius: 10px;
+    background-color: #e9ecef; /* Light background */
+    margin-top: 25px;
+}
+
+.no-tickets-message a {
+    color: #007bff;
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.no-tickets-message a:hover {
+    text-decoration: underline;
+}
+
+/* Forms (create.html, update/comment forms in ticket.html, login/register) - Clean and simple */
+.ticket-form, .update-form, .comment-form, .auth-form {
+    background: #ffffff; /* White background for forms */
+    padding: 25px;
+    border-radius: 10px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05); /* Subtle shadow */
+    max-width: 600px;
+    margin: 20px auto;
+    border: 1px solid #e9ecef; /* Light border */
+}
+
+.ticket-form label, .update-form label, .comment-form label, .auth-form label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 600;
+    color: #495057;
+    font-size: 0.9em;
+}
+
+.ticket-form input[type="text"],
+.ticket-form textarea,
+.ticket-form select,
+.update-form select,
+.comment-form input[type="text"],
+.comment-form textarea,
+.auth-form input[type="email"],
+.auth-form input[type="password"],
+.auth-form select {
+    width: calc(100% - 20px);
+    padding: 10px;
+    margin-bottom: 18px;
+    border: 1px solid #ced4da; /* Light grey border */
+    border-radius: 6px;
+    font-size: 0.95em;
+    box-sizing: border-box;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.ticket-form input[type="text"]:focus,
+.ticket-form textarea:focus,
+.ticket-form select:focus,
+.update-form select:focus,
+.comment-form input[type="text"]:focus,
+.comment-form textarea:focus,
+.auth-form input[type="email"]:focus,
+.auth-form input[type="password"]:focus,
+.auth-form select:focus {
+    border-color: #007bff;
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25); /* Subtle blue focus glow */
+    outline: none;
+}
+
+.ticket-form textarea, .comment-form textarea {
+    min-height: 90px;
+}
+
+/* Buttons - Consistent, clean style */
+.button {
+    display: inline-block;
+    padding: 10px 20px;
+    margin-top: 15px;
+    border: none;
+    border-radius: 6px;
+    font-size: 1em;
+    font-weight: 500;
+    cursor: pointer;
+    text-decoration: none;
+    text-align: center;
+    transition: background-color 0.2s ease, transform 0.1s ease, box-shadow 0.2s ease;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.submit-button, .update-button, .comment-button {
+    background-color: #007bff; /* Primary blue */
+    color: white;
+}
+
+.submit-button:hover, .update-button:hover, .comment-button:hover {
+    background-color: #0056b3;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.view-details {
+    background-color: #6c757d; /* Muted grey for view details */
+    color: white;
+    font-size: 0.85em;
+    padding: 8px 15px;
+    box-shadow: none; /* No shadow for small buttons */
+}
+
+.view-details:hover {
+    background-color: #5a6268;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.back-button {
+    background-color: #adb5bd; /* Lighter grey for back button */
+    color: white;
+    display: block;
+    width: fit-content;
+    margin: 30px auto 0 auto;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.back-button:hover {
+    background-color: #909ea8;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+
+/* Ticket Detail Page (ticket.html) - Clean and spacious */
+.ticket-detail-container {
+    max-width: 850px;
+    margin: 0 auto;
+    padding: 30px;
+    background: #ffffff;
+    border-radius: 12px;
+    box-shadow: 0 6px 15px rgba(0, 0, 0, 0.08);
+    border: 1px solid #e9ecef;
+}
+
+.ticket-detail-title {
+    text-align: center;
+    color: #007bff;
+    margin-bottom: 25px;
+    font-size: 2.2em;
+    word-break: break-word;
+    border-bottom: 1px solid #e9ecef; /* Subtle separator */
+    padding-bottom: 12px;
+    font-weight: 600;
+}
+
+.ticket-details p {
+    font-size: 1em;
+    margin-bottom: 10px;
+    border-bottom: 1px solid #f0f2f5;
+    padding-bottom: 6px;
+    color: #495057;
+}
+
+.ticket-details p:last-of-type {
+    border-bottom: none;
+}
+
+.ticket-details strong {
+    color: #343a40;
+}
+
+.description-box {
+    background-color: #f8f9fa; /* Matches body background */
+    border-left: 4px solid #007bff; /* Primary blue accent */
+    padding: 18px 22px;
+    margin-top: 25px;
+    margin-bottom: 30px;
+    border-radius: 8px;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05); /* Subtle inner shadow */
+    border-right: 1px solid #e9ecef;
+    border-top: 1px solid #e9ecef;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.description-box h4 {
+    margin-top: 0;
+    color: #007bff;
+    font-size: 1.3em;
+    margin-bottom: 10px;
+    border-bottom: 1px solid #e9ecef;
+    padding-bottom: 6px;
+}
+
+.description-box p {
+    font-size: 0.95em;
+    color: #343a40;
+    line-height: 1.7;
+    white-space: pre-wrap;
+    word-break: break-word;
+    border-bottom: none;
+    padding-bottom: 0;
+    margin-bottom: 0;
+}
+
+.update-section, .comments-section {
+    margin-top: 40px;
+    padding-top: 20px;
+    border-top: 1px solid #e9ecef;
+}
+
+.update-section h3, .comments-section h3 {
+    color: #343a40;
+    font-size: 1.8em;
+    margin-bottom: 20px;
+    text-align: center;
+    font-weight: 600;
+}
+
+.comment-list {
+    list-style: none;
+    padding: 0;
+    margin-top: 20px;
+}
+
+.comment-item {
+    background-color: #ffffff; /* White background for comments */
+    border: 1px solid #e9ecef;
+    border-radius: 10px;
+    padding: 18px 22px;
+    margin-bottom: 15px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.comment-item p.comment-text {
+    font-size: 0.95em;
+    margin-bottom: 8px;
+    color: #343a40;
+    white-space: pre-wrap;
+    word-break: break-word;
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.comment-item .comment-meta {
+    display: block;
+    font-size: 0.75em;
+    color: #6c757d;
+    text-align: right;
+    margin-top: 8px;
+    font-weight: 400;
+}
+
+/* Footer */
+footer {
+    text-align: center;
+    padding: 20px;
+    margin-top: 40px;
+    border-top: 1px solid #e9ecef;
+    color: #6c757d;
+    font-size: 0.85em;
+}
+
+/* Auth Forms (login.html, register.html) */
+.auth-form {
+    max-width: 450px;
+}
+
+.auth-link {
+    text-align: center;
+    margin-top: 15px;
+    font-size: 0.9em;
+}
+
+.auth-link a {
+    color: #007bff;
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.auth-link a:hover {
+    text-decoration: underline;
+}
+
+
+/* Responsive adjustments */
+@media (max-width: 992px) {
+    .container {
+        padding: 0; /* Remove horizontal padding here, main will handle it */
+    }
+    header {
+        padding: 15px 20px;
+    }
+    header h1 {
+        font-size: 1.8em;
+    }
+    nav ul li {
+        margin-left: 15px;
+    }
+    .user-info {
+        /* When wrapped, user-info itself may not need special alignment here,
+           but the bubble position needs adjustment */
+        align-self: flex-end; /* Align to the right in flex column */
+        margin-top: 10px; /* Add some space if nav items stack */
+    }
+
+    /* Adjust bubble position for smaller screens */
+    .profile-info-bubble {
+        right: 0; /* Keep aligned to right */
+        left: unset; /* Remove left property if it was set */
+        transform: translateY(10px) translateX(0) scale(0.95); /* Adjust transform */
+    }
+    .profile-info-bubble.show-bubble {
+        transform: translateY(0) translateX(0) scale(1);
+    }
+    .main-content-header {
+        flex-direction: column;
+        align-items: flex-start;
+        padding: 0 10px;
+    }
+    .main-content-header h2 {
+        font-size: 1.8em;
+        margin-bottom: 15px;
+    }
+    .add-new-ticket {
+        width: 100%;
+        box-sizing: border-box;
+        text-align: center;
+    }
+}
+
+@media (max-width: 768px) {
+    body {
+        font-size: 15px; /* Slightly smaller base font on mobile */
+    }
+    .container {
+        width: 100%;
+        margin: 0;
+        border-radius: 0;
+        box-shadow: none;
+        min-height: 100vh;
+    }
+    header {
+        flex-direction: column;
+        text-align: center;
+        padding: 15px;
+        border-radius: 0;
+    }
+
+    header h1 {
+        font-size: 1.6em;
+        margin-bottom: 15px;
+    }
+
+    nav ul {
+        flex-direction: column;
+        align-items: center;
+        width: 100%;
+    }
+
+    nav ul li {
+        margin: 6px 0;
+    }
+    .user-info {
+        margin: 10px 0 0 0;
+        text-align: center;
+        width: 100%;
+    }
+    /* Re-adjust bubble for very small screens */
+    .profile-info-bubble {
+        left: 50%; /* Center it */
+        right: unset;
+        transform: translateY(10px) translateX(-50%) scale(0.95); /* Center and offset */
+    }
+    .profile-info-bubble.show-bubble {
+        transform: translateY(0) translateX(-50%) scale(1);
+    }
+    .profile-info-bubble .bubble-arrow {
+        right: 50%; /* Center the arrow */
+        transform: translateX(50%);
+    }
+
+    .tickets-grid {
+        grid-template-columns: 1fr;
+        gap: 15px;
+    }
+    .ticket-card {
+        padding: 18px;
+        border-radius: 8px;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+    }
+    .ticket-card .ticket-title {
+        font-size: 1.3em;
+    }
+    .ticket-form, .update-form, .comment-form, .auth-form {
+        padding: 20px;
+        margin: 15px auto;
+        border-radius: 8px;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+    }
+    .ticket-form input[type="text"],
+    .ticket-form textarea,
+    .ticket-form select,
+    .update-form select,
+    .comment-form input[type="text"],
+    .comment-form textarea,
+    .auth-form input[type="email"],
+    .auth-form input[type="password"],
+    .auth-form select {
+        width: calc(100% - 16px);
+        padding: 8px;
+        font-size: 0.9em;
+    }
+    .button {
+        padding: 8px 15px;
+        font-size: 0.95em;
+        width: 100%;
+        box-sizing: border-box;
+    }
+    .back-button {
+        width: 100%;
+    }
+    .ticket-detail-container {
+        padding: 20px;
+        border-radius: 0;
+        box-shadow: none;
+    }
+    .ticket-detail-title {
+        font-size: 1.8em;
+    }
+    .description-box {
+        padding: 15px;
+    }
+    .comment-item {
+        padding: 15px;
+        border-radius: 8px;
+    }
+    .ticket-details p, .description-box p, .comment-item p.comment-text {
+        font-size: 0.9em;
+    }
+}

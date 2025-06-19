@@ -1,0 +1,24 @@
+{% extends 'layout.html' %}
+
+{% block title %}Register{% endblock %}
+
+{% block content %}
+    <h2>Register New User</h2>
+    <form method="post" class="auth-form">
+        <label for="email">Email:</label>
+        <input type="email" id="email" name="email" required autocomplete="username">
+
+        <label for="password">Password:</label>
+        <input type="password" id="password" name="password" required autocomplete="new-password">
+
+        <!-- Role selection for demonstration. In a real app, 'support' role might be admin-assigned. -->
+        <label for="role">Select Role:</label>
+        <select id="role" name="role">
+            <option value="user" selected>User</option>
+            <option value="support">Support Associate</option>
+        </select>
+
+        <button type="submit" class="button submit-button">Register</button>
+    </form>
+    <p class="auth-link">Already have an account? <a href="{{ url_for('login') }}">Log in here</a>.</p>
+{% endblock %}

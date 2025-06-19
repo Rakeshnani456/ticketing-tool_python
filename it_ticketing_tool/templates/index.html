@@ -1,0 +1,48 @@
+{% extends 'layout.html' %}
+
+{% block title %}All Tickets{% endblock %}
+
+{% block content %}
+    <div class="main-content-header">
+        <h2>
+            {% if user_role == 'support' %}
+                All Tickets
+            {% else %}
+                My Tickets
+            {% endif %}
+        </h2>
+        {% if user_id %}
+            <a href="{{ url_for('create') }}" class="button primary-button add-new-ticket">
+                + Create New Ticket
+            </a>
+        {% endif %}
+    </div>
+
+    {% if tickets %}
+        <div class="tickets-grid">
+            {% for ticket in tickets %}
+                <div class="ticket-card {{ ticket.status | lower | replace(' ', '-') }} {{ ticket.priority | lower }}">
+                    <div class="card-header">
+                        <h3 class="ticket-title"><a href="{{ url_for('ticket', ticket_id=ticket.id) }}">{{ ticket.title }}</a></h3>
+                        <div class="ticket-badges">
+                            <span class="badge status-{{ ticket.status | lower | replace(' ', '-') }}">{{ ticket.status }}</span>
+                            <span class="badge priority-{{ ticket.priority | lower }}">{{ ticket.priority }}</span>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <p><strong>Reporter:</strong> {{ ticket.reporter }}</p>
+                        <p><strong>Created by:</strong> {{ ticket.creator_email }}</p>
+                        <p><strong>Created:</strong> {{ ticket.created_at | datetimeformat }}</p>
+                        <p><strong>Last Updated:</strong> {{ ticket.updated_at | datetimeformat }}</p>
+                    </div>
+                    <div class="card-actions">
+                        <a href="{{ url_for('ticket', ticket_id=ticket.id) }}" class="button view-details">View Details</a>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <p class="no-tickets-message">No tickets found. {% if user_id %}<a href="{{ url_for('create') }}">Create a new one!</a>{% else %}Please log in to create tickets.{% endif %}</p>
+    {% endif %}
+
+{% endblock %}

@@ -1,0 +1,69 @@
+{% extends 'layout.html' %}
+
+{% block title %}Ticket #{{ ticket.id }}{% endblock %}
+
+{% block content %}
+    <div class="ticket-detail-container">
+        <h2 class="ticket-detail-title">Ticket #{{ ticket.id }}: {{ ticket.title }}</h2>
+
+        <div class="ticket-details">
+            <p><strong>Reporter:</strong> {{ ticket.reporter }}</p>
+            <p><strong>Status:</strong> <span class="badge status-{{ ticket.status | lower | replace(' ', '-') }}">{{ ticket.status }}</span></p>
+            <p><strong>Priority:</strong> <span class="badge priority-{{ ticket.priority | lower }}">{{ ticket.priority }}</span></p>
+            <p><strong>Created:</strong> {{ ticket.created_at }}</p>
+            <p><strong>Last Updated:</strong> {{ ticket.updated_at }}</p>
+            <div class="description-box">
+                <h4>Description:</h4>
+                <p>{{ ticket.description }}</p>
+            </div>
+        </div>
+
+        <div class="update-section">
+            <h3>Update Ticket</h3>
+            <form method="post" action="{{ url_for('update_ticket', ticket_id=ticket.id) }}" class="update-form">
+                <label for="new_status">Update Status:</label>
+                <select id="new_status" name="status">
+                    <option value="Open" {% if ticket.status == 'Open' %}selected{% endif %}>Open</option>
+                    <option value="In Progress" {% if ticket.status == 'In Progress' %}selected{% endif %}>In Progress</option>
+                    <option value="Closed" {% if ticket.status == 'Closed' %}selected{% endif %}>Closed</option>
+                </select>
+
+                <label for="new_priority">Update Priority:</label>
+                <select id="new_priority" name="priority">
+                    <option value="Low" {% if ticket.priority == 'Low' %}selected{% endif %}>Low</option>
+                    <option value="Medium" {% if ticket.priority == 'Medium' %}selected{% endif %}>Medium</option>
+                    <option value="High" {% if ticket.priority == 'High' %}selected{% endif %}>High</option>
+                    <option value="Critical" {% if ticket.priority == 'Critical' %}selected{% endif %}>Critical</option>
+                </select>
+
+                <button type="submit" class="button update-button">Update Ticket</button>
+            </form>
+        </div>
+
+        <div class="comments-section">
+            <h3>Comments</h3>
+            {% if comments %}
+                <ul class="comment-list">
+                    {% for comment in comments %}
+                        <li class="comment-item">
+                            <p class="comment-text">{{ comment.text }}</p>
+                            <span class="comment-meta">By {{ comment.commenter }} on {{ comment.timestamp }}</span>
+                        </li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <p>No comments yet.</p>
+            {% endif %}
+
+            <form method="post" action="{{ url_for('add_comment', ticket_id=ticket.id) }}" class="comment-form">
+                <label for="comment_text">Add New Comment:</label>
+                <textarea id="comment_text" name="comment_text" rows="4" required></textarea>
+                <label for="commenter_name">Your Name (Optional):</label>
+                <input type="text" id="commenter_name" name="commenter_name" autocomplete="off">
+                <button type="submit" class="button comment-button">Add Comment</button>
+            </form>
+        </div>
+
+        <a href="{{ url_for('index') }}" class="button back-button">Back to All Tickets</a>
+    </div>
+{% endblock %}

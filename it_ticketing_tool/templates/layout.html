@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Ticketing Tool{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>IT Support Ticketing</h1>
+            <nav>
+                <ul>
+                    {% if user_id %}
+                        <li><a href="{{ url_for('index') }}">My Tickets</a></li> {# This now strictly shows user's own tickets #}
+                        {% if user_role == 'support' %}
+                            <li><a href="{{ url_for('all_tickets') }}">All Tickets</a></li> {# New link for support only #}
+                        {% endif %}
+                        <li><a href="{{ url_for('create') }}">Create New Ticket</a></li>
+                        <li class="user-info">
+                            <i class="fas fa-user-circle profile-icon" id="profileIcon"></i> <div class="profile-info-bubble" id="profileInfoBubble">
+                                Logged in as: {{ user_email }} ({{ user_role | title }})
+                                <div class="bubble-arrow"></div>
+                            </div>
+                        </li>
+                        <li><a href="{{ url_for('logout') }}" class="logout-link">Logout</a></li>
+                    {% else %}
+                        <li><a href="{{ url_for('login') }}">Login</a></li>
+                        <li><a href="{{ url_for('register') }}">Register</a></li>
+                    {% endif %}
+                </ul>
+            </nav>
+        </header>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <ul class="flash-messages">
+                    {% for category, message in messages %}
+                        <li class="{{ category }}">{{ message }}</li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+        {% endwith %}
+
+        <main>
+            {% block content %}{% endblock %}
+        </main>
+
+        <footer>
+            <p>&copy; 2024 Basic IT Ticketing Tool</p>
+        </footer>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const profileIcon = document.getElementById('profileIcon');
+            const profileInfoBubble = document.getElementById('profileInfoBubble');
+
+            if (profileIcon && profileInfoBubble) {
+                // Toggle bubble visibility on icon click
+                profileIcon.addEventListener('click', function(event) {
+                    event.stopPropagation(); // Prevent document click from immediately closing it
+                    profileInfoBubble.classList.toggle('show-bubble');
+                });
+
+                // Close bubble if clicked anywhere outside the icon or the bubble
+                document.addEventListener('click', function(event) {
+                    if (!profileIcon.contains(event.target) && !profileInfoBubble.contains(event.target)) {
+                        profileInfoBubble.classList.remove('show-bubble');
+                    }
+                });
+
+                // Optional: Prevent closing when clicking inside the bubble itself
+                profileInfoBubble.addEventListener('click', function(event) {
+                    event.stopPropagation();
+                });
+            }
+        });
+    </script>
+</body>
+</html>
