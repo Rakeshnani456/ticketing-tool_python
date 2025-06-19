@@ -1,22 +1,24 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session
 import firebase_admin
 from firebase_admin import credentials, firestore, auth
-from datetime import datetime
+from datetime import datetime, timedelta, timezone # Import timezone
 from functools import wraps # Used for the login_required decorator
+# Removed: from google.cloud.firestore import Timestamp # This import is no longer needed or problematic
 
 # Initialize the Flask application
 app = Flask(__name__)
 # Set a secret key for Flash messages (required for security)
 # IMPORTANT: In a real app, use a strong, randomly generated environment variable!
-app.secret_key = 'your_super_secret_key_for_sessions'
+app.secret_key = 'your_super_secret_key_for_sessions' # Make sure this is a strong, unique key
 
 # --- Firebase Firestore & Auth Configuration ---
 # IMPORTANT: Replace 'path/to/your/serviceAccountKey.json' with the actual path
 # to the service account key file you downloaded from Firebase.
+# This file must be in the same directory as app.py for this configuration.
 # KEEP THIS FILE SECURE AND OUT OF VERSION CONTROL (e.g., .gitignore) IN PRODUCTION!
 SERVICE_ACCOUNT_KEY_PATH = 'serviceAccountKey.json'
 
-# Initialize Firebase Admin SDK
+# Initialize Firebase Admin SDK globally
 db = None
 users_collection = None
 tickets_collection = None
@@ -52,7 +54,7 @@ def support_required(f):
     def decorated_function(*args, **kwargs):
         if 'user_role' not in session or session['user_role'] != 'support':
             flash('Access denied. You must be a support associate.', 'error')
-            return redirect(url_for('index')) # Or a different access denied page
+            return redirect(url_for('index')) # Redirect to index or a different access denied page
         return f(*args, **kwargs)
     return decorated_function
 
@@ -79,38 +81,163 @@ def before_request_checks():
     """
     Checks database connection and clears session if DB is not connected.
     """
-    global db_connected # Use global to refer to the flag set during init
+    global db_connected
     if not db_connected:
         session.clear() # Clear session if DB isn't connected to prevent auth issues
         flash("Database connection not established. Please check server logs and Firebase setup.", 'error')
+
+def get_ticket_counts(user_id=None, user_role=None):
+    """
+    Calculates dynamic counts for filter categories.
+    Adjusts based on user_id and user_role.
+    """
+    if not db_connected:
+        return {
+            'total_tickets': 0, 'open_tickets': 0, 'assigned_to_me': 0, 'assigned_to_others': 0,
+            'unassigned': 0, 'overdue': 0, 'closed_tickets': 0, 'in_progress_tickets': 0
+        }
+
+    counts = {
+        'total_tickets': 0, 'open_tickets': 0, 'assigned_to_me': 0, 'assigned_to_others': 0,
+        'unassigned': 0, 'overdue': 0, 'closed_tickets': 0, 'in_progress_tickets': 0
+    }
+
+    try:
+        # Determine the base query for counting: all tickets for support, or user's tickets otherwise
+        if user_role == 'support':
+            # For support, query all tickets
+            all_tickets_stream = tickets_collection.stream()
+            print("get_ticket_counts: Querying ALL tickets (Support view)")
+        elif user_id:
+            # For regular users, query only tickets they created
+            all_tickets_stream = tickets_collection.where('creator_uid', '==', user_id).stream()
+            print(f"get_ticket_counts: Querying tickets for user_id: {user_id} (My Tickets view)")
+        else:
+            print("get_ticket_counts: No user or role specified, returning zero counts.")
+            return counts # No relevant user or role, return zero counts
+
+        now = datetime.now(timezone.utc) # Make 'now' timezone-aware (UTC)
+
+        for ticket_doc in all_tickets_stream:
+            ticket = ticket_doc.to_dict()
+            
+            counts['total_tickets'] += 1 # Count all relevant tickets for the 'All Tickets' filter
+
+            # Open Tickets (status is 'Open' only)
+            if ticket.get('status') == 'Open':
+                counts['open_tickets'] += 1
+            
+            # In Progress Tickets (new filter)
+            if ticket.get('status') == 'In Progress':
+                counts['in_progress_tickets'] += 1
+            
+            # Closed Tickets
+            if ticket.get('status') == 'Closed':
+                counts['closed_tickets'] += 1
+
+            # Assigned to me (for the current session user)
+            if ticket.get('assigned_to_email') == session.get('user_email'):
+                counts['assigned_to_me'] += 1
+            
+            # Unassigned
+            if not ticket.get('assigned_to_email'): # Checks for empty string or None
+                counts['unassigned'] += 1
+            
+            # Assigned to others (has an assignee, but not the current user)
+            if ticket.get('assigned_to_email') and ticket.get('assigned_to_email') != session.get('user_email'):
+                counts['assigned_to_others'] += 1
+            
+            # Overdue (not closed/resolved AND due date has passed)
+            due_date = ticket.get('due_date')
+            converted_due_date = None
+
+            if due_date: # Only process if due_date exists
+                # Check if it's a Firestore Timestamp object (has .to_datetime() method)
+                if hasattr(due_date, 'to_datetime'):
+                    # Convert Firestore Timestamp to datetime object, which will be timezone-aware (UTC)
+                    converted_due_date = due_date.to_datetime()
+                elif isinstance(due_date, datetime):
+                    # If it's already a datetime, ensure it's UTC-aware if naive
+                    if due_date.tzinfo is None: # If naive, make it UTC-aware
+                        converted_due_date = due_date.replace(tzinfo=timezone.utc)
+                    else: # If already aware, use as is
+                        converted_due_date = due_date
+                else:
+                    # Log a warning if due_date is an unexpected type
+                    print(f"Warning: due_date for ticket {ticket_doc.id} is of unexpected type: {type(due_date)}. Cannot calculate overdue status.")
+            
+            # Now both 'converted_due_date' and 'now' should be timezone-aware for comparison
+            if converted_due_date and ticket.get('status') not in ['Closed', 'Resolved'] and converted_due_date < now:
+                counts['overdue'] += 1
+        
+        print(f"Calculated Counts: {counts}") # Print final calculated counts
+
+    except Exception as e:
+        print(f"Error calculating ticket counts: {e}")
+        # Return default counts on error
+    return counts
 
 @app.route('/')
 @login_required
 def index():
     """
-    Renders the homepage, displaying tickets based on user role.
-    This route now ONLY shows tickets created by the logged-in user, regardless of role.
+    Renders the homepage, displaying tickets created by the logged-in user.
+    Supports filtering by status and assignment.
     """
     if not db_connected:
-        return render_template('index.html', tickets=[])
+        return render_template('index.html', tickets=[], counts=get_ticket_counts())
 
     user_id = session.get('user_id')
+    user_email = session.get('user_email')
+    
+    # Get filter parameters from query string
+    status_filter = request.args.get('status')
+    assignment_filter = request.args.get('assignment')
+    due_filter = request.args.get('due')
+    
+    tickets_query = tickets_collection.where('creator_uid', '==', user_id)
+
+    # Apply status filter if provided
+    if status_filter:
+        if status_filter == 'Open':
+            tickets_query = tickets_query.where('status', '==', 'Open')
+        elif status_filter == 'Closed':
+            tickets_query = tickets_query.where('status', '==', 'Closed')
+        elif status_filter == 'InProgress': # New filter option
+            tickets_query = tickets_query.where('status', '==', 'In Progress')
+        # Add more status conditions as needed
+    
+    # Apply assignment filter if provided
+    if assignment_filter:
+        if assignment_filter == 'assigned_to_me':
+            tickets_query = tickets_query.where('assigned_to_email', '==', user_email)
+        elif assignment_filter == 'unassigned':
+            tickets_query = tickets_query.where('assigned_to_email', '==', '')
+        elif assignment_filter == 'assigned_to_others':
+            tickets_query = tickets_query.where('assigned_to_email', '!=', '')
+            tickets_query = tickets_query.where('assigned_to_email', '!=', user_email)
+    
+    # Apply due filter (only for overdue now)
+    if due_filter == 'overdue':
+        tickets_query = tickets_query.where('due_date', '<', datetime.now(timezone.utc)) # Use timezone-aware datetime
+
+
     tickets = []
-
     try:
-        # All users (regular and support) see only their own tickets on this page
-        tickets_stream = tickets_collection.where('creator_uid', '==', user_id).order_by('created_at', direction=firestore.Query.DESCENDING).stream()
-
+        tickets_stream = tickets_query.order_by('created_at', direction=firestore.Query.DESCENDING).stream()
         for doc in tickets_stream:
             ticket_data = doc.to_dict()
             ticket_data['id'] = doc.id
             tickets.append(ticket_data)
 
-        return render_template('index.html', tickets=tickets)
+        # Get counts for the filters applicable to the current view (My Tickets)
+        counts = get_ticket_counts(user_id=user_id, user_role=session.get('user_role'))
+
+        return render_template('index.html', tickets=tickets, counts=counts)
     except Exception as e:
         flash(f"Error fetching tickets: {e}", 'error')
         print(f"Error in index route: {e}")
-        return render_template('index.html', tickets=[])
+        return render_template('index.html', tickets=[], counts=get_ticket_counts())
 
 @app.route('/all_tickets')
 @login_required
@@ -118,23 +245,60 @@ def index():
 def all_tickets():
     """
     Renders a page displaying all tickets, accessible only by support associates.
+    Supports filtering by status and assignment.
     """
     if not db_connected:
-        return render_template('index.html', tickets=[]) # Fallback if DB is not connected
+        return render_template('index.html', tickets=[], page_title="All Tickets", counts=get_ticket_counts(user_role='support'))
+
+    user_email = session.get('user_email')
+
+    # Get filter parameters from query string
+    status_filter = request.args.get('status')
+    assignment_filter = request.args.get('assignment')
+    due_filter = request.args.get('due')
+
+    tickets_query = tickets_collection
+
+    # Apply status filter if provided
+    if status_filter:
+        if status_filter == 'Open':
+            tickets_query = tickets_query.where('status', '==', 'Open')
+        elif status_filter == 'Closed':
+            tickets_query = tickets_query.where('status', '==', 'Closed')
+        elif status_filter == 'InProgress': # New filter option
+            tickets_query = tickets_query.where('status', '==', 'In Progress')
+        # Add more status conditions as needed
+    
+    # Apply assignment filter if provided
+    if assignment_filter:
+        if assignment_filter == 'assigned_to_me':
+            tickets_query = tickets_query.where('assigned_to_email', '==', user_email)
+        elif assignment_filter == 'unassigned':
+            tickets_query = tickets_query.where('assigned_to_email', '==', '')
+        elif assignment_filter == 'assigned_to_others':
+            tickets_query = tickets_query.where('assigned_to_email', '!=', '')
+            tickets_query = tickets_query.where('assigned_to_email', '!=', user_email)
+    
+    # Apply due filter (only for overdue now)
+    if due_filter == 'overdue':
+        tickets_query = tickets_query.where('due_date', '<', datetime.now(timezone.utc)) # Use timezone-aware datetime
 
     tickets = []
     try:
-        tickets_stream = tickets_collection.order_by('created_at', direction=firestore.Query.DESCENDING).stream()
+        tickets_stream = tickets_query.order_by('created_at', direction=firestore.Query.DESCENDING).stream()
         for doc in tickets_stream:
             ticket_data = doc.to_dict()
             ticket_data['id'] = doc.id
             tickets.append(ticket_data)
-        
-        return render_template('index.html', tickets=tickets, page_title="All Tickets") # Re-use index.html, pass a title for distinction
+
+        # Get counts for all tickets (as support associate)
+        counts = get_ticket_counts(user_role='support') # Pass None for user_id to get all tickets' counts
+
+        return render_template('index.html', tickets=tickets, page_title="All Tickets", counts=counts)
     except Exception as e:
         flash(f"Error fetching all tickets: {e}", 'error')
         print(f"Error in all_tickets route: {e}")
-        return render_template('index.html', tickets=[], page_title="All Tickets")
+        return render_template('index.html', tickets=[], page_title="All Tickets", counts=get_ticket_counts(user_role='support'))
 
 
 @app.route('/register', methods=('GET', 'POST'))
@@ -241,6 +405,7 @@ def create():
     """
     Handles the creation of new tickets in Firestore.
     Associates the ticket with the logged-in user's ID.
+    Automatically sets due_date to 10 days from creation.
     """
     if not db_connected:
         flash("Database is not connected. Cannot create ticket.", 'error')
@@ -252,8 +417,13 @@ def create():
         reporter = request.form['reporter'] # This will be the name entered by user
         status = request.form.get('status', 'Open')
         priority = request.form.get('priority', 'Low')
+        assigned_to_email = request.form.get('assigned_to_email', '') # Optional assignment
+        
         creator_uid = session.get('user_id') # Get ID of the logged-in user
         creator_email = session.get('user_email') # Get email of the logged-in user
+
+        # Calculate due_date: 10 days from creation
+        due_date_obj = datetime.now(timezone.utc) + timedelta(days=10) # Make creation datetime UTC-aware
 
         if not title or not description or not reporter:
             flash('Title, Description, and Reporter are required!', 'error')
@@ -268,11 +438,13 @@ def create():
                     "status": status,
                     "priority": priority,
                     "reporter": reporter,
-                    "creator_uid": creator_uid,  # Store the UID of the user who created it
-                    "creator_email": creator_email, # Store email for easier display/reference
+                    "creator_uid": creator_uid,
+                    "creator_email": creator_email,
+                    "assigned_to_email": assigned_to_email,
+                    "due_date": due_date_obj, # Set calculated due date
                     "comments": [],
-                    "created_at": datetime.now(),
-                    "updated_at": datetime.now()
+                    "created_at": datetime.now(timezone.utc), # Make creation datetime UTC-aware
+                    "updated_at": datetime.now(timezone.utc) # Make update datetime UTC-aware
                 }
                 tickets_collection.add(new_ticket_data)
                 flash('Ticket created successfully!', 'success')
@@ -327,6 +499,7 @@ def update_ticket(ticket_id):
     """
     Handles updating the status and priority of an existing ticket in Firestore.
     Enforces role-based and ownership-based access.
+    Also allows updating assigned_to_email and due_date.
     """
     if not db_connected:
         flash("Database is not connected. Cannot update ticket.", 'error')
@@ -351,12 +524,33 @@ def update_ticket(ticket_id):
 
         new_status = request.form.get('status')
         new_priority = request.form.get('priority')
+        new_assigned_to_email = request.form.get('assigned_to_email', '') # Get assigned email
+        new_due_date_str = request.form.get('due_date') # Get due date string (can still be manually updated)
 
-        tickets_collection.document(ticket_id).update({
+        update_fields = {
             "status": new_status,
             "priority": new_priority,
-            "updated_at": datetime.now()
-        })
+            "updated_at": datetime.now(timezone.utc) # Make update datetime UTC-aware
+        }
+
+        # Allow support to update assignment and due date
+        # Also allow creator to change assigned_to and due_date if they have access
+        if user_role == 'support' or user_id == ticket_data.get('creator_uid'):
+            update_fields["assigned_to_email"] = new_assigned_to_email
+            
+            # Convert due_date string to datetime object
+            new_due_date_obj = None
+            if new_due_date_str:
+                try:
+                    new_due_date_obj = datetime.strptime(new_due_date_str, '%Y-%m-%d')
+                    # If parsed from string, it's naive, so make it UTC-aware
+                    new_due_date_obj = new_due_date_obj.replace(tzinfo=timezone.utc) 
+                except ValueError:
+                    flash('Invalid Due Date format. Please usełaszcza-MM-DD.', 'error')
+                    return redirect(url_for('ticket', ticket_id=ticket_id))
+            update_fields["due_date"] = new_due_date_obj
+        
+        tickets_collection.document(ticket_id).update(update_fields)
         flash('Ticket updated successfully!', 'success')
     except Exception as e:
         flash(f'Error updating ticket: {e}', 'error')
@@ -381,7 +575,7 @@ def add_comment(ticket_id):
     if request.method == 'POST':
         comment_text = request.form['comment_text']
         commenter_name = session.get('user_email', 'Anonymous') # Use logged-in user's email as commenter
-        current_time = datetime.now()
+        current_time = datetime.now(timezone.utc) # Make comment timestamp UTC-aware
 
         if not comment_text:
             flash('Comment cannot be empty!', 'error')
@@ -408,7 +602,7 @@ def add_comment(ticket_id):
                 # Use FieldValue.array_union to atomically add a new comment
                 tickets_collection.document(ticket_id).update({
                     "comments": firestore.ArrayUnion([new_comment]),
-                    "updated_at": datetime.now()
+                    "updated_at": datetime.now(timezone.utc) # Make update datetime UTC-aware
                 })
                 flash('Comment added successfully!', 'success')
             except Exception as e:

@@ -1,48 +1,144 @@
 {% extends 'layout.html' %}
 
-{% block title %}All Tickets{% endblock %}
+{% block title %}
+    {% if page_title %}{{ page_title }}{% else %}My Tickets{% endif %}
+{% endblock %}
 
 {% block content %}
     <div class="main-content-header">
         <h2>
-            {% if user_role == 'support' %}
-                All Tickets
-            {% else %}
-                My Tickets
-            {% endif %}
+            {% if page_title %}{{ page_title }}{% else %}My Tickets{% endif %}
         </h2>
         {% if user_id %}
             <a href="{{ url_for('create') }}" class="button primary-button add-new-ticket">
-                + Create New Ticket
+                <i class="fas fa-plus-circle"></i> Create New Ticket
             </a>
         {% endif %}
     </div>
 
+    {# Status Filter / Overview Tabs - Mimicking the look from the image, now only for "All Tickets" page #}
+    {% if page_title == 'All Tickets' %}
+    <div class="status-filters">
+        {# Changed to use counts.total_tickets for accuracy #}
+        <div class="filter-item {% if not request.args.get('status') and not request.args.get('assignment') and not request.args.get('due') %}active{% endif %}" data-filter-type="" data-filter-value="">All Tickets <span>{{ counts.total_tickets }}</span></div>
+        <div class="filter-item {% if request.args.get('status') == 'Open' %}active{% endif %}" data-filter-type="status" data-filter-value="Open">Open Tickets <span>{{ counts.open_tickets }}</span></div>
+        {# New "In Progress" filter #}
+        <div class="filter-item {% if request.args.get('status') == 'InProgress' %}active{% endif %}" data-filter-type="status" data-filter-value="InProgress">In Progress <span>{{ counts.in_progress_tickets }}</span></div>
+        <div class="filter-item {% if request.args.get('assignment') == 'assigned_to_me' %}active{% endif %}" data-filter-type="assignment" data-filter-value="assigned_to_me">Assigned to me <span>{{ counts.assigned_to_me }}</span></div>
+        <div class="filter-item {% if request.args.get('assignment') == 'assigned_to_others' %}active{% endif %}" data-filter-type="assignment" data-filter-value="assigned_to_others">Assigned to others <span>{{ counts.assigned_to_others }}</span></div>
+        <div class="filter-item {% if request.args.get('assignment') == 'unassigned' %}active{% endif %}" data-filter-type="assignment" data-filter-value="unassigned">Unassigned <span>{{ counts.unassigned }}</span></div>
+        <div class="filter-item {% if request.args.get('status') == 'Closed' %}active{% endif %}" data-filter-type="status" data-filter-value="Closed">Closed Tickets <span>{{ counts.closed_tickets }}</span></div>
+        <div class="filter-item alert-overdue {% if request.args.get('due') == 'overdue' %}active{% endif %}" data-filter-type="due" data-filter-value="overdue">Overdue <span>{{ counts.overdue }}</span></div>
+        <div class="filter-item reload-option">
+            <i class="fas fa-sync-alt"></i> Auto reload page
+            
+        </div>
+    </div>
+    {% endif %}
+
+
     {% if tickets %}
-        <div class="tickets-grid">
-            {% for ticket in tickets %}
-                <div class="ticket-card {{ ticket.status | lower | replace(' ', '-') }} {{ ticket.priority | lower }}">
-                    <div class="card-header">
-                        <h3 class="ticket-title"><a href="{{ url_for('ticket', ticket_id=ticket.id) }}">{{ ticket.title }}</a></h3>
-                        <div class="ticket-badges">
+        <div class="ticket-table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th><input type="checkbox" aria-label="Select all tickets"></th>
+                        <th>TRACKING ID</th>
+                        <th>UPDATED</th>
+                        <th>NAME</th>
+                        <th>SUBJECT</th>
+                        <th>STATUS</th>
+                        <th>LAST REPLIER</th>
+                        <th>PRIORITY</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for ticket in tickets %}
+                    <tr>
+                        <td><input type="checkbox" aria-label="Select ticket {{ ticket.id }}"></td>
+                        <td data-label="Tracking ID"><a href="{{ url_for('ticket', ticket_id=ticket.id) }}">{{ ticket.id[:10] | upper }}</a></td> {# Shorten ID for display #}
+                        <td data-label="Updated">{{ ticket.updated_at | datetimeformat }}</td>
+                        <td data-label="Name">{{ ticket.reporter }}</td>
+                        <td data-label="Subject"><a href="{{ url_for('ticket', ticket_id=ticket.id) }}">{{ ticket.title }}</a></td>
+                        <td data-label="Status">
                             <span class="badge status-{{ ticket.status | lower | replace(' ', '-') }}">{{ ticket.status }}</span>
+                        </td>
+                        <td data-label="Last Replier">{{ ticket.creator_email }}</td> {# Using creator_email as last replier for simplicity #}
+                        <td data-label="Priority">
                             <span class="badge priority-{{ ticket.priority | lower }}">{{ ticket.priority }}</span>
-                        </div>
-                    </div>
-                    <div class="card-body">
-                        <p><strong>Reporter:</strong> {{ ticket.reporter }}</p>
-                        <p><strong>Created by:</strong> {{ ticket.creator_email }}</p>
-                        <p><strong>Created:</strong> {{ ticket.created_at | datetimeformat }}</p>
-                        <p><strong>Last Updated:</strong> {{ ticket.updated_at | datetimeformat }}</p>
-                    </div>
-                    <div class="card-actions">
-                        <a href="{{ url_for('ticket', ticket_id=ticket.id) }}" class="button view-details">View Details</a>
-                    </div>
-                </div>
-            {% endfor %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
         </div>
     {% else %}
         <p class="no-tickets-message">No tickets found. {% if user_id %}<a href="{{ url_for('create') }}">Create a new one!</a>{% else %}Please log in to create tickets.{% endif %}</p>
     {% endif %}
 
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const filterItems = document.querySelectorAll('.status-filters .filter-item');
+            const currentPath = window.location.pathname;
+
+            filterItems.forEach(item => {
+                item.addEventListener('click', function() {
+                    const filterType = this.dataset.filterType;
+                    const filterValue = this.dataset.filterValue;
+                    let url = currentPath; 
+
+                    const params = new URLSearchParams(); 
+                    
+                    if (filterType && filterValue) {
+                        if (filterType === 'due') {
+                            params.set('due', filterValue);
+                        } else if (filterType === 'status') {
+                            params.set('status', filterValue);
+                        } else if (filterType === 'assignment') {
+                            params.set('assignment', filterValue);
+                        }
+                    }
+
+                    const queryString = params.toString();
+                    if (queryString) {
+                        url = `${currentPath}?${queryString}`;
+                    } else {
+                        url = currentPath; 
+                    }
+                    
+                    window.location.href = url;
+                });
+            });
+
+            // Initial active state based on URL parameters
+            const urlParams = new URLSearchParams(window.location.search);
+            const activeStatus = urlParams.get('status');
+            const activeAssignment = urlParams.get('assignment');
+            const activeDue = urlParams.get('due');
+
+            if (!activeStatus && !activeAssignment && !activeDue) {
+                document.querySelector('.status-filters .filter-item[data-filter-type=""][data-filter-value=""]').classList.add('active');
+            } else {
+                filterItems.forEach(item => {
+                    item.classList.remove('active'); 
+                    if (item.dataset.filterType === 'status' && item.dataset.filterValue === activeStatus) {
+                        item.classList.add('active');
+                    } else if (item.dataset.filterType === 'assignment' && item.dataset.filterValue === activeAssignment) {
+                        item.classList.add('active');
+                    } else if (item.dataset.filterType === 'due' && item.dataset.filterValue === activeDue) {
+                        item.classList.add('active');
+                    }
+                });
+            }
+
+            // Auto reload page functionality (placeholder for now)
+            const autoReloadOption = document.querySelector('.reload-option');
+            if (autoReloadOption) {
+                autoReloadOption.addEventListener('click', function() {
+                    alert('Auto reload page clicked! (Functionality not implemented yet)');
+                    // Future implementation: Toggle auto-reload timer
+                });
+            }
+        });
+    </script>
 {% endblock %}

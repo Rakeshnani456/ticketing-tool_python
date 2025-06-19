@@ -4,8 +4,8 @@ body {
     line-height: 1.6;
     margin: 0;
     padding: 0;
-    background-color: #f8f9fa; /* Very light grey/off-white background for the whole page */
-    color: #343a40; /* Darker grey for primary text */
+    background-color: #f0f2f5; /* A slightly deeper light grey-blue background */
+    color: #333d47; /* Dark charcoal for primary text */
     display: flex;
     justify-content: center;
     min-height: 100vh;
@@ -13,42 +13,41 @@ body {
     font-size: 16px; /* Base font size */
 }
 
-/* The container will now primarily manage max-width and centering, without a distinct box background/shadow */
+/* The container will primarily manage max-width and centering */
 .container {
     width: 95%;
-    max-width: 1400px; /* Still wide for content */
+    max-width: 1400px;
     margin: 20px auto;
-    padding: 0; /* Remove padding from container, elements inside will handle their own spacing */
-    background: none; /* No distinct background for the container itself */
-    box-shadow: none; /* No shadow for the container */
-    border-radius: 0; /* No border-radius for the container */
+    padding: 0;
+    background: none;
+    box-shadow: none;
+    border-radius: 0;
     display: flex;
     flex-direction: column;
     min-height: calc(100vh - 40px);
     box-sizing: border-box;
 }
 
-/* Header and Navigation - Integrated with the background, subtle separation */
+/* Header and Navigation - More distinct, slightly elevated */
 header {
-    background-color: #ffffff; /* White background for header */
-    color: #343a40;
-    padding: 15px 30px; /* Slightly reduced padding */
-    border-bottom: 1px solid #e9ecef; /* Subtle bottom border for separation */
-    border-radius: 8px; /* Slightly rounded corners for a softer look */
-    margin-bottom: 30px;
+    background-color: #2c3e50; /* Darker blue-grey for a professional header */
+    color: #ffffff;
+    padding: 18px 35px; /* Increased padding */
+    border-bottom: 4px solid #3498db; /* Stronger blue accent line */
+    border-radius: 10px; /* Slightly more rounded */
+    margin-bottom: 40px; /* More space below header */
     display: flex;
     justify-content: space-between;
     align-items: center;
     flex-wrap: wrap;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05); /* Very subtle shadow */
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.15); /* More pronounced shadow */
 }
 
 header h1 {
     margin: 0;
-    font-size: 2em; /* Slightly smaller, proportional to body font */
+    font-size: 2.2em;
     font-weight: 700;
-    color: #007bff; /* Primary blue for main title */
-    text-shadow: none; /* Remove text shadow */
+    color: #ecf0f1; /* Light grey for header title */
 }
 
 nav ul {
@@ -61,65 +60,71 @@ nav ul {
 }
 
 nav ul li {
-    margin-left: 25px;
+    margin-left: 30px;
 }
 
 nav ul li a {
-    color: #495057; /* Darker grey for nav links */
+    color: #ffffff;
     text-decoration: none;
     font-weight: 500;
-    padding: 8px 12px;
-    border-radius: 6px; /* Softly rounded buttons */
+    padding: 10px 15px;
+    border-radius: 8px; /* Softer button look */
     transition: background-color 0.2s ease, color 0.2s ease;
-    text-transform: none; /* No uppercase for links */
+    text-transform: none;
     letter-spacing: normal;
-    font-size: 0.95em; /* Slightly smaller for nav */
+    font-size: 1em;
 }
 
 nav ul li a:hover {
-    background-color: #e2e6ea; /* Light hover background */
-    color: #0056b3; /* Darker blue on hover */
+    background-color: rgba(255, 255, 255, 0.2); /* Subtle hover effect */
+    color: #ecf0f1;
 }
 
 .user-info {
-    color: #6c757d; /* Muted grey for user info */
-    font-size: 0.9em;
-    margin-left: 25px;
+    color: #bdc3c7; /* Lighter grey for user info */
+    font-size: 0.95em;
+    margin-left: 30px;
     white-space: nowrap;
-    background-color: transparent; /* No distinct background */
+    background-color: transparent;
     padding: 0;
     border-radius: 0;
-    display: flex; /* Use flexbox to align icon and text */
-    align-items: center; /* Vertically center icon and text */
-    position: relative; /* Crucial for positioning the bubble */
-    cursor: pointer; /* Indicate it's clickable */
+    display: flex;
+    align-items: center;
+    position: relative;
+    cursor: pointer;
 }
 
 .profile-icon {
-    font-size: 1.5em; /* Larger icon size */
-    margin-right: 8px; /* Space between icon and text */
-    color: #007bff; /* Primary blue color for the icon */
+    font-size: 1.6em; /* Slightly larger icon */
+    margin-right: 10px; /* More space */
+    color: #3498db; /* Primary blue color for the icon */
+    transition: color 0.2s ease;
+}
+
+.profile-icon:hover {
+    color: #2980b9; /* Darker blue on hover */
 }
 
 /* Profile Info Bubble Styling */
 .profile-info-bubble {
     position: absolute;
-    top: 100%; /* Position below the icon/li */
-    right: 0; /* Align to the right of the icon/li */
+    top: calc(100% + 15px); /* Position slightly further below */
+    right: 0;
     background-color: #ffffff;
-    border: 1px solid #e9ecef;
-    border-radius: 8px;
-    padding: 10px 15px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-    z-index: 1000; /* Ensure it's above other content */
-    min-width: 200px;
-    text-align: left; /* Align text within the bubble */
+    border: 1px solid #e0e0e0;
+    border-radius: 10px; /* More rounded */
+    padding: 15px 20px; /* More padding */
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15); /* Stronger, softer shadow */
+    z-index: 1000;
+    min-width: 220px; /* Slightly wider */
+    text-align: left;
+    font-size: 0.9em; /* Smaller text inside bubble */
+    color: #333d47; /* Dark text for bubble content */
 
-    /* Initial hidden state with transition for smooth appearance */
     opacity: 0;
     visibility: hidden;
-    transform: translateY(10px) scale(0.95);
-    transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s ease;
+    transform: translateY(15px) scale(0.9);
+    transition: opacity 0.3s ease, transform 0.3s ease, visibility 0.3s ease;
 }
 
 .profile-info-bubble.show-bubble {
@@ -131,235 +136,326 @@ nav ul li a:hover {
 /* Bubble Arrow */
 .profile-info-bubble .bubble-arrow {
     position: absolute;
-    top: -8px; /* Position above the bubble */
-    right: 15px; /* Adjust based on desired arrow position */
+    top: -10px; /* Position above the bubble */
+    right: 20px; /* Adjust based on desired arrow position */
     width: 0;
     height: 0;
-    border-left: 8px solid transparent;
-    border-right: 8px solid transparent;
-    border-bottom: 8px solid #ffffff; /* Matches bubble background */
-    filter: drop-shadow(0 -2px 1px rgba(0, 0, 0, 0.05)); /* Subtle shadow for the arrow */
-    z-index: 1001; /* Above the bubble, for shadow effect */
+    border-left: 10px solid transparent;
+    border-right: 10px solid transparent;
+    border-bottom: 10px solid #ffffff; /* Matches bubble background */
+    filter: drop-shadow(0 -3px 2px rgba(0, 0, 0, 0.08)); /* More pronounced shadow for the arrow */
+    z-index: 1001;
 }
 
-
 .logout-link {
-    background-color: #dc3545 !important; /* Red for logout */
+    background-color: #e74c3c !important; /* Brighter red for logout */
     color: white !important;
-    padding: 8px 15px !important;
-    border-radius: 6px;
-    box-shadow: none; /* No shadow */
+    padding: 10px 18px !important;
+    border-radius: 8px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
 }
 
 .logout-link:hover {
-    background-color: #c82333 !important;
-    transform: translateY(-1px); /* Subtle lift */
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    background-color: #c0392b !important;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
 }
 
 /* Flash Messages */
 .flash-messages {
     list-style: none;
     padding: 0;
-    margin: 0 0 20px 0;
+    margin: 0 0 25px 0;
 }
 
 .flash-messages li {
-    padding: 12px 20px;
-    margin-bottom: 10px;
-    border-radius: 8px;
-    font-weight: 500;
+    padding: 15px 25px;
+    margin-bottom: 12px;
+    border-radius: 10px;
+    font-weight: 600;
     word-break: break-word;
     border: 1px solid;
-    opacity: 1; /* Full opacity */
-    font-size: 0.95em;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08); /* Subtle shadow */
+    opacity: 1;
+    font-size: 1em;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
 }
 
 .flash-messages .success {
-    background-color: #d4edda;
-    color: #155724;
-    border-color: #c3e6cb;
+    background-color: #dff0d8;
+    color: #3c763d;
+    border-color: #d6e9c6;
 }
 
 .flash-messages .error {
-    background-color: #f8d7da;
-    color: #721c24;
-    border-color: #f5c6cb;
+    background-color: #f2dede;
+    color: #a94442;
+    border-color: #ebccd1;
 }
 .flash-messages .info {
-    background-color: #d1ecf1;
-    color: #0c5460;
-    border-color: #bee5eb;
+    background-color: #d9edf7;
+    color: #31708f;
+    border-color: #bce8f1;
 }
 
 /* Main Content Area */
 main {
     flex-grow: 1;
-    padding: 0 15px; /* Add horizontal padding inside main content */
+    padding: 0 20px; /* Increased horizontal padding */
 }
 
 .main-content-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 25px;
+    margin-bottom: 20px; /* Reduced margin to make space for filter tabs */
     flex-wrap: wrap;
-    padding: 0 5px; /* Small padding to align with content */
+    padding: 0 10px;
 }
 
 .main-content-header h2 {
     margin: 0;
-    color: #343a40;
-    font-size: 2.2em;
-    font-weight: 600;
+    color: #333d47;
+    font-size: 2.4em;
+    font-weight: 700;
     text-align: left;
 }
 
 .add-new-ticket {
-    background-color: #28a745 !important; /* Green button */
-    padding: 10px 20px !important;
-    font-size: 1em !important;
-    border-radius: 6px !important;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    background-color: #5cb85c !important; /* A professional green */
+    padding: 12px 25px !important;
+    font-size: 1.1em !important;
+    border-radius: 8px !important;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+    display: flex; /* For icon alignment */
+    align-items: center;
+    gap: 8px; /* Space between icon and text */
+}
+
+.add-new-ticket i {
+    font-size: 1.1em;
 }
 
 .add-new-ticket:hover {
-    background-color: #218838 !important;
-    transform: translateY(-1px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+    background-color: #4cae4c !important;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 15px rgba(0, 0, 0, 0.2);
 }
 
-/* Ticket Grid/Cards (index.html) - Subtle elevation */
-.tickets-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: 20px; /* Standard gap */
-    margin-top: 15px;
-}
-
-.ticket-card {
-    background: #ffffff; /* White background for cards */
-    border: 1px solid #e9ecef; /* Very light border */
-    border-radius: 10px; /* Softly rounded */
-    padding: 20px;
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.06); /* Subtle shadow for elevation */
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
+/* Status Filter Tabs Styling */
+.status-filters {
     display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-}
-
-.ticket-card:hover {
-    transform: translateY(-3px); /* Subtle lift */
-    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1); /* Slightly more pronounced shadow on hover */
-}
-
-.ticket-card .card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 12px;
     flex-wrap: wrap;
+    gap: 10px;
+    background-color: #ffffff;
+    border-radius: 8px;
+    padding: 10px 15px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    margin-bottom: 30px; /* Space below filters and above table */
+    border: 1px solid #e0e0e0;
 }
 
-.ticket-card .ticket-title {
-    margin-top: 0;
-    font-size: 1.4em;
-    color: #007bff; /* Primary blue for title */
-    line-height: 1.3;
-    flex-basis: 100%;
-    margin-bottom: 8px;
-}
-.ticket-card .ticket-title a {
-    text-decoration: none;
-    color: inherit;
-    transition: color 0.2s ease;
-}
-.ticket-card .ticket-title a:hover {
-    color: #0056b3; /* Darker blue on hover for title */
-}
-
-.ticket-card .ticket-badges {
+.filter-item {
+    padding: 8px 15px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.9em;
+    font-weight: 500;
+    color: #555e68;
+    background-color: #f8f9fa;
+    border: 1px solid #e9ecef;
+    transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
     display: flex;
-    gap: 6px; /* Smaller space between badges */
-    flex-wrap: wrap;
+    align-items: center;
+    gap: 5px;
 }
 
-.badge {
-    display: inline-block;
-    padding: 4px 9px; /* Smaller badges */
-    border-radius: 16px; /* More pill-shaped */
-    font-size: 0.75em; /* Smaller font in badges */
+.filter-item:hover {
+    background-color: #e2e6ea;
+    border-color: #d1d6db;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.filter-item.active {
+    background-color: #3498db;
+    color: white;
+    border-color: #3498db;
     font-weight: 600;
-    color: #fff;
-    text-transform: uppercase;
-    letter-spacing: 0.3px;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 2px 5px rgba(52, 152, 219, 0.2);
 }
 
-/* Status Badges - Coordinated, softer colors */
-.status-open { background-color: #28a745; } /* Green */
-.status-in-progress { background-color: #ffc107; color: #343a40; } /* Amber */
-.status-closed { background-color: #6c757d; } /* Grey */
-
-/* Priority Badges - Coordinated, softer colors */
-.priority-low { background-color: #17a2b8; } /* Info Blue */
-.priority-medium { background-color: #fd7e14; } /* Orange */
-.priority-high { background-color: #dc3545; } /* Red */
-.priority-critical { background-color: #6f42c1; } /* Purple */
-
-.ticket-card .card-body p {
-    margin-bottom: 8px;
-    font-size: 0.9em; /* Slightly smaller body text */
-    color: #495057;
-    border-bottom: 1px solid #f0f2f5; /* Very light solid line */
-    padding-bottom: 5px;
+.filter-item.active span {
+    background-color: rgba(255, 255, 255, 0.2); /* Lighter badge for active tab */
+    color: #ffffff;
 }
 
-.ticket-card .card-body p:last-of-type {
+.filter-item span {
+    display: inline-block;
+    min-width: 20px;
+    padding: 2px 6px;
+    border-radius: 12px;
+    background-color: #ced4da; /* Default badge color for counts */
+    color: #333d47;
+    font-size: 0.8em;
+    font-weight: 700;
+    text-align: center;
+}
+
+.filter-item.alert-due-soon {
+    color: #e67e22; /* Orange for due soon */
+    border-color: #fbeed5;
+    background-color: #fcf8e3;
+}
+.filter-item.alert-due-soon span {
+    background-color: #f0ad4e;
+    color: white;
+}
+
+.filter-item.alert-overdue {
+    color: #dc3545; /* Red for overdue */
+    border-color: #f5c6cb;
+    background-color: #f8d7da;
+}
+.filter-item.alert-overdue span {
+    background-color: #dc3545;
+    color: white;
+}
+
+.filter-item.reload-option {
+    margin-left: auto; /* Push to the right */
+    background: none;
+    border: none;
+    color: #3498db;
+    box-shadow: none;
+}
+.filter-item.reload-option i {
+    margin-right: 5px;
+    transition: transform 0.6s ease-in-out;
+}
+.filter-item.reload-option:hover i {
+    transform: rotate(360deg);
+}
+
+
+/* Ticket Table Styling */
+.ticket-table-container {
+    background: #ffffff;
+    border-radius: 10px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.07);
+    overflow-x: auto; /* Allows horizontal scrolling on small screens */
+    border: 1px solid #e0e0e0;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0;
+}
+
+table thead th {
+    background-color: #f8f9fa; /* Light header background */
+    color: #555e68;
+    padding: 15px 20px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 0.9em;
+    border-bottom: 1px solid #e0e0e0;
+    white-space: nowrap; /* Prevent header text wrapping */
+}
+
+table tbody tr {
+    border-bottom: 1px solid #f5f7fa; /* Lighter row separator */
+    transition: background-color 0.2s ease;
+}
+
+table tbody tr:last-child {
     border-bottom: none;
-    margin-bottom: 0;
+}
+
+table tbody tr:hover {
+    background-color: #f0f2f5; /* Subtle row highlight on hover */
+}
+
+table td {
+    padding: 12px 20px;
+    vertical-align: middle;
+    font-size: 0.9em;
+    color: #495057;
+    white-space: nowrap; /* Prevent text wrapping in cells by default */
+    overflow: hidden; /* Hide overflow content */
+    text-overflow: ellipsis; /* Add ellipsis for overflowed text */
+    max-width: 200px; /* Max width for general cells */
+}
+
+table td a {
+    color: #3498db;
+    text-decoration: none;
+    font-weight: 500;
+}
+
+table td a:hover {
+    text-decoration: underline;
+    color: #2980b9;
+}
+
+/* Specific column adjustments */
+table th:first-child, table td:first-child {
+    padding-left: 15px; /* Adjust padding for checkbox column */
+    width: 40px; /* Small width for checkbox */
+    text-align: center;
+}
+
+table th:last-child, table td:last-child {
+    padding-right: 15px; /* Adjust padding for last column */
+}
+
+/* Badge styling within table */
+table td .badge {
+    padding: 4px 8px;
+    font-size: 0.7em;
+    border-radius: 14px;
+    font-weight: 600;
+    letter-spacing: 0.2px;
 }
 
 .no-tickets-message {
     text-align: center;
-    font-size: 1.1em;
-    color: #6c757d;
-    padding: 30px;
-    border: 1px dashed #ced4da; /* Subtle dashed border */
-    border-radius: 10px;
-    background-color: #e9ecef; /* Light background */
-    margin-top: 25px;
+    font-size: 1.2em;
+    color: #7f8c8d;
+    padding: 40px;
+    border: 2px dashed #b0c0ce;
+    border-radius: 12px;
+    background-color: #e9eff4;
+    margin-top: 30px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
 .no-tickets-message a {
-    color: #007bff;
+    color: #3498db;
     text-decoration: none;
-    font-weight: 500;
+    font-weight: 600;
 }
 
 .no-tickets-message a:hover {
     text-decoration: underline;
 }
 
-/* Forms (create.html, update/comment forms in ticket.html, login/register) - Clean and simple */
+/* Forms (create.html, update/comment forms in ticket.html, login/register) */
 .ticket-form, .update-form, .comment-form, .auth-form {
-    background: #ffffff; /* White background for forms */
-    padding: 25px;
-    border-radius: 10px;
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05); /* Subtle shadow */
-    max-width: 600px;
-    margin: 20px auto;
-    border: 1px solid #e9ecef; /* Light border */
+    background: #ffffff;
+    padding: 30px;
+    border-radius: 12px;
+    box-shadow: 0 6px 15px rgba(0, 0, 0, 0.08);
+    max-width: 650px;
+    margin: 25px auto;
+    border: 1px solid #e0e0e0;
 }
 
 .ticket-form label, .update-form label, .comment-form label, .auth-form label {
     display: block;
-    margin-bottom: 8px;
+    margin-bottom: 10px;
     font-weight: 600;
-    color: #495057;
-    font-size: 0.9em;
+    color: #555e68;
+    font-size: 0.95em;
 }
 
 .ticket-form input[type="text"],
@@ -371,12 +467,12 @@ main {
 .auth-form input[type="email"],
 .auth-form input[type="password"],
 .auth-form select {
-    width: calc(100% - 20px);
-    padding: 10px;
-    margin-bottom: 18px;
-    border: 1px solid #ced4da; /* Light grey border */
-    border-radius: 6px;
-    font-size: 0.95em;
+    width: calc(100% - 24px);
+    padding: 12px;
+    margin-bottom: 22px;
+    border: 1px solid #ced4da;
+    border-radius: 8px;
+    font-size: 1em;
     box-sizing: border-box;
     transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
@@ -390,99 +486,99 @@ main {
 .auth-form input[type="email"]:focus,
 .auth-form input[type="password"]:focus,
 .auth-form select:focus {
-    border-color: #007bff;
-    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25); /* Subtle blue focus glow */
+    border-color: #3498db;
+    box-shadow: 0 0 0 0.2rem rgba(52, 152, 219, 0.25);
     outline: none;
 }
 
 .ticket-form textarea, .comment-form textarea {
-    min-height: 90px;
+    min-height: 100px;
 }
 
-/* Buttons - Consistent, clean style */
+/* Buttons */
 .button {
     display: inline-block;
-    padding: 10px 20px;
-    margin-top: 15px;
+    padding: 12px 25px;
+    margin-top: 20px;
     border: none;
-    border-radius: 6px;
-    font-size: 1em;
-    font-weight: 500;
+    border-radius: 8px;
+    font-size: 1.05em;
+    font-weight: 600;
     cursor: pointer;
     text-decoration: none;
     text-align: center;
     transition: background-color 0.2s ease, transform 0.1s ease, box-shadow 0.2s ease;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
 }
 
 .submit-button, .update-button, .comment-button {
-    background-color: #007bff; /* Primary blue */
+    background-color: #3498db;
     color: white;
 }
 
 .submit-button:hover, .update-button:hover, .comment-button:hover {
-    background-color: #0056b3;
-    transform: translateY(-1px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+    background-color: #2980b9;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 15px rgba(0, 0, 0, 0.2);
 }
 
 .view-details {
-    background-color: #6c757d; /* Muted grey for view details */
+    background-color: #95a5a6;
     color: white;
-    font-size: 0.85em;
-    padding: 8px 15px;
-    box-shadow: none; /* No shadow for small buttons */
-}
-
-.view-details:hover {
-    background-color: #5a6268;
-    transform: translateY(-1px);
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.back-button {
-    background-color: #adb5bd; /* Lighter grey for back button */
-    color: white;
-    display: block;
-    width: fit-content;
-    margin: 30px auto 0 auto;
+    font-size: 0.9em;
+    padding: 10px 20px;
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
 }
 
-.back-button:hover {
-    background-color: #909ea8;
+.view-details:hover {
+    background-color: #7f8c8d;
     transform: translateY(-1px);
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
 }
 
+.back-button {
+    background-color: #bdc3c7;
+    color: white;
+    display: block;
+    width: fit-content;
+    margin: 40px auto 0 auto;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+}
 
-/* Ticket Detail Page (ticket.html) - Clean and spacious */
+.back-button:hover {
+    background-color: #95a5a6;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 15px rgba(0, 0, 0, 0.15);
+}
+
+
+/* Ticket Detail Page (ticket.html) */
 .ticket-detail-container {
-    max-width: 850px;
+    max-width: 900px;
     margin: 0 auto;
-    padding: 30px;
+    padding: 35px;
     background: #ffffff;
-    border-radius: 12px;
-    box-shadow: 0 6px 15px rgba(0, 0, 0, 0.08);
-    border: 1px solid #e9ecef;
+    border-radius: 15px;
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+    border: 1px solid #e0e0e0;
 }
 
 .ticket-detail-title {
     text-align: center;
-    color: #007bff;
-    margin-bottom: 25px;
-    font-size: 2.2em;
+    color: #3498db;
+    margin-bottom: 30px;
+    font-size: 2.6em;
     word-break: break-word;
-    border-bottom: 1px solid #e9ecef; /* Subtle separator */
-    padding-bottom: 12px;
-    font-weight: 600;
+    border-bottom: 2px solid #ecf0f1;
+    padding-bottom: 15px;
+    font-weight: 700;
 }
 
 .ticket-details p {
-    font-size: 1em;
-    margin-bottom: 10px;
-    border-bottom: 1px solid #f0f2f5;
-    padding-bottom: 6px;
+    font-size: 1.05em;
+    margin-bottom: 12px;
+    border-bottom: 1px dashed #f5f7fa;
+    padding-bottom: 8px;
     color: #495057;
 }
 
@@ -491,34 +587,35 @@ main {
 }
 
 .ticket-details strong {
-    color: #343a40;
+    color: #333d47;
 }
 
 .description-box {
-    background-color: #f8f9fa; /* Matches body background */
-    border-left: 4px solid #007bff; /* Primary blue accent */
-    padding: 18px 22px;
-    margin-top: 25px;
-    margin-bottom: 30px;
-    border-radius: 8px;
-    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05); /* Subtle inner shadow */
-    border-right: 1px solid #e9ecef;
-    border-top: 1px solid #e9ecef;
-    border-bottom: 1px solid #e9ecef;
+    background-color: #e9eff4;
+    border-left: 5px solid #3498db;
+    padding: 20px 25px;
+    margin-top: 30px;
+    margin-bottom: 35px;
+    border-radius: 10px;
+    box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.05);
+    border-right: 1px solid #dce2e8;
+    border-top: 1px solid #dce2e8;
+    border-bottom: 1px solid #dce2e8;
 }
 
 .description-box h4 {
     margin-top: 0;
-    color: #007bff;
-    font-size: 1.3em;
-    margin-bottom: 10px;
-    border-bottom: 1px solid #e9ecef;
-    padding-bottom: 6px;
+    color: #3498db;
+    font-size: 1.4em;
+    margin-bottom: 12px;
+    border-bottom: 1px solid #dce2e8;
+    padding-bottom: 8px;
+    font-weight: 600;
 }
 
 .description-box p {
-    font-size: 0.95em;
-    color: #343a40;
+    font-size: 1em;
+    color: #333d47;
     line-height: 1.7;
     white-space: pre-wrap;
     word-break: break-word;
@@ -528,38 +625,38 @@ main {
 }
 
 .update-section, .comments-section {
-    margin-top: 40px;
-    padding-top: 20px;
-    border-top: 1px solid #e9ecef;
+    margin-top: 50px;
+    padding-top: 25px;
+    border-top: 1px solid #e0e0e0;
 }
 
 .update-section h3, .comments-section h3 {
-    color: #343a40;
-    font-size: 1.8em;
-    margin-bottom: 20px;
+    color: #333d47;
+    font-size: 2em;
+    margin-bottom: 25px;
     text-align: center;
-    font-weight: 600;
+    font-weight: 700;
 }
 
 .comment-list {
     list-style: none;
     padding: 0;
-    margin-top: 20px;
+    margin-top: 25px;
 }
 
 .comment-item {
-    background-color: #ffffff; /* White background for comments */
+    background-color: #ffffff;
     border: 1px solid #e9ecef;
     border-radius: 10px;
-    padding: 18px 22px;
-    margin-bottom: 15px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    padding: 20px 25px;
+    margin-bottom: 18px;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.06);
 }
 
 .comment-item p.comment-text {
-    font-size: 0.95em;
-    margin-bottom: 8px;
-    color: #343a40;
+    font-size: 1em;
+    margin-bottom: 10px;
+    color: #333d47;
     white-space: pre-wrap;
     word-break: break-word;
     border-bottom: none;
@@ -568,36 +665,36 @@ main {
 
 .comment-item .comment-meta {
     display: block;
-    font-size: 0.75em;
-    color: #6c757d;
+    font-size: 0.8em;
+    color: #7f8c8d;
     text-align: right;
-    margin-top: 8px;
-    font-weight: 400;
+    margin-top: 10px;
+    font-weight: 500;
 }
 
 /* Footer */
 footer {
     text-align: center;
-    padding: 20px;
-    margin-top: 40px;
-    border-top: 1px solid #e9ecef;
-    color: #6c757d;
-    font-size: 0.85em;
+    padding: 25px;
+    margin-top: 50px;
+    border-top: 1px solid #e0e0e0;
+    color: #7f8c8d;
+    font-size: 0.9em;
 }
 
 /* Auth Forms (login.html, register.html) */
 .auth-form {
-    max-width: 450px;
+    max-width: 500px;
 }
 
 .auth-link {
     text-align: center;
-    margin-top: 15px;
-    font-size: 0.9em;
+    margin-top: 20px;
+    font-size: 1em;
 }
 
 .auth-link a {
-    color: #007bff;
+    color: #3498db;
     text-decoration: none;
     font-weight: 500;
 }
@@ -610,40 +707,24 @@ footer {
 /* Responsive adjustments */
 @media (max-width: 992px) {
     .container {
-        padding: 0; /* Remove horizontal padding here, main will handle it */
+        padding: 0;
     }
     header {
-        padding: 15px 20px;
+        padding: 15px 25px;
     }
     header h1 {
-        font-size: 1.8em;
+        font-size: 2em;
     }
     nav ul li {
-        margin-left: 15px;
-    }
-    .user-info {
-        /* When wrapped, user-info itself may not need special alignment here,
-           but the bubble position needs adjustment */
-        align-self: flex-end; /* Align to the right in flex column */
-        margin-top: 10px; /* Add some space if nav items stack */
-    }
-
-    /* Adjust bubble position for smaller screens */
-    .profile-info-bubble {
-        right: 0; /* Keep aligned to right */
-        left: unset; /* Remove left property if it was set */
-        transform: translateY(10px) translateX(0) scale(0.95); /* Adjust transform */
-    }
-    .profile-info-bubble.show-bubble {
-        transform: translateY(0) translateX(0) scale(1);
+        margin-left: 20px;
     }
     .main-content-header {
         flex-direction: column;
         align-items: flex-start;
-        padding: 0 10px;
+        padding: 0 15px;
     }
     .main-content-header h2 {
-        font-size: 1.8em;
+        font-size: 2em;
         margin-bottom: 15px;
     }
     .add-new-ticket {
@@ -651,11 +732,78 @@ footer {
         box-sizing: border-box;
         text-align: center;
     }
+    /* Table specific responsiveness */
+    .ticket-table-container {
+        border-radius: 0; /* Remove border radius on small screens for full width */
+        border-left: none;
+        border-right: none;
+        box-shadow: none;
+    }
+    table, thead, tbody, th, td, tr {
+        display: block;
+    }
+    thead tr {
+        position: absolute;
+        top: -9999px;
+        left: -9999px;
+    }
+    table tr {
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        margin-bottom: 15px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    }
+    table td {
+        border-bottom: 1px solid #f0f2f5;
+        position: relative;
+        padding-left: 50%;
+        text-align: right;
+        white-space: normal; /* Allow text to wrap */
+        max-width: unset; /* Remove max-width restriction */
+    }
+    table td:before {
+        content: attr(data-label);
+        position: absolute;
+        left: 0;
+        width: 45%;
+        padding-left: 15px;
+        white-space: nowrap;
+        text-align: left;
+        font-weight: 600;
+        color: #6c757d;
+    }
+    table td:first-child {
+        padding-left: 15px;
+        text-align: left;
+        width: auto;
+    }
+    table td:first-child:before {
+        content: none;
+    }
+    table td:last-child {
+        border-bottom: none;
+    }
+
+    .status-filters {
+        flex-direction: column;
+        align-items: flex-start;
+        padding: 15px;
+    }
+    .filter-item {
+        width: 100%;
+        justify-content: space-between;
+    }
+    .filter-item.reload-option {
+        margin-left: 0;
+        width: 100%;
+        justify-content: center;
+        margin-top: 10px;
+    }
 }
 
 @media (max-width: 768px) {
     body {
-        font-size: 15px; /* Slightly smaller base font on mobile */
+        font-size: 15px;
     }
     .container {
         width: 100%;
@@ -672,7 +820,7 @@ footer {
     }
 
     header h1 {
-        font-size: 1.6em;
+        font-size: 1.8em;
         margin-bottom: 15px;
     }
 
@@ -683,44 +831,44 @@ footer {
     }
 
     nav ul li {
-        margin: 6px 0;
+        margin: 8px 0;
     }
     .user-info {
-        margin: 10px 0 0 0;
+        margin: 15px 0 0 0;
         text-align: center;
         width: 100%;
     }
     /* Re-adjust bubble for very small screens */
     .profile-info-bubble {
-        left: 50%; /* Center it */
+        left: 50%;
         right: unset;
-        transform: translateY(10px) translateX(-50%) scale(0.95); /* Center and offset */
+        transform: translateY(15px) translateX(-50%) scale(0.9);
     }
     .profile-info-bubble.show-bubble {
         transform: translateY(0) translateX(-50%) scale(1);
     }
     .profile-info-bubble .bubble-arrow {
-        right: 50%; /* Center the arrow */
+        right: 50%;
         transform: translateX(50%);
     }
 
-    .tickets-grid {
+    .tickets-grid { /* This is now replaced by table, but keeping it for safety */
         grid-template-columns: 1fr;
-        gap: 15px;
+        gap: 20px;
     }
-    .ticket-card {
-        padding: 18px;
-        border-radius: 8px;
-        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+    .ticket-card { /* This is now replaced by table, but keeping it for safety */
+        padding: 20px;
+        border-radius: 10px;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
     }
-    .ticket-card .ticket-title {
-        font-size: 1.3em;
+    .ticket-card .ticket-title { /* This is now replaced by table, but keeping it for safety */
+        font-size: 1.4em;
     }
     .ticket-form, .update-form, .comment-form, .auth-form {
-        padding: 20px;
-        margin: 15px auto;
-        border-radius: 8px;
-        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+        padding: 25px;
+        margin: 20px auto;
+        border-radius: 10px;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
     }
     .ticket-form input[type="text"],
     .ticket-form textarea,
@@ -731,13 +879,13 @@ footer {
     .auth-form input[type="email"],
     .auth-form input[type="password"],
     .auth-form select {
-        width: calc(100% - 16px);
-        padding: 8px;
-        font-size: 0.9em;
+        width: calc(100% - 20px);
+        padding: 10px;
+        font-size: 0.95em;
     }
     .button {
-        padding: 8px 15px;
-        font-size: 0.95em;
+        padding: 10px 20px;
+        font-size: 1em;
         width: 100%;
         box-sizing: border-box;
     }
@@ -745,21 +893,20 @@ footer {
         width: 100%;
     }
     .ticket-detail-container {
-        padding: 20px;
+        padding: 30px;
         border-radius: 0;
         box-shadow: none;
     }
     .ticket-detail-title {
-        font-size: 1.8em;
+        font-size: 2.2em;
     }
     .description-box {
-        padding: 15px;
+        padding: 18px 22px;
     }
     .comment-item {
-        padding: 15px;
-        border-radius: 8px;
+        padding: 18px 22px;
     }
     .ticket-details p, .description-box p, .comment-item p.comment-text {
-        font-size: 0.9em;
+        font-size: 0.95em;
     }
 }

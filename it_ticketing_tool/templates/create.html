@@ -6,29 +6,39 @@
     <h2>Create New Ticket</h2>
     <form method="post" class="ticket-form">
         <label for="title">Title:</label>
-        <input type="text" id="title" name="title" required autocomplete="off">
+        <input type="text" id="title" name="title" value="{{ request.form['title'] if request.form else '' }}" required>
 
         <label for="description">Description:</label>
-        <textarea id="description" name="description" rows="8" required></textarea>
+        <textarea id="description" name="description" required>{{ request.form['description'] if request.form else '' }}</textarea>
 
         <label for="reporter">Reporter Name:</label>
-        <input type="text" id="reporter" name="reporter" required autocomplete="off">
+        <input type="text" id="reporter" name="reporter" value="{{ request.form['reporter'] if request.form else '' }}" required>
 
         <label for="status">Status:</label>
         <select id="status" name="status">
-            <option value="Open">Open</option>
-            <option value="In Progress">In Progress</option>
-            <option value="Closed">Closed</option>
+            <option value="Open" {% if (request.form['status'] if request.form else 'Open') == 'Open' %}selected{% endif %}>Open</option>
+            <option value="In Progress" {% if (request.form['status'] if request.form else '') == 'In Progress' %}selected{% endif %}>In Progress</option>
+            <option value="Closed" {% if (request.form['status'] if request.form else '') == 'Closed' %}selected{% endif %}>Closed</option>
+            <option value="Resolved" {% if (request.form['status'] if request.form else '') == 'Resolved' %}selected{% endif %}>Resolved</option>
+            <option value="On Hold" {% if (request.form['status'] if request.form else '') == 'On Hold' %}selected{% endif %}>On Hold</option>
+            <option value="Waiting reply" {% if (request.form['status'] if request.form else '') == 'Waiting reply' %}selected{% endif %}>Waiting reply</option>
         </select>
 
         <label for="priority">Priority:</label>
         <select id="priority" name="priority">
-            <option value="Low">Low</option>
-            <option value="Medium">Medium</option>
-            <option value="High">High</option>
-            <option value="Critical">Critical</option>
+            <option value="Low" {% if (request.form['priority'] if request.form else 'Low') == 'Low' %}selected{% endif %}>Low</option>
+            <option value="Medium" {% if (request.form['priority'] if request.form else '') == 'Medium' %}selected{% endif %}>Medium</option>
+            <option value="High" {% if (request.form['priority'] if request.form else '') == 'High' %}selected{% endif %}>High</option>
+            <option value="Critical" {% if (request.form['priority'] if request.form else '') == 'Critical' %}selected{% endif %}>Critical</option>
         </select>
 
+        <label for="assigned_to_email">Assigned To (Email):</label>
+        <input type="email" id="assigned_to_email" name="assigned_to_email" value="{{ request.form['assigned_to_email'] if request.form else '' }}">
+
+        <label for="due_date">Due Date:</label>
+        <input type="date" id="due_date" name="due_date" value="{{ request.form['due_date'] if request.form else '' }}">
+        
         <button type="submit" class="button submit-button">Create Ticket</button>
     </form>
+    <a href="{{ url_for('index') }}" class="button back-button">Back to Tickets</a>
 {% endblock %}
