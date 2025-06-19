@@ -9,7 +9,8 @@
         <h2>
             {% if page_title %}{{ page_title }}{% else %}My Tickets{% endif %}
         </h2>
-        {% if user_id %}
+        {# Only show "Create New Ticket" button if NOT on "All Tickets" page #}
+        {% if user_id and page_title != 'All Tickets' %}
             <a href="{{ url_for('create') }}" class="button primary-button add-new-ticket">
                 <i class="fas fa-plus-circle"></i> Create New Ticket
             </a>
@@ -31,7 +32,6 @@
         <div class="filter-item alert-overdue {% if request.args.get('due') == 'overdue' %}active{% endif %}" data-filter-type="due" data-filter-value="overdue">Overdue <span>{{ counts.overdue }}</span></div>
         <div class="filter-item reload-option">
             <i class="fas fa-sync-alt"></i> Auto reload page
-            
         </div>
     </div>
     {% endif %}
@@ -55,7 +55,7 @@
                 <tbody>
                     {% for ticket in tickets %}
                     <tr>
-                        <td><input type="checkbox" aria-label="Select ticket {{ ticket.id }}"></td>
+                        <td data-label="Select"><input type="checkbox" aria-label="Select ticket {{ ticket.id }}"></td>
                         <td data-label="Tracking ID"><a href="{{ url_for('ticket', ticket_id=ticket.id) }}">{{ ticket.id[:10] | upper }}</a></td> {# Shorten ID for display #}
                         <td data-label="Updated">{{ ticket.updated_at | datetimeformat }}</td>
                         <td data-label="Name">{{ ticket.reporter }}</td>
@@ -85,10 +85,10 @@
                 item.addEventListener('click', function() {
                     const filterType = this.dataset.filterType;
                     const filterValue = this.dataset.filterValue;
-                    let url = currentPath; 
+                    let url = currentPath;
 
-                    const params = new URLSearchParams(); 
-                    
+                    const params = new URLSearchParams();
+
                     if (filterType && filterValue) {
                         if (filterType === 'due') {
                             params.set('due', filterValue);
@@ -103,9 +103,9 @@
                     if (queryString) {
                         url = `${currentPath}?${queryString}`;
                     } else {
-                        url = currentPath; 
+                        url = currentPath;
                     }
-                    
+
                     window.location.href = url;
                 });
             });
@@ -120,7 +120,7 @@
                 document.querySelector('.status-filters .filter-item[data-filter-type=""][data-filter-value=""]').classList.add('active');
             } else {
                 filterItems.forEach(item => {
-                    item.classList.remove('active'); 
+                    item.classList.remove('active');
                     if (item.dataset.filterType === 'status' && item.dataset.filterValue === activeStatus) {
                         item.classList.add('active');
                     } else if (item.dataset.filterType === 'assignment' && item.dataset.filterValue === activeAssignment) {

@@ -1,461 +1,402 @@
 /* General Body and Container Styling */
 body {
-    font-family: 'Inter', sans-serif;
+    font-family: 'Inter', sans-serif; /* Using Inter font as requested */
     line-height: 1.6;
     margin: 0;
     padding: 0;
-    background-color: #f0f2f5; /* A slightly deeper light grey-blue background */
-    color: #333d47; /* Dark charcoal for primary text */
+    background-color: #f4f7f6;
+    color: #333;
     display: flex;
     justify-content: center;
     min-height: 100vh;
-    box-sizing: border-box;
-    font-size: 16px; /* Base font size */
+    box-sizing: border-box; /* Include padding and border in element's total width and height */
 }
 
-/* The container will primarily manage max-width and centering */
 .container {
-    width: 95%;
-    max-width: 1400px;
+    width: 90%;
+    max-width: 1200px; /* Max width for larger screens */
     margin: 20px auto;
-    padding: 0;
-    background: none;
-    box-shadow: none;
-    border-radius: 0;
+    padding: 20px;
+    background: #ffffff;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    border-radius: 12px;
     display: flex;
     flex-direction: column;
-    min-height: calc(100vh - 40px);
+    min-height: calc(100vh - 40px); /* Adjust height to fit within viewport with margin */
     box-sizing: border-box;
 }
 
-/* Header and Navigation - More distinct, slightly elevated */
+/* Header and Navigation */
 header {
-    background-color: #2c3e50; /* Darker blue-grey for a professional header */
+    background-color: #3f51b5; /* Deep blue */
     color: #ffffff;
-    padding: 18px 35px; /* Increased padding */
-    border-bottom: 4px solid #3498db; /* Stronger blue accent line */
-    border-radius: 10px; /* Slightly more rounded */
-    margin-bottom: 40px; /* More space below header */
+    padding: 15px 20px;
+    border-radius: 8px;
+    margin-bottom: 25px;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    flex-wrap: wrap;
-    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.15); /* More pronounced shadow */
+    flex-wrap: wrap; /* Allow wrapping on smaller screens */
 }
 
 header h1 {
     margin: 0;
     font-size: 2.2em;
     font-weight: 700;
-    color: #ecf0f1; /* Light grey for header title */
 }
+
+/* Ensure the main IT Help Desk title link is white */
+header h1 a {
+    color: #ffffff;
+    text-decoration: none; /* Remove underline from the title link */
+    transition: text-decoration 0.3s ease;
+}
+
+header h1 a:hover {
+    text-decoration: underline; /* Add underline on hover for interaction cue */
+}
+
 
 nav ul {
     list-style: none;
     margin: 0;
     padding: 0;
     display: flex;
-    align-items: center;
-    flex-wrap: wrap;
+    flex-wrap: wrap; /* Allow navigation items to wrap */
 }
 
 nav ul li {
-    margin-left: 30px;
+    margin-left: 25px;
 }
 
 nav ul li a {
     color: #ffffff;
     text-decoration: none;
-    font-weight: 500;
-    padding: 10px 15px;
-    border-radius: 8px; /* Softer button look */
-    transition: background-color 0.2s ease, color 0.2s ease;
-    text-transform: none;
-    letter-spacing: normal;
-    font-size: 1em;
+    font-weight: 400;
+    padding: 8px 12px;
+    border-radius: 8px;
+    transition: background-color 0.3s ease;
 }
 
 nav ul li a:hover {
-    background-color: rgba(255, 255, 255, 0.2); /* Subtle hover effect */
-    color: #ecf0f1;
+    background-color: rgba(255, 255, 255, 0.2);
 }
 
+/* User Profile Info Bubble */
 .user-info {
-    color: #bdc3c7; /* Lighter grey for user info */
-    font-size: 0.95em;
-    margin-left: 30px;
-    white-space: nowrap;
-    background-color: transparent;
-    padding: 0;
-    border-radius: 0;
-    display: flex;
-    align-items: center;
     position: relative;
     cursor: pointer;
+    display: flex;
+    align-items: center;
+    color: #ffffff; /* Ensure user info text is white */
+    font-weight: 500;
 }
 
-.profile-icon {
-    font-size: 1.6em; /* Slightly larger icon */
-    margin-right: 10px; /* More space */
-    color: #3498db; /* Primary blue color for the icon */
-    transition: color 0.2s ease;
+.user-info .profile-icon {
+    font-size: 1.5em;
+    margin-right: 8px;
 }
 
-.profile-icon:hover {
-    color: #2980b9; /* Darker blue on hover */
-}
-
-/* Profile Info Bubble Styling */
 .profile-info-bubble {
+    display: none;
     position: absolute;
-    top: calc(100% + 15px); /* Position slightly further below */
+    top: calc(100% + 10px); /* Position below the user-info */
     right: 0;
     background-color: #ffffff;
-    border: 1px solid #e0e0e0;
-    border-radius: 10px; /* More rounded */
-    padding: 15px 20px; /* More padding */
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15); /* Stronger, softer shadow */
+    color: #333;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    padding: 15px;
+    min-width: 200px;
     z-index: 1000;
-    min-width: 220px; /* Slightly wider */
     text-align: left;
-    font-size: 0.9em; /* Smaller text inside bubble */
-    color: #333d47; /* Dark text for bubble content */
-
-    opacity: 0;
-    visibility: hidden;
-    transform: translateY(15px) scale(0.9);
-    transition: opacity 0.3s ease, transform 0.3s ease, visibility 0.3s ease;
+    white-space: nowrap; /* Prevent text wrapping inside bubble */
 }
 
 .profile-info-bubble.show-bubble {
-    opacity: 1;
-    visibility: visible;
-    transform: translateY(0) scale(1);
+    display: block;
 }
 
-/* Bubble Arrow */
 .profile-info-bubble .bubble-arrow {
     position: absolute;
-    top: -10px; /* Position above the bubble */
-    right: 20px; /* Adjust based on desired arrow position */
+    top: -8px;
+    right: 15px;
     width: 0;
     height: 0;
-    border-left: 10px solid transparent;
-    border-right: 10px solid transparent;
-    border-bottom: 10px solid #ffffff; /* Matches bubble background */
-    filter: drop-shadow(0 -3px 2px rgba(0, 0, 0, 0.08)); /* More pronounced shadow for the arrow */
-    z-index: 1001;
+    border-left: 8px solid transparent;
+    border-right: 8px solid transparent;
+    border-bottom: 8px solid #ffffff;
 }
 
-.logout-link {
-    background-color: #e74c3c !important; /* Brighter red for logout */
-    color: white !important;
-    padding: 10px 18px !important;
-    border-radius: 8px;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+.profile-info-bubble p {
+    margin: 5px 0;
+    font-size: 0.95em;
 }
 
-.logout-link:hover {
-    background-color: #c0392b !important;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+.profile-info-bubble hr {
+    border: none;
+    border-top: 1px solid #eee;
+    margin: 10px 0;
 }
+
+.profile-info-bubble .logout-link {
+    display: block;
+    width: 100%;
+    padding: 8px 15px;
+    margin-top: 10px;
+    background-color: #f44336; /* Red for logout */
+    color: white;
+    text-align: center;
+    border-radius: 5px;
+    text-decoration: none;
+    transition: background-color 0.3s ease;
+}
+
+.profile-info-bubble .logout-link:hover {
+    background-color: #d32f2f;
+}
+
 
 /* Flash Messages */
 .flash-messages {
     list-style: none;
     padding: 0;
-    margin: 0 0 25px 0;
+    margin: 0 0 20px 0;
 }
 
 .flash-messages li {
-    padding: 15px 25px;
-    margin-bottom: 12px;
-    border-radius: 10px;
-    font-weight: 600;
-    word-break: break-word;
-    border: 1px solid;
-    opacity: 1;
-    font-size: 1em;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+    padding: 12px 20px;
+    margin-bottom: 10px;
+    border-radius: 8px;
+    font-weight: 500;
+    word-break: break-word; /* Ensure long messages break */
 }
 
 .flash-messages .success {
-    background-color: #dff0d8;
-    color: #3c763d;
-    border-color: #d6e9c6;
+    background-color: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
 }
 
 .flash-messages .error {
-    background-color: #f2dede;
-    color: #a94442;
-    border-color: #ebccd1;
-}
-.flash-messages .info {
-    background-color: #d9edf7;
-    color: #31708f;
-    border-color: #bce8f1;
+    background-color: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
 }
 
 /* Main Content Area */
 main {
-    flex-grow: 1;
-    padding: 0 20px; /* Increased horizontal padding */
+    flex-grow: 1; /* Allows main content to take up available space */
+    padding: 0 10px;
 }
 
 .main-content-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 20px; /* Reduced margin to make space for filter tabs */
-    flex-wrap: wrap;
-    padding: 0 10px;
+    margin-bottom: 25px;
+    flex-wrap: wrap; /* Allow wrapping if items are too wide */
+    gap: 15px; /* Space between title and button */
 }
 
 .main-content-header h2 {
-    margin: 0;
-    color: #333d47;
-    font-size: 2.4em;
+    margin: 0; /* Override default h2 margin */
+    color: #3f51b5;
+    font-size: 2em;
     font-weight: 700;
-    text-align: left;
+    text-align: left; /* Align to left within its flex container */
+    flex-grow: 1; /* Allow it to take available space */
 }
 
-.add-new-ticket {
-    background-color: #5cb85c !important; /* A professional green */
-    padding: 12px 25px !important;
-    font-size: 1.1em !important;
-    border-radius: 8px !important;
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
-    display: flex; /* For icon alignment */
-    align-items: center;
-    gap: 8px; /* Space between icon and text */
-}
 
-.add-new-ticket i {
-    font-size: 1.1em;
-}
-
-.add-new-ticket:hover {
-    background-color: #4cae4c !important;
-    transform: translateY(-2px);
-    box-shadow: 0 6px 15px rgba(0, 0, 0, 0.2);
-}
-
-/* Status Filter Tabs Styling */
+/* Status Filters (The horizontal tabs for "All Tickets") */
 .status-filters {
     display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    background-color: #ffffff;
-    border-radius: 8px;
-    padding: 10px 15px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-    margin-bottom: 30px; /* Space below filters and above table */
+    flex-wrap: wrap; /* Allow filters to wrap to the next line */
+    gap: 10px; /* Space between filter items */
+    margin-bottom: 30px;
+    justify-content: center; /* Center the filter items */
+    padding: 15px;
+    background-color: #f0f4f7; /* Light background for the filter bar */
+    border-radius: 10px;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05);
     border: 1px solid #e0e0e0;
 }
 
 .filter-item {
-    padding: 8px 15px;
-    border-radius: 6px;
+    background-color: #e0e0e0; /* Default background */
+    color: #555;
+    padding: 10px 18px;
+    border-radius: 25px; /* Pill shape */
     cursor: pointer;
     font-size: 0.9em;
-    font-weight: 500;
-    color: #555e68;
-    background-color: #f8f9fa;
-    border: 1px solid #e9ecef;
-    transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+    font-weight: 600;
+    transition: background-color 0.3s ease, color 0.3s ease, box-shadow 0.2s ease;
     display: flex;
     align-items: center;
-    gap: 5px;
+    white-space: nowrap; /* Prevent text wrapping within a filter item */
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
 .filter-item:hover {
-    background-color: #e2e6ea;
-    border-color: #d1d6db;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    background-color: #d1d1d1;
+    color: #333;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
 }
 
 .filter-item.active {
-    background-color: #3498db;
-    color: white;
-    border-color: #3498db;
-    font-weight: 600;
-    box-shadow: 0 2px 5px rgba(52, 152, 219, 0.2);
-}
-
-.filter-item.active span {
-    background-color: rgba(255, 255, 255, 0.2); /* Lighter badge for active tab */
+    background-color: #3f51b5; /* Active tab color */
     color: #ffffff;
-}
-
-.filter-item span {
-    display: inline-block;
-    min-width: 20px;
-    padding: 2px 6px;
-    border-radius: 12px;
-    background-color: #ced4da; /* Default badge color for counts */
-    color: #333d47;
-    font-size: 0.8em;
-    font-weight: 700;
-    text-align: center;
-}
-
-.filter-item.alert-due-soon {
-    color: #e67e22; /* Orange for due soon */
-    border-color: #fbeed5;
-    background-color: #fcf8e3;
-}
-.filter-item.alert-due-soon span {
-    background-color: #f0ad4e;
-    color: white;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
 }
 
 .filter-item.alert-overdue {
-    color: #dc3545; /* Red for overdue */
-    border-color: #f5c6cb;
-    background-color: #f8d7da;
+    background-color: #F44336; /* Red for overdue */
+    color: #ffffff;
 }
+
+.filter-item.alert-overdue.active {
+    background-color: #D32F2F; /* Darker red when active */
+}
+
+
+.filter-item span {
+    margin-left: 8px;
+    padding: 3px 8px;
+    background-color: rgba(0, 0, 0, 0.1);
+    border-radius: 15px;
+    font-weight: 700;
+    font-size: 0.8em;
+}
+
+.filter-item.active span {
+    background-color: rgba(255, 255, 255, 0.2);
+}
+
 .filter-item.alert-overdue span {
-    background-color: #dc3545;
-    color: white;
+    background-color: rgba(255, 255, 255, 0.3);
 }
 
 .filter-item.reload-option {
-    margin-left: auto; /* Push to the right */
-    background: none;
-    border: none;
-    color: #3498db;
-    box-shadow: none;
-}
-.filter-item.reload-option i {
-    margin-right: 5px;
-    transition: transform 0.6s ease-in-out;
-}
-.filter-item.reload-option:hover i {
-    transform: rotate(360deg);
+    background-color: #607D8B; /* Grey-blue for reload */
+    color: #ffffff;
+    cursor: pointer;
 }
 
+.filter-item.reload-option:hover {
+    background-color: #455a64;
+}
 
-/* Ticket Table Styling */
-.ticket-table-container {
+/* Ticket Grid/Cards (index.html) */
+/* This section is primarily for cards, will not affect the table */
+.tickets-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); /* Responsive grid */
+    gap: 25px;
+    margin-top: 20px;
+}
+
+.ticket-card {
     background: #ffffff;
-    border-radius: 10px;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.07);
-    overflow-x: auto; /* Allows horizontal scrolling on small screens */
     border: 1px solid #e0e0e0;
+    border-radius: 10px;
+    padding: 20px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between; /* Pushes button to bottom */
 }
 
-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin: 0;
+.ticket-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
 }
 
-table thead th {
-    background-color: #f8f9fa; /* Light header background */
-    color: #555e68;
-    padding: 15px 20px;
-    text-align: left;
-    font-weight: 600;
-    font-size: 0.9em;
-    border-bottom: 1px solid #e0e0e0;
-    white-space: nowrap; /* Prevent header text wrapping */
+.ticket-card h3 {
+    margin-top: 0;
+    font-size: 1.5em;
+    color: #3f51b5;
+    word-break: break-word; /* Ensure long titles break */
 }
 
-table tbody tr {
-    border-bottom: 1px solid #f5f7fa; /* Lighter row separator */
-    transition: background-color 0.2s ease;
-}
-
-table tbody tr:last-child {
-    border-bottom: none;
-}
-
-table tbody tr:hover {
-    background-color: #f0f2f5; /* Subtle row highlight on hover */
-}
-
-table td {
-    padding: 12px 20px;
-    vertical-align: middle;
-    font-size: 0.9em;
-    color: #495057;
-    white-space: nowrap; /* Prevent text wrapping in cells by default */
-    overflow: hidden; /* Hide overflow content */
-    text-overflow: ellipsis; /* Add ellipsis for overflowed text */
-    max-width: 200px; /* Max width for general cells */
-}
-
-table td a {
-    color: #3498db;
+.ticket-card h3 a {
     text-decoration: none;
-    font-weight: 500;
+    color: inherit;
 }
 
-table td a:hover {
+.ticket-card h3 a:hover {
     text-decoration: underline;
-    color: #2980b9;
 }
 
-/* Specific column adjustments */
-table th:first-child, table td:first-child {
-    padding-left: 15px; /* Adjust padding for checkbox column */
-    width: 40px; /* Small width for checkbox */
-    text-align: center;
+.ticket-card p {
+    margin-bottom: 8px;
 }
 
-table th:last-child, table td:last-child {
-    padding-right: 15px; /* Adjust padding for last column */
+.ticket-card strong {
+    color: #555;
 }
 
-/* Badge styling within table */
-table td .badge {
-    padding: 4px 8px;
-    font-size: 0.7em;
-    border-radius: 14px;
+.badge {
+    display: inline-block;
+    padding: 5px 10px;
+    border-radius: 20px;
+    font-size: 0.85em;
     font-weight: 600;
-    letter-spacing: 0.2px;
+    margin-left: 5px;
+    color: #fff;
+    text-transform: uppercase;
 }
+
+/* Status Badges */
+.status-open { background-color: #4CAF50; } /* Green */
+.status-in-progress { background-color: #FFC107; color: #333; } /* Amber */
+.status-closed { background-color: #9E9E9E; } /* Grey */
+.status-resolved { background-color: #673AB7; } /* Deep Purple */
+
+
+/* Priority Badges */
+.priority-low { background-color: #2196F3; } /* Blue */
+.priority-medium { background-color: #FF9800; } /* Orange */
+.priority-high { background-color: #F44336; } /* Red */
+.priority-critical { background-color: #D32F2F; } /* Dark Red */
 
 .no-tickets-message {
     text-align: center;
-    font-size: 1.2em;
-    color: #7f8c8d;
-    padding: 40px;
-    border: 2px dashed #b0c0ce;
-    border-radius: 12px;
-    background-color: #e9eff4;
-    margin-top: 30px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    font-size: 1.1em;
+    color: #666;
+    padding: 30px;
+    border: 1px dashed #ccc;
+    border-radius: 10px;
+    background-color: #f9f9f9;
 }
 
 .no-tickets-message a {
-    color: #3498db;
+    color: #3f51b5;
     text-decoration: none;
-    font-weight: 600;
+    font-weight: 500;
 }
 
 .no-tickets-message a:hover {
     text-decoration: underline;
 }
 
-/* Forms (create.html, update/comment forms in ticket.html, login/register) */
-.ticket-form, .update-form, .comment-form, .auth-form {
-    background: #ffffff;
-    padding: 30px;
-    border-radius: 12px;
-    box-shadow: 0 6px 15px rgba(0, 0, 0, 0.08);
-    max-width: 650px;
-    margin: 25px auto;
-    border: 1px solid #e0e0e0;
+/* Forms (create.html, update/comment forms in ticket.html) */
+.ticket-form, .update-form, .comment-form {
+    background: #f9f9f9;
+    padding: 25px;
+    border-radius: 10px;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.06);
+    max-width: 600px; /* Limit form width */
+    margin: 20px auto;
+    border: 1px solid #eee;
 }
 
-.ticket-form label, .update-form label, .comment-form label, .auth-form label {
+.ticket-form label, .update-form label, .comment-form label {
     display: block;
-    margin-bottom: 10px;
+    margin-bottom: 8px;
     font-weight: 600;
-    color: #555e68;
-    font-size: 0.95em;
+    color: #555;
 }
 
 .ticket-form input[type="text"],
@@ -463,365 +404,265 @@ table td .badge {
 .ticket-form select,
 .update-form select,
 .comment-form input[type="text"],
-.comment-form textarea,
-.auth-form input[type="email"],
-.auth-form input[type="password"],
-.auth-form select {
-    width: calc(100% - 24px);
+.comment-form textarea {
+    width: calc(100% - 20px); /* Adjust for padding */
     padding: 12px;
-    margin-bottom: 22px;
-    border: 1px solid #ced4da;
+    margin-bottom: 20px;
+    border: 1px solid #ccc;
     border-radius: 8px;
     font-size: 1em;
-    box-sizing: border-box;
-    transition: border-color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.ticket-form input[type="text"]:focus,
-.ticket-form textarea:focus,
-.ticket-form select:focus,
-.update-form select:focus,
-.comment-form input[type="text"]:focus,
-.comment-form textarea:focus,
-.auth-form input[type="email"]:focus,
-.auth-form input[type="password"]:focus,
-.auth-form select:focus {
-    border-color: #3498db;
-    box-shadow: 0 0 0 0.2rem rgba(52, 152, 219, 0.25);
-    outline: none;
+    box-sizing: border-box; /* Include padding in width */
 }
 
 .ticket-form textarea, .comment-form textarea {
-    min-height: 100px;
+    resize: vertical; /* Allow vertical resizing only */
+    min-height: 80px;
 }
 
 /* Buttons */
 .button {
     display: inline-block;
     padding: 12px 25px;
-    margin-top: 20px;
+    margin-top: 15px;
     border: none;
     border-radius: 8px;
-    font-size: 1.05em;
+    font-size: 1.1em;
     font-weight: 600;
     cursor: pointer;
     text-decoration: none;
     text-align: center;
-    transition: background-color 0.2s ease, transform 0.1s ease, box-shadow 0.2s ease;
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+    transition: background-color 0.3s ease, transform 0.1s ease, box-shadow 0.3s ease;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.primary-button {
+    background-color: #3f51b5; /* Primary blue for main actions */
+    color: white;
+}
+
+.primary-button:hover {
+    background-color: #303f9f;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
 }
 
 .submit-button, .update-button, .comment-button {
-    background-color: #3498db;
+    background-color: #4CAF50; /* Green */
     color: white;
 }
 
 .submit-button:hover, .update-button:hover, .comment-button:hover {
-    background-color: #2980b9;
+    background-color: #45a049;
     transform: translateY(-2px);
-    box-shadow: 0 6px 15px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
 }
 
 .view-details {
-    background-color: #95a5a6;
+    background-color: #2196F3; /* Blue */
     color: white;
-    font-size: 0.9em;
-    padding: 10px 20px;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    font-size: 0.95em; /* Slightly smaller for cards */
+    padding: 10px 18px;
 }
 
 .view-details:hover {
-    background-color: #7f8c8d;
-    transform: translateY(-1px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+    background-color: #1976d2;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
 }
 
 .back-button {
-    background-color: #bdc3c7;
+    background-color: #607D8B; /* Grey-blue */
     color: white;
-    display: block;
+    display: block; /* Make it a block element to center */
     width: fit-content;
-    margin: 40px auto 0 auto;
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+    margin: 30px auto 0 auto; /* Center it below comments */
 }
 
 .back-button:hover {
-    background-color: #95a5a6;
+    background-color: #455a64;
     transform: translateY(-2px);
-    box-shadow: 0 6px 15px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
 }
 
 
 /* Ticket Detail Page (ticket.html) */
 .ticket-detail-container {
-    max-width: 900px;
+    max-width: 800px;
     margin: 0 auto;
-    padding: 35px;
+    padding: 30px;
     background: #ffffff;
-    border-radius: 15px;
-    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
-    border: 1px solid #e0e0e0;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
 
 .ticket-detail-title {
     text-align: center;
-    color: #3498db;
+    color: #3f51b5;
     margin-bottom: 30px;
-    font-size: 2.6em;
+    font-size: 2.2em;
     word-break: break-word;
-    border-bottom: 2px solid #ecf0f1;
-    padding-bottom: 15px;
-    font-weight: 700;
 }
 
 .ticket-details p {
-    font-size: 1.05em;
-    margin-bottom: 12px;
-    border-bottom: 1px dashed #f5f7fa;
-    padding-bottom: 8px;
-    color: #495057;
+    font-size: 1.1em;
+    margin-bottom: 10px;
+    border-bottom: 1px dashed #eee;
+    padding-bottom: 5px;
 }
 
 .ticket-details p:last-of-type {
     border-bottom: none;
 }
 
-.ticket-details strong {
-    color: #333d47;
-}
-
 .description-box {
-    background-color: #e9eff4;
-    border-left: 5px solid #3498db;
-    padding: 20px 25px;
-    margin-top: 30px;
-    margin-bottom: 35px;
-    border-radius: 10px;
-    box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.05);
-    border-right: 1px solid #dce2e8;
-    border-top: 1px solid #dce2e8;
-    border-bottom: 1px solid #dce2e8;
+    background-color: #e8f5e9; /* Light green */
+    border-left: 5px solid #4CAF50;
+    padding: 15px 20px;
+    margin-top: 25px;
+    margin-bottom: 30px;
+    border-radius: 8px;
 }
 
 .description-box h4 {
     margin-top: 0;
-    color: #3498db;
-    font-size: 1.4em;
-    margin-bottom: 12px;
-    border-bottom: 1px solid #dce2e8;
-    padding-bottom: 8px;
-    font-weight: 600;
+    color: #1b5e20;
+    font-size: 1.3em;
+    margin-bottom: 10px;
 }
 
 .description-box p {
-    font-size: 1em;
-    color: #333d47;
-    line-height: 1.7;
-    white-space: pre-wrap;
-    word-break: break-word;
-    border-bottom: none;
+    font-size: 1.05em;
+    color: #333;
+    line-height: 1.8;
+    white-space: pre-wrap; /* Preserve whitespace and line breaks */
+    word-break: break-word; /* Ensure long words break */
+    border-bottom: none; /* Override general p border */
     padding-bottom: 0;
-    margin-bottom: 0;
 }
 
 .update-section, .comments-section {
-    margin-top: 50px;
-    padding-top: 25px;
+    margin-top: 40px;
+    padding-top: 20px;
     border-top: 1px solid #e0e0e0;
 }
 
 .update-section h3, .comments-section h3 {
-    color: #333d47;
-    font-size: 2em;
-    margin-bottom: 25px;
+    color: #3f51b5;
+    font-size: 1.8em;
+    margin-bottom: 20px;
     text-align: center;
-    font-weight: 700;
 }
 
 .comment-list {
     list-style: none;
     padding: 0;
-    margin-top: 25px;
+    margin-top: 20px;
 }
 
 .comment-item {
-    background-color: #ffffff;
-    border: 1px solid #e9ecef;
+    background-color: #f0f4f7; /* Light blue-grey */
+    border: 1px solid #dee7ed;
     border-radius: 10px;
-    padding: 20px 25px;
-    margin-bottom: 18px;
-    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.06);
+    padding: 15px 20px;
+    margin-bottom: 15px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
 }
 
 .comment-item p.comment-text {
     font-size: 1em;
-    margin-bottom: 10px;
-    color: #333d47;
-    white-space: pre-wrap;
+    margin-bottom: 8px;
+    color: #333;
+    white-space: pre-wrap; /* Preserve whitespace and line breaks */
     word-break: break-word;
-    border-bottom: none;
+    border-bottom: none; /* Override general p border */
     padding-bottom: 0;
 }
 
 .comment-item .comment-meta {
     display: block;
-    font-size: 0.8em;
-    color: #7f8c8d;
+    font-size: 0.85em;
+    color: #666;
     text-align: right;
-    margin-top: 10px;
-    font-weight: 500;
+    margin-top: 5px;
 }
 
-/* Footer */
-footer {
-    text-align: center;
-    padding: 25px;
-    margin-top: 50px;
-    border-top: 1px solid #e0e0e0;
-    color: #7f8c8d;
+/* Table Styling for All Tickets */
+.ticket-table-container {
+    width: 100%;
+    overflow-x: auto; /* Enable horizontal scrolling on small screens */
+    margin: 20px 0;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.ticket-table-container table {
+    width: 100%;
+    border-collapse: collapse; /* Collapse borders for a clean look */
+    min-width: 700px; /* Ensure table doesn't get too narrow on small screens */
+    background-color: #ffffff;
+}
+
+.ticket-table-container th,
+.ticket-table-container td {
+    padding: 12px 15px;
+    text-align: left;
+    border-bottom: 1px dotted #e0e0e0; /* Dotted fade lines */
+}
+
+.ticket-table-container th {
+    background-color: #f0f4f7; /* Light background for header */
+    color: #555;
+    font-weight: 600;
+    text-transform: uppercase;
     font-size: 0.9em;
+    position: sticky; /* Sticky header for scrolling tables */
+    top: 0;
+    z-index: 1;
 }
 
-/* Auth Forms (login.html, register.html) */
-.auth-form {
-    max-width: 500px;
+.ticket-table-container tbody tr:hover {
+    background-color: #f9f9f9; /* Subtle hover effect */
 }
 
-.auth-link {
-    text-align: center;
-    margin-top: 20px;
-    font-size: 1em;
-}
-
-.auth-link a {
-    color: #3498db;
+/* Specific styling for table data links */
+.ticket-table-container td a {
+    color: #3f51b5;
     text-decoration: none;
     font-weight: 500;
 }
 
-.auth-link a:hover {
+.ticket-table-container td a:hover {
     text-decoration: underline;
 }
 
 
-/* Responsive adjustments */
-@media (max-width: 992px) {
-    .container {
-        padding: 0;
-    }
-    header {
-        padding: 15px 25px;
-    }
-    header h1 {
-        font-size: 2em;
-    }
-    nav ul li {
-        margin-left: 20px;
-    }
-    .main-content-header {
-        flex-direction: column;
-        align-items: flex-start;
-        padding: 0 15px;
-    }
-    .main-content-header h2 {
-        font-size: 2em;
-        margin-bottom: 15px;
-    }
-    .add-new-ticket {
-        width: 100%;
-        box-sizing: border-box;
-        text-align: center;
-    }
-    /* Table specific responsiveness */
-    .ticket-table-container {
-        border-radius: 0; /* Remove border radius on small screens for full width */
-        border-left: none;
-        border-right: none;
-        box-shadow: none;
-    }
-    table, thead, tbody, th, td, tr {
-        display: block;
-    }
-    thead tr {
-        position: absolute;
-        top: -9999px;
-        left: -9999px;
-    }
-    table tr {
-        border: 1px solid #e0e0e0;
-        border-radius: 8px;
-        margin-bottom: 15px;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-    }
-    table td {
-        border-bottom: 1px solid #f0f2f5;
-        position: relative;
-        padding-left: 50%;
-        text-align: right;
-        white-space: normal; /* Allow text to wrap */
-        max-width: unset; /* Remove max-width restriction */
-    }
-    table td:before {
-        content: attr(data-label);
-        position: absolute;
-        left: 0;
-        width: 45%;
-        padding-left: 15px;
-        white-space: nowrap;
-        text-align: left;
-        font-weight: 600;
-        color: #6c757d;
-    }
-    table td:first-child {
-        padding-left: 15px;
-        text-align: left;
-        width: auto;
-    }
-    table td:first-child:before {
-        content: none;
-    }
-    table td:last-child {
-        border-bottom: none;
-    }
-
-    .status-filters {
-        flex-direction: column;
-        align-items: flex-start;
-        padding: 15px;
-    }
-    .filter-item {
-        width: 100%;
-        justify-content: space-between;
-    }
-    .filter-item.reload-option {
-        margin-left: 0;
-        width: 100%;
-        justify-content: center;
-        margin-top: 10px;
-    }
+/* Footer */
+footer {
+    text-align: center;
+    padding: 20px;
+    margin-top: 40px;
+    border-top: 1px solid #e0e0e0;
+    color: #777;
+    font-size: 0.9em;
 }
 
+/* Responsive adjustments */
 @media (max-width: 768px) {
-    body {
-        font-size: 15px;
-    }
     .container {
-        width: 100%;
-        margin: 0;
-        border-radius: 0;
-        box-shadow: none;
-        min-height: 100vh;
+        width: 95%;
+        margin: 10px auto;
+        padding: 15px;
     }
+
     header {
         flex-direction: column;
         text-align: center;
-        padding: 15px;
-        border-radius: 0;
+        padding: 10px 15px;
     }
 
     header h1 {
         font-size: 1.8em;
-        margin-bottom: 15px;
+        margin-bottom: 10px;
     }
 
     nav ul {
@@ -831,82 +672,92 @@ footer {
     }
 
     nav ul li {
-        margin: 8px 0;
-    }
-    .user-info {
-        margin: 15px 0 0 0;
-        text-align: center;
-        width: 100%;
-    }
-    /* Re-adjust bubble for very small screens */
-    .profile-info-bubble {
-        left: 50%;
-        right: unset;
-        transform: translateY(15px) translateX(-50%) scale(0.9);
-    }
-    .profile-info-bubble.show-bubble {
-        transform: translateY(0) translateX(-50%) scale(1);
-    }
-    .profile-info-bubble .bubble-arrow {
-        right: 50%;
-        transform: translateX(50%);
+        margin: 5px 0;
     }
 
-    .tickets-grid { /* This is now replaced by table, but keeping it for safety */
-        grid-template-columns: 1fr;
-        gap: 20px;
-    }
-    .ticket-card { /* This is now replaced by table, but keeping it for safety */
-        padding: 20px;
-        border-radius: 10px;
-        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
-    }
-    .ticket-card .ticket-title { /* This is now replaced by table, but keeping it for safety */
-        font-size: 1.4em;
-    }
-    .ticket-form, .update-form, .comment-form, .auth-form {
-        padding: 25px;
-        margin: 20px auto;
-        border-radius: 10px;
-        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
-    }
-    .ticket-form input[type="text"],
-    .ticket-form textarea,
-    .ticket-form select,
-    .update-form select,
-    .comment-form input[type="text"],
-    .comment-form textarea,
-    .auth-form input[type="email"],
-    .auth-form input[type="password"],
-    .auth-form select {
-        width: calc(100% - 20px);
+    /* Adjust status filters for smaller screens */
+    .status-filters {
+        flex-direction: column; /* Stack filters vertically on small screens */
+        align-items: stretch; /* Stretch filters to full width */
         padding: 10px;
-        font-size: 0.95em;
     }
+
+    .filter-item {
+        width: 100%; /* Make each filter item take full width */
+        margin: 5px 0; /* Adjust margin for stacking */
+        justify-content: space-between; /* Space out text and count */
+    }
+
+    /* Adjust table for smaller screens */
+    .ticket-table-container {
+        border-radius: 0; /* Remove border-radius on small screens if it conflicts with overflow */
+        margin: 10px -15px; /* Extend to edges of container for better use of space */
+    }
+
+    .ticket-table-container table {
+        min-width: unset; /* Allow table to shrink if content fits */
+        width: 100%; /* Take full width within its adjusted container */
+    }
+
+    .ticket-table-container th,
+    .ticket-table-container td {
+        padding: 8px 10px;
+    }
+
+    /* Hide some columns on very small screens or stack them */
+    .ticket-table-container thead {
+        display: none; /* Hide table header on mobile */
+    }
+
+    .ticket-table-container tbody tr {
+        display: block; /* Make rows block to stack cells */
+        margin-bottom: 15px;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        background-color: #ffffff;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+    }
+
+    .ticket-table-container td {
+        display: flex; /* Flexbox for label-value pairing */
+        justify-content: space-between;
+        padding: 10px 15px;
+        border-bottom: 1px dotted #e9e9e9; /* Dotted line between stacked cells */
+    }
+
+    .ticket-table-container td:last-child {
+        border-bottom: none; /* No border on the last stacked cell */
+    }
+
+    .ticket-table-container td:before {
+        content: attr(data-label); /* Use data-label for pseudo-elements */
+        font-weight: 600;
+        text-transform: uppercase;
+        margin-right: 10px;
+        color: #777;
+    }
+
+    /* Buttons in responsive context */
     .button {
         padding: 10px 20px;
         font-size: 1em;
-        width: 100%;
+        width: 100%; /* Full width buttons on small screens */
         box-sizing: border-box;
     }
+
     .back-button {
         width: 100%;
     }
+
     .ticket-detail-container {
-        padding: 30px;
-        border-radius: 0;
-        box-shadow: none;
+        padding: 20px;
     }
+
     .ticket-detail-title {
-        font-size: 2.2em;
+        font-size: 1.8em;
     }
+
     .description-box {
-        padding: 18px 22px;
-    }
-    .comment-item {
-        padding: 18px 22px;
-    }
-    .ticket-details p, .description-box p, .comment-item p.comment-text {
-        font-size: 0.95em;
+        padding: 12px 15px;
     }
 }

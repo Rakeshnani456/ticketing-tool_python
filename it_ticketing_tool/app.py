@@ -62,11 +62,13 @@ def support_required(f):
 def inject_user_info():
     """
     Makes user_id, user_email, and user_role available in all templates.
+    Also injects 'now' for copyright year in footer.
     """
     return dict(
         user_id=session.get('user_id'),
         user_email=session.get('user_email'),
-        user_role=session.get('user_role')
+        user_role=session.get('user_role'),
+        now=datetime.now(timezone.utc) # Inject timezone-aware datetime for footer
     )
 
 # Jinja filter for datetime formatting

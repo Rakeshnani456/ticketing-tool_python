@@ -3,33 +3,37 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Ticketing Tool{% endblock %}</title>
+    <title>{% block title %}IT Ticketing Tool{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>IT Support Ticketing</h1>
+            <h1><a href="{{ url_for('index') }}">IT Help Desk</a></h1>
             <nav>
                 <ul>
                     {% if user_id %}
-                        <li><a href="{{ url_for('index') }}">My Tickets</a></li> {# This now strictly shows user's own tickets #}
+                        <li><a href="{{ url_for('index') }}">My Tickets</a></li>
                         {% if user_role == 'support' %}
-                            <li><a href="{{ url_for('all_tickets') }}">All Tickets</a></li> {# New link for support only #}
+                            <li><a href="{{ url_for('all_tickets') }}">All Tickets</a></li>
                         {% endif %}
-                        <li><a href="{{ url_for('create') }}">Create New Ticket</a></li>
+                        {# The "Create New Ticket" link is removed from here globally #}
                         <li class="user-info">
-                            <i class="fas fa-user-circle profile-icon" id="profileIcon"></i> <div class="profile-info-bubble" id="profileInfoBubble">
-                                Logged in as: {{ user_email }} ({{ user_role | title }})
+                            <i class="fas fa-user-circle profile-icon"></i>
+                            <span>{{ user_email }}</span>
+                            <div class="profile-info-bubble" id="profileInfoBubble">
                                 <div class="bubble-arrow"></div>
+                                <p>Logged in as: <strong>{{ user_email }}</strong></p>
+                                <p>Role: <strong>{{ user_role | capitalize }}</strong></p>
+                                <hr>
+                                <a href="{{ url_for('logout') }}" class="button logout-link">Logout</a>
                             </div>
                         </li>
-                        <li><a href="{{ url_for('logout') }}" class="logout-link">Logout</a></li>
                     {% else %}
-                        <li><a href="{{ url_for('login') }}">Login</a></li>
                         <li><a href="{{ url_for('register') }}">Register</a></li>
+                        <li><a href="{{ url_for('login') }}">Login</a></li>
                     {% endif %}
                 </ul>
             </nav>
@@ -50,32 +54,26 @@
         </main>
 
         <footer>
-            <p>&copy; 2024 Basic IT Ticketing Tool</p>
+            <p>&copy; {{ now.year }} IT Ticketing Tool. All rights reserved.</p>
         </footer>
     </div>
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            const profileIcon = document.getElementById('profileIcon');
+            const userInfo = document.querySelector('.user-info');
             const profileInfoBubble = document.getElementById('profileInfoBubble');
 
-            if (profileIcon && profileInfoBubble) {
-                // Toggle bubble visibility on icon click
-                profileIcon.addEventListener('click', function(event) {
-                    event.stopPropagation(); // Prevent document click from immediately closing it
+            if (userInfo && profileInfoBubble) {
+                userInfo.addEventListener('click', function(event) {
                     profileInfoBubble.classList.toggle('show-bubble');
+                    event.stopPropagation(); // Prevent click from bubbling to document
                 });
 
-                // Close bubble if clicked anywhere outside the icon or the bubble
+                // Close the bubble if clicked outside
                 document.addEventListener('click', function(event) {
-                    if (!profileIcon.contains(event.target) && !profileInfoBubble.contains(event.target)) {
+                    if (!userInfo.contains(event.target) && !profileInfoBubble.contains(event.target)) {
                         profileInfoBubble.classList.remove('show-bubble');
                     }
-                });
-
-                // Optional: Prevent closing when clicking inside the bubble itself
-                profileInfoBubble.addEventListener('click', function(event) {
-                    event.stopPropagation();
                 });
             }
         });
