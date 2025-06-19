@@ -1,2 +1,4 @@
 Flask
-firebase-admin
+pymongo
+dnspython
+Flask-CORS
