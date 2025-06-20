@@ -11,13 +11,7 @@ import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, si
 // IMPORTANT: Replace with your actual Firebase project configuration
 // You can find this in your Firebase project settings -> "General" -> "Your apps" -> "Web app"
 const firebaseConfig = {
-  apiKey: "AIzaSyDZVwd_WHUw8RzUfkVklT7_9U6Mc-FNL-o",
-  authDomain: "it-ticketing-tool-dd679.firebaseapp.com",
-  projectId: "it-ticketing-tool-dd679",
-  storageBucket: "it-ticketing-tool-dd679.firebasestorage.app",
-  messagingSenderId: "919553361675",
-  appId: "1:919553361675:web:55bfeb860ebef1b886840e",
-  measurementId: "G-H6M4JBS3TL"
+
 };
 
 // Initialize Firebase
