@@ -3,6 +3,7 @@ from flask_cors import CORS # Import Flask-CORS
 import firebase_admin
 from firebase_admin import credentials, firestore, auth
 from datetime import datetime, timezone # Import timezone for consistent datetimes
+import traceback # Import traceback for detailed error logging
 
 # Initialize the Flask application
 app = Flask(__name__)
@@ -11,13 +12,8 @@ app = Flask(__name__)
 CORS(app)
 
 # --- Firebase Firestore & Auth Configuration ---
-# IMPORTANT: Replace 'path/to/your/serviceAccountKey.json' with the actual path
-# to the service account key file you downloaded from Firebase.
-# This file must be in the same directory as app.py for this configuration.
-# KEEP THIS FILE SECURE AND OUT OF VERSION CONTROL (e.g., .gitignore) IN PRODUCTION!
-SERVICE_ACCOUNT_KEY_PATH = 'serviceAccountKey.json' # Make sure this file is present
+SERVICE_ACCOUNT_KEY_PATH = 'serviceAccountKey.json' 
 
-# Initialize Firebase Admin SDK globally
 db = None
 users_collection = None
 tickets_collection = None
@@ -35,7 +31,6 @@ try:
 except Exception as e:
     print(f"Error connecting to Firebase Firestore: {e}")
     db_connected = False
-    # In a production app, you'd want more robust error handling here.
 
 def json_serializable_ticket(doc_id, ticket_data):
     """
@@ -78,12 +73,8 @@ def register():
         return jsonify({'error': 'Invalid role specified.'}), 400
 
     try:
-        # Create user in Firebase Authentication
         user = auth.create_user(email=email, password=password)
-
-        # Store user role in Firestore 'users' collection
         users_collection.document(user.uid).set({'email': email, 'role': role})
-
         return jsonify({'message': f'User {email} registered successfully!', 'user_id': user.uid}), 201
     except firebase_admin.auth.EmailAlreadyExistsError:
         return jsonify({'error': 'Email already registered.'}), 409
@@ -95,27 +86,26 @@ def register():
 def login():
     """
     API endpoint for user login.
-    NOTE: This is a SIMPLIFIED login for demonstration ONLY.
-    In production, use client-side Firebase SDK to sign in and send ID token to backend for verification.
+    This endpoint now expects a Firebase ID Token in the Authorization header
+    and verifies it to get the user's UID and retrieve their role from Firestore.
     """
     if not db_connected:
         return jsonify({'error': 'Database connection not established.'}), 500
 
-    data = request.get_json()
-    email = data.get('email')
-    password = data.get('password') # Password is not directly verified by Admin SDK here
-
-    if not email or not password:
-        return jsonify({'error': 'Email and Password are required!'}), 400
+    # Get the ID token from the Authorization header
+    auth_header = request.headers.get('Authorization')
+    if not auth_header or not auth_header.startswith('Bearer '):
+        return jsonify({'error': 'Authorization header required with Bearer token!'}), 401
+    
+    id_token = auth_header.split('Bearer ')[1]
 
     try:
-        # Attempt to get user by email. This confirms existence but doesn't authenticate password.
-        # THIS IS INSECURE FOR PASSWORD VERIFICATION.
-        # A proper flow involves Firebase client SDK for auth and token verification on backend.
-        user_record = auth.get_user_by_email(email)
+        # Verify the ID token. This will raise an error if the token is invalid or expired.
+        decoded_token = auth.verify_id_token(id_token)
+        uid = decoded_token['uid']
 
-        # Retrieve user role from Firestore based on the UID found
-        user_doc = users_collection.document(user_record.uid).get()
+        # Get user profile from Firestore using the UID
+        user_doc = users_collection.document(uid).get()
         
         if not user_doc.exists:
             return jsonify({'error': 'User profile not found in database. Contact support.'}), 404
@@ -123,18 +113,16 @@ def login():
         user_profile = user_doc.to_dict()
 
         logged_in_user = {
-            'id': user_record.uid,
-            'email': user_record.email,
-            'role': user_profile.get('role', 'user') # Default to 'user' if not set
+            'id': uid,
+            'email': user_profile.get('email', decoded_token.get('email')), # Prefer email from Firestore, fallback to token
+            'role': user_profile.get('role', 'user') # Default to 'user' if role not set
         }
         return jsonify({'message': 'Login successful', 'user': logged_in_user}), 200
-    except firebase_admin.auth.UserNotFoundError:
-        return jsonify({'error': 'Invalid email or password.'}), 401
-    except firebase_admin.auth.AuthError as e:
-        print(f"Login AuthError: {e}")
-        return jsonify({'error': f'Authentication error: {e}'}), 401
+    except auth.InvalidIdTokenError:
+        return jsonify({'error': 'Invalid or expired authentication token.'}), 401
     except Exception as e:
-        print(f"Unexpected login error: {e}")
+        print(f"Login error: {e}")
+        print(traceback.format_exc()) # Print full traceback for debugging
         return jsonify({'error': f'An unexpected error occurred during login: {e}'}), 500
 
 
@@ -152,7 +140,6 @@ def get_my_tickets():
         return jsonify({'error': 'User ID is required'}), 400
 
     try:
-        # Query Firestore for tickets where 'creator_uid' matches the user_id
         tickets_stream = tickets_collection.where('creator_uid', '==', user_id).order_by('created_at', direction=firestore.Query.DESCENDING).stream()
         tickets = [json_serializable_ticket(doc.id, doc.to_dict()) for doc in tickets_stream]
         return jsonify(tickets), 200
@@ -171,7 +158,6 @@ def get_all_tickets():
 
     status_filter = request.args.get('status')
     assignment_filter = request.args.get('assignment')
-    # due_filter = request.args.get('due') # Not implementing due_date filter in Firestore Python for simplicity due to indexing complexity
 
     query = tickets_collection
 
@@ -180,9 +166,7 @@ def get_all_tickets():
     
     if assignment_filter:
         if assignment_filter == 'unassigned':
-            query = query.where('assigned_to_email', '==', '') # Assuming empty string for unassigned
-        # For 'assigned_to_me' or 'assigned_to_others', you would need to pass the support's email or a specific email to query
-        # This API assumes simple 'unassigned' filter for now.
+            query = query.where('assigned_to_email', '==', '') 
 
     try:
         tickets_stream = query.order_by('created_at', direction=firestore.Query.DESCENDING).stream()
@@ -191,34 +175,53 @@ def get_all_tickets():
     except Exception as e:
         print(f"Error fetching all tickets: {e}")
         return jsonify({'error': f'Failed to fetch all tickets: {e}'}), 500
+
+# Fixed get_next_ticket_number function with robust generator handling
 def get_next_ticket_number(transaction):
     """
     Atomically increments a ticket number counter in Firestore and returns
     the next formatted 'ITXXXXXX' ID.
+    This version explicitly handles the return type of transaction.get()
+    to robustly deal with a possible unexpected generator.
     """
     counters_ref = db.collection('counters').document('ticket_id_counter')
 
-    # Correct way to get a document within a transaction
-    # `transaction.get()` returns a DocumentSnapshot
-    counter_doc = transaction.get(counters_ref)
+    counter_doc_snapshot = None
+    try:
+        # transaction.get(DocumentReference) is expected to return a DocumentSnapshot.
+        # However, if it returns an iterable/generator (which is non-standard but reported),
+        # we'll attempt to extract the first item.
+        result_from_get = transaction.get(counters_ref)
+        
+        # Check if the result is an iterable (like a generator)
+        if hasattr(result_from_get, '__iter__'): 
+            try:
+                # Attempt to get the first (and only) item from the iterable
+                counter_doc_snapshot = next(iter(result_from_get))
+            except StopIteration:
+                # If the iterable is empty, it means the document does not exist
+                counter_doc_snapshot = None
+        else:
+            # If it's not an iterable, assume it's directly the DocumentSnapshot
+            counter_doc_snapshot = result_from_get
+    except Exception as e:
+        print(f"Error retrieving counter document within transaction (unexpected behavior): {e}")
+        traceback.print_exc()
+        counter_doc_snapshot = None # Fallback if any error occurs during retrieval
 
-    if counter_doc:
-        current_count = counter_doc.get('count')
-    else:
-        # Initialize if the counter doesn't exist.
-        # This will create the document with count=0 if it's the very first ticket.
-        current_count = 0 
-
+    current_count = 0
+    # Now, check if we successfully obtained a DocumentSnapshot and if it exists
+    if counter_doc_snapshot and hasattr(counter_doc_snapshot, 'exists') and counter_doc_snapshot.exists: 
+        current_count = counter_doc_snapshot.to_dict().get('count', 0)
+        
     new_count = current_count + 1
     
-    # Update the counter in the transaction
     transaction.set(counters_ref, {'count': new_count})
-
-    # Format the new count into a 6-digit string with leading zeros
+    
     formatted_number = str(new_count).zfill(6)
     return f"IT{formatted_number}"
 
-# --- Your Flask Route ---
+
 @app.route('/create', methods=['POST'])
 def create_ticket():
     """
@@ -241,45 +244,43 @@ def create_ticket():
         return jsonify({'error': 'Title, Description, Reporter, Creator ID, and Creator Email are required!'}), 400
 
     try:
-        # Use a Firestore transaction to safely get and increment the ticket number
-        transaction = db.transaction()
-        
-        # Call the helper function within the transaction
-        display_id = get_next_ticket_number(transaction)
+        # Use the @firestore.transactional decorator for atomic operations.
+        # This decorator passes the transaction object to the decorated function.
+        @firestore.transactional
+        def create_ticket_transaction_callable(transaction_obj):
+            # Call the get_next_ticket_number within this transactional context
+            display_id = get_next_ticket_number(transaction_obj)
 
-        new_ticket_data = {
-            "title": title,
-            "description": description,
-            "status": status,
-            "priority": priority,
-            "reporter": reporter,
-            "creator_uid": creator_uid,
-            "creator_email": creator_email,
-            "assigned_to_email": "", # Default empty
-            "comments": [], # Comments will be an array of sub-documents
-            "created_at": datetime.now(timezone.utc), # Store as UTC timezone-aware datetime
-            "updated_at": datetime.now(timezone.utc), # Store as UTC timezone-aware datetime
-            "display_id": display_id # Store the new formatted ID here
-        }
-        
-        # Add the ticket data within the same transaction
-        doc_ref = tickets_collection.document() # Create a new document reference
-        transaction.set(doc_ref, new_ticket_data) # Set the data using the transaction
+            new_ticket_data = {
+                "title": title,
+                "description": description,
+                "status": status,
+                "priority": priority,
+                "reporter": reporter,
+                "creator_uid": creator_uid,
+                "creator_email": creator_email,
+                "assigned_to_email": "",
+                "comments": [],
+                "created_at": datetime.now(timezone.utc),
+                "updated_at": datetime.now(timezone.utc),
+                "display_id": display_id
+            }
+            
+            doc_ref = tickets_collection.document()
+            transaction_obj.set(doc_ref, new_ticket_data)
+            return doc_ref.id, display_id # Return the new doc ID and display_id
 
-        # Commit the transaction
-        transaction.commit()
+        # Execute the transactional function
+        ticket_id, display_id = create_ticket_transaction_callable(db.transaction())
 
-        # Return the Firestore document ID and the new display_id
         return jsonify({
             'message': 'Ticket created successfully!',
-            'ticket_id': doc_ref.id,
+            'ticket_id': ticket_id,
             'display_id': display_id
         }), 201
     except Exception as e:
-        # It's good practice to log the full traceback for debugging
-        import traceback
         print(f"Error creating ticket: {e}")
-        print(traceback.format_exc()) # This will print the full stack trace
+        print(traceback.format_exc())
         return jsonify({'error': f'Error creating ticket: {e}'}), 500
 
 @app.route('/ticket/<ticket_id>', methods=['GET'])
@@ -312,21 +313,25 @@ def update_ticket_api(ticket_id):
     data = request.get_json()
     new_status = data.get('status')
     new_priority = data.get('priority')
-    # assigned_to_email and due_date can be added here if needed, consistent with Flask's original update route
+    assigned_to_email = data.get('assigned_to_email')
 
     update_fields = {
-        "updated_at": datetime.now(timezone.utc) # Update timestamp with UTC timezone-aware datetime
+        "updated_at": datetime.now(timezone.utc)
     }
     if new_status:
         update_fields["status"] = new_status
     if new_priority:
         update_fields["priority"] = new_priority
     
+    if assigned_to_email is not None: 
+        update_fields["assigned_to_email"] = assigned_to_email
+
     try:
         tickets_collection.document(ticket_id).update(update_fields)
         return jsonify({'message': 'Ticket updated successfully!'}), 200
     except Exception as e:
         print(f"Error updating ticket: {e}")
+        print(traceback.format_exc())
         return jsonify({'error': f'Error updating ticket: {e}'}), 500
 
 @app.route('/ticket/<ticket_id>/add_comment', methods=['POST'])
@@ -347,20 +352,55 @@ def add_comment_api(ticket_id):
     new_comment = {
         'text': comment_text,
         'commenter': commenter_name,
-        'timestamp': datetime.now(timezone.utc) # Store comment timestamp as UTC timezone-aware datetime
+        'timestamp': datetime.now(timezone.utc)
     }
 
     try:
         tickets_collection.document(ticket_id).update({
             "comments": firestore.ArrayUnion([new_comment]),
-            "updated_at": datetime.now(timezone.utc) # Update ticket's updated_at when a comment is added
+            "updated_at": datetime.now(timezone.utc)
         })
         return jsonify({'message': 'Comment added successfully!'}), 200
     except Exception as e:
         print(f"Error adding comment: {e}")
+        print(traceback.format_exc())
         return jsonify({'error': f'Error adding comment: {e}'}), 500
+
+@app.route('/ticket/<ticket_id>/delete', methods=['DELETE'])
+def delete_ticket(ticket_id):
+    """
+    API endpoint to delete a ticket from Firestore.
+    Requires 'requester_uid' in the request body to verify user role.
+    Only allows 'support' role users to delete tickets.
+    """
+    if not db_connected:
+        return jsonify({'error': 'Database connection not established.'}), 500
+
+    data = request.get_json()
+    requester_uid = data.get('requester_uid')
+
+    if not requester_uid:
+        return jsonify({'error': 'Requester UID is required to verify permissions.'}), 400
+
+    try:
+        user_doc = users_collection.document(requester_uid).get()
+        if not user_doc.exists:
+            return jsonify({'error': 'Requester user profile not found.'}), 404
+        
+        user_role = user_doc.to_dict().get('role')
+        if user_role != 'support':
+            return jsonify({'error': 'Permission denied. Only support associates can delete tickets.'}), 403 # Forbidden
+
+        tickets_collection.document(ticket_id).delete()
+        
+        return jsonify({'message': f'Ticket {ticket_id} deleted successfully!'}), 200
+
+    except Exception as e:
+        print(f"Error deleting ticket {ticket_id}: {e}")
+        print(traceback.format_exc())
+        return jsonify({'error': f'Error deleting ticket: {e}'}), 500
+
 
 # Entry point for running the Flask app
 if __name__ == '__main__':
-    # This will run the Flask development server
     app.run(debug=True)

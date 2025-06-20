@@ -1,11 +1,10 @@
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-// Updated Lucide React imports for new icons and spinner
-import { User, LogIn, LogOut, PlusCircle, List, LayoutDashboard, MessageSquareText, FilePenLine, ChevronDown, Settings, Monitor, CheckCircle, XCircle, Info, AlertTriangle, Tag, CalendarDays, ClipboardCheck, Send, Loader2, ListFilter, Clock, Users } from 'lucide-react'; // Added Users icon
+// Updated Lucide React imports for new icons and spinner, including Trash2
+import { User, LogIn, LogOut, PlusCircle, List, LayoutDashboard, MessageSquareText, FilePenLine, ChevronDown, Settings, Monitor, CheckCircle, XCircle, Info, AlertTriangle, Tag, CalendarDays, ClipboardCheck, Send, Loader2, ListFilter, Clock, Users, Trash2 } from 'lucide-react';
 
 // Import Firebase (make sure you've installed it: npm install firebase)
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInWithEmailAndPassword } from 'firebase/auth'; // Import getAuth and signInWithEmailAndPassword
+import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
 
 
 // --- Firebase Client-Side Configuration ---
@@ -27,6 +26,34 @@ const app = initializeApp(firebaseConfig);
 const authClient = getAuth(app);
 
 
+// --- Custom Confirmation Modal Component ---
+const ConfirmationModal = ({ message, onConfirm, onCancel, confirmText = 'Confirm', cancelText = 'Cancel' }) => {
+  return (
+    // Overlay for the background fade effect
+    <div className="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50 p-4 transition-opacity duration-300">
+      <div className="bg-white rounded-xl shadow-2xl p-8 max-w-sm w-full text-center transform scale-100 transition-transform duration-300">
+        <AlertTriangle size={48} className="text-red-500 mx-auto mb-6" />
+        <p className="text-xl font-semibold text-gray-800 mb-6">{message}</p>
+        <div className="flex justify-center space-x-4">
+          <button
+            onClick={onCancel}
+            className="px-6 py-3 bg-gray-300 text-gray-800 rounded-lg font-bold hover:bg-gray-400 transition duration-200 transform hover:scale-105"
+          >
+            {cancelText}
+          </button>
+          <button
+            onClick={onConfirm}
+            className="px-6 py-3 bg-red-600 text-white rounded-lg font-bold hover:bg-red-700 transition duration-200 transform hover:scale-105"
+          >
+            {confirmText}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+
 // Main App component for the IT Ticketing Tool
 function App() {
   // State to manage the current view (simulating routing without a router library)
@@ -41,7 +68,7 @@ function App() {
   const profileMenuRef = useRef(null); // Ref for the profile dropdown container
 
   // --- API Base URL ---
-  const API_BASE_URL = 'http://127.0.0.1:5000';
+  const API_BASE_URL = 'http://127.0.0.1:5000'; // Make sure this matches your Flask backend URL
 
   // --- Effects and Handlers ---
 
@@ -78,25 +105,24 @@ function App() {
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [profileMenuRef]); // Only re-run if profileMenuRef changes (it won't)
-
+  }, [profileMenuRef]);
 
   // Function to show a flash message
-  const showFlashMessage = useCallback((message, type = 'info') => { // Memoize showFlashMessage
+  const showFlashMessage = useCallback((message, type = 'info') => {
     setFlashMessage({ message, type });
     setTimeout(() => {
       setFlashMessage({ message: '', type: '' }); // Clear message after 5 seconds
     }, 5000);
-  }, []); // showFlashMessage has no dependencies that change during component lifecycle
+  }, []);
 
-  const handleLoginSuccess = useCallback((userData) => { // Memoize handleLoginSuccess
+  const handleLoginSuccess = useCallback((userData) => {
     setCurrentUser(userData);
     localStorage.setItem('currentUser', JSON.stringify(userData)); // Store user in localStorage
     setCurrentView('myTickets');
     showFlashMessage('Login successful!', 'success');
-  }, [showFlashMessage]); // Depends on showFlashMessage
+  }, [showFlashMessage]);
 
-  const handleLogout = useCallback(() => { // Memoize handleLogout
+  const handleLogout = useCallback(() => {
     setCurrentUser(null);
     localStorage.removeItem('currentUser'); // Remove user from localStorage
     setIsProfileMenuOpen(false); // Close menu on logout
@@ -109,14 +135,14 @@ function App() {
         console.error("Error signing out from Firebase client:", error);
     });
     setCurrentView('login'); // Redirect to login after logout
-  }, [showFlashMessage]); // Depends on showFlashMessage
+  }, [showFlashMessage]);
 
-  const navigateTo = useCallback((view, ticketId = null) => { // Memoize navigateTo
+  const navigateTo = useCallback((view, ticketId = null) => {
     setCurrentView(view);
     setSelectedTicketId(ticketId);
     setFlashMessage({ message: '', type: '' }); // Clear messages on navigation
     setIsProfileMenuOpen(false); // Close profile menu on navigation
-  }, []); // navigateTo has no dependencies that change during component lifecycle
+  }, []);
 
   // --- View Components ---
 
@@ -125,9 +151,8 @@ function App() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [message, setMessage] = useState('');
-    const [loading, setLoading] = useState(false); // New loading state for login button
-    // New state for password error highlighting
-    const [passwordError, setPasswordError] = useState(false); // State to control password input highlight
+    const [loading, setLoading] = useState(false);
+    const [passwordError, setPasswordError] = useState(false);
 
     const handleSubmit = async (e) => {
       e.preventDefault();
@@ -136,47 +161,39 @@ function App() {
       setLoading(true); // Set loading to true
       try {
         // 1. Authenticate with Firebase Client SDK
-        // This is where the password verification happens securely against Firebase Auth
         const userCredential = await signInWithEmailAndPassword(authClient, email, password);
-        const user = userCredential.user; // The Firebase User object
-        const idToken = await user.getIdToken(); // Get the Firebase ID token (JWT)
-        console.log("Firebase client login successful. ID Token obtained.");
+        const user = userCredential.user;
+        const idToken = await user.getIdToken();
 
         // 2. Send the ID Token to your Flask backend for verification and role retrieval
-        // The Flask backend will use Firebase Admin SDK to verify this token
         const response = await fetch(`${API_BASE_URL}/login`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            // Send the ID token in the Authorization header for backend verification
             'Authorization': `Bearer ${idToken}`
           },
-          // We can send email or not, the backend will verify using the ID token's UID
-          body: JSON.stringify({ email: user.email }),
+          body: JSON.stringify({ /* No email/password here, backend uses token */ }),
+          // Or simply: body: null,
         });
 
         const data = await response.json();
         if (response.ok) {
           setMessage(data.message);
-          // If backend verification is successful, proceed with login success
-          onLoginSuccess(data.user); // Pass user data (including role from backend) to App component
+          onLoginSuccess(data.user);
         } else {
-          // If backend verification fails (e.g., role not found, or other backend issue)
           setMessage(data.error || 'Login failed after token verification.');
           showFlashMessage(data.error || 'Login failed after token verification.', 'error');
-          // Optional: If backend fails, consider signing out from client-side Firebase Auth as well
           authClient.signOut();
         }
       } catch (error) {
         console.error('Login error:', error);
         let errorMessage = 'Login failed.';
-        // Handle specific Firebase Auth errors returned by signInWithEmailAndPassword
         if (error.code) {
           switch (error.code) {
             case 'auth/user-not-found':
             case 'auth/wrong-password':
               errorMessage = 'Invalid email or password.';
-              setPasswordError(true); // Set password error for highlighting
+              setPasswordError(true);
               break;
             case 'auth/invalid-email':
               errorMessage = 'Invalid email format.';
@@ -188,24 +205,21 @@ function App() {
               errorMessage = 'Network error. Please check your internet connection.';
               break;
             default:
-              errorMessage = error.message; // Fallback to Firebase's default error message
+              errorMessage = error.message;
           }
         } else {
-          // General network or unexpected errors
           errorMessage = 'An unexpected network error occurred or server is unreachable.';
         }
         setMessage(errorMessage);
         showFlashMessage(errorMessage, 'error');
       } finally {
-        setLoading(false); // Always reset loading state
+        setLoading(false);
       }
     };
 
-    // Handler to clear password error when the input is focused
     const handlePasswordFocus = () => {
-      setPasswordError(false); // Clear the highlight when user clicks to re-enter
-      setMessage(''); // Optionally clear the local message
-      // Removed: showFlashMessage('', ''); // Do not clear parent flash message here
+      setPasswordError(false);
+      setMessage('');
     };
 
     return (
@@ -267,7 +281,7 @@ function App() {
     );
   };
 
-  // Register Component (unchanged for now, but will leverage Firebase Admin SDK for user creation)
+  // Register Component
   const RegisterComponent = ({ navigateTo, showFlashMessage }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -291,7 +305,6 @@ function App() {
           showFlashMessage(data.message || 'Registration successful! Please log in.', 'success');
           navigateTo('login');
         } else {
-          setMessage(data.error || 'Registration failed.');
           showFlashMessage(data.error || 'Registration failed.', 'error');
         }
       } catch (error) {
@@ -379,11 +392,10 @@ function App() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
-    const fetchMyTickets = useCallback(async () => { // Wrapped with useCallback
+    const fetchMyTickets = useCallback(async () => {
       setLoading(true);
       setError(null);
       try {
-        // Pass userId as a query parameter
         const response = await fetch(`${API_BASE_URL}/tickets/my?userId=${user.id}`);
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
@@ -397,13 +409,13 @@ function App() {
       } finally {
         setLoading(false);
       }
-    }, [user, showFlashMessage]); // Dependencies: user, showFlashMessage
+    }, [user, showFlashMessage]);
 
     useEffect(() => {
       if (user && user.id) {
         fetchMyTickets();
       }
-    }, [user, fetchMyTickets]); // Added fetchMyTickets to dependencies
+    }, [user, fetchMyTickets]);
 
     if (loading) return <div className="text-center text-gray-600 mt-8 text-xl flex items-center justify-center space-x-2"><Loader2 className="animate-spin" size={24} /> <span>Loading your tickets...</span></div>;
     if (error) return <div className="text-center text-red-600 mt-8 text-xl flex items-center justify-center space-x-2"><XCircle size={24} /> <span>Error: {error}</span></div>;
@@ -431,7 +443,6 @@ function App() {
               <div key={ticket.id} className="bg-white p-7 rounded-xl shadow-md border border-gray-200 hover:shadow-lg transition duration-300 transform hover:-translate-y-1 flex flex-col justify-between">
                 <div>
                   <h3 className="text-2xl font-bold text-indigo-800 mb-3 leading-tight">{ticket.title}</h3>
-                  {/* Using ticket.id directly as Flask API now returns 'id' for Firestore doc ID */}
                   <p className="text-gray-700 mb-2 flex items-center"><ClipboardCheck className="mr-3 text-indigo-500" size={18} /> <span className="font-semibold text-gray-800">ID:</span> {ticket.display_id}</p>
                   <p className="text-gray-700 mb-2 flex items-center"><User className="mr-3 text-indigo-500" size={18} /><span className="font-semibold text-gray-800">Reporter:</span> {ticket.reporter}</p>
                   <p className="text-gray-700 mb-2 flex items-center">
@@ -457,7 +468,6 @@ function App() {
                     </span>
                   </p>
                 </div>
-                {/* Using ticket.id directly */}
                 <button
                   onClick={() => navigateTo('ticketDetail', ticket.id)}
                   className="mt-6 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition duration-300 transform hover:scale-105 flex items-center justify-center space-x-2 font-semibold shadow-md"
@@ -475,25 +485,24 @@ function App() {
 
   // AllTickets Component (for support users)
   const AllTicketsComponent = ({ navigateTo, showFlashMessage }) => {
-    const [rawTickets, setRawTickets] = useState([]); // Stores all fetched tickets
-    const [tickets, setTickets] = useState([]); // Stores filtered tickets for display
+    const [rawTickets, setRawTickets] = useState([]);
+    const [tickets, setTickets] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [filterStatus, setFilterStatus] = useState('');
     const [filterAssignment, setFilterAssignment] = useState('');
     const [filterDue, setFilterDue] = useState('');
 
-    // Function to fetch all tickets from the API
     const fetchAllTickets = useCallback(async () => {
       setLoading(true);
       setError(null);
       try {
-        const response = await fetch(`${API_BASE_URL}/tickets/all`); // Always fetch all tickets
+        const response = await fetch(`${API_BASE_URL}/tickets/all`);
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
         const data = await response.json();
-        setRawTickets(data); // Store the full list
+        setRawTickets(data);
       } catch (err) {
         setError('Failed to fetch all tickets. Please try again.');
         showFlashMessage('Failed to fetch all tickets.', 'error');
@@ -501,16 +510,14 @@ function App() {
       } finally {
         setLoading(false);
       }
-    }, [showFlashMessage]); // No dependencies that change outside component lifecycle
+    }, [showFlashMessage]);
 
-    // Effect to fetch all tickets once on component mount
     useEffect(() => {
       fetchAllTickets();
     }, [fetchAllTickets]);
 
-    // Effect to filter tickets whenever rawTickets or filter states change
     useEffect(() => {
-      let filtered = [...rawTickets]; // Start with the full list
+      let filtered = [...rawTickets];
 
       if (filterStatus) {
         filtered = filtered.filter(ticket => ticket.status === filterStatus);
@@ -518,20 +525,16 @@ function App() {
       if (filterAssignment === 'unassigned') {
         filtered = filtered.filter(ticket => !ticket.assigned_to_email);
       }
-      // Add more filtering logic here for other filters (e.g., filterDue)
 
-      setTickets(filtered); // Update the displayed tickets
-    }, [rawTickets, filterStatus, filterAssignment, filterDue]); // Depend on rawTickets and filter states
+      setTickets(filtered);
+    }, [rawTickets, filterStatus, filterAssignment, filterDue]);
 
-    // Calculate counts based on the unfiltered rawTickets
     const counts = {
       total_tickets: rawTickets.length,
       open_tickets: rawTickets.filter(t => t.status === 'Open').length,
       in_progress_tickets: rawTickets.filter(t => t.status === 'In Progress').length,
       closed_tickets: rawTickets.filter(t => t.status === 'Closed' || t.status === 'Resolved').length,
       unassigned: rawTickets.filter(t => !t.assigned_to_email).length,
-      // For assigned_to_me and assigned_to_others, you'd need current user email, which would come from currentUser context
-      // For overdue, would need proper date comparison
     };
 
 
@@ -585,7 +588,6 @@ function App() {
           >
             Unassigned ({counts.unassigned})
           </button>
-          {/* Add more filter buttons as needed based on your Flask API capabilities */}
         </div>
 
         {tickets.length === 0 ? (
@@ -602,13 +604,14 @@ function App() {
                 <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Status</th>
                 <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Last Updated</th>
                 <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Assigned To</th>
+                <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
               {tickets.map(ticket => (
                 <tr key={ticket.id} className="hover:bg-gray-50 transition-colors duration-150 odd:bg-white even:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap text-base text-blue-700 hover:underline font-medium cursor-pointer" onClick={() => navigateTo('ticketDetail', ticket.id)}>
-                    {ticket.id.substring(0, 10).toUpperCase()}
+                    {ticket.display_id || ticket.id.substring(0, 10).toUpperCase()}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-base text-blue-700 hover:underline font-medium cursor-pointer" onClick={() => navigateTo('ticketDetail', ticket.id)}>
                     {ticket.title}
@@ -634,19 +637,16 @@ function App() {
                       {ticket.status}
                     </span>
                   </td>
-                  {/* Corrected Assigned To Cell */}
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800 flex items-center">
-                    <Users size={16} className="mr-2 text-gray-500" />
-                    {ticket.assigned_to_email || 'Unassigned'}
-                  </td>
-                  {/* Corrected Last Updated Cell */}
+                 
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800 flex items-center">
                     <CalendarDays size={16} className="mr-2 text-gray-500" />
                     {new Date(ticket.updated_at).toLocaleString()}
                   </td>
-                  {/* Actions column remains as is */}
+                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800 flex items-center">
+                    <Users size={16} className="mr-2 text-gray-500" />
+                    {ticket.assigned_to_email }
+                  </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    {/* Add your action buttons/links here */}
                   </td>
                 </tr>
               ))}
@@ -662,7 +662,6 @@ function App() {
   const CreateTicketComponent = ({ user, navigateTo, showFlashMessage }) => {
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
-    // Pre-fill reporter with user's email if available, otherwise allow input
     const [reporter, setReporter] = useState(user?.email || '');
     const [status, setStatus] = useState('Open');
     const [priority, setPriority] = useState('Low');
@@ -681,8 +680,8 @@ function App() {
             reporter,
             status,
             priority,
-            creator_uid: user.id, // Send user ID
-            creator_email: user.email // Send user email
+            creator_uid: user.id,
+            creator_email: user.email
           }),
         });
         const data = await response.json();
@@ -762,12 +761,13 @@ function App() {
     const [newComment, setNewComment] = useState('');
     const [updateStatus, setUpdateStatus] = useState('');
     const [updatePriority, setUpdatePriority] = useState('');
-    const [assignedToEmail, setAssignedToEmail] = useState(''); // New state for assigned to
+    const [assignedToEmail, setAssignedToEmail] = useState('');
     const [updateLoading, setUpdateLoading] = useState(false);
     const [commentLoading, setCommentLoading] = useState(false);
+    const [deleteLoading, setDeleteLoading] = useState(false);
+    const [showConfirmDeleteModal, setShowConfirmDeleteModal] = useState(false); // New state for modal visibility
 
-
-    const fetchTicket = useCallback(async () => { // Wrapped with useCallback
+    const fetchTicket = useCallback(async () => {
       setLoading(true);
       setError(null);
       try {
@@ -776,12 +776,11 @@ function App() {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
         const data = await response.json();
-        // Ensure comments exist and are an array
         if (!data.comments) data.comments = [];
         setTicket(data);
         setUpdateStatus(data.status);
         setUpdatePriority(data.priority);
-        setAssignedToEmail(data.assigned_to_email || ''); // Initialize assignedToEmail
+        setAssignedToEmail(data.assigned_to_email || '');
       } catch (err) {
         setError('Failed to fetch ticket details. Please try again.');
         showFlashMessage('Failed to fetch ticket details.', 'error');
@@ -789,13 +788,13 @@ function App() {
       } finally {
         setLoading(false);
       }
-    }, [ticketId, showFlashMessage]); // Dependencies for fetchTicket
+    }, [ticketId, showFlashMessage]);
 
     useEffect(() => {
       if (ticketId) {
         fetchTicket();
       }
-    }, [ticketId, fetchTicket]); // Now depends on memoized fetchTicket
+    }, [ticketId, fetchTicket]);
 
     const handleUpdateTicket = async (e) => {
         e.preventDefault();
@@ -807,13 +806,12 @@ function App() {
                 body: JSON.stringify({
                   status: updateStatus,
                   priority: updatePriority,
-                  assigned_to_email: assignedToEmail // Include assigned_to_email in update payload
+                  assigned_to_email: assignedToEmail
                 }),
             });
             const data = await response.json();
             if (response.ok) {
                 showFlashMessage(data.message || 'Ticket updated successfully!', 'success');
-                // Re-fetch ticket to get latest details including updated_at
                 fetchTicket();
             } else {
                 showFlashMessage(data.error || 'Failed to update ticket.', 'error');
@@ -844,7 +842,6 @@ function App() {
             if (response.ok) {
                 showFlashMessage(data.message || 'Comment added successfully!', 'success');
                 setNewComment('');
-                // Re-fetch ticket to get latest comments and updated_at
                 fetchTicket();
             } else {
                 showFlashMessage(data.error || 'Failed to add comment.', 'error');
@@ -857,169 +854,239 @@ function App() {
         }
     };
 
+    // Function to open the confirmation modal
+    const handleOpenDeleteConfirm = () => {
+      if (!user || user.role !== 'support') {
+        showFlashMessage("Permission denied. Only support associates can delete tickets.", "error");
+        return;
+      }
+      setShowConfirmDeleteModal(true);
+    };
+
+    // Function to close the confirmation modal
+    const handleCancelDelete = () => {
+      setShowConfirmDeleteModal(false);
+    };
+
+    // Confirmed Delete Ticket Action (this is now called by the modal's onConfirm)
+    const handleConfirmDeleteTicket = async () => {
+      setShowConfirmDeleteModal(false); // Close the modal immediately
+      setDeleteLoading(true);
+      try {
+        const response = await fetch(`${API_BASE_URL}/ticket/${ticketId}/delete`, {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ requester_uid: user.id }),
+        });
+
+        const data = await response.json();
+        if (response.ok) {
+          showFlashMessage(data.message || 'Ticket deleted successfully!', 'success');
+          navigateTo(user.role === 'support' ? 'allTickets' : 'myTickets');
+        } else {
+          showFlashMessage(data.error || 'Failed to delete ticket.', 'error');
+        }
+      } catch (error) {
+        console.error('Delete ticket error:', error);
+        showFlashMessage('Network error or server unreachable during deletion.', 'error');
+      } finally {
+        setDeleteLoading(false);
+      }
+    };
+
+
     if (loading) return <div className="text-center text-gray-600 mt-8 text-xl flex items-center justify-center space-x-2"><Loader2 className="animate-spin" size={24} /> <span>Loading ticket details...</span></div>;
     if (error) return <div className="text-center text-red-600 mt-8 text-xl flex items-center justify-center space-x-2"><XCircle size={24} /> <span>Error: {error}</span></div>;
     if (!ticket) return <div className="text-center text-gray-600 mt-8 text-xl">Ticket not found.</div>;
 
     // Check if the current user is the creator or a support associate
     const canUpdateOrComment = user.role === 'support' || user.id === ticket.creator_uid;
-    // Only support users can edit the assigned_to field
     const canEditAssignedTo = user.role === 'support';
+    const canDeleteTicket = user.role === 'support';
 
 
     return (
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-8rem)] bg-gray-50 p-4">
         <div className="bg-white p-8 rounded-xl shadow-2xl w-full max-w-3xl border border-gray-100">
-        <h2 className="text-4xl font-extrabold text-indigo-800 mb-2 text-center leading-tight">
-          Ticket #{ticket.display_id ? ticket.display_id : 'N/A'}
-        </h2>
+          <h2 className="text-4xl font-extrabold text-indigo-800 mb-2 text-center leading-tight">
+            Ticket #{ticket.display_id ? ticket.display_id : 'N/A'}
+          </h2>
 
-
-        <p className="text-2xl font-semibold text-gray-700 mb-8 text-center px-4">
-          {ticket.title}
-        </p>
-   
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-y-4 gap-x-8 mb-10 text-lg">
-          <p className="text-gray-700 flex items-center"><User className="mr-3 text-indigo-500" size={20} /><span className="font-bold text-gray-800">Reporter:</span> {ticket.reporter}</p>
-          <p className="text-gray-700 flex items-center">
-            <CalendarDays className="mr-3 text-indigo-500" size={20} /><span className="font-bold text-gray-800">Created:</span> {new Date(ticket.created_at).toLocaleString()}
+          <p className="text-3xl font-bold text-gray-800 mb-8 text-center leading-snug">
+            {ticket.title}
           </p>
-          <p className="text-gray-700 flex items-center">
-            <ClipboardCheck className="mr-3 text-indigo-500" size={20} /><span className="font-bold text-gray-800">Status:</span>
-            <span className={`ml-2 px-4 py-1 text-base font-semibold rounded-full ${
-                ticket.status === 'Open' ? 'bg-green-100 text-green-800' :
-                ticket.status === 'In Progress' ? 'bg-yellow-100 text-yellow-800' :
-                ticket.status === 'Closed' || ticket.status === 'Resolved' ? 'bg-gray-100 text-gray-800' :
-                'bg-blue-100 text-blue-800'
-            }`}>
-              {ticket.status}
-            </span>
-          </p>
-          <p className="text-gray-700 flex items-center">
-            <Clock className="mr-3 text-indigo-500" size={20} /><span className="font-bold text-gray-800">Last Updated:</span> {new Date(ticket.updated_at).toLocaleString()}
-          </p>
-          <p className="text-gray-700 flex items-center">
-            <Tag className="mr-3 text-indigo-500" size={20} /><span className="font-bold text-gray-800">Priority:</span>
-            <span className={`ml-2 px-4 py-1 text-base font-semibold rounded-full ${
-                ticket.priority === 'Low' ? 'bg-blue-100 text-blue-800' :
-                ticket.priority === 'Medium' ? 'bg-orange-100 text-orange-800' :
-                ticket.priority === 'High' || ticket.priority === 'Critical' ? 'bg-red-100 text-red-800' :
-                'bg-purple-100 text-purple-800'
-            }`}>
-              {ticket.priority}
-            </span>
-          </p>
-          <p className="text-gray-700 flex items-center">
-            <Users className="mr-3 text-indigo-500" size={20} /><span className="font-bold text-gray-800">Assigned To:</span> {ticket.assigned_to_email || 'Unassigned'}
-          </p>
-        </div>
 
-        <div className="bg-blue-50 p-6 rounded-xl border border-blue-200 shadow-inner mb-10">
-          <h4 className="text-2xl font-bold text-blue-800 mb-4 flex items-center"><FilePenLine className="mr-3" size={24} />Description:</h4>
-          <p className="text-gray-800 whitespace-pre-wrap leading-relaxed text-lg">{ticket.description}</p>
-        </div>
-
-        {canUpdateOrComment && ( // Render update section only if user has permissions
-          <div className="mb-10 p-7 bg-gray-50 rounded-xl shadow-md border border-gray-200">
-            <h3 className="text-3xl font-bold text-indigo-700 mb-6 text-center">Update Ticket</h3>
-            <form onSubmit={handleUpdateTicket} className="space-y-6">
-              <div>
-                <label htmlFor="updateStatus" className="block text-gray-700 text-base font-semibold mb-2">Update Status:</label>
-                <select id="updateStatus" className="w-full px-5 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-3 focus:ring-indigo-300 transition duration-200 bg-white" value={updateStatus} onChange={(e) => setUpdateStatus(e.target.value)}>
-                  <option value="Open">Open</option>
-                  <option value="In Progress">In Progress</option>
-                  <option value="Closed">Closed</option>
-                  <option value="Resolved">Resolved</option>
-                </select>
-              </div>
-              <div>
-                <label htmlFor="updatePriority" className="block text-gray-700 text-base font-semibold mb-2">Update Priority:</label>
-                <select id="updatePriority" className="w-full px-5 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-3 focus:ring-indigo-300 transition duration-200 bg-white" value={updatePriority} onChange={(e) => setUpdatePriority(e.target.value)}>
-                  <option value="Low">Low</option>
-                  <option value="Medium">Medium</option>
-                  <option value="High">High</option>
-                  <option value="Critical">Critical</option>
-                </select>
-              </div>
-              {/* New: Assigned To field - visible to all, editable only by support */}
-              <div>
-                <label htmlFor="assignedToEmail" className="block text-gray-700 text-base font-semibold mb-2">Assigned To (Email):</label>
-                <input
-                  type="email"
-                  id="assignedToEmail"
-                  className={`w-full px-5 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-3 focus:ring-indigo-300 transition duration-200
-                    ${!canEditAssignedTo ? 'bg-gray-100 cursor-not-allowed' : ''}`}
-                  value={assignedToEmail}
-                  onChange={(e) => setAssignedToEmail(e.target.value)}
-                  disabled={!canEditAssignedTo} // Disabled if not a support user
-                  placeholder="Enter support email or leave empty for unassigned"
-                />
-              </div>
-
-              <button type="submit" className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg font-bold text-lg hover:bg-blue-700 focus:outline-none focus:ring-3 focus:ring-blue-500 focus:ring-offset-2 transition duration-300 transform hover:scale-105 flex items-center justify-center space-x-2 disabled:opacity-60 disabled:cursor-not-allowed" disabled={updateLoading}>
-                {updateLoading ? (
-                    <>
-                        <Loader2 size={20} className="animate-spin" />
-                        <span>Updating...</span>
-                    </>
-                ) : (
-                    <>
-                        <FilePenLine size={20} />
-                        <span>Update Ticket</span>
-                    </>
-                )}
-              </button>
-            </form>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-y-4 gap-x-8 mb-10 text-lg">
+            <p className="text-gray-700 flex items-center"><User className="mr-3 text-indigo-500" size={20} /><span className="font-bold text-gray-800">Reporter:</span> {ticket.reporter}</p>
+            <p className="text-gray-700 flex items-center">
+              <CalendarDays className="mr-3 text-indigo-500" size={20} /><span className="font-bold text-gray-800">Created:</span> {new Date(ticket.created_at).toLocaleString()}
+            </p>
+            <p className="text-gray-700 flex items-center">
+              <ClipboardCheck className="mr-3 text-indigo-500" size={20} /><span className="font-bold text-gray-800">Status:</span>
+              <span className={`ml-2 px-4 py-1 text-base font-semibold rounded-full ${
+                  ticket.status === 'Open' ? 'bg-green-100 text-green-800' :
+                  ticket.status === 'In Progress' ? 'bg-yellow-100 text-yellow-800' :
+                  ticket.status === 'Closed' || ticket.status === 'Resolved' ? 'bg-gray-100 text-gray-800' :
+                  'bg-blue-100 text-blue-800'
+              }`}>
+                {ticket.status}
+              </span>
+            </p>
+            <p className="text-gray-700 flex items-center">
+              <Clock className="mr-3 text-indigo-500" size={20} /><span className="font-bold text-gray-800">Last Updated:</span> {new Date(ticket.updated_at).toLocaleString()}
+            </p>
+            <p className="text-gray-700 flex items-center">
+              <Tag className="mr-3 text-indigo-500" size={20} /><span className="font-bold text-gray-800">Priority:</span>
+              <span className={`ml-2 px-4 py-1 text-base font-semibold rounded-full ${
+                  ticket.priority === 'Low' ? 'bg-blue-100 text-blue-800' :
+                  ticket.priority === 'Medium' ? 'bg-orange-100 text-orange-800' :
+                  ticket.priority === 'High' || ticket.priority === 'Critical' ? 'bg-red-100 text-red-800' :
+                  'bg-purple-100 text-purple-800'
+              }`}>
+                {ticket.priority}
+              </span>
+            </p>
+            <p className="text-gray-700 flex items-center">
+              <Users className="mr-3 text-indigo-500" size={20} /><span className="font-bold text-gray-800">Assigned To:</span> {ticket.assigned_to_email || 'Unassigned'}
+            </p>
           </div>
-        )}
 
-        <div className="p-7 bg-gray-50 rounded-xl shadow-md border border-gray-200">
-          <h3 className="text-3xl font-bold text-indigo-700 mb-6 text-center">Comments</h3>
-          {ticket.comments && ticket.comments.length > 0 ? (
-            <ul className="space-y-5">
-              {ticket.comments.map((comment, index) => (
-                <li key={index} className="bg-white p-5 rounded-lg shadow-sm border border-gray-100">
-                  <p className="text-gray-800 text-base mb-2 whitespace-pre-wrap flex items-start"><MessageSquareText className="mr-3 text-indigo-500 flex-shrink-0" size={18} />{comment.text}</p>
-                  <p className="text-gray-600 text-xs text-right mt-2">By <span className="font-semibold text-gray-700">{comment.commenter}</span> on <span className="font-medium">{new Date(comment.timestamp).toLocaleString()}</span></p>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-gray-700 text-lg text-center p-10 border-4 border-dashed border-gray-300 rounded-2xl bg-gray-100">Provide additional comments?</p>
+          <div className="bg-blue-50 p-6 rounded-xl border border-blue-200 shadow-inner mb-10">
+            <h4 className="text-2xl font-bold text-blue-800 mb-4 flex items-center"><FilePenLine className="mr-3" size={24} />Description:</h4>
+            <p className="text-gray-800 whitespace-pre-wrap leading-relaxed text-lg">{ticket.description}</p>
+          </div>
+
+          {canUpdateOrComment && ( // Render update section only if user has permissions
+            <div className="mb-10 p-7 bg-gray-50 rounded-xl shadow-md border border-gray-200">
+              <h3 className="text-3xl font-bold text-indigo-700 mb-6 text-center">Update Ticket</h3>
+              <form onSubmit={handleUpdateTicket} className="space-y-6">
+                <div>
+                  <label htmlFor="updateStatus" className="block text-gray-700 text-base font-semibold mb-2">Update Status:</label>
+                  <select id="updateStatus" className="w-full px-5 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-3 focus:ring-indigo-300 transition duration-200 bg-white" value={updateStatus} onChange={(e) => setUpdateStatus(e.target.value)}>
+                    <option value="Open">Open</option>
+                    <option value="In Progress">In Progress</option>
+                    <option value="Closed">Closed</option>
+                    <option value="Resolved">Resolved</option>
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="updatePriority" className="block text-gray-700 text-base font-semibold mb-2">Update Priority:</label>
+                  <select id="updatePriority" className="w-full px-5 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-3 focus:ring-indigo-300 transition duration-200 bg-white" value={updatePriority} onChange={(e) => setUpdatePriority(e.target.value)}>
+                    <option value="Low">Low</option>
+                    <option value="Medium">Medium</option>
+                    <option value="High">High</option>
+                    <option value="Critical">Critical</option>
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="assignedToEmail" className="block text-gray-700 text-base font-semibold mb-2">Assigned To (Email):</label>
+                  <input
+                    type="email"
+                    id="assignedToEmail"
+                    className={`w-full px-5 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-3 focus:ring-indigo-300 transition duration-200
+                      ${!canEditAssignedTo ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                    value={assignedToEmail}
+                    onChange={(e) => setAssignedToEmail(e.target.value)}
+                    disabled={!canEditAssignedTo}
+                    placeholder="Enter support email or leave empty for unassigned"
+                  />
+                </div>
+
+                <button type="submit" className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg font-bold text-lg hover:bg-blue-700 focus:outline-none focus:ring-3 focus:ring-blue-500 focus:ring-offset-2 transition duration-300 transform hover:scale-105 flex items-center justify-center space-x-2 disabled:opacity-60 disabled:cursor-not-allowed" disabled={updateLoading}>
+                  {updateLoading ? (
+                      <>
+                          <Loader2 size={20} className="animate-spin" />
+                          <span>Updating...</span>
+                      </>
+                  ) : (
+                      <>
+                          <FilePenLine size={20} />
+                          <span>Update Ticket</span>
+                      </>
+                  )}
+                </button>
+              </form>
+            </div>
           )}
 
-          {canUpdateOrComment && ( // Render comment form only if user has permissions
-            <form onSubmit={handleAddComment} className="mt-8 space-y-6">
-              <div>
-                <label htmlFor="newComment" className="block text-gray-700 text-base font-semibold mb-2">Add New Comment:</label>
-                <textarea id="newComment" className="w-full px-5 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-3 focus:ring-indigo-300 transition duration-200" rows="5" value={newComment} onChange={(e) => setNewComment(e.target.value)} required></textarea>
-              </div>
-              <button type="submit" className="w-full bg-green-600 text-white py-3 px-4 rounded-lg font-bold text-lg hover:bg-green-700 focus:outline-none focus:ring-3 focus:ring-green-500 focus:ring-offset-2 transition duration-300 transform hover:scale-105 flex items-center justify-center space-x-2 disabled:opacity-60 disabled:cursor-not-allowed" disabled={commentLoading}>
-                {commentLoading ? (
-                    <>
-                        <Loader2 size={20} className="animate-spin" />
-                        <span>Adding...</span>
-                    </>
-                ) : (
-                    <>
-                        <Send size={20} />
-                        <span>Add Comment</span>
-                    </>
-                )}
-              </button>
-            </form>
+          {/* Delete Ticket Button - Only for Support */}
+          {canDeleteTicket && (
+            <button
+              onClick={handleOpenDeleteConfirm} // Call the new function to open modal
+              className="mt-8 w-full bg-red-600 text-white py-3 px-4 rounded-lg font-bold text-lg hover:bg-red-700 focus:outline-none focus:ring-3 focus:ring-red-500 focus:ring-offset-2 transition duration-300 transform hover:scale-105 flex items-center justify-center space-x-2 disabled:opacity-60 disabled:cursor-not-allowed"
+              disabled={deleteLoading}
+            >
+              {deleteLoading ? (
+                <>
+                  <Loader2 size={20} className="animate-spin" />
+                  <span>Deleting...</span>
+                </>
+              ) : (
+                <>
+                  <Trash2 size={20} />
+                  <span>Delete Ticket</span>
+                </>
+              )}
+            </button>
           )}
+
+          <div className="p-7 bg-gray-50 rounded-xl shadow-md border border-gray-200 mt-8">
+            <h3 className="text-3xl font-bold text-indigo-700 mb-6 text-center">Comments</h3>
+            {ticket.comments && ticket.comments.length > 0 ? (
+              <ul className="space-y-5">
+                {ticket.comments.map((comment, index) => (
+                  <li key={index} className="bg-white p-5 rounded-lg shadow-sm border border-gray-100">
+                    <p className="text-gray-800 text-base mb-2 whitespace-pre-wrap flex items-start"><MessageSquareText className="mr-3 text-indigo-500 flex-shrink-0" size={18} />{comment.text}</p>
+                    <p className="text-gray-600 text-xs text-right mt-2">By <span className="font-semibold text-gray-700">{comment.commenter}</span> on <span className="font-medium">{new Date(comment.timestamp).toLocaleString()}</span></p>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-gray-700 text-lg text-center p-10 border-4 border-dashed border-gray-300 rounded-2xl bg-gray-100">No comments yet. Be the first to add one!</p>
+            )}
+
+            {canUpdateOrComment && (
+              <form onSubmit={handleAddComment} className="mt-8 space-y-6">
+                <div>
+                  <label htmlFor="newComment" className="block text-gray-700 text-base font-semibold mb-2">Add New Comment:</label>
+                  <textarea id="newComment" className="w-full px-5 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-3 focus:ring-indigo-300 transition duration-200" rows="5" value={newComment} onChange={(e) => setNewComment(e.target.value)} required></textarea>
+                </div>
+                <button type="submit" className="w-full bg-green-600 text-white py-3 px-4 rounded-lg font-bold text-lg hover:bg-green-700 focus:outline-none focus:ring-3 focus:ring-green-500 focus:ring-offset-2 transition duration-300 transform hover:scale-105 flex items-center justify-center space-x-2 disabled:opacity-60 disabled:cursor-not-allowed" disabled={commentLoading}>
+                  {commentLoading ? (
+                      <>
+                          <Loader2 size={20} className="animate-spin" />
+                          <span>Adding...</span>
+                      </>
+                  ) : (
+                      <>
+                          <Send size={20} />
+                          <span>Add Comment</span>
+                      </>
+                  )}
+                </button>
+              </form>
+            )}
+          </div>
+
+          <button
+            onClick={() => navigateTo(user.role === 'support' ? 'allTickets' : 'myTickets')}
+            className="mt-8 w-full bg-gray-500 text-white py-3 px-4 rounded-lg font-bold text-lg hover:bg-gray-600 focus:outline-none focus:ring-3 focus:ring-gray-500 focus:ring-offset-2 transition duration-300 transform hover:scale-105 flex items-center justify-center space-x-2"
+          >
+            <List size={20} />
+            <span>Back to Tickets</span>
+          </button>
         </div>
-
-        <button
-          onClick={() => navigateTo(user.role === 'support' ? 'allTickets' : 'myTickets')}
-          className="mt-8 w-full bg-gray-500 text-white py-3 px-4 rounded-lg font-bold text-lg hover:bg-gray-600 focus:outline-none focus:ring-3 focus:ring-gray-500 focus:ring-offset-2 transition duration-300 transform hover:scale-105 flex items-center justify-center space-x-2"
-        >
-          <List size={20} />
-          <span>Back to Tickets</span>
-        </button>
-      </div>
+        {/* Render Confirmation Modal conditionally outside the main content div */}
+        {showConfirmDeleteModal && (
+          <ConfirmationModal
+            message="Are you sure you want to delete this ticket? This action is irreversible."
+            onConfirm={handleConfirmDeleteTicket}
+            onCancel={handleCancelDelete}
+            confirmText="Delete Permanently"
+          />
+        )}
       </div>
     );
   };
@@ -1051,7 +1118,6 @@ function App() {
                   </li>
                 )}
                 <li>
-                  {/* The profile menu container */}
                   <div className="relative" ref={profileMenuRef}>
                     <button
                       onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
@@ -1062,7 +1128,6 @@ function App() {
                       <span className="font-semibold">{currentUser.email}</span>
                       <ChevronDown size={16} className={`ml-1 transition-transform ${isProfileMenuOpen ? 'rotate-180' : ''}`} />
                     </button>
-                    {/* Conditional rendering and classes based on isProfileMenuOpen state */}
                     <div className={`absolute right-0 mt-2 w-48 bg-white text-gray-800 rounded-lg shadow-xl py-1 z-10 origin-top-right transform transition-all duration-200 ease-out
                       ${isProfileMenuOpen ? 'scale-100 opacity-100' : 'scale-95 opacity-0 pointer-events-none'}`}>
                       <div className="block px-4 py-2 text-sm text-gray-700 border-b border-gray-100">Role: <span className="font-bold text-indigo-700">{currentUser.role.charAt(0).toUpperCase() + currentUser.role.slice(1)}</span></div>
@@ -1123,7 +1188,6 @@ function App() {
                 return <RegisterComponent navigateTo={navigateTo} showFlashMessage={showFlashMessage} />;
               case 'login':
               default:
-                // Pass authClient to LoginComponent if needed, though direct import is fine for now
                 return <LoginComponent onLoginSuccess={handleLoginSuccess} navigateTo={navigateTo} showFlashMessage={showFlashMessage} />;
             }
           } else {
@@ -1131,7 +1195,6 @@ function App() {
               case 'myTickets':
                 return <MyTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} />;
               case 'allTickets':
-                // Only allow support role to access all tickets
                 if (currentUser.role === 'support') {
                   return <AllTicketsComponent navigateTo={navigateTo} showFlashMessage={showFlashMessage} />;
                 } else {
