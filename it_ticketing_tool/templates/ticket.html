@@ -7,7 +7,7 @@
         <h2 class="ticket-detail-title">Ticket: {{ ticket.title }}</h2>
 
         <div class="ticket-details">
-            <p><strong>Tracking ID:</strong> {{ ticket.id | upper }}</p>
+            <p><strong>Tracking ID:</strong> {{ ticket.display_id | upper }}</p>
             <p><strong>Reporter:</strong> {{ ticket.reporter }}</p>
             <p><strong>Created by:</strong> {{ ticket.creator_email }}</p>
             <p><strong>Assigned To:</strong> {{ ticket.assigned_to_email if ticket.assigned_to_email else 'Unassigned' }}</p>

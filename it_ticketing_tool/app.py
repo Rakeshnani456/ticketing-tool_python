@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS # Import Flask-CORS
 import firebase_admin
-from firebase_admin import credentials, firestore, auth, exceptions # Import exceptions for FirebaseError
+from firebase_admin import credentials, firestore, auth
 from datetime import datetime, timezone # Import timezone for consistent datetimes
 
 # Initialize the Flask application
@@ -95,45 +95,43 @@ def register():
 def login():
     """
     API endpoint for user login.
-    This now expects a Firebase ID Token from the client-side for verification.
+    NOTE: This is a SIMPLIFIED login for demonstration ONLY.
+    In production, use client-side Firebase SDK to sign in and send ID token to backend for verification.
     """
     if not db_connected:
         return jsonify({'error': 'Database connection not established.'}), 500
 
-    # 1. Get the ID token from the Authorization header
-    auth_header = request.headers.get('Authorization')
-    if not auth_header or not auth_header.startswith('Bearer '):
-        return jsonify({'error': 'Authorization header with Bearer token is required!'}), 401
+    data = request.get_json()
+    email = data.get('email')
+    password = data.get('password') # Password is not directly verified by Admin SDK here
 
-    id_token = auth_header.split(' ')[1] # Extract the token part
+    if not email or not password:
+        return jsonify({'error': 'Email and Password are required!'}), 400
 
     try:
-        # 2. Verify the ID token using Firebase Admin SDK
-        # This securely checks if the token is valid, unexpired, and from your project
-        decoded_token = auth.verify_id_token(id_token)
-        uid = decoded_token['uid'] # Get the user's UID from the verified token
-        email_from_token = decoded_token.get('email', '') # Get the user's email from the verified token
+        # Attempt to get user by email. This confirms existence but doesn't authenticate password.
+        # THIS IS INSECURE FOR PASSWORD VERIFICATION.
+        # A proper flow involves Firebase client SDK for auth and token verification on backend.
+        user_record = auth.get_user_by_email(email)
 
-        # 3. Retrieve user role from Firestore based on the verified UID
-        user_doc = users_collection.document(uid).get()
-
+        # Retrieve user role from Firestore based on the UID found
+        user_doc = users_collection.document(user_record.uid).get()
+        
         if not user_doc.exists:
-            # This should ideally not happen if user successfully logged in on frontend
-            # but is a good safeguard if their Firestore profile is missing.
             return jsonify({'error': 'User profile not found in database. Contact support.'}), 404
-
+        
         user_profile = user_doc.to_dict()
 
         logged_in_user = {
-            'id': uid,
-            'email': email_from_token, # Use email from the decoded token
-            'role': user_profile.get('role', 'user')
+            'id': user_record.uid,
+            'email': user_record.email,
+            'role': user_profile.get('role', 'user') # Default to 'user' if not set
         }
         return jsonify({'message': 'Login successful', 'user': logged_in_user}), 200
-    except firebase_admin.auth.InvalidIdTokenError: # Specific error for invalid ID tokens
-        return jsonify({'error': 'Invalid or expired authentication token.'}), 401
-    except firebase_admin.exceptions.FirebaseError as e: # Catch other Firebase Admin SDK errors
-        print(f"Login FirebaseError during token verification or data fetch: {e}")
+    except firebase_admin.auth.UserNotFoundError:
+        return jsonify({'error': 'Invalid email or password.'}), 401
+    except firebase_admin.auth.AuthError as e:
+        print(f"Login AuthError: {e}")
         return jsonify({'error': f'Authentication error: {e}'}), 401
     except Exception as e:
         print(f"Unexpected login error: {e}")
@@ -179,7 +177,7 @@ def get_all_tickets():
 
     if status_filter:
         query = query.where('status', '==', status_filter)
-
+    
     if assignment_filter:
         if assignment_filter == 'unassigned':
             query = query.where('assigned_to_email', '==', '') # Assuming empty string for unassigned
@@ -193,11 +191,39 @@ def get_all_tickets():
     except Exception as e:
         print(f"Error fetching all tickets: {e}")
         return jsonify({'error': f'Failed to fetch all tickets: {e}'}), 500
+def get_next_ticket_number(transaction):
+    """
+    Atomically increments a ticket number counter in Firestore and returns
+    the next formatted 'ITXXXXXX' ID.
+    """
+    counters_ref = db.collection('counters').document('ticket_id_counter')
 
+    # Correct way to get a document within a transaction
+    # `transaction.get()` returns a DocumentSnapshot
+    counter_doc = transaction.get(counters_ref)
+
+    if counter_doc:
+        current_count = counter_doc.get('count')
+    else:
+        # Initialize if the counter doesn't exist.
+        # This will create the document with count=0 if it's the very first ticket.
+        current_count = 0 
+
+    new_count = current_count + 1
+    
+    # Update the counter in the transaction
+    transaction.set(counters_ref, {'count': new_count})
+
+    # Format the new count into a 6-digit string with leading zeros
+    formatted_number = str(new_count).zfill(6)
+    return f"IT{formatted_number}"
+
+# --- Your Flask Route ---
 @app.route('/create', methods=['POST'])
 def create_ticket():
     """
     API endpoint to create a new ticket in Firestore. Expects JSON input.
+    Generates a sequential 'ITXXXXXX' display ID.
     """
     if not db_connected:
         return jsonify({'error': 'Database connection not established.'}), 500
@@ -215,6 +241,12 @@ def create_ticket():
         return jsonify({'error': 'Title, Description, Reporter, Creator ID, and Creator Email are required!'}), 400
 
     try:
+        # Use a Firestore transaction to safely get and increment the ticket number
+        transaction = db.transaction()
+        
+        # Call the helper function within the transaction
+        display_id = get_next_ticket_number(transaction)
+
         new_ticket_data = {
             "title": title,
             "description": description,
@@ -226,12 +258,28 @@ def create_ticket():
             "assigned_to_email": "", # Default empty
             "comments": [], # Comments will be an array of sub-documents
             "created_at": datetime.now(timezone.utc), # Store as UTC timezone-aware datetime
-            "updated_at": datetime.now(timezone.utc)  # Store as UTC timezone-aware datetime
+            "updated_at": datetime.now(timezone.utc), # Store as UTC timezone-aware datetime
+            "display_id": display_id # Store the new formatted ID here
         }
-        update_time, doc_ref = tickets_collection.add(new_ticket_data) # Add a new document
-        return jsonify({'message': 'Ticket created successfully!', 'ticket_id': doc_ref.id}), 201
+        
+        # Add the ticket data within the same transaction
+        doc_ref = tickets_collection.document() # Create a new document reference
+        transaction.set(doc_ref, new_ticket_data) # Set the data using the transaction
+
+        # Commit the transaction
+        transaction.commit()
+
+        # Return the Firestore document ID and the new display_id
+        return jsonify({
+            'message': 'Ticket created successfully!',
+            'ticket_id': doc_ref.id,
+            'display_id': display_id
+        }), 201
     except Exception as e:
+        # It's good practice to log the full traceback for debugging
+        import traceback
         print(f"Error creating ticket: {e}")
+        print(traceback.format_exc()) # This will print the full stack trace
         return jsonify({'error': f'Error creating ticket: {e}'}), 500
 
 @app.route('/ticket/<ticket_id>', methods=['GET'])
@@ -273,7 +321,7 @@ def update_ticket_api(ticket_id):
         update_fields["status"] = new_status
     if new_priority:
         update_fields["priority"] = new_priority
-
+    
     try:
         tickets_collection.document(ticket_id).update(update_fields)
         return jsonify({'message': 'Ticket updated successfully!'}), 200
