@@ -1,19 +1,39 @@
 // App.js
-import React, { useState, useEffect, useCallback, useRef } from 'react'; // Import useCallback and useRef
-import { User, LogIn, LogOut, PlusCircle, List, LayoutDashboard, MessageSquareText, FilePenLine } from 'lucide-react'; // Example icons from lucide-react
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { User, LogIn, LogOut, PlusCircle, List, LayoutDashboard, MessageSquareText, FilePenLine } from 'lucide-react';
+
+// Import the functions you need from the Firebase SDKs
+import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js";
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut as firebaseSignOut } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js";
+
+
+// Your web app's Firebase configuration
+// IMPORTANT: Replace with your actual Firebase project configuration
+// You can find this in your Firebase project settings -> "General" -> "Your apps" -> "Web app"
+const firebaseConfig = {
+  apiKey: "AIzaSyDZVwd_WHUw8RzUfkVklT7_9U6Mc-FNL-o",
+  authDomain: "it-ticketing-tool-dd679.firebaseapp.com",
+  projectId: "it-ticketing-tool-dd679",
+  storageBucket: "it-ticketing-tool-dd679.firebasestorage.app",
+  messagingSenderId: "919553361675",
+  appId: "1:919553361675:web:55bfeb860ebef1b886840e",
+  measurementId: "G-H6M4JBS3TL"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+
 
 // Main App component for the IT Ticketing Tool
 function App() {
-  // State to manage the current view (simulating routing without a router library)
-  // Possible values: 'login', 'register', 'myTickets', 'allTickets', 'createTicket', 'ticketDetail'
   const [currentView, setCurrentView] = useState('login');
-  // Stores logged-in user data { id, email, role }
   const [currentUser, setCurrentUser] = useState(null); 
-  // For viewing a specific ticket
   const [selectedTicketId, setSelectedTicketId] = useState(null); 
-  const [flashMessage, setFlashMessage] = useState({ message: '', type: '' }); // For showing messages
-  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false); // State to control profile dropdown visibility
-  const profileMenuRef = useRef(null); // Ref for the profile dropdown container
+  const [flashMessage, setFlashMessage] = useState({ message: '', type: '' });
+  const [isFlashMessageVisible, setIsFlashMessageVisible] = useState(false);
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const profileMenuRef = useRef(null);
 
   // --- API Base URL ---
   const API_BASE_URL = 'http://127.0.0.1:5000'; 
@@ -27,7 +47,9 @@ function App() {
       if (storedUser) {
         const user = JSON.parse(storedUser);
         setCurrentUser(user);
-        setCurrentView('myTickets'); // Navigate to myTickets if logged in
+        // Only navigate to myTickets if a user is truly logged in (i.e., session is active or token is valid)
+        // For simplicity, we assume storedUser means logged in for now, but a real app would verify.
+        setCurrentView('myTickets'); 
         console.log("Found stored user:", user);
       } else {
         console.log("No stored user found, defaulting to login.");
@@ -35,873 +57,915 @@ function App() {
       }
     } catch (error) {
       console.error("Failed to parse stored user from localStorage:", error);
-      localStorage.removeItem('currentUser'); // Clear invalid data
+      localStorage.removeItem('currentUser');
       setCurrentUser(null);
       setCurrentView('login');
     }
-  }, []); // Run only once on component mount
+  }, []);
 
-  // Effect to close profile menu when clicking outside
+  // Flash message visibility timer
   useEffect(() => {
-    const handleClickOutside = (event) => {
+    if (flashMessage.message) {
+      setIsFlashMessageVisible(true);
+      const timer = setTimeout(() => {
+        setIsFlashMessageVisible(false);
+        setFlashMessage({ message: '', type: '' }); // Clear message after fading out
+      }, 5000); // Message visible for 5 seconds
+      return () => clearTimeout(timer);
+    }
+  }, [flashMessage]);
+
+  // Handle clicks outside the profile menu to close it
+  useEffect(() => {
+    function handleClickOutside(event) {
       if (profileMenuRef.current && !profileMenuRef.current.contains(event.target)) {
         setIsProfileMenuOpen(false);
       }
-    };
-
+    }
     document.addEventListener('mousedown', handleClickOutside);
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [profileMenuRef]); // Only re-run if profileMenuRef changes (it won't)
+  }, [profileMenuRef]);
 
-
-  // Function to show a flash message
-  const showFlashMessage = useCallback((message, type = 'info') => { // Memoize showFlashMessage
+  const showFlashMessage = useCallback((message, type) => {
     setFlashMessage({ message, type });
-    setTimeout(() => {
-      setFlashMessage({ message: '', type: '' }); // Clear message after 5 seconds
-    }, 5000);
-  }, []); // showFlashMessage has no dependencies that change during component lifecycle
+  }, []);
 
-  const handleLoginSuccess = useCallback((userData) => { // Memoize handleLoginSuccess
-    setCurrentUser(userData);
-    localStorage.setItem('currentUser', JSON.stringify(userData)); // Store user in localStorage
-    setCurrentView('myTickets');
-    showFlashMessage('Login successful!', 'success');
-  }, [showFlashMessage]); // Depends on showFlashMessage
-
-  const handleLogout = useCallback(() => { // Memoize handleLogout
-    setCurrentUser(null);
-    localStorage.removeItem('currentUser'); // Remove user from localStorage
-    setCurrentView('login');
-    setIsProfileMenuOpen(false); // Close menu on logout
-    showFlashMessage('You have been logged out.', 'info');
-    console.log("User logged out.");
-  }, [showFlashMessage]); // Depends on showFlashMessage
-
-  const navigateTo = useCallback((view, ticketId = null) => { // Memoize navigateTo
+  const navigateTo = useCallback((view, ticketId = null) => {
     setCurrentView(view);
     setSelectedTicketId(ticketId);
-    setFlashMessage({ message: '', type: '' }); // Clear messages on navigation
-    setIsProfileMenuOpen(false); // Close profile menu on navigation
-  }, []); // navigateTo has no dependencies that change during component lifecycle
+  }, []);
 
-  // --- View Components ---
+  const handleLogout = useCallback(async () => {
+    try {
+      // Sign out from Firebase client-side
+      await firebaseSignOut(auth); 
+      // Inform backend to clear its session (if using server-side sessions)
+      const response = await fetch(`${API_BASE_URL}/api/logout`, { method: 'POST' });
+      if (!response.ok) {
+        console.error('Failed to clear server session:', await response.text());
+      }
+      localStorage.removeItem('currentUser');
+      setCurrentUser(null);
+      navigateTo('login');
+      showFlashMessage('You have been logged out.', 'info');
+    } catch (error) {
+      console.error('Error during logout:', error);
+      showFlashMessage('Logout failed.', 'error');
+    }
+  }, [navigateTo, showFlashMessage, API_BASE_URL]);
 
-  // Login Component
-  const LoginComponent = ({ onLoginSuccess, navigateTo, showFlashMessage }) => {
+
+  // --- Components for different views ---
+
+  function LoginComponent({ navigateTo, showFlashMessage, setCurrentUser }) {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [message, setMessage] = useState('');
+    const [loading, setLoading] = useState(false);
 
-    const handleSubmit = async (e) => {
+    const handleLogin = async (e) => {
       e.preventDefault();
-      setMessage('Logging in...');
-      try {
-        const response = await fetch(`${API_BASE_URL}/login`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password }),
-        });
-        const data = await response.json();
-        if (response.ok) {
-          setMessage(data.message);
-          onLoginSuccess(data.user); // Pass user data to App component
-        } else {
-          setMessage(data.error || 'Login failed.');
-          showFlashMessage(data.error || 'Login failed.', 'error');
-        }
-      } catch (error) {
-        console.error('Login error:', error);
-        setMessage('Network error or server unreachable.');
-        showFlashMessage('Network error or server unreachable.', 'error');
-      }
-    };
-
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[calc(100vh-8rem)] bg-gray-50 p-4 rounded-lg">
-        <div className="bg-white p-8 rounded-lg shadow-xl w-full max-w-md border border-gray-200">
-          <h2 className="text-3xl font-bold text-indigo-700 mb-6 text-center">Login</h2>
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-              <label htmlFor="email" className="block text-gray-700 text-sm font-semibold mb-2">Email:</label>
-              <input
-                type="email"
-                id="email"
-                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 transition duration-200"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-            </div>
-            <div>
-              <label htmlFor="password" className="block text-gray-700 text-sm font-semibold mb-2">Password:</label>
-              <input
-                type="password"
-                id="password"
-                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 transition duration-200"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-            </div>
-            <button
-              type="submit"
-              className="w-full bg-indigo-600 text-white py-3 px-4 rounded-md font-semibold text-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition duration-300 transform hover:scale-105"
-            >
-              Log In
-            </button>
-            {message && <p className="text-center mt-4 text-sm text-red-500">{message}</p>}
-          </form>
-          <p className="text-center mt-6 text-gray-600">
-            Don't have an account?{' '}
-            <button onClick={() => navigateTo('register')} className="text-indigo-600 hover:underline font-semibold transition duration-200">
-              Register here
-            </button>
-          </p>
-        </div>
-      </div>
-    );
-  };
-
-  // Register Component
-  const RegisterComponent = ({ navigateTo, showFlashMessage }) => {
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-    const [role, setRole] = useState('user'); // Default role
-    const [message, setMessage] = useState('');
-
-    const handleSubmit = async (e) => {
-      e.preventDefault();
-      setMessage('Registering...');
-      try {
-        const response = await fetch(`${API_BASE_URL}/register`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password, role }),
-        });
-        const data = await response.json();
-        if (response.ok) {
-          setMessage(data.message);
-          showFlashMessage(data.message || 'Registration successful! Please log in.', 'success');
-          navigateTo('login');
-        } else {
-          setMessage(data.error || 'Registration failed.');
-          showFlashMessage(data.error || 'Registration failed.', 'error');
-        }
-      } catch (error) {
-        console.error('Registration error:', error);
-        setMessage('Network error or server unreachable.');
-        showFlashMessage('Network error or server unreachable.', 'error');
-      }
-    };
-
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[calc(100vh-8rem)] bg-gray-50 p-4 rounded-lg">
-        <div className="bg-white p-8 rounded-lg shadow-xl w-full max-w-md border border-gray-200">
-          <h2 className="text-3xl font-bold text-indigo-700 mb-6 text-center">Register</h2>
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-              <label htmlFor="email" className="block text-gray-700 text-sm font-semibold mb-2">Email:</label>
-              <input
-                type="email"
-                id="email"
-                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 transition duration-200"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-            </div>
-            <div>
-              <label htmlFor="password" className="block text-gray-700 text-sm font-semibold mb-2">Password:</label>
-              <input
-                type="password"
-                id="password"
-                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 transition duration-200"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-            </div>
-            <div>
-              <label htmlFor="role" className="block text-gray-700 text-sm font-semibold mb-2">Role:</label>
-              <select
-                id="role"
-                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 transition duration-200"
-                value={role}
-                onChange={(e) => setRole(e.target.value)}
-              >
-                <option value="user">User</option>
-                <option value="support">Support Associate</option>
-              </select>
-            </div>
-            <button
-              type="submit"
-              className="w-full bg-green-600 text-white py-3 px-4 rounded-md font-semibold text-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition duration-300 transform hover:scale-105"
-            >
-              Register
-            </button>
-            {message && <p className="text-center mt-4 text-sm text-green-500">{message}</p>}
-          </form>
-          <p className="text-center mt-6 text-gray-600">
-            Already have an account?{' '}
-            <button onClick={() => navigateTo('login')} className="text-indigo-600 hover:underline font-semibold transition duration-200">
-              Log In
-            </button>
-          </p>
-        </div>
-      </div>
-    );
-  };
-
-  // MyTickets Component
-  const MyTicketsComponent = ({ user, navigateTo, showFlashMessage }) => {
-    const [tickets, setTickets] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
-
-    const fetchMyTickets = useCallback(async () => { // Wrapped with useCallback
       setLoading(true);
-      setError(null);
       try {
-        // Pass userId as a query parameter
-        const response = await fetch(`${API_BASE_URL}/tickets/my?userId=${user.id}`);
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
+        // Authenticate with Firebase on the client-side
+        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        const user = userCredential.user;
+        
+        // Get Firebase ID Token
+        const idToken = await user.getIdToken();
+
+        // Send ID Token to Flask backend for verification and session creation
+        const response = await fetch(`${API_BASE_URL}/api/login`, { // <--- New API endpoint
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            // No need to send password here, only the securely obtained ID token
+          },
+          body: JSON.stringify({ idToken: idToken }), // Send ID token
+        });
+
         const data = await response.json();
-        setTickets(data);
-      } catch (err) {
-        setError('Failed to fetch tickets. Please try again.');
-        showFlashMessage('Failed to fetch your tickets.', 'error');
-        console.error('Error fetching my tickets:', err);
+        if (response.ok) {
+          localStorage.setItem('currentUser', JSON.stringify(data.user));
+          setCurrentUser(data.user);
+          navigateTo('myTickets');
+          showFlashMessage('Login successful!', 'success');
+        } else {
+          showFlashMessage(data.error || 'Login failed', 'error');
+        }
+      } catch (error) {
+        console.error('Firebase authentication error:', error);
+        let message = 'Login failed. Please check your credentials.';
+        if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+          message = 'Invalid email or password.';
+        } else if (error.code === 'auth/invalid-email') {
+          message = 'Invalid email address format.';
+        } else if (error.code === 'auth/too-many-requests') {
+          message = 'Too many failed login attempts. Please try again later.';
+        }
+        showFlashMessage(message, 'error');
       } finally {
         setLoading(false);
       }
-    }, [user, showFlashMessage]); // Dependencies: user, showFlashMessage
-
-    useEffect(() => {
-      if (user && user.id) {
-        fetchMyTickets();
-      }
-    }, [user, fetchMyTickets]); // Added fetchMyTickets to dependencies
-
-    if (loading) return <div className="text-center text-gray-600 mt-8 text-xl">Loading your tickets...</div>;
-    if (error) return <div className="text-center text-red-600 mt-8 text-xl">Error: {error}</div>;
+    };
 
     return (
-      <div className="p-4 bg-white rounded-lg shadow-md">
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-3xl font-bold text-indigo-700">My Tickets</h2>
-          <button
-            onClick={() => navigateTo('createTicket')}
-            className="bg-indigo-600 text-white px-6 py-2 rounded-md hover:bg-indigo-700 transition duration-300 flex items-center space-x-2"
-          >
-            <PlusCircle size={20} />
-            <span>Create New Ticket</span>
+      <div className="auth-container">
+        <h2 className="text-2xl font-bold mb-6 text-gray-800 text-center">Login</h2>
+        <form onSubmit={handleLogin} className="auth-form">
+          <label htmlFor="email">Email:</label>
+          <input
+            type="email"
+            id="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            autoComplete="username"
+            className="input-field"
+          />
+
+          <label htmlFor="password">Password:</label>
+          <input
+            type="password"
+            id="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            autoComplete="current-password"
+            className="input-field"
+          />
+
+          <button type="submit" className="button submit-button" disabled={loading}>
+            {loading ? 'Logging in...' : 'Login'}
           </button>
-        </div>
-        {tickets.length === 0 ? (
-          <p className="text-gray-600 text-lg text-center p-8 border-2 border-dashed border-gray-300 rounded-lg">You haven't created any tickets yet. Click "Create New Ticket" to get started!</p>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {tickets.map(ticket => (
-              <div key={ticket.id} className="bg-gray-50 p-6 rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition duration-300 flex flex-col justify-between">
-                <div>
-                  <h3 className="text-xl font-bold text-indigo-800 mb-2">{ticket.title}</h3>
-                  {/* Using ticket.id directly as Flask API now returns 'id' for Firestore doc ID */}
-                  <p className="text-gray-700 mb-1 flex items-center"><LayoutDashboard className="mr-2" size={16} /> <span className="font-semibold">ID:</span> {ticket.id.substring(0,8).toUpperCase()}</p>
-                  <p className="text-gray-700 mb-1"><span className="font-semibold">Reporter:</span> {ticket.reporter}</p>
-                  <p className="text-gray-700 mb-1 flex items-center">
-                    <span className="font-semibold mr-2">Status:</span> 
-                    <span className={`px-3 py-1 text-xs font-semibold rounded-full ${
-                        ticket.status === 'Open' ? 'bg-green-100 text-green-800' :
-                        ticket.status === 'In Progress' ? 'bg-yellow-100 text-yellow-800' :
-                        ticket.status === 'Closed' ? 'bg-gray-100 text-gray-800' :
-                        'bg-blue-100 text-blue-800'
-                    }`}>
-                      {ticket.status}
-                    </span>
-                  </p>
-                  <p className="text-gray-700 mb-4 flex items-center">
-                    <span className="font-semibold mr-2">Priority:</span> 
-                    <span className={`px-3 py-1 text-xs font-semibold rounded-full ${
-                        ticket.priority === 'Low' ? 'bg-blue-100 text-blue-800' :
-                        ticket.priority === 'Medium' ? 'bg-orange-100 text-orange-800' :
-                        ticket.priority === 'High' ? 'bg-red-100 text-red-800' :
-                        'bg-purple-100 text-purple-800'
-                    }`}>
-                      {ticket.priority}
-                    </span>
-                  </p>
-                </div>
-                {/* Using ticket.id directly */}
-                <button
-                  onClick={() => navigateTo('ticketDetail', ticket.id)}
-                  className="mt-4 bg-blue-500 text-white px-5 py-2 rounded-md hover:bg-blue-600 transition duration-300 transform hover:scale-105 flex items-center justify-center space-x-2"
-                >
-                  <List size={18} />
-                  <span>View Details</span>
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
+        </form>
+        <p className="auth-link mt-4 text-center">
+          Don't have an account? <a href="#" onClick={() => navigateTo('register')} className="text-blue-600 hover:underline">Register here</a>.
+        </p>
       </div>
     );
-  };
+  }
 
-  // AllTickets Component (for support users)
-  const AllTicketsComponent = ({ navigateTo, showFlashMessage }) => {
+  function RegisterComponent({ navigateTo, showFlashMessage }) {
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [role, setRole] = useState('user');
+    const [loading, setLoading] = useState(false);
+
+    const handleRegister = async (e) => {
+      e.preventDefault();
+      setLoading(true);
+      try {
+        // Create user in Firebase Authentication client-side
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        const user = userCredential.user;
+
+        // Immediately get ID token after registration to send to backend for role storage
+        const idToken = await user.getIdToken();
+
+        // Send registration data (including role and token) to Flask backend
+        const response = await fetch(`${API_BASE_URL}/api/register`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ email, role, idToken }), // Send token and role
+        });
+
+        const data = await response.json();
+        if (response.ok) {
+          showFlashMessage(data.message, 'success');
+          navigateTo('login');
+        } else {
+          showFlashMessage(data.error || 'Registration failed', 'error');
+        }
+      } catch (error) {
+        console.error('Firebase registration error:', error);
+        let message = 'Registration failed.';
+        if (error.code === 'auth/email-already-in-use') {
+          message = 'Email already registered. Please log in.';
+        } else if (error.code === 'auth/invalid-email') {
+          message = 'Invalid email address format.';
+        } else if (error.code === 'auth/weak-password') {
+          message = 'Password is too weak. It must be at least 6 characters.';
+        }
+        showFlashMessage(message, 'error');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    return (
+      <div className="auth-container">
+        <h2 className="text-2xl font-bold mb-6 text-gray-800 text-center">Register New User</h2>
+        <form onSubmit={handleRegister} className="auth-form">
+          <label htmlFor="email">Email:</label>
+          <input
+            type="email"
+            id="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            autoComplete="username"
+            className="input-field"
+          />
+
+          <label htmlFor="password">Password:</label>
+          <input
+            type="password"
+            id="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            autoComplete="new-password"
+            className="input-field"
+          />
+
+          <label htmlFor="role">Select Role:</label>
+          <select
+            id="role"
+            value={role}
+            onChange={(e) => setRole(e.target.value)}
+            className="input-field"
+          >
+            <option value="user">User</option>
+            <option value="support">Support Associate</option>
+          </select>
+
+          <button type="submit" className="button submit-button" disabled={loading}>
+            {loading ? 'Registering...' : 'Register'}
+          </button>
+        </form>
+        <p className="auth-link mt-4 text-center">
+          Already have an account? <a href="#" onClick={() => navigateTo('login')} className="text-blue-600 hover:underline">Log in here</a>.
+        </p>
+      </div>
+    );
+  }
+
+  // Helper component for displaying tickets (replaces MyTicketsComponent and AllTicketsComponent logic)
+  function TicketsDisplayComponent({ user, navigateTo, showFlashMessage, fetchUrl, pageTitle }) {
     const [tickets, setTickets] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
+    const [counts, setCounts] = useState({});
     const [filterStatus, setFilterStatus] = useState('');
     const [filterAssignment, setFilterAssignment] = useState('');
     const [filterDue, setFilterDue] = useState('');
+    const [loading, setLoading] = useState(true);
 
-    const fetchAllTickets = useCallback(async () => { // Wrapped with useCallback
+    const fetchTickets = useCallback(async () => {
       setLoading(true);
-      setError(null);
-      let url = `${API_BASE_URL}/tickets/all`;
-      const params = new URLSearchParams();
-
-      if (filterStatus) params.append('status', filterStatus);
-      if (filterAssignment) params.append('assignment', filterAssignment);
-      if (filterDue) params.append('due', filterDue);
-
-      if (params.toString()) {
-        url += `?${params.toString()}`;
-      }
-
       try {
+        let url = `${API_BASE_URL}${fetchUrl}`;
+        const params = new URLSearchParams();
+        if (filterStatus) params.append('status', filterStatus);
+        if (filterAssignment) params.append('assignment', filterAssignment);
+        if (filterDue) params.append('due', filterDue);
+
+        // Include userId for myTickets endpoint if applicable
+        if (fetchUrl === '/tickets/my' && user && user.id) {
+          params.append('userId', user.id);
+        }
+
+        if (params.toString()) {
+          url += `?${params.toString()}`;
+        }
+        
+        console.log("Fetching tickets from:", url); // Debugging line
+
         const response = await fetch(url);
         if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to fetch tickets');
         }
         const data = await response.json();
-        setTickets(data);
-      } catch (err) {
-        setError('Failed to fetch all tickets. Please try again.');
-        showFlashMessage('Failed to fetch all tickets.', 'error');
-        console.error('Error fetching all tickets:', err);
+        setTickets(data.tickets);
+        setCounts(data.counts);
+      } catch (error) {
+        console.error("Error fetching tickets:", error);
+        showFlashMessage(error.message || 'Error fetching tickets.', 'error');
+        setTickets([]);
+        setCounts({
+          'open_tickets': 0, 'assigned_to_me': 0, 'assigned_to_others': 0,
+          'unassigned': 0, 'overdue': 0, 'closed_tickets': 0, 'total_tickets': 0
+        });
       } finally {
         setLoading(false);
       }
-    }, [filterStatus, filterAssignment, filterDue, showFlashMessage]); // Dependencies for fetchAllTickets
+    }, [fetchUrl, filterStatus, filterAssignment, filterDue, showFlashMessage, user]);
 
     useEffect(() => {
-      fetchAllTickets();
-    }, [fetchAllTickets]); // Now depends on memoized fetchAllTickets
+      fetchTickets();
+    }, [fetchTickets]);
 
-    // Dummy counts for now - In a real app, these would come from a separate API endpoint or be calculated client-side from all fetched tickets
-    const counts = {
-      total_tickets: tickets.length,
-      open_tickets: tickets.filter(t => t.status === 'Open').length,
-      in_progress_tickets: tickets.filter(t => t.status === 'In Progress').length,
-      closed_tickets: tickets.filter(t => t.status === 'Closed' || t.status === 'Resolved').length,
-      unassigned: tickets.filter(t => !t.assigned_to_email).length,
-      // For assigned_to_me and assigned_to_others, we'd need current user email, which would come from currentUser context
-      // For overdue, would need proper date comparison
+    const handleTicketClick = (ticketId) => {
+      navigateTo('ticketDetail', ticketId);
     };
 
-
-    if (loading) return <div className="text-center text-gray-600 mt-8 text-xl">Loading all tickets...</div>;
-    if (error) return <div className="text-center text-red-600 mt-8 text-xl">Error: {error}</div>;
+    if (loading) {
+      return <div className="text-center mt-8 text-xl text-gray-600">Loading tickets...</div>;
+    }
 
     return (
-      <div className="p-4 bg-white rounded-lg shadow-md">
-        <h2 className="text-3xl font-bold text-indigo-700 mb-6">All Tickets</h2>
-        
-        {/* Filter Section */}
-        <div className="flex flex-wrap gap-3 mb-6 p-4 bg-gray-50 rounded-lg shadow-inner">
-          <button
-            onClick={() => { setFilterStatus(''); setFilterAssignment(''); setFilterDue(''); }}
-            className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors duration-200 ${
-              !filterStatus && !filterAssignment && !filterDue ? 'bg-indigo-600 text-white shadow-md' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
-            }`}
-          >
-            All Tickets ({counts.total_tickets})
-          </button>
-          <button
-            onClick={() => { setFilterStatus('Open'); setFilterAssignment(''); setFilterDue(''); }}
-            className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors duration-200 ${
-              filterStatus === 'Open' ? 'bg-indigo-600 text-white shadow-md' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
-            }`}
-          >
-            Open ({counts.open_tickets})
-          </button>
-          <button
-            onClick={() => { setFilterStatus('In Progress'); setFilterAssignment(''); setFilterDue(''); }}
-            className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors duration-200 ${
-              filterStatus === 'In Progress' ? 'bg-indigo-600 text-white shadow-md' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
-            }`}
-          >
-            In Progress ({counts.in_progress_tickets})
-          </button>
-          <button
-            onClick={() => { setFilterStatus('Closed'); setFilterAssignment(''); setFilterDue(''); }}
-            className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors duration-200 ${
-              filterStatus === 'Closed' ? 'bg-indigo-600 text-white shadow-md' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
-            }`}
-          >
-            Closed ({counts.closed_tickets})
-          </button>
-          <button
-            onClick={() => { setFilterAssignment('unassigned'); setFilterStatus(''); setFilterDue(''); }}
-            className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors duration-200 ${
-              filterAssignment === 'unassigned' ? 'bg-indigo-600 text-white shadow-md' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
-            }`}
-          >
-            Unassigned ({counts.unassigned})
-          </button>
-          {/* Add more filter buttons as needed based on your Flask API capabilities */}
+      <div className="main-content-area">
+        <div className="main-content-header">
+          <h2 className="text-2xl font-bold text-gray-800">{pageTitle}</h2>
+          {pageTitle === "My Tickets" && (
+            <button 
+              onClick={() => navigateTo('createTicket')} 
+              className="button primary-button add-new-ticket"
+            >
+              <PlusCircle className="inline-block mr-2" size={20} /> Create New Ticket
+            </button>
+          )}
         </div>
 
-        {tickets.length === 0 ? (
-          <p className="text-gray-600 text-lg text-center p-8 border-2 border-dashed border-gray-300 rounded-lg">No tickets found matching the criteria.</p>
-        ) : (
-          <div className="overflow-x-auto rounded-lg shadow-md border border-gray-200">
-            <table className="min-w-full bg-white">
-              <thead className="bg-gray-100 border-b border-gray-200">
+        {/* Filter Tabs */}
+        <div className="status-filters flex flex-wrap justify-center gap-2 mb-6">
+          <div 
+            className={`filter-item ${!filterStatus && !filterAssignment && !filterDue ? 'active' : ''}`}
+            onClick={() => { setFilterStatus(''); setFilterAssignment(''); setFilterDue(''); }}
+          >
+            All Tickets <span>{counts.total_tickets || 0}</span>
+          </div>
+          <div 
+            className={`filter-item ${filterStatus === 'Open' ? 'active' : ''}`}
+            onClick={() => { setFilterStatus('Open'); setFilterAssignment(''); setFilterDue(''); }}
+          >
+            Open <span>{counts.open_tickets || 0}</span>
+          </div>
+          {user && user.role === 'support' && (
+            <>
+              <div 
+                className={`filter-item ${filterAssignment === 'assigned_to_me' ? 'active' : ''}`}
+                onClick={() => { setFilterAssignment('assigned_to_me'); setFilterStatus(''); setFilterDue(''); }}
+              >
+                Assigned to Me <span>{counts.assigned_to_me || 0}</span>
+              </div>
+              <div 
+                className={`filter-item ${filterAssignment === 'unassigned' ? 'active' : ''}`}
+                onClick={() => { setFilterAssignment('unassigned'); setFilterStatus(''); setFilterDue(''); }}
+              >
+                Unassigned <span>{counts.unassigned || 0}</span>
+              </div>
+              <div 
+                className={`filter-item ${filterAssignment === 'assigned_to_others' ? 'active' : ''}`}
+                onClick={() => { setFilterAssignment('assigned_to_others'); setFilterStatus(''); setFilterDue(''); }}
+              >
+                Assigned to Others <span>{counts.assigned_to_others || 0}</span>
+              </div>
+            </>
+          )}
+          <div 
+            className={`filter-item ${filterDue === 'overdue' ? 'active' : ''}`}
+            onClick={() => { setFilterDue('overdue'); setFilterStatus(''); setFilterAssignment(''); }}
+          >
+            Overdue <span>{counts.overdue || 0}</span>
+          </div>
+          <div 
+            className={`filter-item ${filterStatus === 'Closed' ? 'active' : ''}`}
+            onClick={() => { setFilterStatus('Closed'); setFilterAssignment(''); setFilterDue(''); }}
+          >
+            Closed <span>{counts.closed_tickets || 0}</span>
+          </div>
+        </div>
+
+        {tickets.length > 0 ? (
+          <div className="ticket-table-container overflow-x-auto bg-white rounded-lg shadow">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Tracking ID</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Updated</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Reporter</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Subject</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Priority</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Title</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Priority</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assigned To</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Due Date</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created By</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created On</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
-                {tickets.map(ticket => (
-                  <tr key={ticket.id} className="hover:bg-gray-50 transition-colors duration-150"> {/* Using ticket.id here */}
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-600 hover:underline cursor-pointer" onClick={() => navigateTo('ticketDetail', ticket.id)}> {/* Using ticket.id here */}
-                      {ticket.id.substring(0, 10).toUpperCase()} {/* Using ticket.id here */}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800">{new Date(ticket.updated_at).toLocaleString()}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800">{ticket.reporter}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-600 hover:underline cursor-pointer" onClick={() => navigateTo('ticketDetail', ticket.id)}> {/* Using ticket.id here */}
-                      {ticket.title}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+              <tbody className="bg-white divide-y divide-gray-200">
+                {tickets.map((ticket) => (
+                  <tr key={ticket.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => handleTicketClick(ticket.id)}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900" data-label="ID">#{ticket.id.substring(0, 8).toUpperCase()}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-600 hover:text-blue-800" data-label="Title">{ticket.title}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm" data-label="Status">
                       <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                          ticket.status === 'Open' ? 'bg-green-100 text-green-800' :
-                          ticket.status === 'In Progress' ? 'bg-yellow-100 text-yellow-800' :
-                          ticket.status === 'Closed' || ticket.status === 'Resolved' ? 'bg-gray-100 text-gray-800' :
-                          'bg-blue-100 text-blue-800'
+                        ticket.status === 'Open' ? 'bg-blue-100 text-blue-800' :
+                        ticket.status === 'In Progress' ? 'bg-yellow-100 text-yellow-800' :
+                        ticket.status === 'Resolved' ? 'bg-green-100 text-green-800' :
+                        ticket.status === 'Closed' ? 'bg-gray-100 text-gray-800' :
+                        ticket.status === 'On Hold' ? 'bg-purple-100 text-purple-800' :
+                        ticket.status === 'Waiting reply' ? 'bg-orange-100 text-orange-800' :
+                        'bg-gray-100 text-gray-800'
                       }`}>
                         {ticket.status}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm" data-label="Priority">
                       <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                          ticket.priority === 'Low' ? 'bg-blue-100 text-blue-800' :
-                          ticket.priority === 'Medium' ? 'bg-orange-100 text-orange-800' :
-                          ticket.priority === 'High' || ticket.priority === 'Critical' ? 'bg-red-100 text-red-800' :
-                          'bg-purple-100 text-purple-800'
+                        ticket.priority === 'Low' ? 'bg-green-100 text-green-800' :
+                        ticket.priority === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
+                        ticket.priority === 'High' ? 'bg-orange-100 text-orange-800' :
+                        ticket.priority === 'Critical' ? 'bg-red-100 text-red-800' :
+                        'bg-gray-100 text-gray-800'
                       }`}>
                         {ticket.priority}
                       </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500" data-label="Assigned To">{ticket.assigned_to_email || 'Unassigned'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500" data-label="Due Date">
+                      {ticket.due_date ? new Date(ticket.due_date).toLocaleDateString() : 'N/A'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500" data-label="Created By">{ticket.creator_email}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500" data-label="Created On">
+                      {new Date(ticket.created_at).toLocaleDateString()}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+        ) : (
+          <p className="text-center text-gray-600 mt-8 text-lg">No tickets found.</p>
         )}
       </div>
     );
-  };
+  }
 
-  // CreateTicket Component
-  const CreateTicketComponent = ({ user, navigateTo, showFlashMessage }) => {
+
+  function MyTicketsComponent({ user, navigateTo, showFlashMessage }) {
+    return (
+      <TicketsDisplayComponent 
+        user={user}
+        navigateTo={navigateTo}
+        showFlashMessage={showFlashMessage}
+        fetchUrl={`/tickets/my`} // My tickets
+        pageTitle="My Tickets"
+      />
+    );
+  }
+
+  function AllTicketsComponent({ navigateTo, showFlashMessage }) {
+    const user = JSON.parse(localStorage.getItem('currentUser')); // Assuming currentUser is always available for support
+    return (
+      <TicketsDisplayComponent 
+        user={user} // Pass user to allow support-specific filters
+        navigateTo={navigateTo}
+        showFlashMessage={showFlashMessage}
+        fetchUrl={`/tickets/all`} // All tickets
+        pageTitle="All Tickets"
+      />
+    );
+  }
+
+
+  function CreateTicketComponent({ user, navigateTo, showFlashMessage }) {
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
-    // Pre-fill reporter with user's email if available, otherwise allow input
-    const [reporter, setReporter] = useState(user?.email || ''); 
+    const [reporter, setReporter] = useState('');
     const [status, setStatus] = useState('Open');
     const [priority, setPriority] = useState('Low');
+    const [assignedToEmail, setAssignedToEmail] = useState('');
+    const [dueDate, setDueDate] = useState('');
     const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        // Set reporter and creator_email from logged-in user if available
+        if (user) {
+            setReporter(user.email.split('@')[0]); // Use part of email as default reporter name
+        }
+        // Calculate and set default due date (10 days from now)
+        const defaultDueDate = new Date();
+        defaultDueDate.setDate(defaultDueDate.getDate() + 10);
+        setDueDate(defaultDueDate.toISOString().split('T')[0]); // Format to YYYY-MM-DD
+    }, [user]);
+
 
     const handleSubmit = async (e) => {
       e.preventDefault();
       setLoading(true);
       try {
-        const response = await fetch(`${API_BASE_URL}/create`, {
+        const response = await fetch(`${API_BASE_URL}/api/tickets`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+          },
           body: JSON.stringify({ 
             title, 
             description, 
             reporter, 
             status, 
-            priority, 
-            creator_uid: user.id, // Send user ID
-            creator_email: user.email // Send user email
+            priority,
+            assigned_to_email: assignedToEmail,
+            due_date: dueDate,
+            creator_uid: user.id, // Send current user's UID
+            creator_email: user.email // Send current user's email
           }),
         });
         const data = await response.json();
         if (response.ok) {
-          showFlashMessage(data.message || 'Ticket created successfully!', 'success');
+          showFlashMessage('Ticket created successfully!', 'success');
           navigateTo('myTickets');
         } else {
-          showFlashMessage(data.error || 'Failed to create ticket.', 'error');
+          showFlashMessage(data.error || 'Failed to create ticket', 'error');
         }
       } catch (error) {
-        console.error('Create ticket error:', error);
-        showFlashMessage('Network error or server unreachable.', 'error');
+        console.error('Error creating ticket:', error);
+        showFlashMessage('Network error or server unavailable', 'error');
       } finally {
         setLoading(false);
       }
     };
 
     return (
-      <div className="flex flex-col items-center justify-center min-h-[calc(100vh-8rem)] bg-gray-50 p-4 rounded-lg">
-        <div className="bg-white p-8 rounded-lg shadow-xl w-full max-w-md border border-gray-200">
-          <h2 className="text-3xl font-bold text-indigo-700 mb-6 text-center">Create New Ticket</h2>
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-              <label htmlFor="title" className="block text-gray-700 text-sm font-semibold mb-2">Title:</label>
-              <input type="text" id="title" className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 transition duration-200" value={title} onChange={(e) => setTitle(e.target.value)} required />
-            </div>
-            <div>
-              <label htmlFor="description" className="block text-gray-700 text-sm font-semibold mb-2">Description:</label>
-              <textarea id="description" className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 transition duration-200" rows="5" value={description} onChange={(e) => setDescription(e.target.value)} required></textarea>
-            </div>
-            <div>
-              <label htmlFor="reporter" className="block text-gray-700 text-sm font-semibold mb-2">Reporter Name:</label>
-              <input type="text" id="reporter" className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 transition duration-200" value={reporter} onChange={(e) => setReporter(e.target.value)} required />
-            </div>
-            <div>
-              <label htmlFor="status" className="block text-gray-700 text-sm font-semibold mb-2">Status:</label>
-              <select id="status" className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 transition duration-200" value={status} onChange={(e) => setStatus(e.target.value)}>
-                <option value="Open">Open</option>
-                <option value="In Progress">In Progress</option>
-                <option value="Closed">Closed</option>
-                <option value="Resolved">Resolved</option>
-              </select>
-            </div>
-            <div>
-              <label htmlFor="priority" className="block text-gray-700 text-sm font-semibold mb-2">Priority:</label>
-              <select id="priority" className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 transition duration-200" value={priority} onChange={(e) => setPriority(e.target.value)}>
-                <option value="Low">Low</option>
-                <option value="Medium">Medium</option>
-                <option value="High">High</option>
-                <option value="Critical">Critical</option>
-              </select>
-            </div>
-            <button type="submit" className="w-full bg-green-600 text-white py-3 px-4 rounded-md font-semibold text-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition duration-300 transform hover:scale-105" disabled={loading}>
-              {loading ? 'Creating...' : 'Create Ticket'}
-            </button>
-          </form>
-        </div>
+      <div className="form-container">
+        <h2 className="text-2xl font-bold mb-6 text-gray-800 text-center">Create New Ticket</h2>
+        <form onSubmit={handleSubmit} className="ticket-form">
+          <label htmlFor="title">Title:</label>
+          <input type="text" id="title" value={title} onChange={(e) => setTitle(e.target.value)} required className="input-field" />
+
+          <label htmlFor="description">Description:</label>
+          <textarea id="description" value={description} onChange={(e) => setDescription(e.target.value)} required className="input-field min-h-[100px]"></textarea>
+
+          <label htmlFor="reporter">Reporter Name:</label>
+          <input type="text" id="reporter" value={reporter} onChange={(e) => setReporter(e.target.value)} required className="input-field" />
+
+          <label htmlFor="status">Status:</label>
+          <select id="status" value={status} onChange={(e) => setStatus(e.target.value)} className="input-field">
+            <option value="Open">Open</option>
+            <option value="In Progress">In Progress</option>
+            <option value="Closed">Closed</option>
+            <option value="Resolved">Resolved</option>
+            <option value="On Hold">On Hold</option>
+            <option value="Waiting reply">Waiting reply</option>
+          </select>
+
+          <label htmlFor="priority">Priority:</label>
+          <select id="priority" value={priority} onChange={(e) => setPriority(e.target.value)} className="input-field">
+            <option value="Low">Low</option>
+            <option value="Medium">Medium</option>
+            <option value="High">High</option>
+            <option value="Critical">Critical</option>
+          </select>
+
+          <label htmlFor="assignedToEmail">Assigned To (Email):</label>
+          <input type="email" id="assignedToEmail" value={assignedToEmail} onChange={(e) => setAssignedToEmail(e.target.value)} className="input-field" />
+
+          <label htmlFor="dueDate">Due Date:</label>
+          <input type="date" id="dueDate" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="input-field" />
+          
+          <button type="submit" className="button submit-button" disabled={loading}>
+            {loading ? 'Creating...' : 'Create Ticket'}
+          </button>
+          <button type="button" onClick={() => navigateTo('myTickets')} className="button secondary-button mt-4">
+            Cancel
+          </button>
+        </form>
       </div>
     );
-  };
+  }
 
-  // TicketDetail Component
-  const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage }) => {
+  function TicketDetailComponent({ ticketId, navigateTo, user, showFlashMessage }) {
     const [ticket, setTicket] = useState(null);
+    const [comments, setComments] = useState([]);
+    const [newCommentText, setNewCommentText] = useState('');
+    const [status, setStatus] = useState('');
+    const [priority, setPriority] = useState('');
+    const [assignedToEmail, setAssignedToEmail] = useState('');
+    const [dueDate, setDueDate] = useState('');
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
-    const [newComment, setNewComment] = useState('');
-    const [updateStatus, setUpdateStatus] = useState('');
-    const [updatePriority, setUpdatePriority] = useState('');
-    const [updateLoading, setUpdateLoading] = useState(false);
-    const [commentLoading, setCommentLoading] = useState(false);
+    const [submittingComment, setSubmittingComment] = useState(false);
+    const [updatingTicket, setUpdatingTicket] = useState(false);
 
 
-    const fetchTicket = useCallback(async () => { // Wrapped with useCallback
+    const fetchTicketDetails = useCallback(async () => {
       setLoading(true);
-      setError(null);
       try {
-        const response = await fetch(`${API_BASE_URL}/ticket/${ticketId}`);
+        const response = await fetch(`${API_BASE_URL}/api/tickets/${ticketId}`);
         if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to fetch ticket details');
         }
         const data = await response.json();
-        // Ensure comments exist and are an array
-        if (!data.comments) data.comments = [];
         setTicket(data);
-        setUpdateStatus(data.status);
-        setUpdatePriority(data.priority);
-      } catch (err) {
-        setError('Failed to fetch ticket details. Please try again.');
-        showFlashMessage('Failed to fetch ticket details.', 'error');
-        console.error('Error fetching ticket:', err);
+        setComments(data.comments || []);
+        setStatus(data.status);
+        setPriority(data.priority);
+        setAssignedToEmail(data.assigned_to_email || '');
+        // Format date from ISO string to YYYY-MM-DD for input type="date"
+        setDueDate(data.due_date ? new Date(data.due_date).toISOString().split('T')[0] : '');
+      } catch (error) {
+        console.error("Error fetching ticket details:", error);
+        showFlashMessage(error.message || 'Error fetching ticket details.', 'error');
+        setTicket(null);
+        navigateTo('myTickets'); // Go back to list if ticket not found/error
       } finally {
         setLoading(false);
       }
-    }, [ticketId, showFlashMessage]); // Dependencies for fetchTicket
+    }, [ticketId, navigateTo, showFlashMessage]);
 
     useEffect(() => {
       if (ticketId) {
-        fetchTicket();
+        fetchTicketDetails();
       }
-    }, [ticketId, fetchTicket]); // Now depends on memoized fetchTicket
+    }, [ticketId, fetchTicketDetails]);
+
 
     const handleUpdateTicket = async (e) => {
         e.preventDefault();
-        setUpdateLoading(true);
+        setUpdatingTicket(true);
         try {
-            const response = await fetch(`${API_BASE_URL}/ticket/${ticketId}/update`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ status: updateStatus, priority: updatePriority }),
+            const response = await fetch(`${API_BASE_URL}/api/tickets/${ticketId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ 
+                    status, 
+                    priority,
+                    assigned_to_email: assignedToEmail,
+                    due_date: dueDate // Send date in YYYY-MM-DD format, backend will parse
+                }),
             });
             const data = await response.json();
             if (response.ok) {
-                showFlashMessage(data.message || 'Ticket updated successfully!', 'success');
-                // Re-fetch ticket to get latest details including updated_at
-                fetchTicket(); 
+                showFlashMessage('Ticket updated successfully!', 'success');
+                fetchTicketDetails(); // Re-fetch to get latest data including updated_at
             } else {
-                showFlashMessage(data.error || 'Failed to update ticket.', 'error');
+                showFlashMessage(data.error || 'Failed to update ticket', 'error');
             }
         } catch (error) {
-            console.error('Update ticket error:', error);
-            showFlashMessage('Network error or server unreachable.', 'error');
+            console.error('Error updating ticket:', error);
+            showFlashMessage('Network error or server unavailable', 'error');
         } finally {
-            setUpdateLoading(false);
+            setUpdatingTicket(false);
         }
     };
 
     const handleAddComment = async (e) => {
         e.preventDefault();
-        setCommentLoading(true);
-        if (!newComment.trim()) {
-            showFlashMessage('Comment cannot be empty.', 'error');
-            setCommentLoading(false);
+        setSubmittingComment(true);
+        if (!newCommentText.trim()) {
+            showFlashMessage('Comment cannot be empty!', 'error');
+            setSubmittingComment(false);
             return;
         }
         try {
-            const response = await fetch(`${API_BASE_URL}/ticket/${ticketId}/add_comment`, {
+            const response = await fetch(`${API_BASE_URL}/api/tickets/${ticketId}/comments`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ comment_text: newComment, commenter_name: user.email }),
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ 
+                    comment_text: newCommentText,
+                    commenter_name: user.email // Use current user's email as commenter
+                }),
             });
             const data = await response.json();
             if (response.ok) {
-                showFlashMessage(data.message || 'Comment added successfully!', 'success');
-                setNewComment('');
-                // Re-fetch ticket to get latest comments and updated_at
-                fetchTicket();
+                showFlashMessage('Comment added successfully!', 'success');
+                setNewCommentText('');
+                fetchTicketDetails(); // Re-fetch to get latest comments
             } else {
-                showFlashMessage(data.error || 'Failed to add comment.', 'error');
+                showFlashMessage(data.error || 'Failed to add comment', 'error');
             }
         } catch (error) {
-            console.error('Add comment error:', error);
-            showFlashMessage('Network error or server unreachable.', 'error');
+            console.error('Error adding comment:', error);
+            showFlashMessage('Network error or server unavailable', 'error');
         } finally {
-            setCommentLoading(false);
+            setSubmittingComment(false);
         }
     };
 
-    if (loading) return <div className="text-center text-gray-600 mt-8 text-xl">Loading ticket details...</div>;
-    if (error) return <div className="text-center text-red-600 mt-8 text-xl">Error: {error}</div>;
-    if (!ticket) return <div className="text-center text-gray-600 mt-8 text-xl">Ticket not found.</div>;
 
-    // Check if the current user is the creator or a support associate
-    const canUpdateOrComment = user.role === 'support' || user.id === ticket.creator_uid;
+    if (loading) {
+      return <div className="text-center mt-8 text-xl text-gray-600">Loading ticket details...</div>;
+    }
+
+    if (!ticket) {
+      return <div className="text-center text-red-600 mt-8 text-2xl font-bold">Ticket not found or access denied.</div>;
+    }
+
+    // Determine if the current user can edit the ticket
+    const canEdit = user && (user.role === 'support' || user.id === ticket.creator_uid);
 
 
     return (
-      <div className="flex flex-col items-center justify-center min-h-[calc(100vh-8rem)] bg-gray-50 p-4 rounded-lg">
-        <div className="bg-white p-8 rounded-lg shadow-xl w-full max-w-2xl border border-gray-200">
-          <h2 className="text-3xl font-bold text-indigo-700 mb-6 text-center">
-            {/* Ensure ticket.id is available before calling substring */}
-            Ticket #{ticket.id ? ticket.id.substring(0,10).toUpperCase() : 'N/A'}: {ticket.title}
-          </h2>
-          
-          <div className="space-y-4 mb-8 text-lg">
-            <p className="text-gray-700 flex items-center"><User className="mr-2" size={18} /><span className="font-semibold">Reporter:</span> {ticket.reporter}</p>
-            <p className="text-gray-700 flex items-center">
-              <List className="mr-2" size={18} /><span className="font-semibold">Status:</span> 
-              <span className={`ml-2 px-3 py-1 text-base font-semibold rounded-full ${
-                  ticket.status === 'Open' ? 'bg-green-100 text-green-800' :
-                  ticket.status === 'In Progress' ? 'bg-yellow-100 text-yellow-800' :
-                  ticket.status === 'Closed' || ticket.status === 'Resolved' ? 'bg-gray-100 text-gray-800' :
-                  'bg-blue-100 text-blue-800'
+      <div className="ticket-detail-container max-w-4xl mx-auto p-6 bg-white rounded-lg shadow-lg">
+        <h2 className="text-3xl font-bold mb-6 text-gray-800 text-center">Ticket: {ticket.title}</h2>
+
+        <div className="ticket-details-grid grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+            <p><strong>Tracking ID:</strong> <span className="text-blue-700 font-mono">{ticket.id ? ticket.id.substring(0, 10).toUpperCase() : 'N/A'}</span></p>
+            <p><strong>Reporter:</strong> {ticket.reporter}</p>
+            <p><strong>Created by:</strong> {ticket.creator_email}</p>
+            <p><strong>Assigned To:</strong> {ticket.assigned_to_email || 'Unassigned'}</p>
+            <p><strong>Due Date:</strong> {ticket.due_date ? new Date(ticket.due_date).toLocaleDateString() : 'N/A'}</p>
+            <p>
+              <strong>Current Status:</strong> 
+              <span className={`ml-2 px-3 py-1 rounded-full text-sm font-semibold ${
+                ticket.status === 'Open' ? 'bg-blue-100 text-blue-800' :
+                ticket.status === 'In Progress' ? 'bg-yellow-100 text-yellow-800' :
+                ticket.status === 'Resolved' ? 'bg-green-100 text-green-800' :
+                ticket.status === 'Closed' ? 'bg-gray-100 text-gray-800' :
+                ticket.status === 'On Hold' ? 'bg-purple-100 text-purple-800' :
+                ticket.status === 'Waiting reply' ? 'bg-orange-100 text-orange-800' :
+                'bg-gray-100 text-gray-800'
               }`}>
                 {ticket.status}
               </span>
             </p>
-            <p className="text-gray-700 flex items-center">
-              <LayoutDashboard className="mr-2" size={18} /><span className="font-semibold">Priority:</span> 
-              <span className={`ml-2 px-3 py-1 text-base font-semibold rounded-full ${
-                  ticket.priority === 'Low' ? 'bg-blue-100 text-blue-800' :
-                  ticket.priority === 'Medium' ? 'bg-orange-100 text-orange-800' :
-                  ticket.priority === 'High' || ticket.priority === 'Critical' ? 'bg-red-100 text-red-800' :
-                  'bg-purple-100 text-purple-800'
+            <p>
+              <strong>Current Priority:</strong> 
+              <span className={`ml-2 px-3 py-1 rounded-full text-sm font-semibold ${
+                ticket.priority === 'Low' ? 'bg-green-100 text-green-800' :
+                ticket.priority === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
+                ticket.priority === 'High' ? 'bg-orange-100 text-orange-800' :
+                ticket.priority === 'Critical' ? 'bg-red-100 text-red-800' :
+                'bg-gray-100 text-gray-800'
               }`}>
                 {ticket.priority}
               </span>
             </p>
-            <p className="text-gray-700 flex items-center"><FilePenLine className="mr-2" size={18} /><span className="font-semibold">Created:</span> {new Date(ticket.created_at).toLocaleString()}</p>
-            <p className="text-gray-700 flex items-center"><FilePenLine className="mr-2" size={18} /><span className="font-semibold">Last Updated:</span> {new Date(ticket.updated_at).toLocaleString()}</p>
-            <div className="bg-blue-50 p-4 rounded-md border border-blue-200 shadow-inner">
-              <h4 className="text-xl font-semibold text-blue-800 mb-2">Description:</h4>
-              <p className="text-gray-800 whitespace-pre-wrap">{ticket.description}</p>
-            </div>
-          </div>
+            <p><strong>Created On:</strong> {new Date(ticket.created_at).toLocaleString()}</p>
+            <p><strong>Last Updated:</strong> {new Date(ticket.updated_at).toLocaleString()}</p>
+        </div>
 
-          {canUpdateOrComment && ( // Render update section only if user has permissions
-            <div className="mb-8 p-6 bg-gray-50 rounded-lg shadow-sm border border-gray-200">
-              <h3 className="text-2xl font-semibold text-indigo-700 mb-4 text-center">Update Ticket</h3>
-              <form onSubmit={handleUpdateTicket} className="space-y-4">
-                <div>
-                  <label htmlFor="updateStatus" className="block text-gray-700 text-sm font-semibold mb-2">Update Status:</label>
-                  <select id="updateStatus" className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 transition duration-200" value={updateStatus} onChange={(e) => setUpdateStatus(e.target.value)}>
-                    <option value="Open">Open</option>
-                    <option value="In Progress">In Progress</option>
-                    <option value="Closed">Closed</option>
-                    <option value="Resolved">Resolved</option>
-                  </select>
-                </div>
-                <div>
-                  <label htmlFor="updatePriority" className="block text-gray-700 text-sm font-semibold mb-2">Update Priority:</label>
-                  <select id="updatePriority" className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 transition duration-200" value={updatePriority} onChange={(e) => setUpdatePriority(e.target.value)}>
-                    <option value="Low">Low</option>
-                    <option value="Medium">Medium</option>
-                    <option value="High">High</option>
-                    <option value="Critical">Critical</option>
-                  </select>
-                </div>
-                <button type="submit" className="w-full bg-blue-600 text-white py-3 px-4 rounded-md font-semibold text-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition duration-300 transform hover:scale-105" disabled={updateLoading}>
-                  {updateLoading ? 'Updating...' : 'Update Ticket'}
-                </button>
-              </form>
-            </div>
-          )}
+        <div className="description-section mb-8 p-4 bg-gray-50 rounded-lg shadow-inner">
+            <h3 className="text-xl font-semibold mb-3 text-gray-700">Description</h3>
+            <p className="text-gray-800 leading-relaxed whitespace-pre-wrap">{ticket.description}</p>
+        </div>
 
-          <div className="mb-8 p-6 bg-gray-50 rounded-lg shadow-sm border border-gray-200">
-            <h3 className="text-2xl font-semibold text-indigo-700 mb-4 text-center">Comments</h3>
-            {ticket.comments && ticket.comments.length > 0 ? (
-              <ul className="space-y-4">
-                {ticket.comments.map((comment, index) => (
-                  <li key={index} className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-                    <p className="text-gray-800 text-base mb-2 whitespace-pre-wrap flex items-center"><MessageSquareText className="mr-2" size={16} />{comment.text}</p>
-                    <p className="text-gray-600 text-xs text-right">By <span className="font-semibold">{comment.commenter}</span> on {new Date(comment.timestamp).toLocaleString()}</p>
-                  </li>
-                ))}
-              </ul>
+        {canEdit && (
+            <div className="update-ticket-section mb-8 p-6 bg-blue-50 rounded-lg shadow">
+                <h3 className="text-xl font-semibold mb-4 text-blue-800">Update Ticket Details</h3>
+                <form onSubmit={handleUpdateTicket} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label htmlFor="status" className="block text-sm font-medium text-gray-700 mb-1">Status:</label>
+                        <select id="status" value={status} onChange={(e) => setStatus(e.target.value)} className="input-field w-full">
+                            <option value="Open">Open</option>
+                            <option value="In Progress">In Progress</option>
+                            <option value="Closed">Closed</option>
+                            <option value="Resolved">Resolved</option>
+                            <option value="On Hold">On Hold</option>
+                            <option value="Waiting reply">Waiting reply</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label htmlFor="priority" className="block text-sm font-medium text-gray-700 mb-1">Priority:</label>
+                        <select id="priority" value={priority} onChange={(e) => setPriority(e.target.value)} className="input-field w-full">
+                            <option value="Low">Low</option>
+                            <option value="Medium">Medium</option>
+                            <option value="High">High</option>
+                            <option value="Critical">Critical</option>
+                        </select>
+                    </div>
+                    {user.role === 'support' && ( // Only support can update assigned_to_email and due_date
+                        <>
+                            <div>
+                                <label htmlFor="assignedToEmail" className="block text-sm font-medium text-gray-700 mb-1">Assigned To (Email):</label>
+                                <input type="email" id="assignedToEmail" value={assignedToEmail} onChange={(e) => setAssignedToEmail(e.target.value)} className="input-field w-full" placeholder="e.g., support@example.com" />
+                            </div>
+                            <div>
+                                <label htmlFor="dueDate" className="block text-sm font-medium text-gray-700 mb-1">Due Date:</label>
+                                <input type="date" id="dueDate" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="input-field w-full" />
+                            </div>
+                        </>
+                    )}
+                    <div className="md:col-span-2 text-center mt-4">
+                        <button type="submit" className="button submit-button update-button" disabled={updatingTicket}>
+                            {updatingTicket ? 'Updating...' : 'Update Ticket'}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        )}
+
+        <div className="comments-section mb-8 p-6 bg-gray-50 rounded-lg shadow">
+            <h3 className="text-xl font-semibold mb-4 text-gray-700">Comments</h3>
+            {comments.length > 0 ? (
+                <ul className="comment-list space-y-4">
+                    {comments.map((comment, index) => (
+                        <li key={index} className="comment-item border-b pb-4 last:pb-0 last:border-b-0">
+                            <p className="comment-text text-gray-800 leading-snug">{comment.text}</p>
+                            <span className="comment-meta text-sm text-gray-500 block mt-1">
+                                By <span className="font-medium text-gray-700">{comment.commenter}</span> on {new Date(comment.timestamp).toLocaleString()}
+                            </span>
+                        </li>
+                    ))}
+                </ul>
             ) : (
-              <p className="text-gray-600 text-lg text-center p-8 border-2 border-dashed border-gray-300 rounded-lg">No comments yet.</p>
+                <p className="no-comments-message text-gray-600 italic">No comments yet.</p>
             )}
 
-            {canUpdateOrComment && ( // Render comment form only if user has permissions
-              <form onSubmit={handleAddComment} className="mt-6 space-y-4">
-                <div>
-                  <label htmlFor="newComment" className="block text-gray-700 text-sm font-semibold mb-2">Add New Comment:</label>
-                  <textarea id="newComment" className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 transition duration-200" rows="4" value={newComment} onChange={(e) => setNewComment(e.target.value)} required></textarea>
-                </div>
-                <button type="submit" className="w-full bg-green-600 text-white py-3 px-4 rounded-md font-semibold text-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition duration-300 transform hover:scale-105" disabled={commentLoading}>
-                  {commentLoading ? 'Adding...' : 'Add Comment'}
+            <form onSubmit={handleAddComment} className="comment-form mt-6">
+                <label htmlFor="new_comment_text" className="block text-sm font-medium text-gray-700 mb-1">Add a new comment:</label>
+                <textarea 
+                    id="new_comment_text" 
+                    value={newCommentText} 
+                    onChange={(e) => setNewCommentText(e.target.value)} 
+                    rows="4" 
+                    required 
+                    className="input-field w-full min-h-[80px]"
+                    placeholder="Type your comment here..."
+                ></textarea>
+                <button type="submit" className="button submit-button comment-button mt-3" disabled={submittingComment}>
+                    {submittingComment ? 'Adding...' : 'Add Comment'}
                 </button>
-              </form>
-            )}
-          </div>
+            </form>
+        </div>
 
-          <button
-            onClick={() => navigateTo(user.role === 'support' ? 'allTickets' : 'myTickets')}
-            className="w-full bg-gray-500 text-white py-3 px-4 rounded-md font-semibold text-lg hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition duration-300 transform hover:scale-105"
-          >
-            Back to Tickets
-          </button>
+        <div className="text-center">
+            <button onClick={() => navigateTo(user.role === 'support' ? 'allTickets' : 'myTickets')} className="button back-button">
+                Back to Tickets
+            </button>
         </div>
       </div>
     );
-  };
+  }
 
-  // --- Main App Render Logic ---
+
   return (
-    <div className="min-h-screen bg-gray-100 font-sans text-gray-900 antialiased flex flex-col">
-      <header className="bg-indigo-700 text-white p-4 shadow-md flex justify-between items-center flex-wrap">
-        <h1 className="text-3xl font-bold">IT Help Desk</h1>
-        <nav>
-          <ul className="flex space-x-6 items-center">
-            {currentUser ? (
-              <>
-                <li>
-                  <button onClick={() => navigateTo('myTickets')} className="flex items-center space-x-1 px-3 py-2 rounded-md hover:bg-indigo-600 transition-colors duration-200">
-                    <List size={18} />
-                    <span>My Tickets</span>
-                  </button>
-                </li>
-                {currentUser.role === 'support' && (
+    <div className="app-container flex flex-col min-h-screen">
+      <header className="bg-gray-800 text-white p-4 shadow-md">
+        <div className="container mx-auto flex justify-between items-center">
+          <h1 className="text-3xl font-bold">
+            <a href="#" onClick={() => currentUser ? navigateTo('myTickets') : navigateTo('login')} className="hover:text-gray-300">IT Help Desk</a>
+          </h1>
+          <nav>
+            <ul className="flex items-center space-x-6">
+              {currentUser && (
+                <>
                   <li>
-                    <button onClick={() => navigateTo('allTickets')} className="flex items-center space-x-1 px-3 py-2 rounded-md hover:bg-indigo-600 transition-colors duration-200">
-                      <LayoutDashboard size={18} />
-                      <span>All Tickets</span>
-                    </button>
+                    <a href="#" onClick={() => navigateTo('myTickets')} className={`hover:text-gray-300 flex items-center ${currentView === 'myTickets' ? 'text-blue-300' : ''}`}>
+                      <LayoutDashboard className="mr-2" size={20} />My Tickets
+                    </a>
                   </li>
-                )}
-                <li>
-                  {/* The profile menu container */}
-                  <div className="relative" ref={profileMenuRef}>
-                    <button
+                  {currentUser.role === 'support' && (
+                    <li>
+                      <a href="#" onClick={() => navigateTo('allTickets')} className={`hover:text-gray-300 flex items-center ${currentView === 'allTickets' ? 'text-blue-300' : ''}`}>
+                        <List className="mr-2" size={20} />All Tickets
+                      </a>
+                    </li>
+                  )}
+                  <li className="relative" ref={profileMenuRef}>
+                    <button 
+                      className="flex items-center focus:outline-none hover:text-gray-300"
                       onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
-                      className="flex items-center space-x-2 px-3 py-2 rounded-md hover:bg-indigo-600 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     >
-                      <User size={20} />
-                      <span className="font-semibold">{currentUser.email}</span>
+                      <User className="mr-2" size={20} />
+                      <span>{currentUser.email}</span>
+                      <svg className={`ml-2 w-4 h-4 transition-transform ${isProfileMenuOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
                     </button>
-                    {/* Conditional rendering and classes based on isProfileMenuOpen state */}
-                    <div className={`absolute right-0 mt-2 w-48 bg-white text-gray-800 rounded-md shadow-lg py-1 z-10 
-                      ${isProfileMenuOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
-                      <div className="block px-4 py-2 text-sm text-gray-700 border-b border-gray-100">Role: <span className="font-semibold">{currentUser.role.charAt(0).toUpperCase() + currentUser.role.slice(1)}</span></div>
-                      <button 
-                        onClick={handleLogout} 
-                        className="flex items-center space-x-2 w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100 transition-colors duration-200"
-                      >
-                        <LogOut size={16} />
-                        <span>Logout</span>
-                      </button>
-                    </div>
-                  </div>
-                </li>
-              </>
-            ) : (
-              <>
-                <li>
-                  <button onClick={() => navigateTo('login')} className="flex items-center space-x-1 px-3 py-2 rounded-md hover:bg-indigo-600 transition-colors duration-200">
-                    <LogIn size={18} />
-                    <span>Login</span>
-                  </button>
-                </li>
-                <li>
-                  <button onClick={() => navigateTo('register')} className="flex items-center space-x-1 px-3 py-2 rounded-md hover:bg-indigo-600 transition-colors duration-200">
-                    <User size={18} />
-                    <span>Register</span>
-                  </button>
-                </li>
-              </>
-            )}
-          </ul>
-        </nav>
+                    {isProfileMenuOpen && (
+                      <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-20">
+                        <div className="block px-4 py-2 text-sm text-gray-700 border-b border-gray-200">
+                          Role: <span className="font-semibold capitalize">{currentUser.role}</span>
+                        </div>
+                        <button 
+                          onClick={handleLogout} 
+                          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
+                        >
+                          <LogOut className="mr-2" size={16} />Logout
+                        </button>
+                      </div>
+                    )}
+                  </li>
+                </>
+              )}
+              {!currentUser && (
+                <>
+                  <li>
+                    <a href="#" onClick={() => navigateTo('login')} className={`hover:text-gray-300 flex items-center ${currentView === 'login' ? 'text-blue-300' : ''}`}>
+                      <LogIn className="mr-2" size={20} />Login
+                    </a>
+                  </li>
+                  <li>
+                    <a href="#" onClick={() => navigateTo('register')} className={`hover:text-gray-300 flex items-center ${currentView === 'register' ? 'text-blue-300' : ''}`}>
+                      <FilePenLine className="mr-2" size={20} />Register
+                    </a>
+                  </li>
+                </>
+              )}
+            </ul>
+          </nav>
+        </div>
       </header>
 
-      {/* Flash Message Display */}
-      {flashMessage.message && (
-        <div className={`relative px-4 py-3 leading-normal rounded-lg mb-4 mx-auto w-11/12 max-w-4xl mt-4 text-center
-          ${flashMessage.type === 'success' ? 'bg-green-100 text-green-800 border border-green-200' :
-            flashMessage.type === 'error' ? 'bg-red-100 text-red-800 border border-red-200' :
-            'bg-blue-100 text-blue-800 border border-blue-200'
-          }`}>
-          {flashMessage.message}
-        </div>
-      )}
+      <main className="container mx-auto mt-8 p-4 flex-grow bg-white rounded-lg shadow-lg">
+        {isFlashMessageVisible && flashMessage.message && (
+          <div className={`flash-message ${flashMessage.type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'} p-3 rounded-md mb-4 text-center`}>
+            {flashMessage.message}
+          </div>
+        )}
 
-      <main className="flex-grow container mx-auto p-4">
-        {(() => { // Using an IIFE for switch-case equivalent in JSX
+        {(() => {
           if (!currentUser) {
-            switch (currentView) {
-              case 'register':
-                return <RegisterComponent navigateTo={navigateTo} showFlashMessage={showFlashMessage} />;
-              case 'login':
-              default:
-                return <LoginComponent onLoginSuccess={handleLoginSuccess} navigateTo={navigateTo} showFlashMessage={showFlashMessage} />;
+            if (currentView === 'register') {
+              return <RegisterComponent navigateTo={navigateTo} showFlashMessage={showFlashMessage} />;
+            } else {
+              return <LoginComponent navigateTo={navigateTo} showFlashMessage={showFlashMessage} setCurrentUser={setCurrentUser} />;
             }
           } else {
             switch (currentView) {
