@@ -1,6 +1,30 @@
 // App.js
-import React, { useState, useEffect, useCallback, useRef } from 'react'; // Import useCallback and useRef
-import { User, LogIn, LogOut, PlusCircle, List, LayoutDashboard, MessageSquareText, FilePenLine } from 'lucide-react'; // Example icons from lucide-react
+
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { User, LogIn, LogOut, PlusCircle, List, LayoutDashboard, MessageSquareText, FilePenLine } from 'lucide-react';
+
+// Import Firebase (make sure you've installed it: npm install firebase)
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInWithEmailAndPassword } from 'firebase/auth'; // Import getAuth and signInWithEmailAndPassword
+
+// --- Firebase Client-Side Configuration ---
+// IMPORTANT: Replace with your actual Firebase project configuration!
+// You can find this in your Firebase Console -> Project settings -> General -> Your apps -> Firebase SDK snippet (choose 'Config')
+const firebaseConfig = {
+  apiKey: "AIzaSyDZVwd_WHUw8RzUfkVklT7_9U6Mc-FNL-o",
+  authDomain: "it-ticketing-tool-dd679.firebaseapp.com",
+  projectId: "it-ticketing-tool-dd679",
+  storageBucket: "it-ticketing-tool-dd679.firebasestorage.app",
+  messagingSenderId: "919553361675",
+  appId: "1:919553361675:web:55bfeb860ebef1b886840e",
+  measurementId: "G-H6M4JBS3TL"// <--- REPLACE THIS
+};
+
+// Initialize Firebase App for client-side use
+const app = initializeApp(firebaseConfig);
+// Get the Auth service instance from the initialized app for client-side operations
+const authClient = getAuth(app);
+
 
 // Main App component for the IT Ticketing Tool
 function App() {
@@ -8,15 +32,15 @@ function App() {
   // Possible values: 'login', 'register', 'myTickets', 'allTickets', 'createTicket', 'ticketDetail'
   const [currentView, setCurrentView] = useState('login');
   // Stores logged-in user data { id, email, role }
-  const [currentUser, setCurrentUser] = useState(null); 
+  const [currentUser, setCurrentUser] = useState(null);
   // For viewing a specific ticket
-  const [selectedTicketId, setSelectedTicketId] = useState(null); 
+  const [selectedTicketId, setSelectedTicketId] = useState(null);
   const [flashMessage, setFlashMessage] = useState({ message: '', type: '' }); // For showing messages
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false); // State to control profile dropdown visibility
   const profileMenuRef = useRef(null); // Ref for the profile dropdown container
 
   // --- API Base URL ---
-  const API_BASE_URL = 'http://127.0.0.1:5000'; 
+  const API_BASE_URL = 'http://127.0.0.1:5000';
 
   // --- Effects and Handlers ---
 
@@ -74,10 +98,16 @@ function App() {
   const handleLogout = useCallback(() => { // Memoize handleLogout
     setCurrentUser(null);
     localStorage.removeItem('currentUser'); // Remove user from localStorage
-    setCurrentView('login');
     setIsProfileMenuOpen(false); // Close menu on logout
     showFlashMessage('You have been logged out.', 'info');
     console.log("User logged out.");
+    // Optional: Sign out from Firebase client-side as well
+    authClient.signOut().then(() => {
+        console.log("Firebase client-side logout successful.");
+    }).catch((error) => {
+        console.error("Error signing out from Firebase client:", error);
+    });
+    setCurrentView('login'); // Redirect to login after logout
   }, [showFlashMessage]); // Depends on showFlashMessage
 
   const navigateTo = useCallback((view, ticketId = null) => { // Memoize navigateTo
@@ -94,28 +124,75 @@ function App() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [message, setMessage] = useState('');
+    const [loading, setLoading] = useState(false); // New loading state for login button
 
     const handleSubmit = async (e) => {
       e.preventDefault();
-      setMessage('Logging in...');
+      setMessage(''); // Clear previous messages
+      setLoading(true); // Set loading to true
       try {
+        // 1. Authenticate with Firebase Client SDK
+        // This is where the password verification happens securely against Firebase Auth
+        const userCredential = await signInWithEmailAndPassword(authClient, email, password);
+        const user = userCredential.user; // The Firebase User object
+        const idToken = await user.getIdToken(); // Get the Firebase ID token (JWT)
+        console.log("Firebase client login successful. ID Token obtained.");
+
+        // 2. Send the ID Token to your Flask backend for verification and role retrieval
+        // The Flask backend will use Firebase Admin SDK to verify this token
         const response = await fetch(`${API_BASE_URL}/login`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password }),
+          headers: {
+            'Content-Type': 'application/json',
+            // Send the ID token in the Authorization header for backend verification
+            'Authorization': `Bearer ${idToken}`
+          },
+          // We can send email or not, the backend will verify using the ID token's UID
+          body: JSON.stringify({ email: user.email }),
         });
+
         const data = await response.json();
         if (response.ok) {
           setMessage(data.message);
-          onLoginSuccess(data.user); // Pass user data to App component
+          // If backend verification is successful, proceed with login success
+          onLoginSuccess(data.user); // Pass user data (including role from backend) to App component
         } else {
-          setMessage(data.error || 'Login failed.');
-          showFlashMessage(data.error || 'Login failed.', 'error');
+          // If backend verification fails (e.g., role not found, or other backend issue)
+          setMessage(data.error || 'Login failed after token verification.');
+          showFlashMessage(data.error || 'Login failed after token verification.', 'error');
+          // Optional: If backend fails, consider signing out from client-side Firebase Auth as well
+          authClient.signOut();
         }
       } catch (error) {
         console.error('Login error:', error);
-        setMessage('Network error or server unreachable.');
-        showFlashMessage('Network error or server unreachable.', 'error');
+        let errorMessage = 'Login failed.';
+        // Handle specific Firebase Auth errors returned by signInWithEmailAndPassword
+        if (error.code) {
+          switch (error.code) {
+            case 'auth/user-not-found':
+            case 'auth/wrong-password':
+              errorMessage = 'Invalid email or password.';
+              break;
+            case 'auth/invalid-email':
+              errorMessage = 'Invalid email format.';
+              break;
+            case 'auth/too-many-requests':
+              errorMessage = 'Too many failed login attempts. Please try again later.';
+              break;
+            case 'auth/network-request-failed':
+              errorMessage = 'Network error. Please check your internet connection.';
+              break;
+            default:
+              errorMessage = error.message; // Fallback to Firebase's default error message
+          }
+        } else {
+          // General network or unexpected errors
+          errorMessage = 'An unexpected network error occurred or server is unreachable.';
+        }
+        setMessage(errorMessage);
+        showFlashMessage(errorMessage, 'error');
+      } finally {
+        setLoading(false); // Always reset loading state
       }
     };
 
@@ -149,8 +226,9 @@ function App() {
             <button
               type="submit"
               className="w-full bg-indigo-600 text-white py-3 px-4 rounded-md font-semibold text-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition duration-300 transform hover:scale-105"
+              disabled={loading} // Disable button while loading
             >
-              Log In
+              {loading ? 'Logging In...' : 'Log In'}
             </button>
             {message && <p className="text-center mt-4 text-sm text-red-500">{message}</p>}
           </form>
@@ -165,16 +243,18 @@ function App() {
     );
   };
 
-  // Register Component
+  // Register Component (unchanged for now, but will leverage Firebase Admin SDK for user creation)
   const RegisterComponent = ({ navigateTo, showFlashMessage }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [role, setRole] = useState('user'); // Default role
     const [message, setMessage] = useState('');
+    const [loading, setLoading] = useState(false);
 
     const handleSubmit = async (e) => {
       e.preventDefault();
       setMessage('Registering...');
+      setLoading(true);
       try {
         const response = await fetch(`${API_BASE_URL}/register`, {
           method: 'POST',
@@ -194,6 +274,8 @@ function App() {
         console.error('Registration error:', error);
         setMessage('Network error or server unreachable.');
         showFlashMessage('Network error or server unreachable.', 'error');
+      } finally {
+        setLoading(false);
       }
     };
 
@@ -239,8 +321,9 @@ function App() {
             <button
               type="submit"
               className="w-full bg-green-600 text-white py-3 px-4 rounded-md font-semibold text-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition duration-300 transform hover:scale-105"
+              disabled={loading}
             >
-              Register
+              {loading ? 'Registering...' : 'Register'}
             </button>
             {message && <p className="text-center mt-4 text-sm text-green-500">{message}</p>}
           </form>
@@ -254,6 +337,7 @@ function App() {
       </div>
     );
   };
+
 
   // MyTickets Component
   const MyTicketsComponent = ({ user, navigateTo, showFlashMessage }) => {
@@ -314,7 +398,7 @@ function App() {
                   <p className="text-gray-700 mb-1 flex items-center"><LayoutDashboard className="mr-2" size={16} /> <span className="font-semibold">ID:</span> {ticket.id.substring(0,8).toUpperCase()}</p>
                   <p className="text-gray-700 mb-1"><span className="font-semibold">Reporter:</span> {ticket.reporter}</p>
                   <p className="text-gray-700 mb-1 flex items-center">
-                    <span className="font-semibold mr-2">Status:</span> 
+                    <span className="font-semibold mr-2">Status:</span>
                     <span className={`px-3 py-1 text-xs font-semibold rounded-full ${
                         ticket.status === 'Open' ? 'bg-green-100 text-green-800' :
                         ticket.status === 'In Progress' ? 'bg-yellow-100 text-yellow-800' :
@@ -325,7 +409,7 @@ function App() {
                     </span>
                   </p>
                   <p className="text-gray-700 mb-4 flex items-center">
-                    <span className="font-semibold mr-2">Priority:</span> 
+                    <span className="font-semibold mr-2">Priority:</span>
                     <span className={`px-3 py-1 text-xs font-semibold rounded-full ${
                         ticket.priority === 'Low' ? 'bg-blue-100 text-blue-800' :
                         ticket.priority === 'Medium' ? 'bg-orange-100 text-orange-800' :
@@ -413,7 +497,7 @@ function App() {
     return (
       <div className="p-4 bg-white rounded-lg shadow-md">
         <h2 className="text-3xl font-bold text-indigo-700 mb-6">All Tickets</h2>
-        
+
         {/* Filter Section */}
         <div className="flex flex-wrap gap-3 mb-6 p-4 bg-gray-50 rounded-lg shadow-inner">
           <button
@@ -520,7 +604,7 @@ function App() {
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
     // Pre-fill reporter with user's email if available, otherwise allow input
-    const [reporter, setReporter] = useState(user?.email || ''); 
+    const [reporter, setReporter] = useState(user?.email || '');
     const [status, setStatus] = useState('Open');
     const [priority, setPriority] = useState('Low');
     const [loading, setLoading] = useState(false);
@@ -532,12 +616,12 @@ function App() {
         const response = await fetch(`${API_BASE_URL}/create`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            title, 
-            description, 
-            reporter, 
-            status, 
-            priority, 
+          body: JSON.stringify({
+            title,
+            description,
+            reporter,
+            status,
+            priority,
             creator_uid: user.id, // Send user ID
             creator_email: user.email // Send user email
           }),
@@ -655,7 +739,7 @@ function App() {
             if (response.ok) {
                 showFlashMessage(data.message || 'Ticket updated successfully!', 'success');
                 // Re-fetch ticket to get latest details including updated_at
-                fetchTicket(); 
+                fetchTicket();
             } else {
                 showFlashMessage(data.error || 'Failed to update ticket.', 'error');
             }
@@ -713,11 +797,11 @@ function App() {
             {/* Ensure ticket.id is available before calling substring */}
             Ticket #{ticket.id ? ticket.id.substring(0,10).toUpperCase() : 'N/A'}: {ticket.title}
           </h2>
-          
+
           <div className="space-y-4 mb-8 text-lg">
             <p className="text-gray-700 flex items-center"><User className="mr-2" size={18} /><span className="font-semibold">Reporter:</span> {ticket.reporter}</p>
             <p className="text-gray-700 flex items-center">
-              <List className="mr-2" size={18} /><span className="font-semibold">Status:</span> 
+              <List className="mr-2" size={18} /><span className="font-semibold">Status:</span>
               <span className={`ml-2 px-3 py-1 text-base font-semibold rounded-full ${
                   ticket.status === 'Open' ? 'bg-green-100 text-green-800' :
                   ticket.status === 'In Progress' ? 'bg-yellow-100 text-yellow-800' :
@@ -728,7 +812,7 @@ function App() {
               </span>
             </p>
             <p className="text-gray-700 flex items-center">
-              <LayoutDashboard className="mr-2" size={18} /><span className="font-semibold">Priority:</span> 
+              <LayoutDashboard className="mr-2" size={18} /><span className="font-semibold">Priority:</span>
               <span className={`ml-2 px-3 py-1 text-base font-semibold rounded-full ${
                   ticket.priority === 'Low' ? 'bg-blue-100 text-blue-800' :
                   ticket.priority === 'Medium' ? 'bg-orange-100 text-orange-800' :
@@ -848,11 +932,11 @@ function App() {
                       <span className="font-semibold">{currentUser.email}</span>
                     </button>
                     {/* Conditional rendering and classes based on isProfileMenuOpen state */}
-                    <div className={`absolute right-0 mt-2 w-48 bg-white text-gray-800 rounded-md shadow-lg py-1 z-10 
+                    <div className={`absolute right-0 mt-2 w-48 bg-white text-gray-800 rounded-md shadow-lg py-1 z-10
                       ${isProfileMenuOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
                       <div className="block px-4 py-2 text-sm text-gray-700 border-b border-gray-100">Role: <span className="font-semibold">{currentUser.role.charAt(0).toUpperCase() + currentUser.role.slice(1)}</span></div>
-                      <button 
-                        onClick={handleLogout} 
+                      <button
+                        onClick={handleLogout}
                         className="flex items-center space-x-2 w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100 transition-colors duration-200"
                       >
                         <LogOut size={16} />
@@ -901,6 +985,7 @@ function App() {
                 return <RegisterComponent navigateTo={navigateTo} showFlashMessage={showFlashMessage} />;
               case 'login':
               default:
+                // Pass authClient to LoginComponent if needed, though direct import is fine for now
                 return <LoginComponent onLoginSuccess={handleLoginSuccess} navigateTo={navigateTo} showFlashMessage={showFlashMessage} />;
             }
           } else {

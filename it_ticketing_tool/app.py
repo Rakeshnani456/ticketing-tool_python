@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS # Import Flask-CORS
 import firebase_admin
-from firebase_admin import credentials, firestore, auth
+from firebase_admin import credentials, firestore, auth, exceptions # Import exceptions for FirebaseError
 from datetime import datetime, timezone # Import timezone for consistent datetimes
 
 # Initialize the Flask application
@@ -95,43 +95,45 @@ def register():
 def login():
     """
     API endpoint for user login.
-    NOTE: This is a SIMPLIFIED login for demonstration ONLY.
-    In production, use client-side Firebase SDK to sign in and send ID token to backend for verification.
+    This now expects a Firebase ID Token from the client-side for verification.
     """
     if not db_connected:
         return jsonify({'error': 'Database connection not established.'}), 500
 
-    data = request.get_json()
-    email = data.get('email')
-    password = data.get('password') # Password is not directly verified by Admin SDK here
+    # 1. Get the ID token from the Authorization header
+    auth_header = request.headers.get('Authorization')
+    if not auth_header or not auth_header.startswith('Bearer '):
+        return jsonify({'error': 'Authorization header with Bearer token is required!'}), 401
 
-    if not email or not password:
-        return jsonify({'error': 'Email and Password are required!'}), 400
+    id_token = auth_header.split(' ')[1] # Extract the token part
 
     try:
-        # Attempt to get user by email. This confirms existence but doesn't authenticate password.
-        # THIS IS INSECURE FOR PASSWORD VERIFICATION.
-        # A proper flow involves Firebase client SDK for auth and token verification on backend.
-        user_record = auth.get_user_by_email(email)
+        # 2. Verify the ID token using Firebase Admin SDK
+        # This securely checks if the token is valid, unexpired, and from your project
+        decoded_token = auth.verify_id_token(id_token)
+        uid = decoded_token['uid'] # Get the user's UID from the verified token
+        email_from_token = decoded_token.get('email', '') # Get the user's email from the verified token
 
-        # Retrieve user role from Firestore based on the UID found
-        user_doc = users_collection.document(user_record.uid).get()
-        
+        # 3. Retrieve user role from Firestore based on the verified UID
+        user_doc = users_collection.document(uid).get()
+
         if not user_doc.exists:
+            # This should ideally not happen if user successfully logged in on frontend
+            # but is a good safeguard if their Firestore profile is missing.
             return jsonify({'error': 'User profile not found in database. Contact support.'}), 404
-        
+
         user_profile = user_doc.to_dict()
 
         logged_in_user = {
-            'id': user_record.uid,
-            'email': user_record.email,
-            'role': user_profile.get('role', 'user') # Default to 'user' if not set
+            'id': uid,
+            'email': email_from_token, # Use email from the decoded token
+            'role': user_profile.get('role', 'user')
         }
         return jsonify({'message': 'Login successful', 'user': logged_in_user}), 200
-    except firebase_admin.auth.UserNotFoundError:
-        return jsonify({'error': 'Invalid email or password.'}), 401
-    except firebase_admin.auth.AuthError as e:
-        print(f"Login AuthError: {e}")
+    except firebase_admin.auth.InvalidIdTokenError: # Specific error for invalid ID tokens
+        return jsonify({'error': 'Invalid or expired authentication token.'}), 401
+    except firebase_admin.exceptions.FirebaseError as e: # Catch other Firebase Admin SDK errors
+        print(f"Login FirebaseError during token verification or data fetch: {e}")
         return jsonify({'error': f'Authentication error: {e}'}), 401
     except Exception as e:
         print(f"Unexpected login error: {e}")
@@ -177,7 +179,7 @@ def get_all_tickets():
 
     if status_filter:
         query = query.where('status', '==', status_filter)
-    
+
     if assignment_filter:
         if assignment_filter == 'unassigned':
             query = query.where('assigned_to_email', '==', '') # Assuming empty string for unassigned
@@ -271,7 +273,7 @@ def update_ticket_api(ticket_id):
         update_fields["status"] = new_status
     if new_priority:
         update_fields["priority"] = new_priority
-    
+
     try:
         tickets_collection.document(ticket_id).update(update_fields)
         return jsonify({'message': 'Ticket updated successfully!'}), 200
