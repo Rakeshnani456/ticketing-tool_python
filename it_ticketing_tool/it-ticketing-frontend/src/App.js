@@ -19,7 +19,6 @@ const firebaseConfig = {
   appId: "1:919553361675:web:55bfeb860ebef1b886840e",
   measurementId: "G-H6M4JBS3TL"
 };
-
 // Initialize Firebase App for client-side use
 const app = initializeApp(firebaseConfig);
 // Get the Auth service instance from the initialized app for client-side operations
