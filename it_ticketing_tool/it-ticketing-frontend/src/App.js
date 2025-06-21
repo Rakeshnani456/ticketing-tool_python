@@ -1,18 +1,22 @@
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 // Updated Lucide React imports for new icons and spinner
 import { User, LogIn, LogOut, PlusCircle, List, LayoutDashboard, MessageSquareText, FilePenLine, ChevronDown, Settings, Monitor, CheckCircle, XCircle, Info, AlertTriangle, Tag, CalendarDays, ClipboardCheck, Send, Loader2, ListFilter, Clock, Users } from 'lucide-react'; // Added Users icon
 
 // Import Firebase (make sure you've installed it: npm install firebase)
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInWithEmailAndPassword } from 'firebase/auth'; // Import getAuth and signInWithEmailAndPassword
-
+import {
+  getAuth,
+  signInWithEmailAndPassword,
+  signOut, // Import signOut for logout functionality
+  onAuthStateChanged, // Import onAuthStateChanged for persistent login
+  createUserWithEmailAndPassword // Import for registration
+} from 'firebase/auth';
 
 // --- Firebase Client-Side Configuration ---
 // IMPORTANT: Replace with your actual Firebase project configuration!
 // You can find this in your Firebase Console -> Project settings -> General -> Your apps -> Firebase SDK snippet (choose 'Config')
 const firebaseConfig = {
-  apiKey: "AIzaSyDZVwd_WHUw8RzUfkVklT7_9U6Mc-FNL-o",
+    apiKey: "AIzaSyDZVwd_WHUw8RzUfkVklT7_9U6Mc-FNL-o",
   authDomain: "it-ticketing-tool-dd679.firebaseapp.com",
   projectId: "it-ticketing-tool-dd679",
   storageBucket: "it-ticketing-tool-dd679.firebasestorage.app",
@@ -27,486 +31,442 @@ const app = initializeApp(firebaseConfig);
 const authClient = getAuth(app);
 
 
-// Main App component for the IT Ticketing Tool
-function App() {
-  // State to manage the current view (simulating routing without a router library)
-  // Possible values: 'login', 'register', 'myTickets', 'allTickets', 'createTicket', 'ticketDetail'
-  const [currentView, setCurrentView] = useState('login');
-  // Stores logged-in user data { id, email, role }
-  const [currentUser, setCurrentUser] = useState(null);
-  // For viewing a specific ticket
-  const [selectedTicketId, setSelectedTicketId] = useState(null);
-  const [flashMessage, setFlashMessage] = useState({ message: '', type: '' }); // For showing messages
-  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false); // State to control profile dropdown visibility
-  const profileMenuRef = useRef(null); // Ref for the profile dropdown container
+// --- API Base URL for your Node.js Backend ---
+// IMPORTANT: Ensure this matches the port your Node.js server is running on.
+const API_BASE_URL = 'http://localhost:5000';
 
-  // --- API Base URL ---
-  const API_BASE_URL = 'http://127.0.0.1:5000';
+// --- Helper type for currentUser state to explicitly include firebaseUser object ---
+// This ensures that methods like .getIdToken() are available.
+// type AppUser = {
+//   firebaseUser: firebase.User; // The original Firebase User object
+//   role: string; // Role fetched from your backend
+//   // Add any other user-specific data from your backend if needed
+// };
 
-  // --- Effects and Handlers ---
 
-  // Check for stored user on app load
-  useEffect(() => {
+// --- Component Definitions (These were previously in separate files, now included here for full code) ---
+
+// Login Component
+const LoginComponent = ({ onLoginSuccess, navigateTo, showFlashMessage }) => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [message, setMessage] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [passwordError, setPasswordError] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setMessage('');
+    setPasswordError(false);
+    setLoading(true);
     try {
-      const storedUser = localStorage.getItem('currentUser');
-      if (storedUser) {
-        const user = JSON.parse(storedUser);
-        setCurrentUser(user);
-        setCurrentView('myTickets'); // Navigate to myTickets if logged in
-        console.log("Found stored user:", user);
+      // 1. Authenticate with Firebase Client SDK (handles password verification)
+      const userCredential = await signInWithEmailAndPassword(authClient, email, password);
+      const firebaseUser = userCredential.user; // The original Firebase User object
+      const idToken = await firebaseUser.getIdToken(); // Get the Firebase ID token (JWT)
+      console.log("Firebase client login successful. ID Token obtained.");
+
+      // 2. Send the ID Token to your Node.js backend for verification and role retrieval
+      const response = await fetch(`${API_BASE_URL}/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}` // Send the ID token for backend verification
+        },
+        body: JSON.stringify({ email: firebaseUser.email }), // Send email for logging/matching on backend
+      });
+
+      const data = await response.json();
+      if (response.ok) {
+        setMessage(data.message);
+        // Pass the original firebaseUser object and role from backend to App component
+        onLoginSuccess({ firebaseUser, role: data.user.role });
       } else {
-        console.log("No stored user found, defaulting to login.");
-        setCurrentView('login');
+        setMessage(data.error || 'Login failed after token verification.');
+        showFlashMessage(data.error || 'Login failed after token verification.', 'error');
+        authClient.signOut(); // Force client-side logout if backend fails
       }
     } catch (error) {
-      console.error("Failed to parse stored user from localStorage:", error);
-      localStorage.removeItem('currentUser'); // Clear invalid data
-      setCurrentUser(null);
-      setCurrentView('login');
+      console.error('Login error:', error);
+      let errorMessage = 'Login failed.';
+      if (error.code) {
+        switch (error.code) {
+          case 'auth/user-not-found':
+          case 'auth/wrong-password':
+            errorMessage = 'Invalid email or password.';
+            setPasswordError(true);
+            break;
+          case 'auth/invalid-email':
+            errorMessage = 'Invalid email format.';
+            break;
+          case 'auth/too-many-requests':
+            errorMessage = 'Too many failed login attempts. Please try again later.';
+            break;
+          case 'auth/network-request-failed':
+            errorMessage = 'Network error. Please check your internet connection.';
+            break;
+          default:
+            errorMessage = error.message;
+        }
+      } else {
+        errorMessage = 'An unexpected network error occurred or server is unreachable.';
+      }
+      setMessage(errorMessage);
+      showFlashMessage(errorMessage, 'error');
+    } finally {
+      setLoading(false);
     }
-  }, []); // Run only once on component mount
-
-  // Effect to close profile menu when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (profileMenuRef.current && !profileMenuRef.current.contains(event.target)) {
-        setIsProfileMenuOpen(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [profileMenuRef]); // Only re-run if profileMenuRef changes (it won't)
-
-
-  // Function to show a flash message
-  const showFlashMessage = useCallback((message, type = 'info') => { // Memoize showFlashMessage
-    setFlashMessage({ message, type });
-    setTimeout(() => {
-      setFlashMessage({ message: '', type: '' }); // Clear message after 5 seconds
-    }, 5000);
-  }, []); // showFlashMessage has no dependencies that change during component lifecycle
-
-  const handleLoginSuccess = useCallback((userData) => { // Memoize handleLoginSuccess
-    setCurrentUser(userData);
-    localStorage.setItem('currentUser', JSON.stringify(userData)); // Store user in localStorage
-    setCurrentView('myTickets');
-    showFlashMessage('Login successful!', 'success');
-  }, [showFlashMessage]); // Depends on showFlashMessage
-
-  const handleLogout = useCallback(() => { // Memoize handleLogout
-    setCurrentUser(null);
-    localStorage.removeItem('currentUser'); // Remove user from localStorage
-    setIsProfileMenuOpen(false); // Close menu on logout
-    showFlashMessage('You have been logged out.', 'info');
-    console.log("User logged out.");
-    // Optional: Sign out from Firebase client-side as well
-    authClient.signOut().then(() => {
-        console.log("Firebase client-side logout successful.");
-    }).catch((error) => {
-        console.error("Error signing out from Firebase client:", error);
-    });
-    setCurrentView('login'); // Redirect to login after logout
-  }, [showFlashMessage]); // Depends on showFlashMessage
-
-  const navigateTo = useCallback((view, ticketId = null) => { // Memoize navigateTo
-    setCurrentView(view);
-    setSelectedTicketId(ticketId);
-    setFlashMessage({ message: '', type: '' }); // Clear messages on navigation
-    setIsProfileMenuOpen(false); // Close profile menu on navigation
-  }, []); // navigateTo has no dependencies that change during component lifecycle
-
-  // --- View Components ---
-
-  // Login Component
-  const LoginComponent = ({ onLoginSuccess, navigateTo, showFlashMessage }) => {
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-    const [message, setMessage] = useState('');
-    const [loading, setLoading] = useState(false); // New loading state for login button
-    // New state for password error highlighting
-    const [passwordError, setPasswordError] = useState(false); // State to control password input highlight
-
-    const handleSubmit = async (e) => {
-      e.preventDefault();
-      setMessage(''); // Clear previous messages
-      setPasswordError(false); // Reset password error state on new submission
-      setLoading(true); // Set loading to true
-      try {
-        // 1. Authenticate with Firebase Client SDK
-        // This is where the password verification happens securely against Firebase Auth
-        const userCredential = await signInWithEmailAndPassword(authClient, email, password);
-        const user = userCredential.user; // The Firebase User object
-        const idToken = await user.getIdToken(); // Get the Firebase ID token (JWT)
-        console.log("Firebase client login successful. ID Token obtained.");
-
-        // 2. Send the ID Token to your Flask backend for verification and role retrieval
-        // The Flask backend will use Firebase Admin SDK to verify this token
-        const response = await fetch(`${API_BASE_URL}/login`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            // Send the ID token in the Authorization header for backend verification
-            'Authorization': `Bearer ${idToken}`
-          },
-          // We can send email or not, the backend will verify using the ID token's UID
-          body: JSON.stringify({ email: user.email }),
-        });
-
-        const data = await response.json();
-        if (response.ok) {
-          setMessage(data.message);
-          // If backend verification is successful, proceed with login success
-          onLoginSuccess(data.user); // Pass user data (including role from backend) to App component
-        } else {
-          // If backend verification fails (e.g., role not found, or other backend issue)
-          setMessage(data.error || 'Login failed after token verification.');
-          showFlashMessage(data.error || 'Login failed after token verification.', 'error');
-          // Optional: If backend fails, consider signing out from client-side Firebase Auth as well
-          authClient.signOut();
-        }
-      } catch (error) {
-        console.error('Login error:', error);
-        let errorMessage = 'Login failed.';
-        // Handle specific Firebase Auth errors returned by signInWithEmailAndPassword
-        if (error.code) {
-          switch (error.code) {
-            case 'auth/user-not-found':
-            case 'auth/wrong-password':
-              errorMessage = 'Invalid email or password.';
-              setPasswordError(true); // Set password error for highlighting
-              break;
-            case 'auth/invalid-email':
-              errorMessage = 'Invalid email format.';
-              break;
-            case 'auth/too-many-requests':
-              errorMessage = 'Too many failed login attempts. Please try again later.';
-              break;
-            case 'auth/network-request-failed':
-              errorMessage = 'Network error. Please check your internet connection.';
-              break;
-            default:
-              errorMessage = error.message; // Fallback to Firebase's default error message
-          }
-        } else {
-          // General network or unexpected errors
-          errorMessage = 'An unexpected network error occurred or server is unreachable.';
-        }
-        setMessage(errorMessage);
-        showFlashMessage(errorMessage, 'error');
-      } finally {
-        setLoading(false); // Always reset loading state
-      }
-    };
-
-    // Handler to clear password error when the input is focused
-    const handlePasswordFocus = () => {
-      setPasswordError(false); // Clear the highlight when user clicks to re-enter
-      setMessage(''); // Optionally clear the local message
-      // Removed: showFlashMessage('', ''); // Do not clear parent flash message here
-    };
-
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[calc(100vh-8rem)] bg-gray-50 p-4">
-        <div className="bg-white p-8 rounded-xl shadow-2xl w-full max-w-md border border-gray-100">
-          <h2 className="text-4xl font-extrabold text-indigo-800 mb-8 text-center">Login</h2>
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-              <label htmlFor="email" className="block text-gray-800 text-base font-semibold mb-2">Email Address:</label>
-              <input
-                type="email"
-                id="email"
-                className="w-full px-5 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-3 focus:ring-indigo-300 transition duration-200"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-            </div>
-            <div>
-              <label htmlFor="password" className="block text-gray-800 text-base font-semibold mb-2">Password:</label>
-              <input
-                type="password"
-                id="password"
-                className={`w-full px-5 py-3 border rounded-lg focus:outline-none focus:ring-3 transition duration-200
-                  ${passwordError ? 'border-red-500 focus:ring-red-300' : 'border-gray-300 focus:ring-indigo-300'}`}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                onFocus={handlePasswordFocus}
-                required
-              />
-            </div>
-            <button
-              type="submit"
-              className="w-full bg-indigo-600 text-white py-3 px-4 rounded-lg font-bold text-lg hover:bg-indigo-700 focus:outline-none focus:ring-3 focus:ring-indigo-500 focus:ring-offset-2 transition duration-300 transform hover:scale-105 flex items-center justify-center space-x-2 disabled:opacity-60 disabled:cursor-not-allowed"
-              disabled={loading}
-            >
-              {loading ? (
-                <>
-                  <Loader2 size={20} className="animate-spin" />
-                  <span>Logging In...</span>
-                </>
-              ) : (
-                <>
-                  <LogIn size={20} />
-                  <span>Log In</span>
-                </>
-              )}
-            </button>
-            {message && <p className="text-center mt-4 text-sm text-red-600 font-medium">{message}</p>}
-          </form>
-          <p className="text-center mt-8 text-gray-600 text-base">
-            Don't have an account?{' '}
-            <button onClick={() => navigateTo('register')} className="text-indigo-700 hover:underline font-bold transition duration-200">
-              Register here
-            </button>
-          </p>
-        </div>
-      </div>
-    );
   };
 
-  // Register Component (unchanged for now, but will leverage Firebase Admin SDK for user creation)
-  const RegisterComponent = ({ navigateTo, showFlashMessage }) => {
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-    const [role, setRole] = useState('user'); // Default role
-    const [message, setMessage] = useState('');
-    const [loading, setLoading] = useState(false);
-
-    const handleSubmit = async (e) => {
-      e.preventDefault();
-      setMessage('Registering...');
-      setLoading(true);
-      try {
-        const response = await fetch(`${API_BASE_URL}/register`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password, role }),
-        });
-        const data = await response.json();
-        if (response.ok) {
-          setMessage(data.message);
-          showFlashMessage(data.message || 'Registration successful! Please log in.', 'success');
-          navigateTo('login');
-        } else {
-          setMessage(data.error || 'Registration failed.');
-          showFlashMessage(data.error || 'Registration failed.', 'error');
-        }
-      } catch (error) {
-        console.error('Registration error:', error);
-        setMessage('Network error or server unreachable.');
-        showFlashMessage('Network error or server unreachable.', 'error');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[calc(100vh-8rem)] bg-gray-50 p-4">
-        <div className="bg-white p-8 rounded-xl shadow-2xl w-full max-w-md border border-gray-200">
-          <h2 className="text-4xl font-extrabold text-indigo-800 mb-8 text-center">Register</h2>
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-              <label htmlFor="email" className="block text-gray-800 text-base font-semibold mb-2">Email:</label>
-              <input
-                type="email"
-                id="email"
-                className="w-full px-5 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-3 focus:ring-indigo-300 transition duration-200"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-            </div>
-            <div>
-              <label htmlFor="password" className="block text-gray-800 text-base font-semibold mb-2">Password:</label>
-              <input
-                type="password"
-                id="password"
-                className="w-full px-5 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-3 focus:ring-indigo-300 transition duration-200"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-            </div>
-            <div>
-              <label htmlFor="role" className="block text-gray-800 text-base font-semibold mb-2">Role:</label>
-              <select
-                id="role"
-                className="w-full px-5 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-3 focus:ring-indigo-300 transition duration-200 bg-white"
-                value={role}
-                onChange={(e) => setRole(e.target.value)}
-              >
-                <option value="user">User</option>
-                <option value="support">Support Associate</option>
-              </select>
-            </div>
-            <button
-              type="submit"
-              className="w-full bg-green-600 text-white py-3 px-4 rounded-lg font-bold text-lg hover:bg-green-700 focus:outline-none focus:ring-3 focus:ring-green-500 focus:ring-offset-2 transition duration-300 transform hover:scale-105 flex items-center justify-center space-x-2 disabled:opacity-60 disabled:cursor-not-allowed"
-              disabled={loading}
-            >
-              {loading ? (
-                  <>
-                      <Loader2 size={20} className="animate-spin" />
-                      <span>Registering...</span>
-                  </>
-              ) : (
-                  <>
-                      <User size={20} />
-                      <span>Register</span>
-                  </>
-              )}
-            </button>
-            {message && <p className="text-center mt-4 text-sm text-green-600 font-medium">{message}</p>}
-          </form>
-          <p className="text-center mt-8 text-gray-600 text-base">
-            Already have an account?{' '}
-            <button onClick={() => navigateTo('login')} className="text-indigo-700 hover:underline font-bold transition duration-200">
-              Log In
-            </button>
-          </p>
-        </div>
-      </div>
-    );
+  const handlePasswordFocus = () => {
+    setPasswordError(false);
+    setMessage('');
   };
 
-
-  // MyTickets Component
-  const MyTicketsComponent = ({ user, navigateTo, showFlashMessage }) => {
-    const [tickets, setTickets] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
-
-    const fetchMyTickets = useCallback(async () => { // Wrapped with useCallback
-      setLoading(true);
-      setError(null);
-      try {
-        // Pass userId as a query parameter
-        const response = await fetch(`${API_BASE_URL}/tickets/my?userId=${user.id}`);
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        const data = await response.json();
-        setTickets(data);
-      } catch (err) {
-        setError('Failed to fetch tickets. Please try again.');
-        showFlashMessage('Failed to fetch your tickets.', 'error');
-        console.error('Error fetching my tickets:', err);
-      } finally {
-        setLoading(false);
-      }
-    }, [user, showFlashMessage]); // Dependencies: user, showFlashMessage
-
-    useEffect(() => {
-      if (user && user.id) {
-        fetchMyTickets();
-      }
-    }, [user, fetchMyTickets]); // Added fetchMyTickets to dependencies
-
-    if (loading) return <div className="text-center text-gray-600 mt-8 text-xl flex items-center justify-center space-x-2"><Loader2 className="animate-spin" size={24} /> <span>Loading your tickets...</span></div>;
-    if (error) return <div className="text-center text-red-600 mt-8 text-xl flex items-center justify-center space-x-2"><XCircle size={24} /> <span>Error: {error}</span></div>;
-
-    return (
-      <div className="p-6 bg-white rounded-xl shadow-lg">
-        <div className="flex justify-between items-center mb-8 flex-wrap gap-4">
-          <h2 className="text-4xl font-extrabold text-indigo-800">My Tickets</h2>
+  return (
+    <div className="flex flex-col items-center justify-center min-h-[calc(100vh-8rem)] bg-gray-50 p-4">
+      <div className="bg-white p-8 rounded-xl shadow-2xl w-full max-w-md border border-gray-100">
+        <h2 className="text-4xl font-extrabold text-indigo-800 mb-8 text-center">Login</h2>
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div>
+            <label htmlFor="email" className="block text-gray-800 text-base font-semibold mb-2">Email Address:</label>
+            <input
+              type="email"
+              id="email"
+              className="w-full px-5 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-3 focus:ring-indigo-300 transition duration-200"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+          </div>
+          <div>
+            <label htmlFor="password" className="block text-gray-800 text-base font-semibold mb-2">Password:</label>
+            <input
+              type="password"
+              id="password"
+              className={`w-full px-5 py-3 border rounded-lg focus:outline-none focus:ring-3 transition duration-200
+                ${passwordError ? 'border-red-500 focus:ring-red-300' : 'border-gray-300 focus:ring-indigo-300'}`}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              onFocus={handlePasswordFocus}
+              required
+            />
+          </div>
           <button
-            onClick={() => navigateTo('createTicket')}
-            className="bg-indigo-600 text-white px-7 py-3 rounded-xl font-semibold hover:bg-indigo-700 transition duration-300 flex items-center space-x-2 shadow-md hover:shadow-lg transform hover:scale-105"
+            type="submit"
+            className="w-full bg-indigo-600 text-white py-3 px-4 rounded-lg font-bold text-lg hover:bg-indigo-700 focus:outline-none focus:ring-3 focus:ring-indigo-500 focus:ring-offset-2 transition duration-300 transform hover:scale-105 flex items-center justify-center space-x-2 disabled:opacity-60 disabled:cursor-not-allowed"
+            disabled={loading}
           >
-            <PlusCircle size={22} />
-            <span>Create New Ticket</span>
+            {loading ? (
+              <>
+                <Loader2 size={20} className="animate-spin" />
+                <span>Logging In...</span>
+              </>
+            ) : (
+              <>
+                <LogIn size={20} />
+                <span>Log In</span>
+              </>
+            )}
           </button>
-        </div>
-        {tickets.length === 0 ? (
-          <div className="text-center text-gray-700 text-xl p-12 border-4 border-dashed border-gray-300 rounded-2xl bg-gray-50">
-            <p className="mb-4">You haven't created any tickets yet.</p>
-            <p className="font-semibold">Click "Create New Ticket" to get started!</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-            {tickets.map(ticket => (
-              <div key={ticket.id} className="bg-white p-7 rounded-xl shadow-md border border-gray-200 hover:shadow-lg transition duration-300 transform hover:-translate-y-1 flex flex-col justify-between">
-                <div>
-                  <h3 className="text-2xl font-bold text-indigo-800 mb-3 leading-tight">{ticket.title}</h3>
-                  {/* Using ticket.id directly as Flask API now returns 'id' for Firestore doc ID */}
-                  <p className="text-gray-700 mb-2 flex items-center"><ClipboardCheck className="mr-3 text-indigo-500" size={18} /> <span className="font-semibold text-gray-800">ID:</span> {ticket.display_id}</p>
-                  <p className="text-gray-700 mb-2 flex items-center"><User className="mr-3 text-indigo-500" size={18} /><span className="font-semibold text-gray-800">Reporter:</span> {ticket.reporter}</p>
-                  <p className="text-gray-700 mb-2 flex items-center">
-                    <span className="font-semibold mr-3 text-gray-800">Status:</span>
-                    <span className={`px-4 py-1 text-sm font-semibold rounded-full ${
-                        ticket.status === 'Open' ? 'bg-green-100 text-green-800' :
-                        ticket.status === 'In Progress' ? 'bg-yellow-100 text-yellow-800' :
-                        ticket.status === 'Closed' || ticket.status === 'Resolved' ? 'bg-gray-100 text-gray-800' :
-                        'bg-blue-100 text-blue-800'
-                    }`}>
-                      {ticket.status}
-                    </span>
-                  </p>
-                  <p className="text-gray-700 mb-4 flex items-center">
-                    <span className="font-semibold mr-3 text-gray-800">Priority:</span>
-                    <span className={`px-4 py-1 text-sm font-semibold rounded-full ${
-                        ticket.priority === 'Low' ? 'bg-blue-100 text-blue-800' :
-                        ticket.priority === 'Medium' ? 'bg-orange-100 text-orange-800' :
-                        ticket.priority === 'High' || ticket.priority === 'Critical' ? 'bg-red-100 text-red-800' :
-                        'bg-purple-100 text-purple-800'
-                    }`}>
-                      {ticket.priority}
-                    </span>
-                  </p>
-                </div>
-                {/* Using ticket.id directly */}
-                <button
-                  onClick={() => navigateTo('ticketDetail', ticket.id)}
-                  className="mt-6 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition duration-300 transform hover:scale-105 flex items-center justify-center space-x-2 font-semibold shadow-md"
-                >
-                  <List size={20} />
-                  <span>View Details</span>
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
+          {message && <p className="text-center mt-4 text-sm text-red-600 font-medium">{message}</p>}
+        </form>
+        <p className="text-center mt-8 text-gray-600 text-base">
+          Don't have an account?{' '}
+          <button onClick={() => navigateTo('register')} className="text-indigo-700 hover:underline font-bold transition duration-200">
+            Register here
+          </button>
+        </p>
       </div>
-    );
+    </div>
+  );
+};
+
+
+// Register Component
+const RegisterComponent = ({ navigateTo, showFlashMessage }) => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [role, setRole] = useState('user'); // Default role
+  const [message, setMessage] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setMessage('Registering...');
+    setLoading(true);
+    try {
+      // No client-side Firebase Auth user creation here, as per your Flask `app.py` logic.
+      // Firebase Auth user creation is handled on the Node.js backend.
+      const response = await fetch(`${API_BASE_URL}/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, role }),
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setMessage(data.message);
+        showFlashMessage(data.message || 'Registration successful! Please log in.', 'success');
+        navigateTo('login');
+      } else {
+        setMessage(data.error || 'Registration failed.');
+        showFlashMessage(data.error || 'Registration failed.', 'error');
+      }
+    } catch (error) {
+      console.error('Registration error:', error);
+      setMessage('Network error or server unreachable.');
+      showFlashMessage('Network error or server unreachable.', 'error');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // AllTickets Component (for support users)
-  const AllTicketsComponent = ({ navigateTo, showFlashMessage }) => {
-    const [rawTickets, setRawTickets] = useState([]); // Stores all fetched tickets
-    const [tickets, setTickets] = useState([]); // Stores filtered tickets for display
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
-    const [filterStatus, setFilterStatus] = useState('');
-    const [filterAssignment, setFilterAssignment] = useState('');
-    const [filterDue, setFilterDue] = useState('');
+  return (
+    <div className="flex flex-col items-center justify-center min-h-[calc(100vh-8rem)] bg-gray-50 p-4">
+      <div className="bg-white p-8 rounded-xl shadow-2xl w-full max-w-md border border-gray-200">
+        <h2 className="text-4xl font-extrabold text-indigo-800 mb-8 text-center">Register</h2>
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div>
+            <label htmlFor="email" className="block text-gray-800 text-base font-semibold mb-2">Email:</label>
+            <input
+              type="email"
+              id="email"
+              className="w-full px-5 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-3 focus:ring-indigo-300 transition duration-200"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+          </div>
+          <div>
+            <label htmlFor="password" className="block text-gray-800 text-base font-semibold mb-2">Password:</label>
+            <input
+              type="password"
+              id="password"
+              className="w-full px-5 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-3 focus:ring-indigo-300 transition duration-200"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+          </div>
+          <div>
+            <label htmlFor="role" className="block text-gray-800 text-base font-semibold mb-2">Role:</label>
+            <select
+              id="role"
+              className="w-full px-5 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-3 focus:ring-indigo-300 transition duration-200 bg-white"
+              value={role}
+              onChange={(e) => setRole(e.target.value)}
+            >
+              <option value="user">User</option>
+              <option value="support">Support Associate</option>
+            </select>
+          </div>
+          <button
+            type="submit"
+            className="w-full bg-green-600 text-white py-3 px-4 rounded-lg font-bold text-lg hover:bg-green-700 focus:outline-none focus:ring-3 focus:ring-green-500 focus:ring-offset-2 transition duration-300 transform hover:scale-105 flex items-center justify-center space-x-2 disabled:opacity-60 disabled:cursor-not-allowed"
+            disabled={loading}
+          >
+            {loading ? (
+                <>
+                    <Loader2 size={20} className="animate-spin" />
+                    <span>Registering...</span>
+                </>
+            ) : (
+                <>
+                    <User size={20} />
+                    <span>Register</span>
+                </>
+            )}
+          </button>
+          {message && <p className="text-center mt-4 text-sm text-green-600 font-medium">{message}</p>}
+        </form>
+        <p className="text-center mt-8 text-gray-600 text-base">
+          Already have an account?{' '}
+          <button onClick={() => navigateTo('login')} className="text-indigo-700 hover:underline font-bold transition duration-200">
+            Log In
+          </button>
+        </p>
+      </div>
+    </div>
+  );
+};
 
-    // Function to fetch all tickets from the API
-    const fetchAllTickets = useCallback(async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const response = await fetch(`${API_BASE_URL}/tickets/all`); // Always fetch all tickets
+
+// MyTickets Component - **FIXED for getIdToken**
+const MyTicketsComponent = ({ user, navigateTo, showFlashMessage }) => {
+  const [tickets, setTickets] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const fetchMyTickets = useCallback(async () => {
+    // Access the original Firebase User object from the 'user' prop
+    const firebaseUser = user?.firebaseUser;
+
+    if (!firebaseUser) {
+      setLoading(false);
+      // Optional: show a message if no user is logged in
+      showFlashMessage('Please log in to view your tickets.', 'info');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    try {
+      // --- CRUCIAL FIX: Call getIdToken() on the original firebaseUser object ---
+      const idToken = await firebaseUser.getIdToken();
+      console.log("Fetching tickets for UID:", firebaseUser.uid, "with ID Token (first 30 chars):", idToken.substring(0, 30) + '...');
+
+      const response = await fetch(`${API_BASE_URL}/tickets/my?userId=${firebaseUser.uid}`, { // Use firebaseUser.uid
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}` // <<< THIS SENDS THE TOKEN TO YOUR NODE.JS BACKEND
+        }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(`HTTP error! status: ${response.status}, message: ${errorData.error || errorData.message}`);
+      }
+
+      const data = await response.json();
+      setTickets(data);
+      // showFlashMessage('Tickets loaded successfully!', 'success'); // Only show if user explicitly triggers fetch
+    } catch (err) {
+      console.error('Error fetching my tickets:', err);
+      setError(err.message || 'Failed to fetch tickets. Please try again.');
+      showFlashMessage(err.message || 'Failed to fetch your tickets.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, [user, showFlashMessage]); // Dependencies: user, showFlashMessage
+
+  useEffect(() => {
+    // Fetch tickets when the component mounts or when the user object changes
+    // This ensures data is fetched once the user is confirmed and ready
+    if (user?.firebaseUser) {
+        fetchMyTickets();
+    }
+  }, [user, fetchMyTickets]);
+
+  if (loading) return <div className="text-center text-gray-600 mt-8 text-xl flex items-center justify-center space-x-2"><Loader2 className="animate-spin" size={24} /> <span>Loading your tickets...</span></div>;
+  if (error) return <div className="text-center text-red-600 mt-8 text-xl flex items-center justify-center space-x-2"><XCircle size={24} /> <span>Error: {error}</span></div>;
+
+  return (
+    <div className="p-6 bg-white rounded-xl shadow-lg">
+      <div className="flex justify-between items-center mb-8 flex-wrap gap-4">
+        <h2 className="text-4xl font-extrabold text-indigo-800">My Tickets</h2>
+        <button
+          onClick={() => navigateTo('createTicket')}
+          className="bg-indigo-600 text-white px-7 py-3 rounded-xl font-semibold hover:bg-indigo-700 transition duration-300 flex items-center space-x-2 shadow-md hover:shadow-lg transform hover:scale-105"
+        >
+          <PlusCircle size={22} />
+          <span>Create New Ticket</span>
+        </button>
+      </div>
+      {tickets.length === 0 ? (
+        <div className="text-center text-gray-700 text-xl p-12 border-4 border-dashed border-gray-300 rounded-2xl bg-gray-50">
+          <p className="mb-4">You haven't created any tickets yet.</p>
+          <p className="font-semibold">Click "Create New Ticket" to get started!</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+          {tickets.map(ticket => (
+            <div key={ticket.id} className="bg-white p-7 rounded-xl shadow-md border border-gray-200 hover:shadow-lg transition duration-300 transform hover:-translate-y-1 flex flex-col justify-between">
+              <div>
+                <h3 className="text-2xl font-bold text-indigo-800 mb-3 leading-tight">{ticket.title}</h3>
+                <p className="text-gray-700 mb-2 flex items-center"><ClipboardCheck className="mr-3 text-indigo-500" size={18} /> <span className="font-semibold text-gray-800">ID:</span> {ticket.display_id}</p>
+                <p className="text-gray-700 mb-2 flex items-center"><User className="mr-3 text-indigo-500" size={18} /><span className="font-semibold text-gray-800">Reporter:</span> {ticket.reporter}</p>
+                <p className="text-gray-700 mb-2 flex items-center">
+                  <span className="font-semibold mr-3 text-gray-800">Status:</span>
+                  <span className={`px-4 py-1 text-sm font-semibold rounded-full ${
+                      ticket.status === 'Open' ? 'bg-green-100 text-green-800' :
+                      ticket.status === 'In Progress' ? 'bg-yellow-100 text-yellow-800' :
+                      ticket.status === 'Closed' || ticket.status === 'Resolved' ? 'bg-gray-100 text-gray-800' :
+                      'bg-blue-100 text-blue-800'
+                  }`}>
+                    {ticket.status}
+                  </span>
+                </p>
+                <p className="text-gray-700 mb-4 flex items-center">
+                  <span className="font-semibold mr-3 text-gray-800">Priority:</span>
+                  <span className={`px-4 py-1 text-sm font-semibold rounded-full ${
+                      ticket.priority === 'Low' ? 'bg-blue-100 text-blue-800' :
+                      ticket.priority === 'Medium' ? 'bg-orange-100 text-orange-800' :
+                      ticket.priority === 'High' || ticket.priority === 'Critical' ? 'bg-red-100 text-red-800' :
+                      'bg-purple-100 text-purple-800'
+                  }`}>
+                    {ticket.priority}
+                  </span>
+                </p>
+              </div>
+              <button
+                onClick={() => navigateTo('ticketDetail', ticket.id)}
+                className="mt-6 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition duration-300 transform hover:scale-105 flex items-center justify-center space-x-2 font-semibold shadow-md"
+              >
+                <List size={20} />
+                <span>View Details</span>
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// AllTickets Component (for support users) - **FIXED for getIdToken**
+const AllTicketsComponent = ({ navigateTo, showFlashMessage, user }) => {
+  const [rawTickets, setRawTickets] = useState([]);
+  const [tickets, setTickets] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [filterStatus, setFilterStatus] = useState('');
+  const [filterAssignment, setFilterAssignment] = useState('');
+  const [filterDue, setFilterDue] = useState('');
+
+  const fetchAllTickets = useCallback(async () => {
+    // Access the original Firebase User object from the 'user' prop
+    const firebaseUser = user?.firebaseUser;
+
+    if (!firebaseUser) {
+        setLoading(false);
+        showFlashMessage('You must be logged in to view all tickets.', 'info');
+        return;
+    }
+
+    setLoading(true);
+    setError(null);
+    try {
+        // --- CRUCIAL FIX: Call getIdToken() on the original firebaseUser object ---
+        const idToken = await firebaseUser.getIdToken();
+
+        const response = await fetch(`${API_BASE_URL}/tickets/all`, { // Always fetch all tickets
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${idToken}` // <<< THIS SENDS THE TOKEN
+            }
+        });
         if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
+          const errorData = await response.json();
+          throw new Error(`HTTP error! status: ${response.status}, message: ${errorData.error || errorData.message}`);
         }
         const data = await response.json();
         setRawTickets(data); // Store the full list
       } catch (err) {
-        setError('Failed to fetch all tickets. Please try again.');
-        showFlashMessage('Failed to fetch all tickets.', 'error');
+        setError(err.message || 'Failed to fetch all tickets. Please try again.');
+        showFlashMessage(err.message || 'Failed to fetch all tickets.', 'error');
         console.error('Error fetching all tickets:', err);
       } finally {
         setLoading(false);
       }
-    }, [showFlashMessage]); // No dependencies that change outside component lifecycle
+    }, [user, showFlashMessage]); // Depend on user and showFlashMessage
 
-    // Effect to fetch all tickets once on component mount
     useEffect(() => {
-      fetchAllTickets();
-    }, [fetchAllTickets]);
+        if (user?.firebaseUser) { // Ensure firebaseUser exists before fetching
+            fetchAllTickets();
+        }
+    }, [user, fetchAllTickets]);
 
     // Effect to filter tickets whenever rawTickets or filter states change
     useEffect(() => {
@@ -521,7 +481,7 @@ function App() {
       // Add more filtering logic here for other filters (e.g., filterDue)
 
       setTickets(filtered); // Update the displayed tickets
-    }, [rawTickets, filterStatus, filterAssignment, filterDue]); // Depend on rawTickets and filter states
+    }, [rawTickets, filterStatus, filterAssignment, filterDue]);
 
     // Calculate counts based on the unfiltered rawTickets
     const counts = {
@@ -600,8 +560,8 @@ function App() {
                 <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Raised by</th>
                 <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Priority</th>
                 <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Status</th>
-                <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Last Updated</th>
                 <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Assigned To</th>
+                <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Last Updated</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
@@ -634,17 +594,14 @@ function App() {
                       {ticket.status}
                     </span>
                   </td>
-                  {/* Corrected Assigned To Cell */}
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800 flex items-center">
                     <Users size={16} className="mr-2 text-gray-500" />
                     {ticket.assigned_to_email || 'Unassigned'}
                   </td>
-                  {/* Corrected Last Updated Cell */}
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800 flex items-center">
                     <CalendarDays size={16} className="mr-2 text-gray-500" />
                     {new Date(ticket.updated_at).toLocaleString()}
                   </td>
-                  {/* Actions column remains as is */}
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     {/* Add your action buttons/links here */}
                   </td>
@@ -658,31 +615,44 @@ function App() {
     );
   };
 
-  // CreateTicket Component
+  // CreateTicket Component - **FIXED for getIdToken**
   const CreateTicketComponent = ({ user, navigateTo, showFlashMessage }) => {
+    // Access the original Firebase User object
+    const firebaseUser = user?.firebaseUser;
+
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
     // Pre-fill reporter with user's email if available, otherwise allow input
-    const [reporter, setReporter] = useState(user?.email || '');
+    const [reporter, setReporter] = useState(firebaseUser?.email || '');
     const [status, setStatus] = useState('Open');
     const [priority, setPriority] = useState('Low');
     const [loading, setLoading] = useState(false);
 
     const handleSubmit = async (e) => {
       e.preventDefault();
+      if (!firebaseUser) {
+          showFlashMessage('You must be logged in to create a ticket.', 'error');
+          return;
+      }
       setLoading(true);
       try {
+        // --- CRUCIAL FIX: Call getIdToken() on the original firebaseUser object ---
+        const idToken = await firebaseUser.getIdToken();
+
         const response = await fetch(`${API_BASE_URL}/create`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${idToken}` // <<< THIS SENDS THE TOKEN
+          },
           body: JSON.stringify({
             title,
             description,
             reporter,
             status,
             priority,
-            creator_uid: user.id, // Send user ID
-            creator_email: user.email // Send user email
+            creator_uid: firebaseUser.uid, // Use firebaseUser.uid
+            creator_email: firebaseUser.email // Use firebaseUser.email
           }),
         });
         const data = await response.json();
@@ -754,26 +724,43 @@ function App() {
     );
   };
 
-  // TicketDetail Component
+  // TicketDetail Component - **FIXED for getIdToken**
   const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage }) => {
+    // Access the original Firebase User object
+    const firebaseUser = user?.firebaseUser;
+
     const [ticket, setTicket] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [newComment, setNewComment] = useState('');
     const [updateStatus, setUpdateStatus] = useState('');
     const [updatePriority, setUpdatePriority] = useState('');
-    const [assignedToEmail, setAssignedToEmail] = useState(''); // New state for assigned to
+    const [assignedToEmail, setAssignedToEmail] = useState('');
     const [updateLoading, setUpdateLoading] = useState(false);
     const [commentLoading, setCommentLoading] = useState(false);
 
 
-    const fetchTicket = useCallback(async () => { // Wrapped with useCallback
+    const fetchTicket = useCallback(async () => {
+      if (!ticketId || !firebaseUser) { // Ensure firebaseUser exists
+        setLoading(false);
+        return;
+      }
       setLoading(true);
       setError(null);
       try {
-        const response = await fetch(`${API_BASE_URL}/ticket/${ticketId}`);
+        // --- CRUCIAL FIX: Call getIdToken() on the original firebaseUser object ---
+        const idToken = await firebaseUser.getIdToken();
+
+        const response = await fetch(`${API_BASE_URL}/ticket/${ticketId}`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${idToken}` // <<< THIS SENDS THE TOKEN
+          }
+        });
         if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
+          const errorData = await response.json();
+          throw new Error(`HTTP error! status: ${response.status}, message: ${errorData.error || errorData.message}`);
         }
         const data = await response.json();
         // Ensure comments exist and are an array
@@ -781,40 +768,45 @@ function App() {
         setTicket(data);
         setUpdateStatus(data.status);
         setUpdatePriority(data.priority);
-        setAssignedToEmail(data.assigned_to_email || ''); // Initialize assignedToEmail
+        setAssignedToEmail(data.assigned_to_email || '');
       } catch (err) {
-        setError('Failed to fetch ticket details. Please try again.');
-        showFlashMessage('Failed to fetch ticket details.', 'error');
+        setError(err.message || 'Failed to fetch ticket details. Please try again.');
+        showFlashMessage(err.message || 'Failed to fetch ticket details.', 'error');
         console.error('Error fetching ticket:', err);
       } finally {
         setLoading(false);
       }
-    }, [ticketId, showFlashMessage]); // Dependencies for fetchTicket
+    }, [ticketId, firebaseUser, showFlashMessage]); // Dependencies for fetchTicket
 
     useEffect(() => {
       if (ticketId) {
         fetchTicket();
       }
-    }, [ticketId, fetchTicket]); // Now depends on memoized fetchTicket
+    }, [ticketId, fetchTicket]);
 
     const handleUpdateTicket = async (e) => {
         e.preventDefault();
         setUpdateLoading(true);
         try {
+            // --- CRUCIAL FIX: Call getIdToken() on the original firebaseUser object ---
+            const idToken = await firebaseUser.getIdToken();
+
             const response = await fetch(`${API_BASE_URL}/ticket/${ticketId}/update`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${idToken}` // <<< THIS SENDS THE TOKEN
+                },
                 body: JSON.stringify({
                   status: updateStatus,
                   priority: updatePriority,
-                  assigned_to_email: assignedToEmail // Include assigned_to_email in update payload
+                  assigned_to_email: assignedToEmail
                 }),
             });
             const data = await response.json();
             if (response.ok) {
                 showFlashMessage(data.message || 'Ticket updated successfully!', 'success');
-                // Re-fetch ticket to get latest details including updated_at
-                fetchTicket();
+                fetchTicket(); // Re-fetch to get latest details including updated_at
             } else {
                 showFlashMessage(data.error || 'Failed to update ticket.', 'error');
             }
@@ -835,17 +827,22 @@ function App() {
             return;
         }
         try {
+            // --- CRUCIAL FIX: Call getIdToken() on the original firebaseUser object ---
+            const idToken = await firebaseUser.getIdToken();
+
             const response = await fetch(`${API_BASE_URL}/ticket/${ticketId}/add_comment`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ comment_text: newComment, commenter_name: user.email }),
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${idToken}` // <<< THIS SENDS THE TOKEN
+                },
+                body: JSON.stringify({ comment_text: newComment, commenter_name: firebaseUser.email }), // Use firebaseUser.email
             });
             const data = await response.json();
             if (response.ok) {
                 showFlashMessage(data.message || 'Comment added successfully!', 'success');
                 setNewComment('');
-                // Re-fetch ticket to get latest comments and updated_at
-                fetchTicket();
+                fetchTicket(); // Re-fetch to get latest comments and updated_at
             } else {
                 showFlashMessage(data.error || 'Failed to add comment.', 'error');
             }
@@ -862,7 +859,7 @@ function App() {
     if (!ticket) return <div className="text-center text-gray-600 mt-8 text-xl">Ticket not found.</div>;
 
     // Check if the current user is the creator or a support associate
-    const canUpdateOrComment = user.role === 'support' || user.id === ticket.creator_uid;
+    const canUpdateOrComment = user.role === 'support' || firebaseUser.uid === ticket.creator_uid; // Use firebaseUser.uid
     // Only support users can edit the assigned_to field
     const canEditAssignedTo = user.role === 'support';
 
@@ -878,7 +875,7 @@ function App() {
         <p className="text-2xl font-semibold text-gray-700 mb-8 text-center px-4">
           {ticket.title}
         </p>
-   
+
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-y-4 gap-x-8 mb-10 text-lg">
           <p className="text-gray-700 flex items-center"><User className="mr-3 text-indigo-500" size={20} /><span className="font-bold text-gray-800">Reporter:</span> {ticket.reporter}</p>
@@ -986,7 +983,7 @@ function App() {
               ))}
             </ul>
           ) : (
-            <p className="text-gray-700 text-lg text-center p-10 border-4 border-dashed border-gray-300 rounded-2xl bg-gray-100">Provide additional comments?</p>
+            <p className="text-gray-700 text-lg text-center p-10 border-4 border-dashed border-gray-300 rounded-2xl bg-gray-100">No comments yet. Be the first to provide additional comments!</p>
           )}
 
           {canUpdateOrComment && ( // Render comment form only if user has permissions
@@ -1024,6 +1021,130 @@ function App() {
     );
   };
 
+// --- Main App Component ---
+function App() {
+  // currentUser now stores an object: { firebaseUser: firebase.User, role: string }
+  // firebaseUser holds the original Firebase User object with its methods.
+  const [currentUser, setCurrentUser] = useState(null);
+  const [loading, setLoading] = useState(true); // Initial loading for Firebase auth state
+  const [currentView, setCurrentView] = useState('login'); // Default view
+  const [selectedTicketId, setSelectedTicketId] = useState(null); // For viewing a specific ticket
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false); // State to control profile dropdown visibility
+  const profileMenuRef = useRef(null); // Ref for the profile dropdown container
+
+  // Flash Message state
+  const [flashMessage, setFlashMessage] = useState({ type: '', message: '' });
+  const flashMessageTimeoutRef = useRef(null);
+
+  // Function to show flash message (memoized)
+  const showFlashMessage = useCallback((type, message) => {
+    setFlashMessage({ type, message });
+    if (flashMessageTimeoutRef.current) {
+      clearTimeout(flashMessageTimeoutRef.current);
+    }
+    flashMessageTimeoutRef.current = setTimeout(() => {
+      setFlashMessage({ type: '', message: '' });
+    }, 5000); // Message disappears after 5 seconds
+  }, []);
+
+  // Handler for successful login, updates currentUser state (memoized)
+  const handleLoginSuccess = useCallback((userWithRoleData) => {
+    // userWithRoleData is expected to be { firebaseUser: firebase.User, role: string }
+    setCurrentUser(userWithRoleData);
+    // Optionally persist to localStorage if needed for specific use cases, but onAuthStateChanged is more reliable
+    // localStorage.setItem('currentUser', JSON.stringify(userWithRoleData)); // Note: firebaseUser is not directly JSON.stringify-able
+    setCurrentView('myTickets');
+    showFlashMessage('Login successful!', 'success');
+  }, [showFlashMessage]);
+
+  // Effect to listen to Firebase Auth state changes
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(authClient, async (user) => {
+      if (user) {
+        // User is signed in. Fetch their role from your backend.
+        try {
+          const idToken = await user.getIdToken(); // This 'user' is the original Firebase User object
+          const response = await fetch(`${API_BASE_URL}/login`, { // Using /login to fetch role from backend
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${idToken}`
+            }
+          });
+          if (!response.ok) {
+            // Handle error if backend fails to verify token or retrieve role
+            const errorData = await response.json();
+            console.error('Backend role fetch failed:', errorData.error);
+            showFlashMessage('error', 'Failed to retrieve user role. Please try logging in again.');
+            setCurrentUser(null); // Clear user if role fetch fails
+            signOut(authClient); // Force logout if role cannot be confirmed
+          } else {
+            const backendLoginData = await response.json();
+            // Store the original Firebase User object AND the role
+            setCurrentUser({ firebaseUser: user, role: backendLoginData.user.role });
+            setCurrentView('myTickets'); // Navigate to tickets dashboard
+          }
+        } catch (error) {
+          console.error("Error fetching user role on auth state change:", error);
+          showFlashMessage('error', 'Authentication error. Please re-login.');
+          setCurrentUser(null);
+          signOut(authClient);
+        }
+      } else {
+        // User is signed out
+        setCurrentUser(null);
+        setCurrentView('login'); // Redirect to login page
+      }
+      setLoading(false); // Authentication state loaded
+    });
+
+    // Cleanup subscription on component unmount
+    return () => unsubscribe();
+  }, [showFlashMessage]); // Add showFlashMessage to dependencies
+
+  // Navigation handler (memoized)
+  const navigateTo = useCallback((view, ticketId = null) => {
+    setCurrentView(view);
+    setSelectedTicketId(ticketId);
+    setFlashMessage({ message: '', type: '' }); // Clear messages on navigation
+    setIsProfileMenuOpen(false); // Close profile menu on navigation
+  }, []);
+
+  // Logout handler (memoized)
+  const handleLogout = useCallback(async () => {
+    try {
+      await signOut(authClient);
+      showFlashMessage('Logged out successfully!', 'info');
+      // The onAuthStateChanged listener will handle clearing currentUser and navigating to login
+    } catch (error) {
+      console.error("Logout failed:", error);
+      showFlashMessage('error', 'Logout failed. Please try again.');
+    }
+  }, [showFlashMessage]);
+
+  // Effect to close profile menu when clicking outside (memoized)
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(event.target)) {
+        setIsProfileMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []); // No dependencies for ref
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-100">
+        <Loader2 className="animate-spin text-blue-500" size={48} />
+        <p className="ml-4 text-xl text-gray-700">Loading application...</p>
+      </div>
+    );
+  }
+
   // --- Main App Render Logic ---
   return (
     <div className="min-h-screen bg-gray-100 font-sans text-gray-900 antialiased flex flex-col">
@@ -1050,6 +1171,8 @@ function App() {
                     </button>
                   </li>
                 )}
+                {/* Note: Create Ticket button is now within MyTicketsComponent */}
+
                 <li>
                   {/* The profile menu container */}
                   <div className="relative" ref={profileMenuRef}>
@@ -1059,7 +1182,8 @@ function App() {
                         ${isProfileMenuOpen ? 'bg-indigo-600' : 'hover:bg-indigo-600'}`}
                     >
                       <User size={20} />
-                      <span className="font-semibold">{currentUser.email}</span>
+                      {/* Display email from firebaseUser */}
+                      <span className="font-semibold">{currentUser.firebaseUser.email}</span>
                       <ChevronDown size={16} className={`ml-1 transition-transform ${isProfileMenuOpen ? 'rotate-180' : ''}`} />
                     </button>
                     {/* Conditional rendering and classes based on isProfileMenuOpen state */}
@@ -1123,7 +1247,6 @@ function App() {
                 return <RegisterComponent navigateTo={navigateTo} showFlashMessage={showFlashMessage} />;
               case 'login':
               default:
-                // Pass authClient to LoginComponent if needed, though direct import is fine for now
                 return <LoginComponent onLoginSuccess={handleLoginSuccess} navigateTo={navigateTo} showFlashMessage={showFlashMessage} />;
             }
           } else {
@@ -1133,7 +1256,7 @@ function App() {
               case 'allTickets':
                 // Only allow support role to access all tickets
                 if (currentUser.role === 'support') {
-                  return <AllTicketsComponent navigateTo={navigateTo} showFlashMessage={showFlashMessage} />;
+                  return <AllTicketsComponent navigateTo={navigateTo} showFlashMessage={showFlashMessage} user={currentUser} />;
                 } else {
                   return <div className="text-center text-red-600 mt-8 text-2xl font-bold">Access Denied. You do not have permission to view all tickets.</div>;
                 }
@@ -1149,7 +1272,7 @@ function App() {
       </main>
 
       <footer className="bg-gray-800 text-white text-center p-4 mt-8 w-full">
-        <p>&copy; {new Date().getFullYear()} IT Ticketing Tool. All rights reserved.</p>
+        <p>&copy; {new Date().getFullYear()} IT Help Desk. All rights reserved.</p>
       </footer>
     </div>
   );
