@@ -44,14 +44,13 @@ app.use(cors()); // Enable CORS for all routes (for development, restrict in pro
 app.use(express.json()); // For parsing application/json request bodies
 
 // --- Helper function: JSON Serializable Ticket ---
-// Replicates the functionality of your Python json_serializable_ticket
+// Converts Firestore Timestamp objects and adds document ID
 function jsonSerializableTicket(docId, ticketData) {
     if (!ticketData) return null;
 
     const data = { ...ticketData, id: docId }; // Add document ID
 
     // Convert Firestore Timestamp objects to ISO 8601 strings
-    // Firestore Timestamp objects have toMillis() method
     if (data.created_at && data.created_at.toDate) {
         data.created_at = data.created_at.toDate().toISOString();
     }
@@ -183,6 +182,63 @@ const verifyFirebaseToken = async (req, res, next) => {
     }
 };
 
+// --- Get User Profile ---
+// @route   GET /profile/:userId
+// @desc    Get user profile details (email, role).
+// @access  Private (requires token)
+app.get('/profile/:userId', verifyFirebaseToken, async (req, res) => {
+    const requestedUid = req.params.userId;
+    const authenticatedUid = req.user.uid; // UID from the verified token
+
+    // Ensure the authenticated user is requesting their own profile
+    if (requestedUid !== authenticatedUid) {
+        return res.status(403).json({ error: 'Unauthorized: You can only view your own profile.' });
+    }
+
+    try {
+        const userDoc = await usersCollection.doc(requestedUid).get();
+        if (!userDoc.exists) {
+            return res.status(404).json({ error: 'User profile not found.' });
+        }
+        const profileData = userDoc.data();
+        return res.status(200).json({
+            uid: requestedUid,
+            email: profileData.email,
+            role: profileData.role
+        });
+    } catch (error) {
+        console.error(`Error fetching user profile for ${requestedUid}: ${error.message}`);
+        return res.status(500).json({ error: `Failed to fetch user profile: ${error.message}` });
+    }
+});
+
+// --- Change User Password ---
+// @route   POST /user/change-password
+// @desc    Change the password for the authenticated user.
+// @access  Private (requires token)
+// Note: This endpoint is still here for completeness, but client-side Firebase Auth's updatePassword
+// is generally preferred as it handles re-authentication flow more robustly.
+app.post('/user/change-password', verifyFirebaseToken, async (req, res) => {
+    const uid = req.user.uid; // Get UID from the authenticated token
+    const { newPassword } = req.body;
+
+    if (!newPassword || newPassword.length < 6) {
+        return res.status(400).json({ error: 'New password must be at least 6 characters long.' });
+    }
+
+    try {
+        await admin.auth().updateUser(uid, {
+            password: newPassword,
+        });
+        console.log(`Password updated for user: ${uid}`);
+        return res.status(200).json({ message: 'Password updated successfully!' });
+    } catch (error) {
+        console.error(`Error changing password for ${uid}: ${error.message}`);
+        return res.status(500).json({ error: `Failed to change password: ${error.message}` });
+    }
+});
+
+
 // --- Transactional Logic: get_next_ticket_number ---
 // This function needs to be defined within the scope where `db` is accessible.
 // It uses Firestore transactions similar to your Python version.
@@ -210,19 +266,15 @@ async function getNextTicketNumber(transaction) {
 }
 
 // @route   GET /tickets/my
-// @desc    Get tickets created by a specific user.
+// @desc    Get tickets created by a specific user. Supports keyword search.
 // @access  Private (requires token)
 app.get('/tickets/my', verifyFirebaseToken, async (req, res) => {
-    const userId = req.query.userId; // Get from query parameter as in Flask
+    const userId = req.query.userId;
+    const searchKeyword = req.query.keyword ? req.query.keyword.toLowerCase() : '';
 
     if (!userId) {
         return res.status(400).json({ error: 'User ID is required' });
     }
-
-    // Optional: Add a check if req.user.uid matches userId for security
-    // if (req.user.uid !== userId) {
-    //     return res.status(403).json({ error: 'Access denied: You can only view your own tickets.' });
-    // }
 
     try {
         const ticketsSnapshot = await ticketsCollection
@@ -230,10 +282,19 @@ app.get('/tickets/my', verifyFirebaseToken, async (req, res) => {
             .orderBy('created_at', 'desc')
             .get();
 
-        const tickets = [];
+        let tickets = [];
         ticketsSnapshot.forEach(doc => {
             tickets.push(jsonSerializableTicket(doc.id, doc.data()));
         });
+
+        // Apply keyword filtering in backend if a keyword is provided
+        if (searchKeyword) {
+            tickets = tickets.filter(ticket =>
+                (ticket.display_id && ticket.display_id.toLowerCase().includes(searchKeyword)) ||
+                (ticket.title && ticket.title.toLowerCase().includes(searchKeyword))
+            );
+        }
+
         return res.status(200).json(tickets);
     } catch (error) {
         console.error(`Error fetching my tickets: ${error.message}`);
@@ -242,10 +303,11 @@ app.get('/tickets/my', verifyFirebaseToken, async (req, res) => {
 });
 
 // @route   GET /tickets/all
-// @desc    Get all tickets (for support roles). Supports filtering.
+// @desc    Get all tickets (for support roles). Supports filtering and keyword search.
 // @access  Private (requires token)
 app.get('/tickets/all', verifyFirebaseToken, async (req, res) => {
     const { status, assignment } = req.query; // Get from query parameters
+    const searchKeyword = req.query.keyword ? req.query.keyword.toLowerCase() : ''; // New: Keyword search parameter
 
     let query = ticketsCollection;
 
@@ -258,11 +320,21 @@ app.get('/tickets/all', verifyFirebaseToken, async (req, res) => {
     }
 
     try {
+        // Fetch all tickets that match status/assignment filters first
         const ticketsSnapshot = await query.orderBy('created_at', 'desc').get();
-        const tickets = [];
+        let tickets = [];
         ticketsSnapshot.forEach(doc => {
             tickets.push(jsonSerializableTicket(doc.id, doc.data()));
         });
+
+        // Apply keyword filtering in backend if a keyword is provided
+        if (searchKeyword) {
+            tickets = tickets.filter(ticket =>
+                (ticket.display_id && ticket.display_id.toLowerCase().includes(searchKeyword)) ||
+                (ticket.title && ticket.title.toLowerCase().includes(searchKeyword))
+            );
+        }
+
         return res.status(200).json(tickets);
     } catch (error) {
         console.error(`Error fetching all tickets: ${error.message}`);
