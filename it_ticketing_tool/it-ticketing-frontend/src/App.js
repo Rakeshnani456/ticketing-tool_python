@@ -17,8 +17,8 @@ const firebaseConfig = {
   projectId: "it-ticketing-tool-dd679",
   storageBucket: "it-ticketing-tool-dd679.firebasestorage.app",
   messagingSenderId: "919553361675",
-  appId: "1:919553361675:web:55bfeb860ebef1b886840e",
-  measurementId: "G-H6M4JBS3TL"
+  appId: "1:919553361675:web:ae1be7140926013786840e",
+  measurementId: "G-HCVXC67K86"
 };
 
 // Initialize Firebase App for client-side use
