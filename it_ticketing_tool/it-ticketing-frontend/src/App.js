@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { User, LogIn, LogOut, PlusCircle, List, LayoutDashboard, MessageSquareText, FilePenLine, ChevronDown, Settings, Monitor, CheckCircle, XCircle, Info, AlertTriangle, Tag, CalendarDays, ClipboardCheck, Send, Loader2, ListFilter, Clock, Users, KeyRound, Eye, EyeOff, Search, FileUp, Download, Link, X } from 'lucide-react';
-
+import { ExternalLink } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import {
     getAuth,
@@ -1123,6 +1123,8 @@ const ProfileComponent = ({ user, showFlashMessage, navigateTo, handleLogout }) 
 
 
 // --- TicketDetail Component ---
+
+
 const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage }) => {
     const [ticket, setTicket] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -1131,6 +1133,8 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
     const [commentText, setCommentText] = useState('');
     const [commentLoading, setCommentLoading] = useState(false);
     const [updateLoading, setUpdateLoading] = useState(false);
+    // New state to manage button feedback text and icon
+    const [saveButtonState, setSaveButtonState] = useState('save'); // 'save', 'saving', 'success', 'error'
     const [attachmentFiles, setAttachmentFiles] = useState([]);
     const [uploadingAttachments, setUploadingAttachments] = useState(false);
 
@@ -1200,16 +1204,14 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
         } catch (err) {
             console.error('Error fetching ticket details:', err);
             setError(err.message || 'Failed to fetch ticket details.');
-            showFlashMessage(err.message || 'Failed to fetch ticket details.', 'error');
         } finally {
             setLoading(false);
         }
-    }, [ticketId, user, showFlashMessage]);
+    }, [ticketId, user]);
 
     useEffect(() => {
         fetchTicketDetails();
     }, [fetchTicketDetails]);
-
 
     const isTicketClosedOrResolved = ticket && ['Resolved', 'Closed'].includes(ticket.status);
     // Determine if user can edit: is support OR is reporter AND ticket is not closed/resolved
@@ -1217,15 +1219,33 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
     const canAddComments = !isTicketClosedOrResolved;
     const canAddAttachments = !isTicketClosedOrResolved;
 
+    // Check if any editable field has changed from its original value
+    const hasChanges = () => {
+        if (!ticket) return false;
+        return (
+            editableFields.request_for_email !== ticket.request_for_email ||
+            editableFields.short_description !== ticket.short_description ||
+            editableFields.long_description !== ticket.long_description ||
+            editableFields.contact_number !== ticket.contact_number ||
+            editableFields.priority !== ticket.priority ||
+            editableFields.status !== ticket.status ||
+            editableFields.assigned_to_email !== ticket.assigned_to_email
+        );
+    };
 
     const handleEditChange = (e) => {
         const { id, value } = e.target;
         setEditableFields(prev => ({ ...prev, [id]: value }));
+        // Reset button state if changes are made after an error or success
+        if (saveButtonState !== 'save') {
+            setSaveButtonState('save');
+        }
     };
 
     const handleUpdateTicket = async () => {
         setUpdateLoading(true);
-        showFlashMessage('Updating ticket...', 'info');
+        setSaveButtonState('saving'); // Change button state to saving
+
         try {
             const idToken = await user.firebaseUser.getIdToken();
             const payload = {
@@ -1243,18 +1263,44 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
 
             const data = await response.json();
             if (response.ok) {
-                showFlashMessage(data.message || 'Ticket updated successfully!', 'success');
-                setIsEditing(false);
+                setSaveButtonState('success'); // Change button state to success
                 fetchTicketDetails(); // Re-fetch to get latest data
+                setTimeout(() => {
+                    setIsEditing(false); // Go back to view mode
+                    setSaveButtonState('save'); // Reset button state for next edit cycle
+                }, 1500); // Display "Success!" for 1.5 seconds
             } else {
-                showFlashMessage(data.error || 'Failed to update ticket.', 'error');
+                setSaveButtonState('error'); // Change button state to error
+                showFlashMessage(data.error || 'Failed to update ticket.', 'error'); // Keep flash message for errors
+                setTimeout(() => {
+                    setSaveButtonState('save'); // Reset button state after error
+                }, 2000); // Display "Error!" for 2 seconds
             }
         } catch (error) {
             console.error('Update ticket error:', error);
-            showFlashMessage('Network error or server unreachable during update.', 'error');
+            setSaveButtonState('error'); // Change button state to error
+            showFlashMessage('Network error or server unreachable during update.', 'error'); // Keep flash message for network errors
+            setTimeout(() => {
+                setSaveButtonState('save'); // Reset button state after error
+            }, 2000); // Display "Error!" for 2 seconds
         } finally {
-            setUpdateLoading(false);
+            setUpdateLoading(false); // This will re-enable the button after the timeout if needed, but setIsEditing handles overall state
         }
+    };
+
+    const handleCancelEdit = () => {
+        // Reset editable fields to original ticket values
+        setEditableFields({
+            request_for_email: ticket.request_for_email || '',
+            short_description: ticket.short_description || '',
+            long_description: ticket.long_description || '',
+            contact_number: ticket.contact_number || '',
+            priority: ticket.priority || '',
+            status: ticket.status || '',
+            assigned_to_email: ticket.assigned_to_email || ''
+        });
+        setIsEditing(false);
+        setSaveButtonState('save'); // Ensure button state is reset on cancel
     };
 
     const handleAddComment = async (e) => {
@@ -1369,7 +1415,7 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                 showFlashMessage('Network error during updating ticket with attachments.', 'error');
             }
         } else if (attachmentFiles.length > 0) {
-             showFlashMessage('No attachments were successfully uploaded to add to the ticket.', 'error');
+            showFlashMessage('No attachments were successfully uploaded to add to the ticket.', 'error');
         }
         setUploadingAttachments(false);
     };
@@ -1400,73 +1446,144 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
     if (!ticket) return <div className="text-center text-gray-600 mt-8 text-base">Ticket not found.</div>;
 
     return (
-        <div className="p-4 bg-offwhite flex-1 overflow-auto">
-            <h2 className="text-xl font-extrabold text-gray-800 mb-4 text-center">Ticket: {ticket.display_id}</h2>
-            <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-3xl mx-auto border border-gray-200">
-                {/* Ticket Details Section */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-y-3 gap-x-6 mb-6">
-                    <div>
-                        <p className="text-gray-600 text-sm mb-1"><strong>Requested For:</strong> {isEditing && (canEdit || isSupportUser) ? (
-                            <FormInput
-                                id="request_for_email"
-                                type="email"
-                                value={editableFields.request_for_email}
-                                onChange={handleEditChange}
-                                disabled={!canEdit && !isSupportUser || isTicketClosedOrResolved}
-                                className="inline-block w-auto"
-                                label="" // Label is already in strong tag
-                            />
-                        ) : ticket.request_for_email}</p>
-                        <p className="text-gray-600 text-sm mb-1"><strong>Category:</strong> {ticket.category}</p>
-                        <p className="text-gray-600 text-sm mb-1"><strong>Contact No:</strong> {isEditing && canEdit ? (
-                            <FormInput
-                                id="contact_number"
-                                type="text"
-                                value={editableFields.contact_number}
-                                onChange={handleEditChange}
-                                disabled={!canEdit || isTicketClosedOrResolved}
-                                className="inline-block w-auto"
-                                label="" // Label is already in strong tag
-                            />
-                        ) : ticket.contact_number}</p>
-                        <p className="text-gray-600 text-sm mb-1"><strong>Hostname/Asset ID:</strong> {ticket.hostname_asset_id}</p>
-                        <p className="text-gray-600 text-sm mb-1">
-                            <strong>Priority:</strong> {isEditing && canEdit ? (
+        <div className="p-4 bg-gray-100 min-h-screen flex-1 overflow-auto font-sans">
+            {/* Header section with back button, ticket number, and EDIT/SAVE/CANCEL buttons */}
+            <div className="flex items-center bg-white border-b border-gray-200 px-4 py-3 shadow-sm sticky top-0 z-10">
+                <button onClick={() => navigateTo('/tickets')} className="text-gray-500 hover:text-gray-700 mr-4">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-chevron-left"><path d="m15 18-6-6 6-6"/></svg>
+                </button>
+                <h1 className="text-lg font-semibold text-gray-800 flex-grow">TASK{ticket.display_id} (Portal view)</h1>
+                
+                {/* Edit/Save/Cancel Buttons - Moved to the header */}
+                <div className="flex space-x-2">
+                    {canEdit && !isEditing && !isTicketClosedOrResolved && (
+                        <button
+                            onClick={() => setIsEditing(true)}
+                            className="px-3 py-1.5 text-sm font-medium text-blue-700 bg-blue-50 rounded-md hover:bg-blue-100 transition-colors duration-200"
+                        >
+                            Edit Ticket
+                        </button>
+                    )}
+                    {isEditing && (
+                        <>
+                            <button
+                                onClick={handleCancelEdit}
+                                disabled={updateLoading} // Disable cancel during update
+                                className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors duration-200"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleUpdateTicket}
+                                disabled={updateLoading || !hasChanges()} // Disable save if no changes or updating
+                                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all duration-300 ease-in-out flex items-center justify-center
+                                    ${saveButtonState === 'saving' 
+                                        ? 'bg-blue-200 text-blue-500 cursor-not-allowed'
+                                        : saveButtonState === 'success'
+                                            ? 'bg-green-500 text-white'
+                                            : saveButtonState === 'error'
+                                                ? 'bg-red-500 text-white'
+                                                : hasChanges()
+                                                    ? 'bg-blue-600 text-white hover:bg-blue-700'
+                                                    : 'bg-blue-200 text-blue-500 cursor-not-allowed'
+                                    }`}
+                            >
+                                {saveButtonState === 'saving' && <Loader2 className="animate-spin mr-2" size={16} />}
+                                {saveButtonState === 'success' && <CheckCircle className="mr-2" size={16} />}
+                                {saveButtonState === 'error' && <XCircle className="mr-2" size={16} />}
+                                {saveButtonState === 'saving' && 'Saving...'}
+                                {saveButtonState === 'success' && 'Success!'}
+                                {saveButtonState === 'error' && 'Error!'}
+                                {saveButtonState === 'save' && 'Save'}
+                            </button>
+                        </>
+                    )}
+                </div>
+            </div>
+
+            <div className="bg-white p-6 rounded-lg shadow-md w-full max-w-4xl mx-auto mt-4 border border-gray-200">
+                {/* Top Section: Number, Customer, Request, Due date, Short description (original UI fields) */}
+                <div className="grid grid-cols-2 gap-x-8 gap-y-4 mb-6">
+                    {/* Left Column */}
+                    <div className="space-y-3">
+                        <div className="flex items-center">
+                            <label className="text-gray-700 text-sm font-semibold w-28 shrink-0">Number:</label>
+                            <span className="text-gray-900 text-sm font-medium flex-1">{ticket.display_id}</span>
+                        </div>
+                        <div className="flex items-center">
+                            <label className="text-gray-700 text-sm font-semibold w-28 shrink-0">Customer:</label>
+                            <span className="text-gray-900 text-sm font-medium flex-1">{ticket.request_for_email}</span>
+                            {/* Icon next to Customer name - placeholder */}
+                            
+                        </div>
+                        <div className="flex items-center">
+                            <label className="text-gray-700 text-sm font-semibold w-28 shrink-0">Request:</label>
+                            <span className="text-gray-900 text-sm font-medium flex-1">{ticket.request_item_id || 'N/A'}</span>
+                            {/* Icon next to Request - placeholder */}
+                            
+                        </div>
+                        <div className="flex items-center">
+                            <label className="text-gray-700 text-sm font-semibold w-28 shrink-0">Request Item:</label>
+                            <span className="text-gray-900 text-sm font-medium flex-1">{ticket.request_item_id || 'RITM000000'}</span> {/* Placeholder */}
+                            {/* Icon next to Request Item - placeholder */}
+                            
+                        </div>
+                        <div className="flex items-center">
+                            <label className="text-gray-700 text-sm font-semibold w-28 shrink-0">Due date:</label>
+                            <span className="text-gray-900 text-sm font-medium flex-1">{ticket.due_date ? new Date(ticket.due_date).toLocaleDateString() : 'N/A'}</span>
+                        </div>
+                    </div>
+
+                    {/* Right Column */}
+                    <div className="space-y-3">
+                        <div className="flex items-center">
+                            <label className="text-gray-700 text-sm font-semibold w-28 shrink-0">Priority:</label>
+                             {isEditing && canEdit ? (
+                                 <FormSelect
+                                     id="priority"
+                                     value={editableFields.priority}
+                                     onChange={handleEditChange}
+                                     options={priorities}
+                                     disabled={!canEdit || isTicketClosedOrResolved}
+                                     className="flex-1 max-w-xs" // Adjusted width for input
+                                     label=""
+                                 />
+                             ) : (
+                                 <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getPriorityClasses(ticket.priority)} flex-1 max-w-fit`}>
+                                     {ticket.priority}
+                                 </span>
+                             )}
+                        </div>
+                        <div className="flex items-center">
+                            <label className="text-gray-700 text-sm font-semibold w-28 shrink-0">Status:</label>
+                            {isEditing && isSupportUser ? (
                                 <FormSelect
-                                    id="priority"
-                                    value={editableFields.priority}
+                                    id="status"
+                                    value={editableFields.status}
                                     onChange={handleEditChange}
-                                    options={priorities}
-                                    disabled={!canEdit || isTicketClosedOrResolved}
-                                    className="inline-block w-auto"
-                                    label="" // Label is already in strong tag
+                                    options={statuses}
+                                    disabled={!isSupportUser}
+                                    className="flex-1 max-w-xs" // Adjusted width for input
+                                    label=""
                                 />
                             ) : (
-                                <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getPriorityClasses(ticket.priority)}`}>
-                                    {ticket.priority}
+                                <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getStatusClasses(ticket.status)} flex-1 max-w-fit`}>
+                                    {ticket.status}
                                 </span>
                             )}
-                        </p>
-                    </div>
-                    <div>
-                        <p className="text-gray-600 text-sm mb-1"><strong>Status:</strong> {isEditing && isSupportUser ? (
-                            <FormSelect
-                                id="status"
-                                value={editableFields.status}
-                                onChange={handleEditChange}
-                                options={statuses}
-                                disabled={!isSupportUser}
-                                className="inline-block w-auto"
-                                label="" // Label is already in strong tag
-                            />
-                        ) : (
-                            <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getStatusClasses(ticket.status)}`}>
-                                {ticket.status}
-                            </span>
-                        )}</p>
+                        </div>
                         {isSupportUser && (
-                            <p className="text-gray-600 text-sm mb-1">
-                                <strong>Assigned To:</strong> {isEditing && isSupportUser ? (
+                            <div className="flex items-center">
+                                <label className="text-gray-700 text-sm font-semibold w-28 shrink-0">Assignment group:</label>
+                                {/* This field is not in editableFields, so keep it read-only for now */}
+                                <span className="text-gray-900 text-sm font-medium flex-1">{ticket.assignment_group || 'ITS-FieldSupport.CentralCampus'}</span> {/* Placeholder based on image */}
+                                
+                            </div>
+                        )}
+                        {isSupportUser && (
+                            <div className="flex items-center">
+                                <label className="text-gray-700 text-sm font-semibold w-28 shrink-0">Assigned to:</label>
+                                {isEditing && isSupportUser ? (
                                     <FormInput
                                         id="assigned_to_email"
                                         type="email"
@@ -1474,59 +1591,120 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                                         onChange={handleEditChange}
                                         placeholder="Enter email to assign"
                                         disabled={!isSupportUser || isTicketClosedOrResolved}
-                                        className="inline-block w-auto"
-                                        label="" // Label is already in strong tag
+                                        className="flex-1 max-w-xs" // Adjusted width for input
+                                        label=""
                                     />
-                                ) : (ticket.assigned_to_email || 'Unassigned')}
-                            </p>
-                        )}
-                        <p className="text-gray-600 text-sm mb-1"><strong>Reporter Email:</strong> {ticket.reporter_email}</p>
-                        <p className="text-gray-600 text-sm mb-1"><strong>Created At:</strong> {new Date(ticket.created_at).toLocaleString()}</p>
-                        <p className="text-gray-600 text-sm mb-1"><strong>Last Updated:</strong> {new Date(ticket.updated_at).toLocaleString()}</p>
-                        {ticket.resolved_at && (
-                            <p className="text-gray-600 text-sm mb-1"><strong>Resolved At:</strong> {new Date(ticket.resolved_at).toLocaleString()}</p>
-                        )}
-                        {ticket.time_spent_minutes !== null && (
-                            <p className="text-gray-600 text-sm mb-1"><strong>Time Spent:</strong> {ticket.time_spent_minutes} minutes</p>
+                                ) : (
+                                    <span className="text-gray-900 text-sm font-medium flex-1">{ticket.assigned_to_email || 'Unassigned'}</span>
+                                )}
+                                
+                            </div>
                         )}
                     </div>
                 </div>
 
+                {/* Short Description */}
+                <div className="mb-6 border-t border-gray-200 pt-6"> {/* Added border-top for separation */}
+                    <div className="flex items-center mb-2">
+                        <label className="text-gray-700 text-sm font-semibold w-36 shrink-0">Short description:</label>
+                        {isEditing && canEdit ? (
+                            <FormTextarea
+                                id="short_description"
+                                value={editableFields.short_description}
+                                onChange={handleEditChange}
+                                rows={2}
+                                maxLength={250}
+                                disabled={!canEdit || isTicketClosedOrResolved}
+                                className="flex-1"
+                                label=""
+                            />
+                        ) : (
+                            <span className="text-gray-900 text-sm bg-gray-50 p-2 rounded-sm border border-gray-200 flex-1">{ticket.short_description}</span>
+                        )}
+                    </div>
+                    <div className="flex justify-end text-xs text-gray-500 mt-1">
+                        Characters left: {isEditing && canEdit ? 250 - editableFields.short_description.length : ticket.short_description.length ? 250 - ticket.short_description.length : 250}
+                    </div>
+                </div>
+
+                {/* Description */}
                 <div className="mb-6">
-                    <h3 className="text-lg font-semibold text-gray-800 mb-2">Short Description:</h3>
-                    {isEditing && canEdit ? (
-                        <FormTextarea
-                            id="short_description"
-                            value={editableFields.short_description}
-                            onChange={handleEditChange}
-                            rows={2}
-                            maxLength={250}
-                            disabled={!canEdit || isTicketClosedOrResolved}
-                            label="" // Label is already in strong tag
-                        />
-                    ) : (
-                        <p className="text-gray-700 text-sm bg-gray-50 p-3 rounded-md border border-gray-200">{ticket.short_description}</p>
+                    <div className="flex items-start mb-2"> {/* Align top for textarea */}
+                        <label className="text-gray-700 text-sm font-semibold w-36 shrink-0 pt-2">Description:</label> {/* Added pt-2 to align with textarea */}
+                        {isEditing && canEdit ? (
+                            <FormTextarea
+                                id="long_description"
+                                value={editableFields.long_description}
+                                onChange={handleEditChange}
+                                rows={6}
+                                disabled={!canEdit || isTicketClosedOrResolved}
+                                className="flex-1"
+                                label=""
+                            />
+                        ) : (
+                            <span className="text-gray-900 text-sm bg-gray-50 p-2 rounded-sm border border-gray-200 whitespace-pre-wrap flex-1">{ticket.long_description || 'No long description provided.'}</span>
+                        )}
+                    </div>
+                    <div className="flex justify-end text-xs text-gray-500 mt-1">
+                        Characters left: {isEditing && canEdit ? 4000 - editableFields.long_description.length : ticket.long_description.length ? 4000 - ticket.long_description.length : 4000} {/* Assuming 4000 char limit */}
+                    </div>
+                </div>
+
+                {/* Additional Details (from your original component, structured to fit) */}
+                <div className="grid grid-cols-2 gap-x-8 gap-y-4 mb-6 border-t border-gray-200 pt-6">
+                    <div className="flex items-center">
+                        <label className="text-gray-700 text-sm font-semibold w-28 shrink-0">Reporter Email:</label>
+                        <span className="text-gray-900 text-sm font-medium flex-1">{ticket.reporter_email}</span>
+                    </div>
+                    <div className="flex items-center">
+                        <label className="text-gray-700 text-sm font-semibold w-28 shrink-0">Category:</label>
+                        <span className="text-gray-900 text-sm font-medium flex-1">{ticket.category}</span>
+                    </div>
+                    <div className="flex items-center">
+                        <label className="text-gray-700 text-sm font-semibold w-28 shrink-0">Contact No:</label>
+                        {isEditing && canEdit ? (
+                            <FormInput
+                                id="contact_number"
+                                type="text"
+                                value={editableFields.contact_number}
+                                onChange={handleEditChange}
+                                disabled={!canEdit || isTicketClosedOrResolved}
+                                className="flex-1 max-w-xs"
+                                label=""
+                            />
+                        ) : (
+                            <span className="text-gray-900 text-sm font-medium flex-1">{ticket.contact_number}</span>
+                        )}
+                    </div>
+                    <div className="flex items-center">
+                        <label className="text-gray-700 text-sm font-semibold w-28 shrink-0">Hostname/Asset ID:</label>
+                        <span className="text-gray-900 text-sm font-medium flex-1">{ticket.hostname_asset_id}</span>
+                    </div>
+                    <div className="flex items-center">
+                        <label className="text-gray-700 text-sm font-semibold w-28 shrink-0">Created At:</label>
+                        <span className="text-gray-900 text-sm font-medium flex-1">{new Date(ticket.created_at).toLocaleString()}</span>
+                    </div>
+                    <div className="flex items-center">
+                        <label className="text-gray-700 text-sm font-semibold w-28 shrink-0">Last Updated:</label>
+                        <span className="text-gray-900 text-sm font-medium flex-1">{new Date(ticket.updated_at).toLocaleString()}</span>
+                    </div>
+                    {ticket.resolved_at && (
+                        <div className="flex items-center">
+                            <label className="text-gray-700 text-sm font-semibold w-28 shrink-0">Resolved At:</label>
+                            <span className="text-gray-900 text-sm font-medium flex-1">{new Date(ticket.resolved_at).toLocaleString()}</span>
+                        </div>
+                    )}
+                    {ticket.time_spent_minutes !== null && (
+                        <div className="flex items-center">
+                            <label className="text-gray-700 text-sm font-semibold w-28 shrink-0">Time Spent:</label>
+                            <span className="text-gray-900 text-sm font-medium flex-1">{ticket.time_spent_minutes} minutes</span>
+                        </div>
                     )}
                 </div>
 
-                <div className="mb-6">
-                    <h3 className="text-lg font-semibold text-gray-800 mb-2">Long Description:</h3>
-                    {isEditing && canEdit ? (
-                        <FormTextarea
-                            id="long_description"
-                            value={editableFields.long_description}
-                            onChange={handleEditChange}
-                            rows={6}
-                            disabled={!canEdit || isTicketClosedOrResolved}
-                            label="" // Label is already in strong tag
-                        />
-                    ) : (
-                        <p className="text-gray-700 text-sm bg-gray-50 p-3 rounded-md border border-gray-200 whitespace-pre-wrap">{ticket.long_description || 'No long description provided.'}</p>
-                    )}
-                </div>
 
                 {/* Attachments Section */}
-                <div className="mb-6">
+                <div className="mb-6 border-t border-gray-200 pt-6">
                     <h3 className="text-lg font-semibold text-gray-800 mb-2">Attachments:</h3>
                     {ticket.attachments && ticket.attachments.length > 0 ? (
                         <ul className="list-disc pl-5 text-blue-700 text-sm">
@@ -1543,56 +1721,35 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                         <p className="text-gray-600 text-sm">No attachments for this ticket.</p>
                     )}
 
-                    {canAddAttachments && ( // Only show if ticket is not closed/resolved
-                        <div className="mt-3 p-3 border border-dashed border-gray-300 rounded-md bg-gray-50">
-                            <label htmlFor="addAttachments" className="block text-gray-700 text-sm font-semibold mb-1">Add More Attachments:</label>
+                    {canAddAttachments && (
+                        <div className="mt-4 p-4 border border-dashed border-gray-300 rounded-md bg-gray-50">
+                            <label htmlFor="addAttachments" className="block text-gray-700 text-sm font-semibold mb-2">Add More Attachments (Max 10MB, PDF, JPG, PNG, Word):</label>
                             <input
                                 type="file"
                                 id="addAttachments"
                                 multiple
                                 onChange={handleFileChange}
-                                className="w-full text-gray-700 text-sm bg-white border border-gray-300 rounded-md file:mr-3 file:py-1.5 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                                className="w-full text-gray-700 text-sm bg-white border border-gray-300 rounded-md file:mr-3 file:py-1.5 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
                             />
                             {attachmentFiles.length > 0 && (
-                                <div className="mt-1 text-xs text-gray-600">
+                                <div className="mt-2 text-xs text-gray-600">
                                     Selected for upload: {attachmentFiles.map(file => file.name).join(', ')}
                                 </div>
                             )}
-                            <PrimaryButton onClick={handleAddAttachmentsToTicket} Icon={FileUp} className="mt-3 w-auto px-4 py-1.5" disabled={uploadingAttachments || attachmentFiles.length === 0}>
+                            <PrimaryButton onClick={handleAddAttachmentsToTicket} Icon={FileUp} className="mt-4 w-auto px-4 py-2 text-sm" disabled={uploadingAttachments || attachmentFiles.length === 0}>
                                 {uploadingAttachments ? 'Uploading...' : 'Upload Attachments'}
                             </PrimaryButton>
                         </div>
                     )}
                 </div>
 
-
-                {/* Edit/Update Buttons */}
-                <div className="flex justify-end space-x-3 mb-6">
-                    {canEdit && !isEditing && !isTicketClosedOrResolved && ( // Only allow editing if not closed/resolved
-                        <SecondaryButton onClick={() => setIsEditing(true)} Icon={FilePenLine} className="px-4 py-1.5">
-                            Edit Ticket
-                        </SecondaryButton>
-                    )}
-                    {isEditing && (
-                        <>
-                            <SecondaryButton onClick={() => setIsEditing(false)} disabled={updateLoading} className="px-4 py-1.5">
-                                Cancel Edit
-                            </SecondaryButton>
-                            <PrimaryButton onClick={handleUpdateTicket} loading={updateLoading ? "Updating..." : null} Icon={CheckCircle} className="px-4 py-1.5">
-                                Save Changes
-                            </PrimaryButton>
-                        </>
-                    )}
-                </div>
-
-
                 {/* Comments Section */}
-                <div>
-                    <h3 className="text-lg font-semibold text-gray-800 mb-3">Comments</h3>
-                    <div className="space-y-3 mb-4">
+                <div className="border-t border-gray-200 pt-6">
+                    <h3 className="text-lg font-semibold text-gray-800 mb-3">Comments:</h3>
+                    <div className="space-y-4 mb-4">
                         {ticket.comments && ticket.comments.length > 0 ? (
-                            [...ticket.comments].reverse().map((comment, index) => ( // Display in reverse chronological order
-                                <div key={index} className="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                            [...ticket.comments].reverse().map((comment, index) => (
+                                <div key={index} className="bg-gray-50 p-4 rounded-lg border border-gray-200">
                                     <p className="text-gray-800 text-sm mb-1">{comment.text}</p>
                                     <p className="text-gray-500 text-xs text-right">
                                         — {comment.commenter} at {new Date(comment.timestamp).toLocaleString()}
@@ -1604,20 +1761,22 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                         )}
                     </div>
 
-                    {canAddComments && ( // Only show if ticket is not closed/resolved
+                    {canAddComments && (
                         <form onSubmit={handleAddComment} className="space-y-3">
                             <FormTextarea
                                 id="comment"
                                 label="Add a Comment"
                                 value={commentText}
                                 onChange={(e) => setCommentText(e.target.value)}
-                                rows={3}
+                                rows={4}
                                 placeholder="Type your comment here..."
                                 disabled={commentLoading}
                             />
-                            <PrimaryButton type="submit" loading={commentLoading ? "Adding Comment..." : null} Icon={MessageSquareText} className="w-auto px-4 py-1.5">
-                                Add Comment
-                            </PrimaryButton>
+                            <div className="flex justify-end">
+                                <PrimaryButton type="submit" loading={commentLoading ? "Adding..." : null} disabled={commentLoading || !commentText.trim()}>
+                                    Add Comment
+                                </PrimaryButton>
+                            </div>
                         </form>
                     )}
                 </div>
@@ -1625,6 +1784,9 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
         </div>
     );
 };
+
+
+
 
 
 // --- Main App Component ---
