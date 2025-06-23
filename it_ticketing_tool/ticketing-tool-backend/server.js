@@ -174,6 +174,8 @@ app.get('/tickets/summary-counts', verifyFirebaseToken, async (req, res) => {
 });
 
 
+
+
 // --- Routes ---
 
 // @route   POST /register
@@ -338,7 +340,7 @@ app.post('/tickets', verifyFirebaseToken, async (req, res) => {
             short_description: short_description,
             long_description: long_description,
             contact_number: contact_number,
-            priority: priority,
+            priority: 'Low',
             hostname_asset_id: hostname_asset_id,
             status: 'Open', // Default status for new tickets
             created_at: admin.firestore.FieldValue.serverTimestamp(),
@@ -357,7 +359,7 @@ app.post('/tickets', verifyFirebaseToken, async (req, res) => {
         // TODO: Implement email alert logic here (requires external email service integration)
         // Example: sendEmailAlert(reporterEmail, 'Ticket Created', `Your ticket ${newDisplayId} has been created.`);
 
-        return res.status(201).json({ message: 'Ticket created successfully!', ticket_id: docRef.id, display_id: newDisplayId });
+        return res.status(201).json({ message: 'Ticket created successfully!', id: docRef.id, display_id: newDisplayId  });
     } catch (error) {
         console.error(`Error creating ticket: ${error.message}`);
         return res.status(500).json({ error: `Error creating ticket: ${error.message}` });

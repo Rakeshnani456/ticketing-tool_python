@@ -10,7 +10,7 @@ import {
     createUserWithEmailAndPassword,
     updatePassword
 } from 'firebase/auth';
-
+import KriasolLogo from './logo/logo.png';
 // --- Firebase Client-Side Configuration ---
 const firebaseConfig = {
     apiKey: "AIzaSyDZVwd_WHUw8RzUfkVklT7_9U6Mc-FNL-o",
@@ -359,7 +359,7 @@ const RegisterComponent = ({ navigateTo, showFlashMessage }) => {
 };
 
 // --- New Component: CreateTicketComponent ---
-const CreateTicketComponent = ({ user, onClose, showFlashMessage, onTicketCreated }) => {
+const CreateTicketComponent = ({ user, onClose, showFlashMessage, onTicketCreated, navigateTo }) => {
     const [formData, setFormData] = useState({
         request_for_email: user?.email || '',
         category: '',
@@ -373,6 +373,10 @@ const CreateTicketComponent = ({ user, onClose, showFlashMessage, onTicketCreate
     const [loading, setLoading] = useState(false);
     const [attachmentFiles, setAttachmentFiles] = useState([]);
     const [uploadingAttachments, setUploadingAttachments] = useState(false);
+    const [submissionStatus, setSubmissionStatus] = useState('idle'); // 'idle', 'creating', 'success', 'error'
+    const [createdTicketId, setCreatedTicketId] = useState(null); // This will store the actual DB ID for navigation
+    const [createdTicketDisplayId, setCreatedTicketDisplayId] = useState(null); // New state for display ID
+    const [errorMessage, setErrorMessage] = useState('');
 
     const categories = [
         { value: '', label: 'Select Category' },
@@ -397,6 +401,9 @@ const CreateTicketComponent = ({ user, onClose, showFlashMessage, onTicketCreate
     const handleChange = (e) => {
         const { id, value } = e.target;
         setFormData(prev => ({ ...prev, [id]: value }));
+        // Reset status message when user starts typing again
+        setSubmissionStatus('idle');
+        setErrorMessage('');
     };
 
     const handleFileChange = (e) => {
@@ -428,7 +435,6 @@ const CreateTicketComponent = ({ user, onClose, showFlashMessage, onTicketCreate
             setAttachmentFiles(validFiles);
         }
     };
-
 
     const uploadAttachments = async () => {
         if (attachmentFiles.length === 0) return [];
@@ -466,21 +472,22 @@ const CreateTicketComponent = ({ user, onClose, showFlashMessage, onTicketCreate
         return uploadedUrls;
     };
 
-
     const handleSubmit = async (e) => {
         e.preventDefault();
         setLoading(true);
-        showFlashMessage('Creating ticket...', 'info');
+        setSubmissionStatus('creating');
+        setErrorMessage(''); // Clear previous errors
 
         try {
             // 1. Upload attachments first
             const uploadedAttachmentUrls = await uploadAttachments();
             // If attachments were selected but not all uploaded successfully, prevent ticket creation
-            if (attachmentFiles.length > uploadedAttachmentUrls.length) {
+            if (attachmentFiles.length > uploadedAttachmentUrls.length && attachmentFiles.length > 0) {
                 // Some files might have failed validation or upload.
                 // If there are valid files uploaded, proceed, otherwise show error.
-                if (uploadedAttachmentUrls.length === 0 && attachmentFiles.length > 0) {
-                    showFlashMessage('No attachments were uploaded successfully. Ticket not created.', 'error');
+                if (uploadedAttachmentUrls.length === 0) {
+                    setErrorMessage('No attachments were uploaded successfully. Ticket not created.');
+                    setSubmissionStatus('error');
                     setLoading(false);
                     return;
                 }
@@ -504,8 +511,11 @@ const CreateTicketComponent = ({ user, onClose, showFlashMessage, onTicketCreate
 
             const data = await response.json();
             if (response.ok) {
-                showFlashMessage(data.message || 'Ticket created successfully!', 'success');
-                setFormData({ // Reset form
+                setSubmissionStatus('success');
+                // Corrected: Backend now sends 'id', so data.id is correct
+                setCreatedTicketId(data.id); // Store actual DB ID for navigation
+                setCreatedTicketDisplayId(data.display_id); // Store display ID for message
+                setFormData({ // Reset form fields
                     request_for_email: user?.email || '',
                     category: '',
                     short_description: '',
@@ -517,16 +527,26 @@ const CreateTicketComponent = ({ user, onClose, showFlashMessage, onTicketCreate
                 });
                 setAttachmentFiles([]); // Clear selected files
                 onTicketCreated(); // Notify parent to refresh ticket list
-                onClose(); // Close the modal
             } else {
-                showFlashMessage(data.error || 'Failed to create ticket.', 'error');
+                setSubmissionStatus('error');
+                setErrorMessage(data.error || 'Failed to create ticket.');
             }
         } catch (error) {
             console.error('Create ticket error:', error);
-            showFlashMessage('Network error or server unreachable during ticket creation.', 'error');
+            setSubmissionStatus('error');
+            setErrorMessage('Network error or server unreachable during ticket creation.');
         } finally {
             setLoading(false);
         }
+    };
+
+    const handleViewTicket = () => {
+        // Corrected: Ensure createdTicketId is passed to navigateTo
+        navigateTo('ticketDetail', createdTicketId);
+    };
+
+    const handleGoToMyTickets = () => {
+        navigateTo('myTickets');
     };
 
     return (
@@ -540,6 +560,7 @@ const CreateTicketComponent = ({ user, onClose, showFlashMessage, onTicketCreate
                     onChange={handleChange}
                     required
                     placeholder="e.g., user@company.com"
+                    disabled={submissionStatus === 'success' || submissionStatus === 'creating'}
                 />
                 <FormSelect
                     id="category"
@@ -548,6 +569,7 @@ const CreateTicketComponent = ({ user, onClose, showFlashMessage, onTicketCreate
                     onChange={handleChange}
                     options={categories}
                     required
+                    disabled={submissionStatus === 'success' || submissionStatus === 'creating'}
                 />
                 <FormInput
                     id="short_description"
@@ -558,6 +580,7 @@ const CreateTicketComponent = ({ user, onClose, showFlashMessage, onTicketCreate
                     required
                     maxLength={250}
                     placeholder="Brief summary of the issue"
+                    disabled={submissionStatus === 'success' || submissionStatus === 'creating'}
                 />
                 <FormTextarea
                     id="long_description"
@@ -566,6 +589,7 @@ const CreateTicketComponent = ({ user, onClose, showFlashMessage, onTicketCreate
                     onChange={handleChange}
                     rows={4}
                     placeholder="Provide detailed information about the issue"
+                    disabled={submissionStatus === 'success' || submissionStatus === 'creating'}
                 />
                 <div>
                     <label htmlFor="attachments" className="block text-gray-700 text-sm font-semibold mb-1">Attachments (PDF, JPG, PNG, Word - max 10MB per file):</label>
@@ -575,6 +599,7 @@ const CreateTicketComponent = ({ user, onClose, showFlashMessage, onTicketCreate
                         multiple
                         onChange={handleFileChange}
                         className="w-full text-gray-700 text-sm bg-white border border-gray-300 rounded-md file:mr-3 file:py-1.5 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                        disabled={submissionStatus === 'success' || submissionStatus === 'creating'}
                     />
                     {attachmentFiles.length > 0 && (
                         <div className="mt-1 text-xs text-gray-600">
@@ -590,6 +615,7 @@ const CreateTicketComponent = ({ user, onClose, showFlashMessage, onTicketCreate
                     onChange={handleChange}
                     required
                     placeholder="e.g., +91-9876543210"
+                    disabled={submissionStatus === 'success' || submissionStatus === 'creating'}
                 />
                 <FormSelect
                     id="priority"
@@ -598,6 +624,7 @@ const CreateTicketComponent = ({ user, onClose, showFlashMessage, onTicketCreate
                     onChange={handleChange}
                     options={priorities}
                     required
+                    disabled={submissionStatus === 'success' || submissionStatus === 'creating'}
                 />
                 <FormInput
                     id="hostname_asset_id"
@@ -607,19 +634,60 @@ const CreateTicketComponent = ({ user, onClose, showFlashMessage, onTicketCreate
                     onChange={handleChange}
                     required
                     placeholder="e.g., LPT-XYZ-001, Server-ABC"
+                    disabled={submissionStatus === 'success' || submissionStatus === 'creating'}
                 />
+
+                {/* Submission Status Message */}
+                {submissionStatus === 'creating' && (
+                    <div className="flex items-center justify-center p-3 text-sm text-blue-800 bg-blue-50 rounded-md animate-pulse">
+                        <Loader2 size={16} className="animate-spin mr-2" />
+                        <span>Creating ticket...</span>
+                    </div>
+                )}
+
+                {submissionStatus === 'success' && (
+                    <div className="flex flex-col items-center justify-center p-4 text-center text-green-800 bg-green-50 rounded-md border border-green-200">
+                        <CheckCircle size={24} className="text-green-600 mb-2" />
+                        <p className="font-semibold text-base">
+                            Ticket <span onClick={handleViewTicket} className="text-blue-600 hover:underline cursor-pointer">
+                                {createdTicketDisplayId}
+                            </span> created successfully!
+                        </p>
+                        <div className="flex space-x-3 mt-4">
+                            <PrimaryButton onClick={handleViewTicket} Icon={Eye} className="w-auto px-4 py-1.5 bg-green-600 hover:bg-green-700">
+                                View Ticket
+                            </PrimaryButton>
+                            <SecondaryButton onClick={handleGoToMyTickets} className="w-auto px-4 py-1.5">
+                                Go to My Tickets
+                            </SecondaryButton>
+                        </div>
+                    </div>
+                )}
+
+                {submissionStatus === 'error' && errorMessage && (
+                    <div className="flex items-center justify-center p-3 text-sm text-red-800 bg-red-50 rounded-md border border-red-200">
+                        <XCircle size={16} className="mr-2" />
+                        <span>Error: {errorMessage}</span>
+                    </div>
+                )}
+
                 <div className="flex justify-end space-x-3 pt-3">
-                    <SecondaryButton onClick={onClose} className="w-auto px-4 py-1.5">
-                        Cancel
-                    </SecondaryButton>
-                    <PrimaryButton type="submit" loading={loading || uploadingAttachments ? (uploadingAttachments ? "Uploading Files..." : "Creating Ticket...") : null} Icon={Send} className="w-auto px-4 py-1.5">
-                        Submit Ticket
-                    </PrimaryButton>
+                    {submissionStatus !== 'success' && ( // Hide cancel/submit buttons after success
+                        <>
+                            <SecondaryButton onClick={onClose} className="w-auto px-4 py-1.5" disabled={loading}>
+                                Cancel
+                            </SecondaryButton>
+                            <PrimaryButton type="submit" loading={loading || uploadingAttachments ? (uploadingAttachments ? "Uploading Files..." : "Creating Ticket...") : null} Icon={Send} className="w-auto px-4 py-1.5" disabled={loading}>
+                                Submit Ticket
+                            </PrimaryButton>
+                        </>
+                    )}
                 </div>
             </form>
         </div>
     );
 };
+
 
 
 // --- MyTickets Component (Refactored for list view and clickable ID) ---
@@ -893,7 +961,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
     };
 
 
-    if (loading) return <div className="text-center text-gray-600 mt-8 text-base flex items-center justify-center space-x-2"><Loader2 className="animate-spin" size={20} /> <span>Loading tickets...</span></div>;
+   /* if (loading) return <div className="text-center text-gray-600 mt-8 text-base flex items-center justify-center space-x-2"><Loader2 className="animate-spin" size={20} /> <span>Loading tickets...</span></div>;*/
     if (error) return <div className="text-center text-red-600 mt-8 text-base flex items-center justify-center space-x-2"><XCircle size={20} /> <span>Error: {error}</span></div>;
 
     return (
@@ -1172,46 +1240,75 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
         { value: 'Closed', label: 'Closed' },
     ];
 
-    const fetchTicketDetails = useCallback(async () => {
-        if (!ticketId || !user?.firebaseUser) return;
-        setLoading(true);
-        setError(null);
-        try {
-            const idToken = await user.firebaseUser.getIdToken();
-            const response = await fetch(`${API_BASE_URL}/ticket/${ticketId}`, {
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${idToken}`
-                }
-            });
-            if (response.ok) {
-                const data = await response.json();
-                setTicket(data);
-                // Initialize editable fields with current ticket data
-                setEditableFields({
-                    request_for_email: data.request_for_email || '',
-                    short_description: data.short_description || '',
-                    long_description: data.long_description || '',
-                    contact_number: data.contact_number || '',
-                    priority: data.priority || '',
-                    status: data.status || '',
-                    assigned_to_email: data.assigned_to_email || ''
-                });
-            } else {
-                const errorData = await response.json();
-                throw new Error(`HTTP error! status: ${response.status}, message: ${errorData.error || errorData.message}`);
-            }
-        } catch (err) {
-            console.error('Error fetching ticket details:', err);
-            setError(err.message || 'Failed to fetch ticket details.');
-        } finally {
-            setLoading(false);
-        }
-    }, [ticketId, user]);
-
     useEffect(() => {
-        fetchTicketDetails();
-    }, [fetchTicketDetails]);
+        console.log('TicketDetailComponent useEffect: ticketId prop changed to:', ticketId);
+
+        const loadTicket = async () => {
+            if (!ticketId || !user?.firebaseUser) {
+                console.log('TicketDetailComponent: Skipping fetch inside useEffect. ticketId:', ticketId, 'user:', user);
+                setLoading(false);
+                return;
+            }
+
+            setLoading(true);
+            setError(null);
+            console.log(`TicketDetailComponent: Attempting to fetch ticket with ID: ${ticketId}`);
+            try {
+                const idToken = await user.firebaseUser.getIdToken();
+                console.log('TicketDetailComponent: Firebase ID Token acquired.');
+                const response = await fetch(`${API_BASE_URL}/ticket/${ticketId}`, {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${idToken}`
+                    }
+                });
+
+                console.log('TicketDetailComponent: Raw response received:', response);
+
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('TicketDetailComponent: Ticket data received:', data);
+                    setTicket(data);
+                    setEditableFields({
+                        request_for_email: data.request_for_email || '',
+                        short_description: data.short_description || '',
+                        long_description: data.long_description || '',
+                        contact_number: data.contact_number || '',
+                        priority: data.priority || '',
+                        status: data.status || '',
+                        assigned_to_email: data.assigned_to_email || ''
+                    });
+                } else {
+                    let errorData = {};
+                    try {
+                        errorData = await response.json();
+                    } catch (parseError) {
+                        console.error('TicketDetailComponent: Error parsing error response:', parseError);
+                        errorData.message = 'Could not parse error response from server.';
+                    }
+                    console.error('TicketDetailComponent: Fetch failed. Status:', response.status, 'Error Data:', errorData);
+
+                    if (response.status === 404) {
+                        setError(`Ticket with ID ${ticketId} not found.`);
+                        showFlashMessage(`Ticket with ID ${ticketId} not found.`, 'error');
+                    } else {
+                        setError(errorData.error || errorData.message || 'Failed to fetch ticket details.');
+                        showFlashMessage(errorData.error || 'Failed to fetch ticket details.', 'error');
+                    }
+                    
+                }
+            } catch (err) {
+                console.error('TicketDetailComponent: Critical error during loadTicket:', err);
+                setError(err.message || 'Network error or server unreachable.');
+                showFlashMessage(err.message || 'Network error or server unreachable.', 'error');
+            } finally {
+                setLoading(false);
+                console.log('TicketDetailComponent: Loading state set to false after loadTicket completion.');
+            }
+        };
+
+        loadTicket();
+    }, [ticketId, user, showFlashMessage, API_BASE_URL]);
 
     const isTicketClosedOrResolved = ticket && ['Resolved', 'Closed'].includes(ticket.status);
     // Determine if user can edit: is support OR is reporter AND ticket is not closed/resolved
@@ -1264,7 +1361,15 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
             const data = await response.json();
             if (response.ok) {
                 setSaveButtonState('success'); // Change button state to success
-                fetchTicketDetails(); // Re-fetch to get latest data
+                showFlashMessage('Ticket updated successfully!', 'success');
+                // Re-fetch to get latest data, important after updates
+                // Directly call loadTicket since it's now wrapped in useCallback and depends on ticketId
+                // The useEffect will trigger this
+                setTicket(null); // Clear ticket state to force re-fetch and show loading spinner again
+                setError(null); // Clear any previous errors
+                setLoading(true); // Manually set loading to true to show spinner
+                // The useEffect will then pick up the ticketId and user and call loadTicket
+                // No need to explicitly call loadTicket() here
                 setTimeout(() => {
                     setIsEditing(false); // Go back to view mode
                     setSaveButtonState('save'); // Reset button state for next edit cycle
@@ -1324,7 +1429,11 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
             if (response.ok) {
                 showFlashMessage(data.message || 'Comment added!', 'success');
                 setCommentText('');
-                fetchTicketDetails(); // Re-fetch to get latest comments
+                // Re-fetch to get latest comments
+                setTicket(null); // Clear ticket state to force re-fetch and show loading spinner again
+                setError(null); // Clear any previous errors
+                setLoading(true); // Manually set loading to true to show spinner
+                // The useEffect will then pick up the ticketId and user and call loadTicket
             } else {
                 showFlashMessage(data.error || 'Failed to add comment.', 'error');
             }
@@ -1405,7 +1514,10 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                 if (response.ok) {
                     showFlashMessage('Attachments added to ticket successfully!', 'success');
                     setAttachmentFiles([]); // Clear selected files after successful upload and update
-                    fetchTicketDetails(); // Re-fetch to show new attachments
+                    setTicket(null); // Clear ticket state to force re-fetch and show loading spinner again
+                    setError(null); // Clear any previous errors
+                    setLoading(true); // Manually set loading to true to show spinner
+                    // The useEffect will then pick up the ticketId and user and call loadTicket
                 } else {
                     const errorData = await response.json();
                     showFlashMessage(`Failed to update ticket with attachments: ${errorData.error || 'Server error'}`, 'error');
@@ -1449,7 +1561,7 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
         <div className="p-4 bg-gray-100 min-h-screen flex-1 overflow-auto font-sans">
             {/* Header section with back button, ticket number, and EDIT/SAVE/CANCEL buttons */}
             <div className="flex items-center bg-white border-b border-gray-200 px-4 py-3 shadow-sm sticky top-0 z-10">
-                <button onClick={() => navigateTo('/tickets')} className="text-gray-500 hover:text-gray-700 mr-4">
+                <button onClick={() => navigateTo(user?.role === 'support' ? 'allTickets' : 'myTickets')} className="text-gray-500 hover:text-gray-700 mr-4">
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-chevron-left"><path d="m15 18-6-6 6-6"/></svg>
                 </button>
                 <h1 className="text-lg font-semibold text-gray-800 flex-grow">TASK{ticket.display_id} (Portal view)</h1>
@@ -1788,7 +1900,6 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
 
 
 
-
 // --- Main App Component ---
 const App = () => {
     const [currentUser, setCurrentUser] = useState(null);
@@ -1799,9 +1910,8 @@ const App = () => {
     const flashMessageTimeoutRef = useRef(null);
     const [ticketListRefreshKey, setTicketListRefreshKey] = useState(0);
     const [searchKeyword, setSearchKeyword] = useState('');
-    const [showCreateTicketModal, setShowCreateTicketModal] = useState(false);
-    const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false); // State for profile dropdown
-    const [ticketCounts, setTicketCounts] = useState({ active_tickets: 0, assigned_to_me: 0, total_tickets: 0 }); // New state for counts
+    const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+    const [ticketCounts, setTicketCounts] = useState({ active_tickets: 0, assigned_to_me: 0, total_tickets: 0 });
 
     const fetchTicketCounts = useCallback(async (user) => {
         if (!user || !user.firebaseUser) return;
@@ -1838,11 +1948,11 @@ const App = () => {
                     if (response.ok) {
                         const userProfile = { firebaseUser, role: data.user.role, email: firebaseUser.email };
                         setCurrentUser(userProfile);
-                        fetchTicketCounts(userProfile); // Fetch counts on successful login
+                        fetchTicketCounts(userProfile);
                         if (data.user.role === 'support') {
-                             setCurrentPage('allTickets'); // Support defaults to All Tickets
+                            setCurrentPage('allTickets');
                         } else {
-                            setCurrentPage('myTickets'); // User defaults to My Tickets
+                            setCurrentPage('myTickets');
                         }
                     } else {
                         console.error("Backend login verification failed:", data.error);
@@ -1861,18 +1971,17 @@ const App = () => {
             } else {
                 setCurrentUser(null);
                 setCurrentPage('login');
-                setTicketCounts({ active_tickets: 0, assigned_to_me: 0, total_tickets: 0 }); // Clear counts on logout
+                setTicketCounts({ active_tickets: 0, assigned_to_me: 0, total_tickets: 0 });
             }
         });
         return () => unsubscribe();
-    }, [fetchTicketCounts]); // Dependency on fetchTicketCounts
-
+    }, [fetchTicketCounts]);
 
     const handleLoginSuccess = (user) => {
         setCurrentUser(user);
-        fetchTicketCounts(user); // Fetch counts on successful login
+        fetchTicketCounts(user);
         if (user.role === 'support') {
-            setCurrentPage('allTickets'); // Support defaults to All Tickets
+            setCurrentPage('allTickets');
         } else {
             setCurrentPage('myTickets');
         }
@@ -1888,25 +1997,21 @@ const App = () => {
             console.error('Logout error:', error);
             showFlashMessage('Failed to log out.', 'error');
         } finally {
-            setIsProfileMenuOpen(false); // Close dropdown on logout
-            setTicketCounts({ active_tickets: 0, assigned_to_me: 0, total_tickets: 0 }); // Clear counts on logout
+            setIsProfileMenuOpen(false);
+            setTicketCounts({ active_tickets: 0, assigned_to_me: 0, total_tickets: 0 });
         }
     };
 
     const navigateTo = (page, id = null) => {
-        if (page === 'createTicket') {
-            setShowCreateTicketModal(true);
-        } else {
-            setCurrentPage(page);
-            setSelectedTicketId(id);
-            setSearchKeyword(''); // Clear search on navigation
-            setTicketListRefreshKey(prev => prev + 1); // Trigger refresh
-            setShowCreateTicketModal(false); // Ensure modal is closed if navigating away
-            if (currentUser) {
-                fetchTicketCounts(currentUser); // Refresh counts on navigation
-            }
+        console.log(`App: Navigating to page: ${page}, with ID: ${id}`);
+        setCurrentPage(page);
+        setSelectedTicketId(id);
+        setSearchKeyword('');
+        setTicketListRefreshKey(prev => prev + 1);
+        if (currentUser) {
+            fetchTicketCounts(currentUser);
         }
-        setIsProfileMenuOpen(false); // Close profile dropdown on navigation
+        setIsProfileMenuOpen(false);
     };
 
     const showFlashMessage = useCallback((message, type = 'info', duration = 3000) => {
@@ -1921,10 +2026,9 @@ const App = () => {
     }, []);
 
     const handleTicketCreated = () => {
-        setTicketListRefreshKey(prev => prev + 1); // Refresh ticket list after creation
-        setShowCreateTicketModal(false);
+        setTicketListRefreshKey(prev => prev + 1);
         if (currentUser) {
-            fetchTicketCounts(currentUser); // Refresh counts after ticket creation
+            fetchTicketCounts(currentUser);
         }
     };
 
@@ -1934,9 +2038,7 @@ const App = () => {
 
     const handleSearchSubmit = (e) => {
         e.preventDefault();
-        setTicketListRefreshKey(prev => prev + 1); // Trigger refresh of current view with search keyword
-        // Note: The backend handles direct search by Ticket ID which bypasses status filters.
-        // For general text search on descriptions, additional backend logic would be needed.
+        setTicketListRefreshKey(prev => prev + 1);
     };
 
     const getStatusClasses = (type) => {
@@ -1956,8 +2058,11 @@ const App = () => {
     return (
         <div className="flex flex-col min-h-screen bg-gray-100 font-inter overflow-hidden">
             {/* Top Banner */}
-            <header className="bg-blue-800 text-white p-3 flex items-center justify-between shadow-md flex-shrink-0 fixed top-0 w-full z-50">
-                <h1 className="text-xl font-bold flex-shrink-0">IT Help Desk</h1>
+            <header className="bg-white text-white p-3 flex items-center justify-between shadow-md flex-shrink-0 fixed top-0 w-full z-50">
+                {/* Replaced h1 with img tag for the logo */}
+                <div className="flex-shrink-0">
+                    <img src={KriasolLogo} alt="Kriasol Logo" className="h-8" /> {/* Adjust h-8 (height) as needed */}
+                </div>
 
                 {currentUser && currentPage !== 'login' && currentPage !== 'register' && (
                     <form onSubmit={handleSearchSubmit} className="flex items-center space-x-2 flex-1 max-w-md mx-auto">
@@ -1993,7 +2098,7 @@ const App = () => {
                                     <User size={16} className="mr-2" /> Profile
                                 </button>
                                 <button
-                                    onClick={handleLogout} // Calls the main handleLogout function
+                                    onClick={handleLogout}
                                     className="flex items-center w-full text-left px-4 py-2 text-sm text-red-700 hover:bg-red-50"
                                 >
                                     <LogOut size={16} className="mr-2" /> Log Out
@@ -2034,13 +2139,12 @@ const App = () => {
                                     <ClipboardCheck size={16} className="mr-2" /> My Tickets (Home)
                                 </button>
                             </li>
-                            {/* Create Ticket button moved to MyTicketsComponent only */}
                         </ul>
                     </nav>
                 )}
 
                 {/* Main Content Canvas */}
-                <section className={`flex-1 bg-offwhite flex flex-col min-w-0 ${currentUser ? 'ml-56 pt-16' : ''}`}>
+                <section className={`flex-1 bg-blue flex flex-col min-w-0 ${currentUser ? 'ml-56 pt-16' : ''}`}>
                     {flashMessage && (
                         <div className={`fixed top-16 left-0 right-0 z-40 p-3 text-xs rounded-none flex items-center justify-between ${getStatusClasses(flashType)}`} role="alert">
                             <div className="flex items-center">
@@ -2068,7 +2172,6 @@ const App = () => {
                                     if (currentUser.role !== 'support') {
                                         return <AccessDeniedComponent />;
                                     }
-                                    // Dashboard can be a specific view or just All Tickets by default
                                     return <AllTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} showFilters={true} />;
                                 case 'allTickets':
                                     if (currentUser.role !== 'support') {
@@ -2079,13 +2182,28 @@ const App = () => {
                                     if (currentUser.role !== 'support') {
                                         return <AccessDeniedComponent />;
                                     }
-                                    // Filter by assigned_to_me for this specific view, hide filters
                                     return <AllTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} initialFilterAssignment="assigned_to_me" showFilters={false} />;
                                 case 'ticketDetail':
-                                    return <TicketDetailComponent ticketId={selectedTicketId} navigateTo={navigateTo} user={currentUser} showFlashMessage={showFlashMessage} />;
+                                    console.log(`App: Rendering TicketDetailComponent with selectedTicketId: ${selectedTicketId}`);
+                                    return <TicketDetailComponent key={selectedTicketId} ticketId={selectedTicketId} navigateTo={navigateTo} user={currentUser} showFlashMessage={showFlashMessage} />;
+                                case 'createTicket':
+                                    return (
+                                        <div className="flex flex-col items-center justify-center p-4">
+                                            <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-3xl relative border border-gray-200">
+                                                <h2 className="text-xl font-extrabold text-gray-800 mb-4 text-center">Create New Ticket</h2>
+                                                <CreateTicketComponent
+                                                    user={currentUser}
+                                                    onClose={() => navigateTo('myTickets')}
+                                                    showFlashMessage={showFlashMessage}
+                                                    onTicketCreated={handleTicketCreated}
+                                                    navigateTo={navigateTo}
+                                                />
+                                            </div>
+                                        </div>
+                                    );
                                 case 'profile':
                                     return <ProfileComponent user={currentUser} showFlashMessage={showFlashMessage} navigateTo={navigateTo} handleLogout={handleLogout} />;
-                                default: // 'myTickets' is default home for users and primary for support's reported tickets
+                                default:
                                     return <MyTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} />;
                             }
                         }
@@ -2096,22 +2214,10 @@ const App = () => {
             <footer className="bg-gray-800 text-white text-center p-2 w-full shadow-inner text-xs flex-shrink-0">
                 <p>&copy; {new Date().getFullYear()} IT Help Desk. All rights reserved.</p>
             </footer>
-
-            {/* Create Ticket Modal */}
-            <Modal
-                isOpen={showCreateTicketModal}
-                onClose={() => setShowCreateTicketModal(false)}
-                title="Create New Ticket"
-            >
-                <CreateTicketComponent
-                    user={currentUser}
-                    onClose={() => setShowCreateTicketModal(false)}
-                    showFlashMessage={showFlashMessage}
-                    onTicketCreated={handleTicketCreated}
-                />
-            </Modal>
         </div>
     );
 }
 
 export default App;
+
+
