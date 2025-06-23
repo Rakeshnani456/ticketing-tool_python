@@ -35,7 +35,7 @@ try {
             // Add storageBucket for Firebase Storage integration
             // IMPORTANT: This is hardcoded for debugging. In production, use environment variables.
             // The correct format is your-project-id.appspot.com (e.g., 'it-ticketing-tool-dd679.appspot.com')
-            storageBucket: 'it-ticketing-tool-dd679.firebasestorage.app' 
+            storageBucket: 'it-ticketing-tool-dd679.firebasestorage.app'
         });
     }
     db = admin.firestore(); // Get a Firestore client
@@ -58,7 +58,7 @@ app.use(express.json()); // For parsing application/json request bodies
 const validTicketCategories = ['software', 'hardware', 'troubleshoot'];
 // Added 'Hold' status
 const validTicketPriorities = ['Low', 'Medium', 'High', 'Critical'];
-const validTicketStatuses = ['Open', 'In Progress', 'Hold', 'Resolved', 'Closed']; 
+const validTicketStatuses = ['Open', 'In Progress', 'Hold', 'Resolved', 'Closed'];
 
 // --- Helper function: JSON Serializable Ticket ---
 // Converts Firestore Timestamp objects and adds document ID
@@ -148,12 +148,12 @@ app.get('/tickets/summary-counts', verifyFirebaseToken, async (req, res) => {
     try {
         // Query for active tickets (Open, In Progress, Hold)
         let activeTicketsQuery = ticketsCollection.where('status', 'in', ['Open', 'In Progress', 'Hold']);
-        
+
         // Query for tickets assigned to the current user (only relevant for support)
         let assignedToMeTicketsQuery = ticketsCollection.where('assigned_to_id', '==', authenticatedUid);
-        
+
         // Query for all tickets (including resolved and closed)
-        let totalTicketsQuery = ticketsCollection; 
+        let totalTicketsQuery = ticketsCollection;
 
         const [activeSnapshot, assignedSnapshot, totalSnapshot] = await Promise.all([
             activeTicketsQuery.get(),
@@ -301,7 +301,8 @@ app.post('/tickets', verifyFirebaseToken, async (req, res) => {
         contact_number,
         priority,
         hostname_asset_id,
-        attachments = [] // Array of attachment URLs
+        // Expect attachments to be an array of objects: [{ url: '...', fileName: '...' }]
+        attachments = []
     } = req.body;
 
     // Get reporter info from authenticated user
@@ -348,7 +349,7 @@ app.post('/tickets', verifyFirebaseToken, async (req, res) => {
             created_at: admin.firestore.FieldValue.serverTimestamp(),
             updated_at: admin.firestore.FieldValue.serverTimestamp(),
             comments: [],
-            attachments: attachments, // Store attachment URLs
+            attachments: attachments, // Store attachment objects with url and fileName
             assigned_to_id: null,
             assigned_to_email: null,
             resolved_at: null, // New field for time spent calculation
@@ -381,7 +382,7 @@ app.patch('/ticket/:ticket_id', verifyFirebaseToken, async (req, res) => {
         short_description,
         long_description,
         contact_number,
-        attachments // if attachments can be added later
+        attachments // Now expecting an array of objects: [{ url: '...', fileName: '...' }]
     } = req.body;
 
     const authenticatedUid = req.user.uid;
@@ -411,7 +412,7 @@ app.patch('/ticket/:ticket_id', verifyFirebaseToken, async (req, res) => {
         if (['Resolved', 'Closed'].includes(ticketData.status) && authenticatedUserRole === 'user') {
             return res.status(403).json({ error: 'Forbidden: Cannot update a resolved or closed ticket as a regular user.' });
         }
-        
+
         // Support users can update resolved/closed tickets (e.g., re-open them)
         // Regular users can only update their own tickets if they are not resolved/closed
         if (authenticatedUserRole === 'user' && ticketData.reporter_id !== authenticatedUid) {
@@ -428,11 +429,22 @@ app.patch('/ticket/:ticket_id', verifyFirebaseToken, async (req, res) => {
         if (short_description !== undefined) updateData.short_description = short_description;
         if (long_description !== undefined) updateData.long_description = long_description;
         if (contact_number !== undefined) updateData.contact_number = contact_number;
-        // If the frontend sends an 'attachments' array, we use arrayUnion to add new ones.
+
+        // --- MODIFICATION START ---
+        // If the frontend sends an 'attachments' array (now expected to be objects),
+        // we use arrayUnion to add new ones.
         // This is safer than direct assignment which would overwrite previous attachments.
         if (attachments && Array.isArray(attachments) && attachments.length > 0) {
-            updateData.attachments = admin.firestore.FieldValue.arrayUnion(...attachments);
+            // Validate that each attachment object has 'url' and 'fileName'
+            const validNewAttachments = attachments.filter(att => att && typeof att.url === 'string' && typeof att.fileName === 'string');
+            if (validNewAttachments.length > 0) {
+                updateData.attachments = admin.firestore.FieldValue.arrayUnion(...validNewAttachments);
+            } else if (attachments.length > 0) { // If attachments array was provided but no valid attachments found
+                console.warn('Received attachments array but no valid {url, fileName} objects found.');
+                // Optionally return an error or just ignore invalid entries
+            }
         }
+        // --- MODIFICATION END ---
 
 
         // Handle status change and time_spent calculation
@@ -479,7 +491,7 @@ app.patch('/ticket/:ticket_id', verifyFirebaseToken, async (req, res) => {
                 updateData.assigned_to_email = assigned_to_email;
             }
         }
-        
+
         await ticketsCollection.doc(ticketId).update(updateData);
         console.log(`Ticket ${ticketId} updated successfully!`);
         return res.status(200).json({ message: 'Ticket updated successfully!' });
@@ -601,7 +613,7 @@ app.get('/tickets/all', verifyFirebaseToken, async (req, res) => {
             }
             // If no exact ID match, proceed to general filtering.
         }
-        
+
         // Apply status filter if provided. If filterStatus is empty, NO status filter is applied, returning all tickets.
         if (filterStatus) {
             if (!validTicketStatuses.includes(filterStatus)) {
@@ -713,6 +725,15 @@ app.get('/tickets/export', verifyFirebaseToken, async (req, res) => {
         let csv = headers.join(',') + '\n';
 
         allTickets.forEach(ticket => {
+            const commentsCsv = ticket.comments && Array.isArray(ticket.comments)
+                ? ticket.comments.map(c => `[${c.commenter} @ ${c.timestamp}]: ${c.text}`).join('; ').replace(/"/g, '""')
+                : '';
+
+            // Handle attachments: map to original fileName if available, otherwise use URL part
+            const attachmentsCsv = ticket.attachments && Array.isArray(ticket.attachments)
+                ? ticket.attachments.map(att => att.fileName || att.url.substring(att.url.lastIndexOf('/') + 1)).join('; ').replace(/"/g, '""')
+                : '';
+
             const row = [
                 ticket.display_id || '',
                 `"${ticket.short_description ? ticket.short_description.replace(/"/g, '""') : ''}"`, // Enclose with quotes and escape double quotes
@@ -729,8 +750,8 @@ app.get('/tickets/export', verifyFirebaseToken, async (req, res) => {
                 ticket.updated_at || '',
                 ticket.resolved_at || '',
                 ticket.time_spent_minutes !== null ? ticket.time_spent_minutes : '',
-                `"${ticket.comments && Array.isArray(ticket.comments) ? ticket.comments.map(c => `[${c.commenter} @ ${c.timestamp}]: ${c.text}`).join('; ').replace(/"/g, '""') : ''}"`,
-                `"${ticket.attachments && Array.isArray(ticket.attachments) ? ticket.attachments.join('; ').replace(/"/g, '""') : ''}"`
+                `"${commentsCsv}"`,
+                `"${attachmentsCsv}"` // Use the modified attachmentsCsv
             ];
             csv += row.join(',') + '\n';
         });
@@ -745,6 +766,7 @@ app.get('/tickets/export', verifyFirebaseToken, async (req, res) => {
     }
 });
 
+
 // --- New Route: Upload Attachment ---
 // @route   POST /upload-attachment
 // @desc    Uploads a file to Firebase Storage and returns its URL.
@@ -753,7 +775,6 @@ app.get('/tickets/export', verifyFirebaseToken, async (req, res) => {
 app.post('/upload-attachment', verifyFirebaseToken, async (req, res) => {
     if (!admin.storage()) {
         console.error("Firebase Storage not initialized.");
-        // Ensure a response is sent if storage isn't configured.
         if (!res.headersSent) {
             return res.status(500).json({ error: "Firebase Storage not configured on the server." });
         }
@@ -763,14 +784,12 @@ app.post('/upload-attachment', verifyFirebaseToken, async (req, res) => {
     const busboy = Busboy({ headers: req.headers, limits: { fileSize: 10 * 1024 * 1024 } }); // Max 10MB per file
     const bucket = admin.storage().bucket();
 
+    // This array will store objects like { originalFilename: 'abc.pdf', url: 'https://...', mimetype: '...' }
     const uploads = [];
     const filePromises = [];
 
-    // This flag ensures that only one HTTP response is sent back to the client.
-    // This is crucial for preventing the ERR_HTTP_HEADERS_SENT error.
-    let responseSent = false; 
+    let responseSent = false;
 
-    // Function to send a single response and set the flag
     const sendResponse = (statusCode, data) => {
         if (!responseSent) {
             responseSent = true;
@@ -780,19 +799,19 @@ app.post('/upload-attachment', verifyFirebaseToken, async (req, res) => {
 
     busboy.on('file', (fieldname, file, filenameInfo) => {
         if (responseSent) {
-            file.resume(); // Consume the file stream to prevent hanging
+            file.resume();
             return;
         }
 
-        const { filename, encoding, mimetype } = filenameInfo;
-        const fileExtension = path.extname(filename).toLowerCase(); // Get extension and convert to lowercase
+        const { filename: originalFilename, encoding, mimetype } = filenameInfo; // Capture original filename
+        const fileExtension = path.extname(originalFilename).toLowerCase();
 
         const allowedMimeTypes = [
             'application/pdf',
             'image/jpeg',
             'image/png',
-            'application/msword', // .doc
-            'application/vnd.openxmlformats-officedocument.wordprocessingml.document' // .docx
+            'application/msword',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
         ];
 
         const allowedExtensions = [
@@ -805,14 +824,13 @@ app.post('/upload-attachment', verifyFirebaseToken, async (req, res) => {
         ];
 
         const fileUploadPromise = new Promise((resolve, reject) => {
-            // Validate based on MIME type OR file extension for robustness
             const isMimeTypeAllowed = mimetype && allowedMimeTypes.includes(mimetype);
             const isExtensionAllowed = fileExtension && allowedExtensions.includes(fileExtension);
 
             if (!isMimeTypeAllowed && !isExtensionAllowed) {
-                file.resume(); // Consume the stream
-                const errorMsg = `File type for ${filename} not allowed. Detected MIME: "${mimetype}", Extension: "${fileExtension}". Allowed types: PDF, JPG, PNG, Word.`;
-                return reject(new Error(errorMsg)); 
+                file.resume();
+                const errorMsg = `File type for ${originalFilename} not allowed. Detected MIME: "${mimetype}", Extension: "${fileExtension}". Allowed types: PDF, JPG, PNG, Word.`;
+                return reject(new Error(errorMsg));
             }
 
             const uniqueFilename = `${uuidv4()}${fileExtension}`;
@@ -822,43 +840,47 @@ app.post('/upload-attachment', verifyFirebaseToken, async (req, res) => {
             file.pipe(writeStream);
 
             writeStream.on('finish', () => {
+                // Ensure a unique path in storage, but retain original filename in metadata
                 const destination = `attachments/${Date.now()}_${uniqueFilename}`;
                 bucket.upload(filepath, {
                     destination: destination,
                     metadata: {
-                        contentType: mimetype, // Use the detected MIME type for storage
+                        contentType: mimetype,
                         metadata: {
                             firebaseStorageDownloadTokens: uuidv4(),
-                            uploadedBy: req.user.email
+                            uploadedBy: req.user.email,
+                            // *** Store the original filename as custom metadata ***
+                            originalFileName: originalFilename
                         }
                     }
                 })
                 .then(() => {
                     const fileRef = bucket.file(destination);
-                    return fileRef.makePublic(); // Make the file publicly readable
+                    return fileRef.makePublic();
                 })
                 .then(() => {
                     const publicUrl = `https://storage.googleapis.com/${bucket.name}/${destination}`;
-                    uploads.push({ filename: filename, url: publicUrl, mimetype: mimetype });
-                    fs.unlink(filepath, () => {}); // Clean up temp file
+                    // *** Push an object with originalFilename and url to the uploads array ***
+                    uploads.push({ originalFilename: originalFilename, url: publicUrl, mimetype: mimetype });
+                    fs.unlink(filepath, () => {});
                     resolve();
                 })
                 .catch(err => {
                     console.error("Error uploading file to Firebase Storage:", err);
-                    fs.unlink(filepath, () => {}); // Clean up temp file on error
-                    reject(new Error(`Failed to upload file ${filename}: ${err.message}`));
+                    fs.unlink(filepath, () => {});
+                    reject(new Error(`Failed to upload file ${originalFilename}: ${err.message}`));
                 });
             });
 
             writeStream.on('error', (err) => {
-                fs.unlink(filepath, () => {}); // Clean up temp file on write error
-                reject(new Error(`Failed to write file ${filename} to disk: ${err.message}`));
+                fs.unlink(filepath, () => {});
+                reject(new Error(`Failed to write file ${originalFilename} to disk: ${err.message}`));
             });
 
-            file.on('limit', () => { // Handle file size limit
-                fs.unlink(filepath, () => {}); // Clean up temp file
-                file.resume(); // Consume the stream
-                reject(new Error(`File ${filename} exceeds the 10MB limit.`));
+            file.on('limit', () => {
+                fs.unlink(filepath, () => {});
+                file.resume();
+                reject(new Error(`File ${originalFilename} exceeds the 10MB limit.`));
             });
         });
 
@@ -866,48 +888,47 @@ app.post('/upload-attachment', verifyFirebaseToken, async (req, res) => {
     });
 
     busboy.on('finish', async () => {
-    if (responseSent) return;
+        if (responseSent) return;
 
-    try {
-        // Promise.allSettled will ensure all file processing attempts are resolved
-        // The `uploads` array should already contain fulfilled promises' data
-        const results = await Promise.allSettled(filePromises);
+        try {
+            // Using Promise.allSettled to ensure all promises resolve or reject before continuing
+            const results = await Promise.allSettled(filePromises);
 
-        const errors = [];
-        // Reconstruct `uploads` from successful promises if you want to be explicit,
-        // otherwise, the `uploads` array populated inside the `fileUploadPromise` is fine.
-        // Let's assume for this fix that `uploads` is correctly populated as promises resolve.
+            const successfulUploads = [];
+            const failedUploads = [];
 
-        results.forEach((result) => {
-            if (result.status === 'rejected') {
-                errors.push(result.reason.message || `File upload failed for an unknown reason.`);
+            results.forEach((result, index) => {
+                if (result.status === 'fulfilled') {
+                    // uploads array is populated within the file.on('finish') handler
+                    // No need to push again here, just ensure the order might be different.
+                    // If you wanted to strictly use results, you'd resolve the full object from the promise
+                    // For now, `uploads` array is already populated correctly.
+                } else {
+                    failedUploads.push(result.reason.message);
+                }
+            });
+
+            if (failedUploads.length > 0) {
+                const errorMessage = `Some files failed to upload: ${failedUploads.join('; ')}`;
+                sendResponse(400, { error: errorMessage, files: uploads }); // Return successful uploads along with errors
+            } else if (uploads.length > 0) {
+                sendResponse(200, { message: 'Files uploaded successfully', files: uploads });
+            } else {
+                sendResponse(400, { error: 'No files were uploaded or processed.' });
             }
-        });
-
-        if (errors.length > 0) {
-            const errorMessage = `Some files failed to upload: ${errors.join('; ')}`;
-            sendResponse(400, { error: errorMessage, successfulUploads: uploads }); // Optionally send successful uploads too
-        } else if (uploads.length > 0) {
-            sendResponse(200, { message: 'Files uploaded successfully', files: uploads });
-        } else {
-            sendResponse(400, { error: 'No files were uploaded or processed.' });
+        } catch (error) {
+            console.error('Busboy finish processing error:', error);
+            sendResponse(500, { error: `An unexpected error occurred during file processing: ${error.message}` });
         }
-    } catch (error) {
-        console.error('Busboy finish processing error:', error);
-        sendResponse(500, { error: `An unexpected error occurred during file processing: ${error.message}` });
-    }
-});
+    });
 
     busboy.on('error', (error) => {
         console.error('Busboy parsing error:', error);
-        // Catch errors during busboy parsing itself
         sendResponse(500, { error: `File upload parsing error: ${error.message}` });
     });
 
     req.pipe(busboy);
 });
-
-
 // Start the server
 app.listen(port, () => {
     console.log(`Server running on port ${port}`);

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { User, LogIn, LogOut, PlusCircle, List, LayoutDashboard, MessageSquareText, FilePenLine, ChevronDown, Settings, Monitor, CheckCircle, XCircle, Info, AlertTriangle, Tag, CalendarDays, ClipboardCheck, Send, Loader2, ListFilter, Clock, Users, KeyRound, Eye, EyeOff, Search, FileUp, Download, Link, X } from 'lucide-react';
+import { User, UploadCloud, LogIn, LogOut, PlusCircle, List, LayoutDashboard, MessageSquareText, FilePenLine, ChevronDown, Settings, Monitor, CheckCircle, XCircle, Info, AlertTriangle, Tag, CalendarDays, ClipboardCheck, Send, Loader2, ListFilter, Clock, Users, KeyRound, Eye, EyeOff, Search, FileUp, Download, Link, X } from 'lucide-react';
 import { ExternalLink } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import {
@@ -1201,10 +1201,10 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
     const [commentText, setCommentText] = useState('');
     const [commentLoading, setCommentLoading] = useState(false);
     const [updateLoading, setUpdateLoading] = useState(false);
-    // New state to manage button feedback text and icon
-    const [saveButtonState, setSaveButtonState] = useState('save'); // 'save', 'saving', 'success', 'error'
+    const [saveButtonState, setSaveButtonState] = useState('save');
     const [attachmentFiles, setAttachmentFiles] = useState([]);
-    // Removed uploadingAttachments state as it's now handled by the main 'loading' state
+    const [uploadButtonState, setUploadButtonState] = useState('upload'); // 'upload', 'uploading', 'success', 'error'
+
 
     // Editable fields state
     const [editableFields, setEditableFields] = useState({
@@ -1240,7 +1240,6 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
         { value: 'Closed', label: 'Closed' },
     ];
 
-    // useCallback is good practice for functions passed as dependencies to useEffect
     const loadTicket = useCallback(async () => {
         console.log('TicketDetailComponent useEffect: ticketId prop changed to:', ticketId);
 
@@ -1305,19 +1304,17 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
             setLoading(false);
             console.log('TicketDetailComponent: Loading state set to false after loadTicket completion.');
         }
-    }, [ticketId, user, showFlashMessage]); // Dependencies for useCallback
+    }, [ticketId, user, showFlashMessage]);
 
     useEffect(() => {
         loadTicket();
-    }, [loadTicket]); // useEffect now depends on the memoized loadTicket
+    }, [loadTicket]);
 
     const isTicketClosedOrResolved = ticket && ['Resolved', 'Closed'].includes(ticket.status);
-    // Determine if user can edit: is support OR is reporter AND ticket is not closed/resolved
     const canEdit = isSupportUser || (ticket && ticket.reporter_id === user?.firebaseUser.uid && !isTicketClosedOrResolved);
     const canAddComments = !isTicketClosedOrResolved;
     const canAddAttachments = !isTicketClosedOrResolved;
 
-    // Check if any editable field has changed from its original value
     const hasChanges = () => {
         if (!ticket) return false;
         return (
@@ -1334,7 +1331,6 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
     const handleEditChange = (e) => {
         const { id, value } = e.target;
         setEditableFields(prev => ({ ...prev, [id]: value }));
-        // Reset button state if changes are made after an error or success
         if (saveButtonState !== 'save') {
             setSaveButtonState('save');
         }
@@ -1342,7 +1338,7 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
 
     const handleUpdateTicket = async () => {
         setUpdateLoading(true);
-        setSaveButtonState('saving'); // Change button state to saving
+        setSaveButtonState('saving');
 
         try {
             const idToken = await user.firebaseUser.getIdToken();
@@ -1361,37 +1357,35 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
 
             const data = await response.json();
             if (response.ok) {
-                setSaveButtonState('success'); // Change button state to success
+                setSaveButtonState('success');
                 showFlashMessage('Ticket updated successfully!', 'success');
-                // Re-fetch to get latest data, important after updates
-                setTicket(null); // Clear ticket state to force re-fetch and show loading spinner again
-                setError(null); // Clear any previous errors
-                setLoading(true); // Manually set loading to true to show spinner
+                setTicket(null);
+                setError(null);
+                setLoading(true);
                 setTimeout(() => {
-                    setIsEditing(false); // Go back to view mode
-                    setSaveButtonState('save'); // Reset button state for next edit cycle
-                }, 1500); // Display "Success!" for 1.5 seconds
+                    setIsEditing(false);
+                    setSaveButtonState('save');
+                }, 1500);
             } else {
-                setSaveButtonState('error'); // Change button state to error
-                showFlashMessage(data.error || 'Failed to update ticket.', 'error'); // Keep flash message for errors
+                setSaveButtonState('error');
+                showFlashMessage(data.error || 'Failed to update ticket.', 'error');
                 setTimeout(() => {
-                    setSaveButtonState('save'); // Reset button state after error
-                }, 2000); // Display "Error!" for 2 seconds
+                    setSaveButtonState('save');
+                }, 2000);
             }
         } catch (error) {
             console.error('Update ticket error:', error);
-            setSaveButtonState('error'); // Change button state to error
-            showFlashMessage('Network error or server unreachable during update.', 'error'); // Keep flash message for network errors
+            setSaveButtonState('error');
+            showFlashMessage('Network error or server unreachable during update.', 'error');
             setTimeout(() => {
-                setSaveButtonState('save'); // Reset button state after error
-            }, 2000); // Display "Error!" for 2 seconds
+                setSaveButtonState('save');
+            }, 2000);
         } finally {
-            setUpdateLoading(false); // This will re-enable the button after the timeout if needed, but setIsEditing handles overall state
+            setUpdateLoading(false);
         }
     };
 
     const handleCancelEdit = () => {
-        // Reset editable fields to original ticket values
         setEditableFields({
             request_for_email: ticket.request_for_email || '',
             short_description: ticket.short_description || '',
@@ -1402,7 +1396,7 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
             assigned_to_email: ticket.assigned_to_email || ''
         });
         setIsEditing(false);
-        setSaveButtonState('save'); // Ensure button state is reset on cancel
+        setSaveButtonState('save');
     };
 
     const handleAddComment = async (e) => {
@@ -1424,11 +1418,10 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
             });
             const data = await response.json();
             if (response.ok) {
-                
+
                 setCommentText('');
                 loadTicket(ticketId)
-                // Re-fetch to get latest comments
-                
+
             } else {
                 showFlashMessage(data.error || 'Failed to add comment.', 'error');
             }
@@ -1456,21 +1449,31 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
             }
             validFiles.push(file);
         }
-        setAttachmentFiles(validFiles);
+        setAttachmentFiles(prevFiles => [...prevFiles, ...validFiles]); // Append new files
+        // Reset upload button state if files are selected after a previous success/error
+        if (uploadButtonState !== 'upload') {
+            setUploadButtonState('upload');
+        }
     };
+
+    const handleRemoveFile = (fileToRemove) => {
+        setAttachmentFiles(prevFiles => prevFiles.filter(file => file !== fileToRemove));
+        if (uploadButtonState !== 'upload') {
+            setUploadButtonState('upload'); // Reset button state if files are removed
+        }
+    };
+
 
     const handleAddAttachmentsToTicket = async () => {
         if (attachmentFiles.length === 0) {
-            showFlashMessage('No files selected for upload.', 'info');
             return;
         }
-        showFlashMessage('Uploading attachments...', 'info');
-        // We'll use the main 'loading' state for the spinner now.
-        setLoading(true); // Indicate overall component loading during upload and re-fetch
+
+        setUploadButtonState('uploading');
 
         const uploadedUrls = [];
+        let anyUploadFailed = false;
 
-        // Use Promise.all to upload files concurrently for better performance
         const uploadPromises = attachmentFiles.map(async (file) => {
             const formData = new FormData();
             formData.append('attachment', file);
@@ -1485,17 +1488,19 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                 if (response.ok) {
                     const data = await response.json();
                     if (data.files && data.files.length > 0) {
-                        return data.files[0].url; // Return the URL
+                        return data.files[0].url;
                     }
                 } else {
                     const errorData = await response.json();
                     showFlashMessage(`Failed to upload ${file.name}: ${errorData.error || 'Server error'}`, 'error');
+                    anyUploadFailed = true;
                 }
             } catch (error) {
                 console.error('Attachment upload error:', error);
                 showFlashMessage(`Network error during upload for ${file.name}.`, 'error');
+                anyUploadFailed = true;
             }
-            return null; // Return null for failed uploads
+            return null;
         });
 
         const results = await Promise.all(uploadPromises);
@@ -1508,38 +1513,57 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
         if (uploadedUrls.length > 0) {
             try {
                 const idToken = await user.firebaseUser.getIdToken();
-                // Patch the ticket to add new attachment URLs.
                 const response = await fetch(`${API_BASE_URL}/ticket/${ticketId}`, {
                     method: 'PATCH',
                     headers: {
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${idToken}`
                     },
-                    body: JSON.stringify({ attachments: uploadedUrls }), // Send only the new URLs to be added
+                    body: JSON.stringify({ attachments: uploadedUrls }),
                 });
                 if (response.ok) {
-                    showFlashMessage('Attachments added to ticket successfully!', 'success');
-                    setAttachmentFiles([]); // Clear selected files after successful upload and update
-                    loadTicket(ticketId); // Re-fetch the ticket to get updated attachments
-                    // Force re-fetch the ticket to show the updated attachments
-                    setTicket(null); // Clear ticket state to force re-fetch
-                    setError(null); // Clear any previous errors
-                    // setLoading(true); // Already set to true at the start of the function
+                    setAttachmentFiles([]); // Clear selected files
+                    setTicket(prevTicket => ({
+                        ...prevTicket,
+                        attachments: [...(prevTicket.attachments || []), ...uploadedUrls]
+                    }));
+
+                    if (!anyUploadFailed) {
+                        setUploadButtonState('success');
+                    } else {
+                        setUploadButtonState('error');
+                    }
+
+                    setTimeout(() => {
+                        setUploadButtonState('upload');
+                    }, 1500);
                 } else {
                     const errorData = await response.json();
+                    setUploadButtonState('error');
                     showFlashMessage(`Failed to update ticket with attachments: ${errorData.error || 'Server error'}`, 'error');
+                    setTimeout(() => {
+                        setUploadButtonState('upload');
+                    }, 2000);
                 }
             } catch (error) {
                 console.error('Update ticket with attachments error:', error);
+                setUploadButtonState('error');
                 showFlashMessage('Network error during updating ticket with attachments.', 'error');
+                setTimeout(() => {
+                    setUploadButtonState('upload');
+                }, 2000);
             }
-        } else if (attachmentFiles.length > 0) {
-            // This condition means files were selected but none uploaded successfully
-            showFlashMessage('No attachments were successfully uploaded to add to the ticket.', 'error');
+        } else {
+            setUploadButtonState('error');
+            if (!anyUploadFailed) {
+                 showFlashMessage('No attachments were successfully uploaded to add to the ticket.', 'error');
+            }
+            setTimeout(() => {
+                setUploadButtonState('upload');
+            }, 2000);
         }
-        // setLoading(false) will be handled by the loadTicket function after re-fetching
-        // No need to setUploadingAttachments(false) anymore.
     };
+
 
     const getStatusClasses = (status) => {
         switch (status) {
@@ -1569,14 +1593,12 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
 
     return (
         <div className="p-4 bg-gray-100 min-h-screen flex-1 overflow-auto font-sans">
-            {/* Header section with back button, ticket number, and EDIT/SAVE/CANCEL buttons */}
             <div className="flex items-center bg-white border-b border-gray-200 px-4 py-3 shadow-sm sticky top-0 z-10">
                 <button onClick={() => navigateTo(user?.role === 'support' ? 'allTickets' : 'myTickets')} className="text-gray-500 hover:text-gray-700 mr-4">
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-chevron-left"><path d="m15 18-6-6 6-6" /></svg>
                 </button>
                 <h1 className="text-lg font-semibold text-gray-800 flex-grow">TASK{ticket.display_id} (Portal view)</h1>
 
-                {/* Edit/Save/Cancel Buttons - Moved to the header */}
                 <div className="flex space-x-2">
                     {canEdit && !isEditing && !isTicketClosedOrResolved && (
                         <button
@@ -1590,14 +1612,14 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                         <>
                             <button
                                 onClick={handleCancelEdit}
-                                disabled={updateLoading} // Disable cancel during update
+                                disabled={updateLoading}
                                 className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors duration-200"
                             >
                                 Cancel
                             </button>
                             <button
                                 onClick={handleUpdateTicket}
-                                disabled={updateLoading || !hasChanges()} // Disable save if no changes or updating
+                                disabled={updateLoading || !hasChanges()}
                                 className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all duration-300 ease-in-out flex items-center justify-center
                                 ${saveButtonState === 'saving'
                                         ? 'bg-blue-200 text-blue-500 cursor-not-allowed'
@@ -1624,9 +1646,7 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
             </div>
 
             <div className="bg-white p-6 rounded-lg shadow-md w-full max-w-4xl mx-auto mt-4 border border-gray-200">
-                {/* Top Section: Number, Customer, Request, Due date, Short description (original UI fields) */}
                 <div className="grid grid-cols-2 gap-x-8 gap-y-4 mb-6">
-                    {/* Left Column */}
                     <div className="space-y-3">
                         <div className="flex items-center">
                             <label className="text-gray-700 text-sm font-semibold w-28 shrink-0">Number:</label>
@@ -1635,20 +1655,14 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                         <div className="flex items-center">
                             <label className="text-gray-700 text-sm font-semibold w-28 shrink-0">Customer:</label>
                             <span className="text-gray-900 text-sm font-medium flex-1">{ticket.request_for_email}</span>
-                            {/* Icon next to Customer name - placeholder */}
-
                         </div>
                         <div className="flex items-center">
                             <label className="text-gray-700 text-sm font-semibold w-28 shrink-0">Request:</label>
                             <span className="text-gray-900 text-sm font-medium flex-1">{ticket.request_item_id || 'N/A'}</span>
-                            {/* Icon next to Request - placeholder */}
-
                         </div>
                         <div className="flex items-center">
                             <label className="text-gray-700 text-sm font-semibold w-28 shrink-0">Request Item:</label>
-                            <span className="text-gray-900 text-sm font-medium flex-1">{ticket.request_item_id || 'RITM000000'}</span> {/* Placeholder */}
-                            {/* Icon next to Request Item - placeholder */}
-
+                            <span className="text-gray-900 text-sm font-medium flex-1">{ticket.request_item_id || 'RITM000000'}</span>
                         </div>
                         <div className="flex items-center">
                             <label className="text-gray-700 text-sm font-semibold w-28 shrink-0">Due date:</label>
@@ -1656,7 +1670,6 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                         </div>
                     </div>
 
-                    {/* Right Column */}
                     <div className="space-y-3">
                         <div className="flex items-center">
                             <label className="text-gray-700 text-sm font-semibold w-28 shrink-0">Priority:</label>
@@ -1667,7 +1680,7 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                                     onChange={handleEditChange}
                                     options={priorities}
                                     disabled={!canEdit || isTicketClosedOrResolved}
-                                    className="flex-1 max-w-xs" // Adjusted width for input
+                                    className="flex-1 max-w-xs"
                                     label=""
                                 />
                             ) : (
@@ -1685,7 +1698,7 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                                     onChange={handleEditChange}
                                     options={statuses}
                                     disabled={!isSupportUser}
-                                    className="flex-1 max-w-xs" // Adjusted width for input
+                                    className="flex-1 max-w-xs"
                                     label=""
                                 />
                             ) : (
@@ -1697,9 +1710,7 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                         {isSupportUser && (
                             <div className="flex items-center">
                                 <label className="text-gray-700 text-sm font-semibold w-28 shrink-0">Assignment group:</label>
-                                {/* This field is not in editableFields, so keep it read-only for now */}
-                                <span className="text-gray-900 text-sm font-medium flex-1">{ticket.assignment_group || 'ITS-FieldSupport.CentralCampus'}</span> {/* Placeholder based on image */}
-
+                                <span className="text-gray-900 text-sm font-medium flex-1">{ticket.assignment_group || 'ITS-FieldSupport.CentralCampus'}</span>
                             </div>
                         )}
                         {isSupportUser && (
@@ -1713,7 +1724,7 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                                         onChange={handleEditChange}
                                         placeholder="Enter email to assign"
                                         disabled={!isSupportUser || isTicketClosedOrResolved}
-                                        className="flex-1 max-w-xs" // Adjusted width for input
+                                        className="flex-1 max-w-xs"
                                         label=""
                                     />
                                 ) : (
@@ -1725,8 +1736,7 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                     </div>
                 </div>
 
-                {/* Short Description */}
-                <div className="mb-6 border-t border-gray-200 pt-6"> {/* Added border-top for separation */}
+                <div className="mb-6 border-t border-gray-200 pt-6">
                     <div className="flex items-center mb-2">
                         <label className="text-gray-700 text-sm font-semibold w-36 shrink-0">Short description:</label>
                         {isEditing && canEdit ? (
@@ -1749,10 +1759,9 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                     </div>
                 </div>
 
-                {/* Description */}
                 <div className="mb-6">
-                    <div className="flex items-start mb-2"> {/* Align top for textarea */}
-                        <label className="text-gray-700 text-sm font-semibold w-36 shrink-0 pt-2">Description:</label> {/* Added pt-2 to align with textarea */}
+                    <div className="flex items-start mb-2">
+                        <label className="text-gray-700 text-sm font-semibold w-36 shrink-0 pt-2">Description:</label>
                         {isEditing && canEdit ? (
                             <FormTextarea
                                 id="long_description"
@@ -1768,11 +1777,10 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                         )}
                     </div>
                     <div className="flex justify-end text-xs text-gray-500 mt-1">
-                        Characters left: {isEditing && canEdit ? 4000 - editableFields.long_description.length : ticket.long_description.length ? 4000 - ticket.long_description.length : 4000} {/* Assuming 4000 char limit */}
+                        Characters left: {isEditing && canEdit ? 4000 - editableFields.long_description.length : ticket.long_description.length ? 4000 - ticket.long_description.length : 4000}
                     </div>
                 </div>
 
-                {/* Additional Details (from your original component, structured to fit) */}
                 <div className="grid grid-cols-2 gap-x-8 gap-y-4 mb-6 border-t border-gray-200 pt-6">
                     <div className="flex items-center">
                         <label className="text-gray-700 text-sm font-semibold w-28 shrink-0">Reporter Email:</label>
@@ -1782,112 +1790,153 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                         <label className="text-gray-700 text-sm font-semibold w-28 shrink-0">Category:</label>
                         <span className="text-gray-900 text-sm font-medium flex-1">{ticket.category}</span>
                     </div>
-                    {/* Add other fields from your original snippet here if needed, following the same pattern */}
                 </div>
 
-                {/* Comments Section */}
-                <div className="mt-6 border-t border-gray-200 pt-6">
-                    <h3 className="text-lg font-semibold text-gray-800 mb-4">Comments</h3>
-                    <div className="space-y-4 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
-                        {ticket.comments && ticket.comments.length > 0 ? (
-                            ticket.comments.map((comment, index) => (
-                                <div key={index} className="bg-gray-50 p-3 rounded-md border border-gray-200">
-                                    <p className="text-gray-800 text-sm mb-1">{comment.comment_text}</p>
-                                    <p className="text-xs text-gray-500">
-                                        Added by <span className="font-medium">{comment.commenter_name || 'Unknown'}</span> on {new Date(comment.timestamp).toLocaleString()}
-                                    </p>
-                                </div>
-                            ))
-                        ) : (
-                            <p className="text-gray-500 text-sm">No comments yet.</p>
+                {/* --- Attachments Section --- */}
+                <hr className="my-6 border-gray-200" />
+                <h2 className="text-lg font-semibold text-gray-800 mb-4">Attachments</h2>
+                <div className="mb-4">
+                    {ticket.attachments && ticket.attachments.length > 0 ? (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {ticket.attachments.map((attachment, index) => (
+                                <a
+                                    key={index}
+                                    href={attachment}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center p-2 border border-gray-300 rounded-md text-blue-600 hover:bg-blue-50 transition-colors text-sm truncate"
+                                >
+                                    <UploadCloud size={16} className="mr-2 shrink-0" />
+                                    <span className="truncate">{attachment.substring(attachment.lastIndexOf('/') + 1)}</span>
+                                </a>
+                            ))}
+                        </div>
+                    ) : (
+                        <p className="text-gray-500 text-sm">No attachments yet.</p>
+                    )}
+                </div>
+
+                {canAddAttachments && (
+                    <div className="border border-gray-300 p-3 rounded-md mt-4 bg-gray-50">
+                        <div className="flex items-center space-x-2 mb-3">
+                            <label
+                                htmlFor="attachment-upload"
+                                className="inline-flex items-center px-2 py-1 text-xs font-medium text-blue-700 bg-blue-100 rounded-md cursor-pointer hover:bg-blue-200 transition-colors"
+                            >
+                                <UploadCloud className="mr-1" size={14} />
+                                Choose Files
+                            </label>
+                            <input
+                                id="attachment-upload"
+                                type="file"
+                                multiple
+                                onChange={handleFileChange}
+                                className="hidden"
+                                disabled={uploadButtonState === 'uploading'}
+                                // Clear input value so selecting the same file again triggers change
+                                value=""
+                            />
+                            {attachmentFiles.length === 0 && (
+                                <span className="text-sm text-gray-600 flex-grow">No files chosen</span>
+                            )}
+                            <button
+                                onClick={handleAddAttachmentsToTicket}
+                                disabled={attachmentFiles.length === 0 || uploadButtonState === 'uploading'}
+                                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-300 ease-in-out flex items-center justify-center h-7 ${
+                                    uploadButtonState === 'uploading'
+                                        ? 'bg-blue-200 text-blue-500 cursor-not-allowed'
+                                        : uploadButtonState === 'success'
+                                            ? 'bg-green-500 text-white'
+                                            : uploadButtonState === 'error'
+                                                ? 'bg-red-500 text-white'
+                                                : attachmentFiles.length > 0
+                                                    ? 'bg-blue-600 text-white hover:bg-blue-700'
+                                                    : 'bg-blue-200 text-blue-500 cursor-not-allowed'
+                                }`}
+                            >
+                                {uploadButtonState === 'uploading' && <Loader2 className="animate-spin mr-1" size={14} />}
+                                {uploadButtonState === 'success' && <CheckCircle className="mr-1" size={14} />}
+                                {uploadButtonState === 'error' && <XCircle className="mr-1" size={14} />}
+                                {uploadButtonState === 'uploading' && 'Uploading...'}
+                                {uploadButtonState === 'success' && 'Success!'}
+                                {uploadButtonState === 'error' && 'Failed!'}
+                                {uploadButtonState === 'upload' && 'Upload'}
+                            </button>
+                        </div>
+
+                        {attachmentFiles.length > 0 && (
+                            <div className="mt-2 space-y-1">
+                                {attachmentFiles.map((file, index) => (
+                                    <div key={index} className="flex items-center justify-between bg-white px-3 py-1.5 rounded-md border border-gray-200 text-sm">
+                                        <span className="truncate mr-2">{file.name}</span>
+                                        <button
+                                            onClick={() => handleRemoveFile(file)}
+                                            className="text-red-500 hover:text-red-700 p-1 rounded-full hover:bg-red-100 transition-colors"
+                                            title={`Remove ${file.name}`}
+                                            aria-label={`Remove ${file.name}`}
+                                        >
+                                            <XCircle size={16} />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
                         )}
                     </div>
-                    {canAddComments && (
-                        <form onSubmit={handleAddComment} className="mt-4 flex flex-col sm:flex-row gap-2">
-                            <FormTextarea
-                                id="commentText"
-                                value={commentText}
-                                onChange={(e) => setCommentText(e.target.value)}
-                                placeholder="Add a comment..."
-                                rows={2}
-                                className="flex-1"
-                                label=""
-                                disabled={commentLoading}
-                            />
+                )}
+
+                {/* --- Comments Section --- */}
+                <hr className="my-6 border-gray-200" />
+                <h2 className="text-lg font-semibold text-gray-800 mb-4">Comments</h2>
+                <div className="space-y-4 mb-6">
+                    {ticket.comments && ticket.comments.length > 0 ? (
+                        [...ticket.comments].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)).map((comment, index) => (
+                            <div key={index} className="bg-gray-50 p-3 rounded-md border border-gray-200">
+                                <div className="flex items-center text-sm text-gray-600 mb-1">
+                                    <strong className="text-gray-800 mr-2">{comment.commenter_name || 'Anonymous'}</strong>
+                                    <span className="text-xs text-gray-500">
+                                        {new Date(comment.timestamp).toLocaleString()}
+                                    </span>
+                                </div>
+                                <p className="text-gray-700 text-sm whitespace-pre-wrap">{comment.comment_text}</p>
+                            </div>
+                        ))
+                    ) : (
+                        <p className="text-gray-500 text-sm">No comments yet.</p>
+                    )}
+                </div>
+
+                {canAddComments && (
+                    <form onSubmit={handleAddComment} className="mt-4 p-4 border border-gray-300 rounded-md bg-white shadow-sm">
+                        <h3 className="text-md font-semibold text-gray-800 mb-3">Add a Comment</h3>
+                        <textarea
+                            className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                            rows="4"
+                            placeholder="Type your comment here..."
+                            value={commentText}
+                            onChange={(e) => setCommentText(e.target.value)}
+                            disabled={commentLoading}
+                        ></textarea>
+                        <div className="flex justify-end mt-3">
                             <button
                                 type="submit"
                                 disabled={commentLoading || !commentText.trim()}
-                                className={`px-4 py-2 rounded-md transition-colors duration-200 text-sm font-medium self-end sm:self-start min-w-[100px] flex items-center justify-center
-                                    ${commentLoading || !commentText.trim()
-                                        ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
-                                        : 'bg-green-600 text-white hover:bg-green-700'
+                                className={`px-4 py-2 text-sm font-medium rounded-md transition-colors duration-200 flex items-center justify-center
+                                ${commentLoading
+                                        ? 'bg-blue-200 text-blue-500 cursor-not-allowed'
+                                        : 'bg-blue-600 text-white hover:bg-blue-700'
                                     }`}
                             >
                                 {commentLoading && <Loader2 className="animate-spin mr-2" size={16} />}
                                 Add Comment
                             </button>
-                        </form>
-                    )}
-                </div>
-
-                {/* Attachments Section */}
-                <div className="mt-6 border-t border-gray-200 pt-6">
-                    <h3 className="text-lg font-semibold text-gray-800 mb-4">Attachments</h3>
-                    <div className="space-y-2 mb-4">
-                        {ticket.attachments && ticket.attachments.length > 0 ? (
-                            ticket.attachments.map((attachmentUrl, index) => (
-                                <div key={index} className="flex items-center text-sm text-blue-700 hover:underline">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-paperclip mr-2"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.49" /></svg>
-                                    <a href={attachmentUrl} target="_blank" rel="noopener noreferrer" className="truncate">
-                                        {attachmentUrl.split('/').pop()} {/* Display just the filename */}
-                                    </a>
-                                </div>
-                            ))
-                        ) : (
-                            <p className="text-gray-500 text-sm">No attachments yet.</p>
-                        )}
-                    </div>
-                    {canAddAttachments && (
-                        <div className="flex flex-col gap-3">
-                            <label htmlFor="attachmentUpload" className="block text-gray-700 text-sm font-medium">Upload New Attachments (PDF, JPG, PNG, Word up to 10MB):</label>
-                            <input
-                                type="file"
-                                id="attachmentUpload"
-                                multiple
-                                onChange={handleFileChange}
-                                className="block w-full text-sm text-gray-900 border border-gray-300 rounded-lg cursor-pointer bg-gray-50 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-                                disabled={loading} // Disable if main ticket loading
-                            />
-                            {attachmentFiles.length > 0 && (
-                                <div className="mt-2 text-sm text-gray-600">
-                                    Selected files: {attachmentFiles.map(file => file.name).join(', ')}
-                                </div>
-                            )}
-                            <button
-                                onClick={handleAddAttachmentsToTicket}
-                                disabled={attachmentFiles.length === 0 || loading} // Disable if no files selected or main ticket loading
-                                className={`px-4 py-2 rounded-md transition-colors duration-200 text-sm font-medium self-start flex items-center justify-center
-                                    ${attachmentFiles.length === 0 || loading
-                                        ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
-                                        : 'bg-blue-600 text-white hover:bg-blue-700'
-                                    }`}
-                            >
-                                {loading ? ( // Use the main 'loading' state for the button
-                                    <>
-                                        <Loader2 className="animate-spin mr-2" size={16} />
-                                        Uploading...
-                                    </>
-                                ) : (
-                                    'Add Attachments'
-                                )}
-                            </button>
                         </div>
-                    )}
-                </div>
+                    </form>
+                )}
             </div>
         </div>
     );
 };
+
 
 
 
