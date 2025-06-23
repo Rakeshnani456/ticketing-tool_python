@@ -175,7 +175,39 @@ app.get('/tickets/summary-counts', verifyFirebaseToken, async (req, res) => {
     }
 });
 
+// --- NEW ENDPOINT: Get Ticket Status Summary ---
+// @route   GET /tickets/status-summary
+// @desc    Get counts of tickets by each status (e.g., Open: 5, In Progress: 3).
+// @access  Private (requires token)
+app.get('/tickets/status-summary', verifyFirebaseToken, async (req, res) => {
+    try {
+        const snapshot = await ticketsCollection.get();
+        const statusCounts = {};
 
+        // Initialize counts for all valid statuses to 0
+        validTicketStatuses.forEach(status => {
+            statusCounts[status] = 0;
+        });
+
+        snapshot.forEach(doc => {
+            const ticketData = doc.data();
+            const status = ticketData.status;
+            if (statusCounts.hasOwnProperty(status)) {
+                statusCounts[status]++;
+            } else {
+                // Handle cases where a ticket might have an invalid/unexpected status
+                console.warn(`Ticket ${doc.id} has an unrecognized status: ${status}.`);
+                // Optionally, you might want to count these under an 'Other' category
+                // statusCounts['Other'] = (statusCounts['Other'] || 0) + 1;
+            }
+        });
+
+        return res.status(200).json(statusCounts);
+    } catch (error) {
+        console.error(`Error fetching ticket status summary: ${error.message}`);
+        return res.status(500).json({ error: `Failed to fetch ticket status summary: ${error.message}` });
+    }
+});
 
 
 // --- Routes ---

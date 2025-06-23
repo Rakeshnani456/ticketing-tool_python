@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { User, UploadCloud, LogIn, LogOut, PlusCircle, List, LayoutDashboard, MessageSquareText, FilePenLine, ChevronDown, Settings, Monitor, CheckCircle, XCircle, Info, AlertTriangle, Tag, CalendarDays, ClipboardCheck, Send, Loader2, ListFilter, Clock, Users, KeyRound, Eye, EyeOff, Search, FileUp, Download, Link, X } from 'lucide-react';
+import { User, UploadCloud, LogIn, LogOut, PlusCircle, List, Ticket, LayoutDashboard, MessageSquareText, FilePenLine, ChevronDown, Settings, Monitor, CheckCircle, XCircle, Info, AlertTriangle, Tag, CalendarDays, ClipboardCheck, Send, Loader2, ListFilter, Clock, Users, KeyRound, Eye, EyeOff, Search, FileUp, Download, Link, X } from 'lucide-react';
 import { ExternalLink } from 'lucide-react';
+import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 import { initializeApp } from 'firebase/app';
 import {
     getAuth,
@@ -21,7 +22,7 @@ const firebaseConfig = {
     appId: "1:919553361675:web:ae1be7140926013786840e",
     measurementId: "G-HCVXC67K86"
 };
-
+const COLORS = ['#8884d8', '#82ca9d', '#ffc658', '#ff7300', '#00C49F', '#FFBB28', '#FF8042'];
 const app = initializeApp(firebaseConfig);
 const authClient = getAuth(app);
 
@@ -832,7 +833,11 @@ const MyTicketsComponent = ({ user, navigateTo, showFlashMessage, searchKeyword,
 
 // --- AllTickets Component (for support users) ---
 const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword, refreshKey, initialFilterAssignment = '', showFilters = true }) => {
-    const [tickets, setTickets] = useState([]);
+    // State to hold ALL tickets fetched from the backend (unfiltered)
+    const [allTickets, setAllTickets] = useState([]);
+    // State for the tickets currently being displayed in the table (filtered)
+    const [displayedTickets, setDisplayedTickets] = useState([]);
+
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [filterStatus, setFilterStatus] = useState('');
@@ -840,7 +845,8 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
 
-    const fetchAllTickets = useCallback(async () => {
+    // Fetch all tickets without any status or assignment filters
+    const fetchAllTicketsData = useCallback(async () => {
         const firebaseUser = user?.firebaseUser;
         if (!firebaseUser) {
             setLoading(false);
@@ -852,9 +858,9 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
         setError(null);
         try {
             const idToken = await firebaseUser.getIdToken();
+            // Fetch ALL tickets, without applying status or assignment filters here
+            // Keyword search is a global search, so it can remain in the fetch
             const queryParams = new URLSearchParams();
-            if (filterStatus) queryParams.append('status', filterStatus);
-            if (filterAssignment) queryParams.append('assignment', filterAssignment);
             if (searchKeyword) queryParams.append('keyword', searchKeyword);
 
             const response = await fetch(`${API_BASE_URL}/tickets/all?${queryParams.toString()}`, {
@@ -869,7 +875,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                 throw new Error(`HTTP error! status: ${response.status}, message: ${errorData.error || errorData.message}`);
             }
             const data = await response.json();
-            setTickets(data);
+            setAllTickets(data); // Store all fetched tickets
         } catch (err) {
             setError(err.message || 'Failed to fetch tickets. Please try again.');
             showFlashMessage(err.message || 'Failed to fetch tickets.', 'error');
@@ -877,15 +883,46 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
         } finally {
             setLoading(false);
         }
-    }, [user, showFlashMessage, filterStatus, filterAssignment, searchKeyword, refreshKey]);
+    }, [user, showFlashMessage, searchKeyword, refreshKey]); // Added searchKeyword and refreshKey to dependencies
 
     useEffect(() => {
         if (user?.firebaseUser) {
-            fetchAllTickets();
+            fetchAllTicketsData();
         }
-    }, [user, fetchAllTickets, refreshKey]);
+    }, [user, fetchAllTicketsData, refreshKey]);
+
+    // Apply client-side filtering whenever allTickets, filterStatus, filterAssignment, or searchKeyword changes
+    useEffect(() => {
+        let currentFilteredTickets = [...allTickets];
+
+        if (filterStatus) {
+            currentFilteredTickets = currentFilteredTickets.filter(t => t.status === filterStatus || (filterStatus === 'Closed' && t.status === 'Resolved'));
+        }
+
+        if (filterAssignment) {
+            if (filterAssignment === 'unassigned') {
+                currentFilteredTickets = currentFilteredTickets.filter(t => !t.assigned_to_email);
+            } else if (filterAssignment === 'assigned_to_me') {
+                currentFilteredTickets = currentFilteredTickets.filter(t => t.assigned_to_id === user?.firebaseUser?.uid);
+            }
+        }
+        
+        // This part needs to be handled carefully if searchKeyword is already applied in the API call.
+        // If your API already filters by keyword, this client-side filter is redundant for keyword.
+        // If the API `tickets/all` endpoint returns ALL tickets and keyword filtering happens client-side:
+        // if (searchKeyword) {
+        //     currentFilteredTickets = currentFilteredTickets.filter(ticket =>
+        //         ticket.display_id.toLowerCase().includes(searchKeyword.toLowerCase()) ||
+        //         ticket.short_description.toLowerCase().includes(searchKeyword.toLowerCase())
+        //     );
+        // }
+        // For now, assuming searchKeyword is handled by backend as per fetchAllTicketsData.
+        
+        setDisplayedTickets(currentFilteredTickets);
+    }, [allTickets, filterStatus, filterAssignment, user]); // Removed searchKeyword as a direct dependency here if backend handles it
 
     // Reset filters when initialFilterAssignment changes (e.g., navigating from All Tickets to Assigned To Me)
+    // This part is crucial for initial state synchronization
     useEffect(() => {
         setFilterAssignment(initialFilterAssignment);
         setFilterStatus(''); // Clear status filter when changing assignment filter
@@ -950,18 +987,19 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
         }
     };
 
+    // Calculate counts based on the ALL TICKETS, not the filtered ones
     const counts = {
-        total_tickets: tickets.length,
-        open_tickets: tickets.filter(t => t.status === 'Open').length,
-        in_progress_tickets: tickets.filter(t => t.status === 'In Progress').length,
-        hold_tickets: tickets.filter(t => t.status === 'Hold').length,
-        closed_resolved_tickets: tickets.filter(t => t.status === 'Closed' || t.status === 'Resolved').length,
-        unassigned: tickets.filter(t => !t.assigned_to_email).length,
-        assigned_to_me: tickets.filter(t => t.assigned_to_id === user.firebaseUser.uid).length
+        total_tickets: allTickets.length,
+        open_tickets: allTickets.filter(t => t.status === 'Open').length,
+        in_progress_tickets: allTickets.filter(t => t.status === 'In Progress').length,
+        hold_tickets: allTickets.filter(t => t.status === 'Hold').length,
+        closed_resolved_tickets: allTickets.filter(t => t.status === 'Closed' || t.status === 'Resolved').length,
+        unassigned: allTickets.filter(t => !t.assigned_to_email).length,
+        assigned_to_me: allTickets.filter(t => t.assigned_to_id === user?.firebaseUser?.uid).length
     };
 
 
-   /* if (loading) return <div className="text-center text-gray-600 mt-8 text-base flex items-center justify-center space-x-2"><Loader2 className="animate-spin" size={20} /> <span>Loading tickets...</span></div>;*/
+    if (loading) return <div className="text-center text-gray-600 mt-8 text-base flex items-center justify-center space-x-2"><Loader2 className="animate-spin" size={20} /> <span>Loading tickets...</span></div>;
     if (error) return <div className="text-center text-red-600 mt-8 text-base flex items-center justify-center space-x-2"><XCircle size={20} /> <span>Error: {error}</span></div>;
 
     return (
@@ -984,7 +1022,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                     <button onClick={() => { setFilterStatus('Open'); setFilterAssignment(''); }} className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors duration-200 shadow-sm ${filterStatus === 'Open' ? 'bg-green-600 text-white hover:bg-green-700' : 'bg-gray-200 text-gray-800 hover:bg-gray-300' }`} > Open ({counts.open_tickets}) </button>
                     <button onClick={() => { setFilterStatus('In Progress'); setFilterAssignment(''); }} className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors duration-200 shadow-sm ${filterStatus === 'In Progress' ? 'bg-yellow-600 text-white hover:bg-yellow-700' : 'bg-gray-200 text-gray-800 hover:bg-gray-300' }`} > In Progress ({counts.in_progress_tickets}) </button>
                     <button onClick={() => { setFilterStatus('Hold'); setFilterAssignment(''); }} className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors duration-200 shadow-sm ${filterStatus === 'Hold' ? 'bg-purple-600 text-white hover:bg-purple-700' : 'bg-gray-200 text-gray-800 hover:bg-gray-300' }`} > On Hold ({counts.hold_tickets}) </button>
-                    <button onClick={() => { setFilterStatus('Closed'); setFilterAssignment(''); }} className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors duration-200 shadow-sm ${filterStatus === 'Closed' ? 'bg-gray-600 text-white hover:bg-gray-700' : 'bg-gray-200 text-gray-800 hover:bg-gray-300' }`} > Closed/Resolved ({counts.closed_resolved_tickets}) </button>
+                    <button onClick={() => { setFilterStatus('Closed'); setFilterAssignment(''); }} className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors duration-200 shadow-sm ${filterStatus === 'Closed' || filterStatus === 'Resolved' ? 'bg-gray-600 text-white hover:bg-gray-700' : 'bg-gray-200 text-gray-800 hover:bg-gray-300' }`} > Closed/Resolved ({counts.closed_resolved_tickets}) </button>
                     
                     {/* Filter buttons for assignment */}
                     <button onClick={() => { setFilterAssignment('unassigned'); setFilterStatus(''); }} className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors duration-200 shadow-sm ${filterAssignment === 'unassigned' ? 'bg-orange-600 text-white hover:bg-orange-700' : 'bg-gray-200 text-gray-800 hover:bg-gray-300' }`} > Unassigned ({counts.unassigned}) </button>
@@ -1001,7 +1039,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                 </div>
             )}
 
-            {tickets.length === 0 ? (
+            {displayedTickets.length === 0 ? (
                 <p className="text-gray-600 text-sm text-center p-6 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50">
                     {searchKeyword ? `No tickets found matching "${searchKeyword}".` : "No tickets found matching the criteria."}
                 </p>
@@ -1022,7 +1060,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200">
-                            {tickets.map(ticket => (
+                            {displayedTickets.map(ticket => (
                                 <tr key={ticket.id} className="hover:bg-gray-50 transition-colors duration-150 odd:bg-white even:bg-gray-50">
                                     <td className="px-3 py-2 whitespace-nowrap text-sm text-blue-700 hover:underline font-medium cursor-pointer" onClick={() => navigateTo('ticketDetail', ticket.id)}>
                                         {ticket.display_id}
@@ -1936,7 +1974,187 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
         </div>
     );
 };
+const DashboardComponent = ({ user, navigateTo, showFlashMessage }) => {
+    const [ticketStatusData, setTicketStatusData] = useState([]);
+    const [totalTickets, setTotalTickets] = useState(0);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
 
+    /**
+     * Fetches ticket status counts from the backend API.
+     * This function is memoized using useCallback to prevent unnecessary re-renders.
+     */
+    const fetchTicketStatusCounts = useCallback(async () => {
+        if (!user || !user.firebaseUser) {
+            setLoading(false);
+            return;
+        }
+
+        setLoading(true);
+        setError(null);
+        try {
+            const idToken = await user.firebaseUser.getIdToken();
+            const response = await fetch(`${API_BASE_URL}/tickets/status-summary`, {
+                headers: { 'Authorization': `Bearer ${idToken}` }
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                // Transform data for Recharts PieChart: [{ name: 'Status', value: count }]
+                const formattedData = Object.keys(data).map(status => ({
+                    name: status,
+                    value: data[status]
+                }));
+                setTicketStatusData(formattedData);
+                const total = formattedData.reduce((sum, item) => sum + item.value, 0);
+                setTotalTickets(total);
+            } else {
+                const errorData = await response.json();
+                setError(errorData.message || 'Failed to fetch ticket status counts.');
+                showFlashMessage(errorData.message || 'Failed to fetch ticket status counts.', 'error');
+            }
+        } catch (err) {
+            console.error("Network error fetching ticket status counts:", err);
+            setError('Network error: Could not connect to the server.');
+            showFlashMessage('Network error: Could not connect to the server.', 'error');
+        } finally {
+            setLoading(false);
+        }
+    }, [user, showFlashMessage]);
+
+    // Effect hook to fetch data when the component mounts or user changes.
+    useEffect(() => {
+        fetchTicketStatusCounts();
+    }, [fetchTicketStatusCounts]);
+
+    // Custom label for the pie chart slices, showing percentage and count
+    // This function is no longer used for rendering labels on the pie chart
+    const renderCustomizedLabel = ({ cx, cy, midAngle, outerRadius, percent, name, value }) => {
+        // This function is intentionally left empty as labels are being removed from the pie chart
+        // It remains here to avoid breaking references, but it will not be used by the Pie component.
+        return null; 
+    };
+
+    // Custom tooltip content
+    const CustomTooltip = ({ active, payload }) => {
+        if (active && payload && payload.length) {
+            return (
+                <div className="bg-white p-2 border border-gray-300 rounded shadow-md text-sm">
+                    <p className="font-semibold text-gray-800">{`${payload[0].name}`}</p>
+                    <p className="text-gray-700">{`Tickets: ${payload[0].value}`}</p>
+                    <p className="text-gray-600">{`Percentage: ${(payload[0].percent * 100).toFixed(1)}%`}</p>
+                </div>
+            );
+        }
+        return null;
+    };
+
+
+    if (loading) {
+        return (
+            <div className="flex justify-center items-center h-full min-h-[calc(100vh-8rem)]">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+                <p className="ml-4 text-gray-700">Loading dashboard data...</p>
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="text-center text-red-600 mt-8 text-base font-bold p-6 bg-red-100 rounded-lg shadow-md border border-red-200">
+                <XCircle size={24} className="inline-block mr-2" /> {error}
+            </div>
+        );
+    }
+
+    return (
+        <div className="p-6 overflow-auto flex-1 bg-gray-100">
+            <h1 className="text-3xl font-extrabold text-gray-900 mb-6 flex items-center">
+                <LayoutDashboard size={28} className="mr-3 text-blue-600" />
+                Dashboard Overview
+            </h1>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                {/* Total Tickets Card */}
+                <div className="bg-gradient-to-br from-blue-500 to-blue-700 text-white p-6 rounded-lg shadow-lg flex items-center justify-between">
+                    <div>
+                        <div className="text-sm opacity-90">Total Tickets</div>
+                        <div className="text-4xl font-bold mt-1">{totalTickets}</div>
+                    </div>
+                    <Ticket size={48} className="opacity-75" />
+                </div>
+
+                {/* Create Ticket Card */}
+                <div className="bg-gradient-to-br from-green-500 to-green-700 text-white p-6 rounded-lg shadow-lg flex items-center justify-between cursor-pointer hover:from-green-600 hover:to-green-800 transition duration-300"
+                    onClick={() => navigateTo('createTicket')}>
+                    <div>
+                        <div className="text-sm opacity-90">Quick Action</div>
+                        <div className="text-4xl font-bold mt-1">Create New Ticket</div>
+                    </div>
+                    <Ticket size={48} className="opacity-75 transform rotate-[-20deg]" />
+                </div>
+            </div>
+
+            <div className="bg-white p-6 rounded-lg shadow-xl border border-gray-200 flex flex-col lg:flex-row items-center lg:items-start justify-center lg:justify-between gap-8">
+                <div className="lg:w-1/2 w-full flex flex-col items-center">
+                    <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center">
+                        <PieChart size={20} className="mr-2 text-purple-600" />
+                        Tickets by Status
+                    </h2>
+                    <ResponsiveContainer width="100%" height={300}>
+                        <PieChart>
+                            <Pie
+                                data={ticketStatusData}
+                                dataKey="value"
+                                nameKey="name"
+                                cx="50%"
+                                cy="50%"
+                                outerRadius={80} // Consistent outerRadius
+                                fill="#8884d8"
+                                // Removed label={renderCustomizedLabel}
+                                // Removed labelLine={true}
+                            >
+                                {
+                                    ticketStatusData.map((entry, index) => (
+                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                    ))
+                                }
+                            </Pie>
+                            <Tooltip content={<CustomTooltip />} />
+                            <Legend layout="vertical" align="right" verticalAlign="middle" wrapperStyle={{ paddingLeft: '20px' }} />
+                        </PieChart>
+                    </ResponsiveContainer>
+                </div>
+
+                <div className="lg:w-1/2 w-full bg-gray-50 p-6 rounded-lg border border-gray-100">
+                    <h3 className="text-lg font-semibold text-gray-700 mb-4 flex items-center">
+                        <Info size={18} className="mr-2 text-blue-500" />
+                        Status Breakdown
+                    </h3>
+                    {ticketStatusData.length > 0 ? (
+                        <ul className="space-y-2">
+                            {ticketStatusData.map((item, index) => (
+                                <li 
+                                    key={item.name} 
+                                    className="flex items-center justify-between py-2 px-3 bg-white rounded-md shadow-sm text-gray-700 text-sm cursor-pointer hover:bg-gray-100 transition duration-150"
+                                    onClick={() => navigateTo('tickets', { status: item.name })} // Make clickable
+                                >
+                                    <span className="flex items-center">
+                                        <span className="inline-block w-3 h-3 rounded-full mr-2" style={{ backgroundColor: COLORS[index % COLORS.length] }}></span>
+                                        {item.name}:
+                                    </span>
+                                    <span className="font-semibold text-gray-900">{item.value} tickets</span>
+                                </li>
+                            ))}
+                        </ul>
+                    ) : (
+                        <p className="text-gray-500 italic">No ticket status data available.</p>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
 
 
 
@@ -2213,7 +2431,7 @@ const App = () => {
                                     if (currentUser.role !== 'support') {
                                         return <AccessDeniedComponent />;
                                     }
-                                    return <AllTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} showFilters={true} />;
+                                    return <DashboardComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} showFilters={true} />;
                                 case 'allTickets':
                                     if (currentUser.role !== 'support') {
                                         return <AccessDeniedComponent />;
