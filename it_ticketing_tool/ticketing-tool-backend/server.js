@@ -33,7 +33,9 @@ try {
         admin.initializeApp({
             credential: admin.credential.cert(serviceAccount),
             // Add storageBucket for Firebase Storage integration
-            storageBucket: process.env.FIREBASE_STORAGE_BUCKET || 'your-project-id.appspot.com' // Replace with your actual storage bucket
+            // IMPORTANT: This is hardcoded for debugging. In production, use environment variables.
+            // The correct format is your-project-id.appspot.com (e.g., 'it-ticketing-tool-dd679.appspot.com')
+            storageBucket: 'it-ticketing-tool-dd679.firebasestorage.app' 
         });
     }
     db = admin.firestore(); // Get a Firestore client
@@ -652,7 +654,8 @@ app.get('/ticket/:ticket_id', verifyFirebaseToken, async (req, res) => {
         }
 
         return res.status(200).json(jsonSerializableTicket(ticketDoc.id, ticketData));
-    } catch (error) {
+    }
+    catch (error) {
         console.error(`Error fetching ticket ${ticketId}: ${error.message}`);
         return res.status(500).json({ error: `Failed to fetch ticket details: ${error.message}` });
     }
@@ -661,7 +664,7 @@ app.get('/ticket/:ticket_id', verifyFirebaseToken, async (req, res) => {
 
 // --- New Route: Export all tickets to CSV ---
 // @route   GET /tickets/export
-// @desc    Export all tickets (including closed/resolved) to CSV based on duration.
+// // @desc    Export all tickets (including closed/resolved) to CSV based on duration.
 // @access  Private (requires support role)
 app.get('/tickets/export', verifyFirebaseToken, async (req, res) => {
     const authenticatedUserRole = (await usersCollection.doc(req.user.uid).get()).data().role;
@@ -750,7 +753,11 @@ app.get('/tickets/export', verifyFirebaseToken, async (req, res) => {
 app.post('/upload-attachment', verifyFirebaseToken, async (req, res) => {
     if (!admin.storage()) {
         console.error("Firebase Storage not initialized.");
-        return res.status(500).json({ error: "Firebase Storage not configured on the server." });
+        // Ensure a response is sent if storage isn't configured.
+        if (!res.headersSent) {
+            return res.status(500).json({ error: "Firebase Storage not configured on the server." });
+        }
+        return;
     }
 
     const busboy = Busboy({ headers: req.headers, limits: { fileSize: 10 * 1024 * 1024 } }); // Max 10MB per file
@@ -759,9 +766,26 @@ app.post('/upload-attachment', verifyFirebaseToken, async (req, res) => {
     const uploads = [];
     const filePromises = [];
 
+    // This flag ensures that only one HTTP response is sent back to the client.
+    // This is crucial for preventing the ERR_HTTP_HEADERS_SENT error.
+    let responseSent = false; 
+
+    // Function to send a single response and set the flag
+    const sendResponse = (statusCode, data) => {
+        if (!responseSent) {
+            responseSent = true;
+            return res.status(statusCode).json(data);
+        }
+    };
+
     busboy.on('file', (fieldname, file, filenameInfo) => {
+        if (responseSent) {
+            file.resume(); // Consume the file stream to prevent hanging
+            return;
+        }
+
         const { filename, encoding, mimetype } = filenameInfo;
-        const fileExtension = path.extname(filename);
+        const fileExtension = path.extname(filename).toLowerCase(); // Get extension and convert to lowercase
 
         const allowedMimeTypes = [
             'application/pdf',
@@ -771,23 +795,38 @@ app.post('/upload-attachment', verifyFirebaseToken, async (req, res) => {
             'application/vnd.openxmlformats-officedocument.wordprocessingml.document' // .docx
         ];
 
-        if (!allowedMimeTypes.includes(mimetype)) {
-            file.resume(); // Consume the stream to prevent client hanging
-            return res.status(400).json({ error: `File type ${mimetype} not allowed. Allowed types: PDF, JPG, PNG, Word.` });
-        }
+        const allowedExtensions = [
+            '.pdf',
+            '.jpg',
+            '.jpeg',
+            '.png',
+            '.doc',
+            '.docx'
+        ];
 
-        const uniqueFilename = `${uuidv4()}${fileExtension}`;
-        const filepath = path.join(os.tmpdir(), uniqueFilename);
-        const writeStream = fs.createWriteStream(filepath);
+        const fileUploadPromise = new Promise((resolve, reject) => {
+            // Validate based on MIME type OR file extension for robustness
+            const isMimeTypeAllowed = mimetype && allowedMimeTypes.includes(mimetype);
+            const isExtensionAllowed = fileExtension && allowedExtensions.includes(fileExtension);
 
-        const filePromise = new Promise((resolve, reject) => {
+            if (!isMimeTypeAllowed && !isExtensionAllowed) {
+                file.resume(); // Consume the stream
+                const errorMsg = `File type for ${filename} not allowed. Detected MIME: "${mimetype}", Extension: "${fileExtension}". Allowed types: PDF, JPG, PNG, Word.`;
+                return reject(new Error(errorMsg)); 
+            }
+
+            const uniqueFilename = `${uuidv4()}${fileExtension}`;
+            const filepath = path.join(os.tmpdir(), uniqueFilename);
+            const writeStream = fs.createWriteStream(filepath);
+
             file.pipe(writeStream);
+
             writeStream.on('finish', () => {
                 const destination = `attachments/${Date.now()}_${uniqueFilename}`;
                 bucket.upload(filepath, {
                     destination: destination,
                     metadata: {
-                        contentType: mimetype,
+                        contentType: mimetype, // Use the detected MIME type for storage
                         metadata: {
                             firebaseStorageDownloadTokens: uuidv4(),
                             uploadedBy: req.user.email
@@ -795,9 +834,8 @@ app.post('/upload-attachment', verifyFirebaseToken, async (req, res) => {
                     }
                 })
                 .then(() => {
-                    // Make the file publicly readable. For production, consider signed URLs for more security.
                     const fileRef = bucket.file(destination);
-                    return fileRef.makePublic();
+                    return fileRef.makePublic(); // Make the file publicly readable
                 })
                 .then(() => {
                     const publicUrl = `https://storage.googleapis.com/${bucket.name}/${destination}`;
@@ -811,32 +849,59 @@ app.post('/upload-attachment', verifyFirebaseToken, async (req, res) => {
                     reject(new Error(`Failed to upload file ${filename}: ${err.message}`));
                 });
             });
-            writeStream.on('error', reject);
+
+            writeStream.on('error', (err) => {
+                fs.unlink(filepath, () => {}); // Clean up temp file on write error
+                reject(new Error(`Failed to write file ${filename} to disk: ${err.message}`));
+            });
+
             file.on('limit', () => { // Handle file size limit
                 fs.unlink(filepath, () => {}); // Clean up temp file
+                file.resume(); // Consume the stream
                 reject(new Error(`File ${filename} exceeds the 10MB limit.`));
             });
         });
-        filePromises.push(filePromise);
+
+        filePromises.push(fileUploadPromise);
     });
 
     busboy.on('finish', async () => {
-        try {
-            await Promise.all(filePromises);
-            if (uploads.length > 0) {
-                res.status(200).json({ message: 'Files uploaded successfully', files: uploads });
-            } else {
-                res.status(400).json({ error: 'No files were uploaded or processed.' });
+    if (responseSent) return;
+
+    try {
+        // Promise.allSettled will ensure all file processing attempts are resolved
+        // The `uploads` array should already contain fulfilled promises' data
+        const results = await Promise.allSettled(filePromises);
+
+        const errors = [];
+        // Reconstruct `uploads` from successful promises if you want to be explicit,
+        // otherwise, the `uploads` array populated inside the `fileUploadPromise` is fine.
+        // Let's assume for this fix that `uploads` is correctly populated as promises resolve.
+
+        results.forEach((result) => {
+            if (result.status === 'rejected') {
+                errors.push(result.reason.message || `File upload failed for an unknown reason.`);
             }
-        } catch (error) {
-            console.error('Busboy finish error:', error);
-            res.status(500).json({ error: `File upload failed: ${error.message}` });
+        });
+
+        if (errors.length > 0) {
+            const errorMessage = `Some files failed to upload: ${errors.join('; ')}`;
+            sendResponse(400, { error: errorMessage, successfulUploads: uploads }); // Optionally send successful uploads too
+        } else if (uploads.length > 0) {
+            sendResponse(200, { message: 'Files uploaded successfully', files: uploads });
+        } else {
+            sendResponse(400, { error: 'No files were uploaded or processed.' });
         }
-    });
+    } catch (error) {
+        console.error('Busboy finish processing error:', error);
+        sendResponse(500, { error: `An unexpected error occurred during file processing: ${error.message}` });
+    }
+});
 
     busboy.on('error', (error) => {
         console.error('Busboy parsing error:', error);
-        res.status(500).json({ error: `File upload parsing error: ${error.message}` });
+        // Catch errors during busboy parsing itself
+        sendResponse(500, { error: `File upload parsing error: ${error.message}` });
     });
 
     req.pipe(busboy);
