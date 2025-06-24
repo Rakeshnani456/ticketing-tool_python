@@ -832,6 +832,7 @@ const MyTicketsComponent = ({ user, navigateTo, showFlashMessage, searchKeyword,
 };
 
 // --- AllTickets Component (for support users) ---
+
 const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword, refreshKey, initialFilterAssignment = '', showFilters = true }) => {
     // State to hold ALL tickets fetched from the backend (unfiltered)
     const [allTickets, setAllTickets] = useState([]);
@@ -844,6 +845,8 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
     const [filterAssignment, setFilterAssignment] = useState(initialFilterAssignment);
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
+    // New state to control the visibility of the informational message
+    const [showMessage, setShowMessage] = useState(true); // Default to true to show the message initially
 
     // Fetch all tickets without any status or assignment filters
     const fetchAllTicketsData = useCallback(async () => {
@@ -911,10 +914,10 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
         // If your API already filters by keyword, this client-side filter is redundant for keyword.
         // If the API `tickets/all` endpoint returns ALL tickets and keyword filtering happens client-side:
         // if (searchKeyword) {
-        //     currentFilteredTickets = currentFilteredTickets.filter(ticket =>
-        //         ticket.display_id.toLowerCase().includes(searchKeyword.toLowerCase()) ||
-        //         ticket.short_description.toLowerCase().includes(searchKeyword.toLowerCase())
-        //     );
+        //      currentFilteredTickets = currentFilteredTickets.filter(ticket =>
+        //          ticket.display_id.toLowerCase().includes(searchKeyword.toLowerCase()) ||
+        //          ticket.short_description.toLowerCase().includes(searchKeyword.toLowerCase())
+        //      );
         // }
         // For now, assuming searchKeyword is handled by backend as per fetchAllTicketsData.
         
@@ -1006,11 +1009,20 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
         <div className="p-4 bg-offwhite flex-1 overflow-auto">
             <h2 className="text-xl font-extrabold text-gray-800 mb-4">{initialFilterAssignment === 'assigned_to_me' ? `Tickets Assigned to Me (${counts.assigned_to_me})` : `All Tickets`}</h2>
 
-            {/* Informational message for filter behavior (only if filters are shown) */}
-            {showFilters && (
-                <p className="text-sm text-gray-600 mb-4 p-2 bg-blue-50 rounded-md border border-blue-200">
-                    This view shows all tickets. Use the filters below or search by Ticket ID to refine the list.
-                </p>
+            {/* Informational message for filter behavior (only if filters are shown and showMessage is true) */}
+            {showFilters && showMessage && (
+                <div className="relative text-sm text-gray-600 mb-4 p-2 bg-blue-50 rounded-md border border-blue-200 flex items-start justify-between">
+                    <span>
+                        This view shows all tickets. Use the filters below or search by Ticket ID to refine the list.
+                    </span>
+                    <button
+                        onClick={() => setShowMessage(false)}
+                        className="ml-4 p-1 rounded-full hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-300 transition-colors duration-200"
+                        aria-label="Close message"
+                    >
+                        <XCircle size={16} className="text-blue-600" />
+                    </button>
+                </div>
             )}
 
             {/* Filter and Export Section (Conditional Rendering) */}
@@ -1100,7 +1112,6 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
         </div>
     );
 };
-
 // --- Profile Component ---
 const ProfileComponent = ({ user, showFlashMessage, navigateTo, handleLogout }) => {
     const [profile, setProfile] = useState(null);
@@ -1228,6 +1239,21 @@ const ProfileComponent = ({ user, showFlashMessage, navigateTo, handleLogout }) 
 };
 
 
+// --- Utility function for extracting file name from URL ---
+function getFileNameFromUrl(url) {
+    try {
+        const pathname = new URL(url).pathname;
+        return pathname.split('/').pop() || url;
+    } catch {
+        // fallback for invalid URLs
+        const lastSlash = url.lastIndexOf('/');
+        if (lastSlash !== -1) {
+            return url.substring(lastSlash + 1);
+        }
+        return url;
+    }
+}
+
 // --- TicketDetail Component ---
 
 
@@ -1287,7 +1313,7 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
             return;
         }
 
-        setLoading(true);
+       // setLoading(true);
         setError(null);
         console.log(`TicketDetailComponent: Attempting to fetch ticket with ID: ${ticketId}`);
         try {
@@ -1396,10 +1422,9 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
             const data = await response.json();
             if (response.ok) {
                 setSaveButtonState('success');
-                showFlashMessage('Ticket updated successfully!', 'success');
-                setTicket(null);
+                //showFlashMessage('Ticket updated successfully!', 'success');
+                loadTicket(ticketId);
                 setError(null);
-                setLoading(true);
                 setTimeout(() => {
                     setIsEditing(false);
                     setSaveButtonState('save');
@@ -1845,7 +1870,7 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                                     className="flex items-center p-2 border border-gray-300 rounded-md text-blue-600 hover:bg-blue-50 transition-colors text-sm truncate"
                                 >
                                     <UploadCloud size={16} className="mr-2 shrink-0" />
-                                    <span className="truncate">{attachment.substring(attachment.lastIndexOf('/') + 1)}</span>
+                                    <span className="truncate">{getFileNameFromUrl(attachment)}</span>
                                 </a>
                             ))}
                         </div>
@@ -1926,21 +1951,24 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                 <hr className="my-6 border-gray-200" />
                 <h2 className="text-lg font-semibold text-gray-800 mb-4">Comments</h2>
                 <div className="space-y-4 mb-6">
-                    {ticket.comments && ticket.comments.length > 0 ? (
-                        [...ticket.comments].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)).map((comment, index) => (
-                            <div key={index} className="bg-gray-50 p-3 rounded-md border border-gray-200">
-                                <div className="flex items-center text-sm text-gray-600 mb-1">
-                                    <strong className="text-gray-800 mr-2">{comment.commenter_name || 'Anonymous'}</strong>
-                                    <span className="text-xs text-gray-500">
-                                        {new Date(comment.timestamp).toLocaleString()}
-                                    </span>
-                                </div>
-                                <p className="text-gray-700 text-sm whitespace-pre-wrap">{comment.comment_text}</p>
+                     {ticket.comments && ticket.comments.length > 0 ? (
+                    // Sort comments by timestamp
+                    [...ticket.comments].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)).map((comment, index) => (
+                        <div key={index} className="bg-gray-50 p-3 rounded-md border border-gray-200">
+                            <div className="flex items-center text-sm text-gray-600 mb-1">
+                                {/* Change from comment.commenter_name to comment.commenter */}
+                                <strong className="text-gray-800 mr-2">{comment.commenter || 'Anonymous'}</strong>
+                                <span className="text-xs text-gray-500">
+                                    {new Date(comment.timestamp).toLocaleString()}
+                                </span>
                             </div>
-                        ))
-                    ) : (
-                        <p className="text-gray-500 text-sm">No comments yet.</p>
-                    )}
+                            {/* Change from comment.comment_text to comment.text */}
+                            <p className="text-gray-700 text-sm whitespace-pre-wrap">{comment.text}</p>
+                        </div>
+                    ))
+                ) : (
+                    <p className="text-gray-500 text-sm">No comments yet.</p>
+                )}
                 </div>
 
                 {canAddComments && (
@@ -2471,7 +2499,7 @@ const App = () => {
             </main>
 
             <footer className="bg-gray-800 text-white text-center p-2 w-full shadow-inner text-xs flex-shrink-0">
-                <p>&copy; {new Date().getFullYear()} IT Help Desk. All rights reserved.</p>
+                <p>&copy; {new Date().getFullYear()} Kriasol. All rights reserved.</p>
             </footer>
         </div>
     );
