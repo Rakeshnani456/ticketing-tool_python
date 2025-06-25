@@ -2,12 +2,16 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Loader2, XCircle, ListFilter, Download, User, CheckCircle } from 'lucide-react';
+import { collection, query, onSnapshot, where, orderBy, getFirestore } from 'firebase/firestore';
 
 // Import common UI components
 import PrimaryButton from '../common/PrimaryButton';
 
 // Import API Base URL from constants
 import { API_BASE_URL } from '../../config/constants';
+
+// Import Firebase client (now including dbClient)
+import { app, dbClient } from '../../config/firebase';
 
 /**
  * Component to display all tickets, primarily for support users.
@@ -23,14 +27,15 @@ import { API_BASE_URL } from '../../config/constants';
  * @returns {JSX.Element} The list of all tickets or a loading/error message.
  */
 const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword, refreshKey, initialFilterAssignment = '', showFilters = true }) => {
-    // State to hold ALL tickets fetched from the backend (before client-side filtering)
+    // State to hold ALL tickets fetched from Firestore (before client-side filtering)
     const [allTickets, setAllTickets] = useState([]);
     // State for the tickets currently being displayed in the table (after client-side filtering)
     const [displayedTickets, setDisplayedTickets] = useState([]);
 
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-    const [filterStatus, setFilterStatus] = useState(''); // State for status filter
+    // MODIFIED: Default filterStatus to 'Open' to show open tickets initially
+    const [filterStatus, setFilterStatus] = useState('Open'); // State for status filter
     const [filterAssignment, setFilterAssignment] = useState(initialFilterAssignment); // State for assignment filter
     const [startDate, setStartDate] = useState(''); // State for start date filter for export
     const [endDate, setEndDate] = useState('');     // State for end date filter for export
@@ -42,108 +47,153 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
     const exportPopupRef = useRef(null);
     const exportButtonRef = useRef(null);
 
-    // NEW STATE: To control the success message on the export button
+    // New state for export success message on the export button
     const [exportSuccess, setExportSuccess] = useState(false);
 
     // Get today's date in YYYY-MM-DD format for the max attribute of the end date input
     const today = new Date().toISOString().split('T')[0];
 
+    // Initialize Firestore DB client. This will be the same instance as exported from firebase.js.
+    const db = dbClient; // Use the already initialized dbClient
+
     /**
-     * Fetches all tickets from the backend. This fetch is designed to get the full dataset
-     * before client-side filters are applied (except for `searchKeyword` which might be server-side).
-     * Uses useCallback to memoize the function.
+     * Helper function to convert Firestore Timestamp to ISO string or Date object.
+     * This ensures consistency for display and client-side sorting/filtering.
+     * @param {object} data - The raw data from Firestore document.
+     * @returns {object} Data with timestamps converted.
      */
-    const fetchAllTicketsData = useCallback(async () => {
-        const firebaseUser = user?.firebaseUser;
-        if (!firebaseUser) {
+    const formatTicketData = (data) => {
+        const newData = { ...data };
+        if (newData.created_at && newData.created_at.toDate) {
+            newData.created_at = newData.created_at.toDate().toISOString();
+        }
+        if (newData.updated_at && newData.updated_at.toDate) {
+            newData.updated_at = newData.updated_at.toDate().toISOString();
+        }
+        if (newData.resolved_at && newData.resolved_at.toDate) {
+            newData.resolved_at = newData.resolved_at.toDate().toISOString();
+        }
+        if (newData.comments && Array.isArray(newData.comments)) {
+            newData.comments = newData.comments.map(comment => {
+                if (comment.timestamp && comment.timestamp.toDate) {
+                    return { ...comment, timestamp: comment.timestamp.toDate().toISOString() };
+                }
+                return comment;
+            });
+        }
+        return newData;
+    };
+
+    /**
+     * Effect hook to set up real-time Firestore listener for all tickets.
+     * This ensures 'allTickets' state contains the comprehensive dataset for accurate counts.
+     */
+    useEffect(() => {
+        if (!user || !user.firebaseUser || !db) {
             setLoading(false);
-            showFlashMessage('You must be logged in to view tickets.', 'info');
-            return;
+            showFlashMessage('Authentication required to view tickets.', 'info');
+            return () => {};
         }
 
         setLoading(true);
         setError(null);
-        try {
-            const idToken = await firebaseUser.getIdToken();
-            const queryParams = new URLSearchParams();
-            // If backend supports keyword search on /tickets/all, include it here.
-            // Otherwise, keyword filtering would be purely client-side on `allTickets` state.
-            if (searchKeyword) queryParams.append('keyword', searchKeyword);
 
-            const response = await fetch(`${API_BASE_URL}/tickets/all?${queryParams.toString()}`, {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${idToken}`
-                }
-            });
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(`HTTP error! status: ${response.status}, message: ${errorData.error || errorData.message}`);
-            }
-            const data = await response.json();
-            setAllTickets(data); // Store all fetched tickets in `allTickets` state
-        } catch (err) {
-            setError(err.message || 'Failed to fetch tickets. Please try again.');
-            showFlashMessage(err.message || 'Failed to fetch tickets.', 'error');
-            console.error('Error fetching tickets:', err);
-        } finally {
+        let ticketsRef = collection(db, 'tickets');
+        let q;
+
+        // If there's an exact search keyword that looks like a TICKET-ID,
+        // apply that filter directly in the Firestore query for efficiency.
+        if (searchKeyword && searchKeyword.toUpperCase().startsWith('TICKET-')) {
+            const exactId = searchKeyword.toUpperCase();
+            q = query(ticketsRef, where('display_id', '==', exactId), orderBy('created_at', 'desc'));
+        } else {
+            // Otherwise, fetch all tickets ordered by creation date.
+            // Client-side filtering for status and assignment will be applied in the next useEffect.
+            q = query(ticketsRef, orderBy('created_at', 'desc'));
+        }
+
+        // Set up the real-time listener
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const fetchedTickets = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...formatTicketData(doc.data()) // Format timestamps
+            }));
+            setAllTickets(fetchedTickets); // Update the raw fetched tickets (full dataset or exact search result)
             setLoading(false);
-        }
-    }, [user, showFlashMessage, searchKeyword, refreshKey]);
+            setError(null);
+        }, (err) => {
+            console.error("Firestore onSnapshot error:", err);
+            setError(`Failed to load tickets: ${err.message}`);
+            showFlashMessage(`Failed to load tickets: ${err.message}`, 'error');
+            setLoading(false);
+        });
 
-    // Effect hook to trigger data fetching when component mounts or relevant dependencies change.
+        // Cleanup function: unsubscribe from the listener when the component unmounts
+        return () => unsubscribe();
+    }, [user, db, searchKeyword]); // Re-run effect if these dependencies change
+
+
+    /**
+     * Effect hook to apply client-side filtering (status, assignment, general search)
+     * whenever `allTickets` (the raw data from Firestore) or filter states change.
+     */
     useEffect(() => {
-        if (user?.firebaseUser) {
-            fetchAllTicketsData();
-        }
-    }, [user, fetchAllTicketsData, refreshKey]);
+        let currentFilteredTickets = [...allTickets]; // Start with all tickets fetched by Firestore
 
-    // Effect hook to apply client-side filtering whenever `allTickets` or filter states change.
-    useEffect(() => {
-        let currentFilteredTickets = [...allTickets]; // Start with all fetched tickets
-
-        // Apply status filter
+        // Apply status filter based on filterStatus state
+        // If filterStatus is an empty string, no status filter is applied, showing all statuses
         if (filterStatus) {
-            currentFilteredTickets = currentFilteredTickets.filter(t => t.status === filterStatus || (filterStatus === 'Closed' && t.status === 'Resolved'));
+            if (filterStatus === 'Closed') {
+                currentFilteredTickets = currentFilteredTickets.filter(ticket => ['Closed', 'Resolved'].includes(ticket.status));
+            } else {
+                currentFilteredTickets = currentFilteredTickets.filter(ticket => ticket.status === filterStatus);
+            }
         }
 
         // Apply assignment filter
         if (filterAssignment) {
             if (filterAssignment === 'unassigned') {
-                currentFilteredTickets = currentFilteredTickets.filter(t => !t.assigned_to_email);
+                currentFilteredTickets = currentFilteredTickets.filter(ticket => !ticket.assigned_to_email);
             } else if (filterAssignment === 'assigned_to_me') {
-                currentFilteredTickets = currentFilteredTickets.filter(t => t.assigned_to_id === user?.firebaseUser?.uid);
+                currentFilteredTickets = currentFilteredTickets.filter(ticket => ticket.assigned_to_id === user?.firebaseUser?.uid);
             }
         }
 
-        // --- NEW: Apply search keyword filter with safety checks ---
-        if (searchKeyword) {
+        // Apply client-side search keyword filter (only if it wasn't handled fully by Firestore query)
+        if (searchKeyword && !searchKeyword.toUpperCase().startsWith('TICKET-')) {
             const lowercasedKeyword = searchKeyword.toLowerCase();
             currentFilteredTickets = currentFilteredTickets.filter(ticket => {
-                // Safely access properties, converting null/undefined to empty string before toLowerCase()
                 const displayId = (ticket.display_id || '').toLowerCase();
                 const shortDescription = (ticket.short_description || '').toLowerCase();
                 const reporterEmail = (ticket.reporter_email || '').toLowerCase();
                 const category = (ticket.category || '').toLowerCase();
+                const assignedToEmail = (ticket.assigned_to_email || '').toLowerCase();
 
                 return (
                     displayId.includes(lowercasedKeyword) ||
-                    shortDescription.includes(lowercasedKeyword) ||
+                    shortDescription.includes(lowercasedKeyword) || // Corrected typo here
                     reporterEmail.includes(lowercasedKeyword) ||
-                    category.includes(lowercasedKeyword)
+                    category.includes(lowercasedKeyword) ||
+                    assignedToEmail.includes(lowercasedKeyword)
                 );
             });
         }
-        // --- END NEW ---
 
         setDisplayedTickets(currentFilteredTickets); // Update displayed tickets
-    }, [allTickets, filterStatus, filterAssignment, user, searchKeyword]); // IMPORTANT: Add searchKeyword to dependencies
+    }, [allTickets, filterStatus, filterAssignment, searchKeyword, user]); // Dependencies include all filtering states and user
+
 
     // Effect hook to reset filters when `initialFilterAssignment` changes (e.g., navigating from menu)
     useEffect(() => {
+        // This effect runs whenever initialFilterAssignment changes, resetting filter states
         setFilterAssignment(initialFilterAssignment);
-        setFilterStatus(''); // Clear status filter when changing assignment filter
+        // MODIFIED: If initialFilterAssignment is provided, do not override default filterStatus
+        if (!initialFilterAssignment) {
+            setFilterStatus('Open'); // Re-default to Open if no assignment filter is active
+        } else {
+            setFilterStatus(''); // Clear status filter if an assignment filter is explicitly set
+        }
+        setShowMessage(true); // Show message again when assignment filter changes
     }, [initialFilterAssignment]);
 
     // Effect hook to handle clicks outside the export popup to close it
@@ -218,6 +268,8 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
             if (startDate) queryParams.append('start_date', startDate);
             if (endDate) queryParams.append('end_date', endDate);
 
+            // Note: The backend endpoint '/tickets/export' still uses HTTP fetch,
+            // as real-time export directly from Firestore client is not a typical use case.
             const response = await fetch(`${API_BASE_URL}/tickets/export?${queryParams.toString()}`, {
                 method: 'GET',
                 headers: {
@@ -306,16 +358,38 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
         }
     };
 
-    // Calculate counts based on the *allTickets* (unfiltered) array
+    // Calculate counts based on the *allTickets* array, which now contains the full dataset
     const counts = {
+        // 'All' button now shows count of ALL tickets fetched
         total_tickets: allTickets.length,
         open_tickets: allTickets.filter(t => t.status === 'Open').length,
         in_progress_tickets: allTickets.filter(t => t.status === 'In Progress').length,
         hold_tickets: allTickets.filter(t => t.status === 'Hold').length,
-        closed_resolved_tickets: allTickets.filter(t => t.status === 'Closed' || t.status === 'Resolved').length,
+        closed_resolved_tickets: allTickets.filter(t => ['Closed', 'Resolved'].includes(t.status)).length, // Corrected to include 'Resolved'
         unassigned: allTickets.filter(t => !t.assigned_to_email).length,
-        assigned_to_me: allTickets.filter(t => t.assigned_to_id === user?.firebaseUser?.uid).length
+        // Removed assigned_to_me count as the button is being removed
     };
+
+    // Function to determine the page heading based on active filters
+    const getPageHeading = useCallback(() => {
+        if (searchKeyword) {
+            return `Search Results for "${searchKeyword}"`;
+        }
+        if (filterAssignment === 'assigned_to_me') {
+            return 'Tickets Assigned To Me';
+        }
+        if (filterAssignment === 'unassigned') {
+            return 'Unassigned Tickets';
+        }
+        if (filterStatus) {
+            if (filterStatus === 'Closed') {
+                return 'Closed/Resolved Tickets';
+            }
+            return `${filterStatus} Tickets`;
+        }
+        return 'All Tickets'; // Default if no specific filter is active
+    }, [filterStatus, filterAssignment, searchKeyword]);
+
 
     // Conditional rendering for loading or error states
     if (loading && !showExportPopup) return <div className="text-center text-gray-600 mt-8 text-base flex items-center justify-center space-x-2"><Loader2 className="animate-spin" size={20} /> <span>Loading tickets...</span></div>;
@@ -324,14 +398,14 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
     return (
         <div className="p-4 bg-offwhite flex-1 overflow-auto">
             <h2 className="text-xl font-extrabold text-gray-800 mb-4">
-                {initialFilterAssignment === 'assigned_to_me' }
+                {getPageHeading()}
             </h2>
 
             {/* Informational message for filter behavior (only if filters are shown and showMessage is true) */}
             {showFilters && showMessage && (
                 <div className="relative text-sm text-gray-600 mb-4 p-2 bg-blue-50 rounded-md border border-blue-200 flex items-start justify-between">
                     <span>
-                        This view shows tickets assigned to you by default. Use the filters below or search by status to refine the list.
+                        This view is showing {getPageHeading().toLowerCase()}. Use the filters below or search by keyword to refine the list.
                     </span>
                     <button
                         onClick={() => setShowMessage(false)} // Hide message on click
@@ -345,17 +419,24 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
 
             {/* Filter and Export Section (Conditional Rendering based on `showFilters` prop) */}
             {showFilters && (
-                <div className="mb-4 p-3 bg-gray-50 rounded-md shadow-inner border border-gray-100 flex flex-wrap gap-2 items-center relative"> {/* Added relative for popup positioning */}
+                <div className="mb-4 p-3 bg-gray-50 rounded-md shadow-inner border border-gray-100 flex flex-wrap gap-2 items-center relative">
                     <span className="text-sm font-semibold text-gray-700 flex items-center"><ListFilter className="mr-1" size={16} /> Filter By:</span>
-                    {/* Filter buttons for status */}
-                    <button onClick={() => { setFilterStatus('Open'); setFilterAssignment(''); }} className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors duration-200 shadow-sm ${filterStatus === 'Open' ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`} > All ({counts.open_tickets}) </button>
-                    <button onClick={() => { setFilterStatus('In Progress'); setFilterAssignment(''); }} className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors duration-200 shadow-sm ${filterStatus === 'In Progress' ? 'bg-yellow-600 text-white hover:bg-yellow-700' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`} > In Progress ({counts.in_progress_tickets}) </button>
-                    <button onClick={() => { setFilterStatus('Hold'); setFilterAssignment(''); }} className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors duration-200 shadow-sm ${filterStatus === 'Hold' ? 'bg-purple-600 text-white hover:bg-purple-700' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`} > On Hold ({counts.hold_tickets}) </button>
-                    <button onClick={() => { setFilterStatus('Closed'); setFilterAssignment(''); }} className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors duration-200 shadow-sm ${filterStatus === 'Closed' || filterStatus === 'Resolved' ? 'bg-gray-600 text-white hover:bg-gray-700' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`} > Closed/Resolved ({counts.closed_resolved_tickets}) </button>
+                    {/* MODIFIED: 'All' button now sets filterStatus to empty string to show all tickets */}
+                    <button
+                        onClick={() => { setFilterStatus(''); setFilterAssignment(''); }} // Set to empty string for 'All' and clear assignment
+                        className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors duration-200 shadow-sm ${filterStatus === '' && filterAssignment === '' ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}
+                    >
+                        All ({counts.total_tickets})
+                    </button>
+                    {/* MODIFIED: Ensure setFilterAssignment('') is called for status filters */}
+                    <button onClick={() => { setFilterStatus('Open'); setFilterAssignment(''); }} className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors duration-200 shadow-sm ${filterStatus === 'Open' && filterAssignment === '' ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`} > Open ({counts.open_tickets}) </button>
+                    <button onClick={() => { setFilterStatus('In Progress'); setFilterAssignment(''); }} className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors duration-200 shadow-sm ${filterStatus === 'In Progress' && filterAssignment === '' ? 'bg-yellow-600 text-white hover:bg-yellow-700' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`} > In Progress ({counts.in_progress_tickets}) </button>
+                    <button onClick={() => { setFilterStatus('Hold'); setFilterAssignment(''); }} className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors duration-200 shadow-sm ${filterStatus === 'Hold' && filterAssignment === '' ? 'bg-purple-600 text-white hover:bg-purple-700' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`} > On Hold ({counts.hold_tickets}) </button>
+                    <button onClick={() => { setFilterStatus('Closed'); setFilterAssignment(''); }} className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors duration-200 shadow-sm ${filterStatus === 'Closed' && filterAssignment === '' ? 'bg-gray-600 text-white hover:bg-gray-700' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`} > Closed/Resolved ({counts.closed_resolved_tickets}) </button>
 
-                    {/* Filter buttons for assignment */}
-                    <button onClick={() => { setFilterAssignment('unassigned'); setFilterStatus(''); }} className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors duration-200 shadow-sm ${filterAssignment === 'unassigned' ? 'bg-orange-600 text-white hover:bg-orange-700' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`} > Unassigned ({counts.unassigned}) </button>
-                    <button onClick={() => { setFilterAssignment('assigned_to_me'); setFilterStatus(''); }} className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors duration-200 shadow-sm ${filterAssignment === 'assigned_to_me' ? 'bg-green-600 text-white hover:bg-green-700' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`} > Assigned to Me ({counts.assigned_to_me}) </button>
+                    {/* MODIFIED: Filter button for 'Unassigned' - ensure setFilterStatus('') is called */}
+                    <button onClick={() => { setFilterAssignment('unassigned'); setFilterStatus(''); }} className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors duration-200 shadow-sm ${filterAssignment === 'unassigned' && filterStatus === '' ? 'bg-orange-600 text-white hover:bg-orange-700' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`} > Unassigned ({counts.unassigned}) </button>
+                    {/* Removed the 'Assigned to Me' button */}
 
                     {/* Export button and popup */}
                     <div className="relative ml-auto flex items-center">
@@ -364,7 +445,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                             Icon={Download}
                             className="w-auto px-3 py-1 text-xs"
                             disabled={loading}
-                            ref={exportButtonRef} // Attach ref to the export button
+                            ref={exportButtonRef}
                         >
                             Export
                         </PrimaryButton>
@@ -385,7 +466,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                         value={endDate}
                                         onChange={(e) => setEndDate(e.target.value)}
                                         className="p-1 border border-gray-300 rounded-md text-xs w-28"
-                                        max={today} // Restrict future dates
+                                        max={today}
                                     />
                                 </div>
                                 <div className="flex justify-end space-x-2 mt-2">
@@ -395,12 +476,11 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                     >
                                         Cancel
                                     </button>
-                                    {/* Confirm Export Button with dynamic content and styling */}
                                     <PrimaryButton
                                         onClick={handleExport}
                                         className={`w-auto px-3 py-1 text-xs ${exportSuccess ? 'bg-green-500 hover:bg-green-600' : ''}`}
                                         disabled={loading || !startDate || !endDate || (new Date(endDate) > new Date(today)) || (new Date(startDate) > new Date(endDate))}
-                                        Icon={exportSuccess ? CheckCircle : Download} // Change icon on success
+                                        Icon={exportSuccess ? CheckCircle : Download}
                                     >
                                         {exportSuccess ? 'Exported!' : (loading ? 'Exporting...' : 'Confirm Export')}
                                     </PrimaryButton>
@@ -411,59 +491,58 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                 </div>
             )}
 
-            {/* Conditional rendering for no tickets found after filtering */}
             {displayedTickets.length === 0 ? (
                 <p className="text-gray-600 text-sm text-center p-6 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50">
                     {searchKeyword ? `No tickets found matching "${searchKeyword}".` : "No tickets found matching the criteria."}
                 </p>
             ) : (
-                // Table to display filtered tickets
-                <div className="overflow-x-auto rounded-lg shadow-md border border-gray-200 bg-white">
-                    <table className="min-w-full bg-white">
-                        <thead className="bg-gray-100 border-b border-gray-200">
+                <div className="overflow-x-auto rounded-lg bg-white border border-gray-200">
+                    <table className="min-w-full bg-white table-auto">
+                        <thead className="bg-gray-50 border-b border-gray-200">
                             <tr>
-                                <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Ticket ID</th>
-                                <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Short Description</th>
-                                <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Raised by</th>
-                                <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Category</th>
-                                <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Priority</th>
-                                <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Status</th>
-                                <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Assigned To</th>
-                                <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Last Updated</th>
-                                <th className="px-3 py-2 whitespace-nowrap text-sm text-gray-800">Time Spent</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">#</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Ticket ID</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Short Description</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Raised by</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Category</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Priority</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Status</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Assigned To</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Last Updated</th>
+                                <th className="px-4 py-3 whitespace-nowrap text-sm text-gray-800">Time Spent</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200">
-                            {displayedTickets.map(ticket => (
-                                <tr key={ticket.id} className="hover:bg-gray-50 transition-colors duration-150 odd:bg-white even:bg-gray-50">
-                                    <td className="px-3 py-2 whitespace-nowrap text-sm text-blue-700 hover:underline font-medium cursor-pointer" onClick={() => navigateTo('ticketDetail', ticket.id)}>
+                            {displayedTickets.map((ticket, index) => (
+                                <tr key={ticket.id} className="hover:bg-gray-100 transition-colors duration-150">
+                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-800">{index + 1}</td>
+                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-blue-700 hover:underline font-medium cursor-pointer" onClick={() => navigateTo('ticketDetail', ticket.id)}>
                                         {ticket.display_id}
                                     </td>
-                                    {/* MODIFICATION HERE: Added truncate and max-w-xs */}
-                                    <td className="px-3 py-2 text-sm text-gray-800 max-w-xs truncate" title={ticket.short_description}>
+                                    <td className="px-4 py-3 text-sm text-gray-800 max-w-xs truncate" title={ticket.short_description}>
                                         {ticket.short_description}
                                     </td>
-                                    <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-800 flex items-center"><User size={12} className="mr-1" />{ticket.reporter_email}</td>
-                                    <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-800">
+                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-800 flex items-center"><User size={12} className="mr-1" />{ticket.reporter_email}</td>
+                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-800">
                                         {ticket.category}
                                     </td>
-                                    <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-800">
+                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-800">
                                         <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getPriorityClasses(ticket.priority)}`}>
                                             {ticket.priority}
                                         </span>
                                     </td>
-                                    <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-800">
+                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-800">
                                         <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getStatusClasses(ticket.status)}`}>
                                             {ticket.status}
                                         </span>
                                     </td>
-                                    <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-800">
+                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-800">
                                         {ticket.assigned_to_email || 'Unassigned'}
                                     </td>
-                                    <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-800">
+                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-800">
                                         {ticket.updated_at ? new Date(ticket.updated_at).toLocaleString() : 'N/A'}
                                     </td>
-                                    <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-800">
+                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-800">
                                         {ticket.time_spent_minutes !== null ? `${ticket.time_spent_minutes} mins` : 'N/A'}
                                     </td>
                                 </tr>

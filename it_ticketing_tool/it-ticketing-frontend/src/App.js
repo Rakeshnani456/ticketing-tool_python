@@ -631,8 +631,8 @@ const App = () => {
                                     if (currentUser.role !== 'support') {
                                         return <AccessDeniedComponent />;
                                     }
-                                    // Pass all relevant props to AllTicketsComponent
-                                    return <AllTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} initialFilterAssignment="assigned_to_me" showFilters={true} />;
+                                    // Pass all relevant props to AllTicketsComponent, remove initialFilterAssignment
+                                    return <AllTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} showFilters={true} />;
                                 case 'assignedToMe':
                                     if (currentUser.role !== 'support') {
                                         return <AccessDeniedComponent />;
@@ -646,10 +646,8 @@ const App = () => {
                                     return (
                                         <div className="flex flex-col items-center justify-center p-4">
                                             <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-3xl relative border border-gray-200">
-                                                <h2 className="text-xl font-extrabold text-gray-800 mb-4 text-center">Create New Ticket</h2>
                                                 <CreateTicketComponent
                                                     user={currentUser}
-                                                    onClose={() => navigateTo('myTickets')} // Close action navigates to myTickets
                                                     showFlashMessage={showFlashMessage}
                                                     onTicketCreated={handleTicketCreated} // Callback for successful ticket creation
                                                     navigateTo={navigateTo}

@@ -2,12 +2,13 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Loader2, XCircle, PlusCircle, User } from 'lucide-react'; // Icons
+import { collection, query, onSnapshot, where, orderBy, getFirestore } from 'firebase/firestore'; // NEW: Firestore imports
 
 // Import common UI components
 import LinkButton from '../common/LinkButton';
 
-// Import API Base URL from constants
-import { API_BASE_URL } from '../../config/constants';
+// Import Firebase client (now including dbClient)
+import { app, dbClient } from '../../config/firebase'; // Import 'app' and 'dbClient'
 
 /**
  * Component to display a list of tickets created by the current user.
@@ -24,50 +25,84 @@ const MyTicketsComponent = ({ user, navigateTo, showFlashMessage, searchKeyword,
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
+    // Initialize Firestore DB client.
+    const db = dbClient; // Use the already initialized dbClient
+
     /**
-     * Fetches tickets associated with the current user from the backend.
-     * Uses useCallback to memoize the function, preventing unnecessary re-renders.
+     * Helper function to convert Firestore Timestamp to ISO string or Date object.
+     * This ensures consistency for display and client-side sorting/filtering.
+     * @param {object} data - The raw data from Firestore document.
+     * @returns {object} Data with timestamps converted.
      */
-    const fetchMyTickets = useCallback(async () => {
+    const formatTicketData = (data) => {
+        const newData = { ...data };
+        if (newData.created_at && newData.created_at.toDate) {
+            newData.created_at = newData.created_at.toDate().toISOString();
+        }
+        if (newData.updated_at && newData.updated_at.toDate) {
+            newData.updated_at = newData.updated_at.toDate().toISOString();
+        }
+        if (newData.resolved_at && newData.resolved_at.toDate) {
+            newData.resolved_at = newData.resolved_at.toDate().toISOString();
+        }
+        if (newData.comments && Array.isArray(newData.comments)) {
+            newData.comments = newData.comments.map(comment => {
+                if (comment.timestamp && comment.timestamp.toDate) {
+                    return { ...comment, timestamp: comment.timestamp.toDate().toISOString() };
+                }
+                return comment;
+            });
+        }
+        return newData;
+    };
+
+    /**
+     * Effect hook to set up real-time Firestore listener for tickets created by the current user.
+     * This replaces the traditional HTTP fetch for continuous updates.
+     */
+    useEffect(() => {
         const firebaseUser = user?.firebaseUser;
-        if (!firebaseUser) {
+        if (!firebaseUser || !db) {
             setLoading(false);
             showFlashMessage('Please log in to view your tickets.', 'info');
-            return;
+            return () => {}; // Return empty cleanup function
         }
 
         setLoading(true);
-        setError(null); // Clear previous errors
-        try {
-            const idToken = await firebaseUser.getIdToken(); // Get Firebase ID token for authorization
-            const queryParams = new URLSearchParams({ userId: firebaseUser.uid }); // Add user ID to query params
+        setError(null);
 
-            // For MyTickets, if you want client-side keyword filtering to always apply
-            // remove this line if you are sure backend handles 'keyword' for '/tickets/my'
-            // if (searchKeyword) {
-            //     queryParams.append('keyword', searchKeyword);
-            // }
+        let ticketsRef = collection(db, 'tickets');
+        let q = query(
+            ticketsRef,
+            where('reporter_id', '==', firebaseUser.uid), // Filter by current user's ID
+            where('status', 'in', ['Open', 'In Progress', 'Hold']), // Default filter: show active tickets
+            orderBy('created_at', 'desc') // Order by creation date
+        );
 
-            const response = await fetch(`${API_BASE_URL}/tickets/my?${queryParams.toString()}`, {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${idToken}` // Include token
-                }
-            });
+        // If there's an exact search keyword that looks like a TICKET-ID,
+        // we can try to apply that server-side for an exact match.
+        // For 'My Tickets', if an exact ID is searched, it should also show resolved/closed tickets.
+        if (searchKeyword && searchKeyword.toUpperCase().startsWith('TICKET-')) {
+            const exactId = searchKeyword.toUpperCase();
+            q = query(
+                ticketsRef,
+                where('reporter_id', '==', firebaseUser.uid),
+                where('display_id', '==', exactId),
+                orderBy('created_at', 'desc')
+            );
+        }
 
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(`HTTP error! status: ${response.status}, message: ${errorData.error || errorData.message}`);
-            }
+        // Set up the real-time listener
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            let fetchedTickets = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...formatTicketData(doc.data())
+            }));
 
-            let data = await response.json();
-
-            // --- NEW: Apply client-side search keyword filter for MyTickets with safety checks ---
-            if (searchKeyword) {
+            // Apply client-side search keyword filter for general keywords if not an exact ID search
+            if (searchKeyword && !searchKeyword.toUpperCase().startsWith('TICKET-')) {
                 const lowercasedKeyword = searchKeyword.toLowerCase();
-                data = data.filter(ticket => {
-                    // Safely access properties, converting null/undefined to empty string before toLowerCase()
+                fetchedTickets = fetchedTickets.filter(ticket => {
                     const displayId = (ticket.display_id || '').toLowerCase();
                     const shortDescription = (ticket.short_description || '').toLowerCase();
                     const reporterEmail = (ticket.reporter_email || '').toLowerCase();
@@ -81,24 +116,20 @@ const MyTicketsComponent = ({ user, navigateTo, showFlashMessage, searchKeyword,
                     );
                 });
             }
-            // --- END NEW ---
 
-            setTickets(data); // Set fetched (and now filtered) tickets to state
-        } catch (err) {
-            console.error('Error fetching my tickets:', err);
-            setError(err.message || 'Failed to fetch tickets. Please try again.');
-            showFlashMessage(err.message || 'Failed to fetch your tickets.', 'error');
-        } finally {
-            setLoading(false); // End loading state
-        }
-    }, [user, showFlashMessage, searchKeyword, refreshKey]); // Re-run effect if these dependencies change
+            setTickets(fetchedTickets);
+            setLoading(false);
+            setError(null);
+        }, (err) => {
+            console.error("Firestore onSnapshot error (MyTicketsComponent):", err);
+            setError(`Failed to load your tickets: ${err.message}`);
+            showFlashMessage(`Failed to load your tickets: ${err.message}`, 'error');
+            setLoading(false);
+        });
 
-    // Effect hook to trigger data fetching when user, search keyword, or refresh key changes.
-    useEffect(() => {
-        if (user?.firebaseUser) {
-            fetchMyTickets();
-        }
-    }, [user, fetchMyTickets, refreshKey]); // `fetchMyTickets` is a dependency because it's wrapped in `useCallback`
+        // Cleanup function
+        return () => unsubscribe();
+    }, [user, db, searchKeyword]); // Dependencies for the effect
 
     /**
      * Determines CSS classes for a ticket's status badge.
@@ -137,9 +168,9 @@ const MyTicketsComponent = ({ user, navigateTo, showFlashMessage, searchKeyword,
     return (
         <div className="p-4 bg-offwhite flex-1 overflow-auto">
             <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
-                <h2 className="text-l font-bold text-green-800">Created by Me: </h2> {/* Updated label */}
+                <h2 className="text-xl font-extrabold text-gray-800">My Tickets</h2> {/* Changed label to be more general */}
                 <LinkButton onClick={() => navigateTo('createTicket')} className="text-sm flex items-center space-x-1">
-                    <PlusCircle size={16} /> <span>Create Ticket</span> {/* Link style for Create Ticket */}
+                    <PlusCircle size={16} /> <span>Create Ticket</span>
                 </LinkButton>
             </div>
             {tickets.length === 0 ? (

@@ -12,6 +12,8 @@ import SecondaryButton from '../common/SecondaryButton';
 
 // Import API Base URL from constants
 import { API_BASE_URL } from '../../config/constants';
+// Import Firebase client (now including dbClient)
+import { app, dbClient } from '../../config/firebase'; // Import 'app' and 'dbClient'
 
 /**
  * Component for creating a new support ticket.
@@ -221,7 +223,7 @@ const CreateTicketComponent = ({ user, onClose, showFlashMessage, onTicketCreate
                     attachments: []
                 });
                 setAttachmentFiles([]); // Clear selected attachment files
-                onTicketCreated(); // Notify parent component to refresh ticket list
+                onTicketCreated(); // Notify parent component to refresh ticket list (which will trigger onSnapshot)
             } else {
                 setSubmissionStatus('error'); // Set status to 'error'
                 setErrorMessage(data.error || 'Failed to create ticket.'); // Display specific error from backend

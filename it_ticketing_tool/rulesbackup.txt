@@ -1,0 +1,29 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Users Collection: Stores user roles (e.g., { role: 'user' } or { role: 'support' })
+    // A user can only read/write their own user document.
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Tickets Collection:
+    match /tickets/{ticketId} {
+      // Allow anyone authenticated to create a ticket
+      allow create: if request.auth != null;
+
+      // Read/Update/Delete rules depend on role and ownership
+      allow read, update, delete: if
+          request.auth != null && ( // Must be authenticated
+
+              // Support associates can read/update/delete any ticket
+              get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'support'
+              ||
+              // Regular users can only read/update/delete their own tickets
+              // CORRECTED: Changed 'creator_uid' to 'created_by_uid'
+              request.auth.uid == resource.data.created_by_uid
+          );
+    }
+  }
+}

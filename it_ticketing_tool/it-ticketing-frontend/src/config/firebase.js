@@ -2,6 +2,7 @@
 
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore'; // NEW: Import getFirestore
 
 // --- Firebase Client-Side Configuration ---
 // Replace these with your actual Firebase project configuration
@@ -20,10 +21,13 @@ const app = initializeApp(firebaseConfig);
 
 // Get Firebase Auth instance
 const authClient = getAuth(app);
+// Get Firestore instance
+const dbClient = getFirestore(app); // NEW: Export the Firestore client
 
-// Export the auth client for use in other components
-export { authClient };
+// Export the auth and db clients for use in other components
+export { app, authClient, dbClient }; // NEW: Export 'app' and 'dbClient'
 
 // This file sets up and initializes Firebase for your application.
 // It exports the `authClient` instance, allowing other components to
 // interact with Firebase Authentication services without re-initializing Firebase.
+// It now also exports the `dbClient` for Firestore interactions.

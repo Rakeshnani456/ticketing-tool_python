@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Loader2, CheckCircle, XCircle, UploadCloud, Send, Download } from 'lucide-react'; // Icons
+import { doc, onSnapshot, getFirestore } from 'firebase/firestore'; // NEW: Firestore imports
 
 // Import common UI components
 import FormInput from '../common/FormInput';
@@ -12,6 +13,8 @@ import FormSelect from '../common/FormSelect';
 import { getFileNameFromUrl } from '../../utils/utils';
 // Import API Base URL from constants
 import { API_BASE_URL } from '../../config/constants';
+// Import Firebase client (now including dbClient)
+import { app, dbClient } from '../../config/firebase'; // Import 'app' and 'dbClient'
 
 
 /**
@@ -75,80 +78,108 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
         { value: 'Closed', label: 'Closed' },
     ];
 
+    // Initialize Firestore DB client.
+    const db = dbClient; // Use the already initialized dbClient
+
     /**
-     * Fetches the ticket details from the backend.
-     * Uses useCallback to memoize the function, optimizing performance.
+     * Helper function to convert Firestore Timestamp to ISO string or Date object.
+     * This ensures consistency for display and client-side sorting/filtering.
+     * @param {object} data - The raw data from Firestore document.
+     * @returns {object} Data with timestamps converted.
      */
-    const loadTicket = useCallback(async () => {
-        // console.log('TicketDetailComponent useEffect: ticketId prop changed to:', ticketId); // Debugging
-
-        if (!ticketId || !user?.firebaseUser) {
-            // console.log('TicketDetailComponent: Skipping fetch inside useEffect. ticketId:', ticketId, 'user:', user); // Debugging
-            setLoading(false); // Set loading to false if pre-conditions not met
-            return;
+    const formatTicketData = (data) => {
+        const newData = { ...data };
+        if (newData.created_at && newData.created_at.toDate) {
+            newData.created_at = newData.created_at.toDate().toISOString();
         }
-
-        //setLoading(true); // Start loading state
-        setError(null); // Clear previous errors
-        // console.log(`TicketDetailComponent: Attempting to fetch ticket with ID: ${ticketId}`); // Debugging
-        try {
-            const idToken = await user.firebaseUser.getIdToken(); // Get Firebase ID token for authorization
-            // console.log('TicketDetailComponent: Firebase ID Token acquired.'); // Debugging
-            const response = await fetch(`${API_BASE_URL}/ticket/${ticketId}`, {
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${idToken}` // Include token in headers
+        if (newData.updated_at && newData.updated_at.toDate) {
+            newData.updated_at = newData.updated_at.toDate().toISOString();
+        }
+        if (newData.resolved_at && newData.resolved_at.toDate) {
+            newData.resolved_at = newData.resolved_at.toDate().toISOString();
+        }
+        if (newData.comments && Array.isArray(newData.comments)) {
+            newData.comments = newData.comments.map(comment => {
+                if (comment.timestamp && comment.timestamp.toDate) {
+                    return { ...comment, timestamp: comment.timestamp.toDate().toISOString() };
                 }
+                return comment;
             });
-
-            // console.log('TicketDetailComponent: Raw response received:', response); // Debugging
-
-            if (response.ok) {
-                const data = await response.json();
-                // console.log('TicketDetailComponent: Ticket data received:', data); // Debugging
-                setTicket(data); // Update ticket state
-                // Initialize editable fields with fetched data
-                setEditableFields({
-                    request_for_email: data.request_for_email || '',
-                    short_description: data.short_description || '',
-                    long_description: data.long_description || '',
-                    contact_number: data.contact_number || '',
-                    priority: data.priority || '',
-                    status: data.status || '',
-                    assigned_to_email: data.assigned_to_email || ''
-                });
-            } else {
-                let errorData = {};
-                try {
-                    errorData = await response.json(); // Attempt to parse error message from response
-                } catch (parseError) {
-                    console.error('TicketDetailComponent: Error parsing error response:', parseError);
-                    errorData.message = 'Could not parse error response from server.';
-                }
-                console.error('TicketDetailComponent: Fetch failed. Status:', response.status, 'Error Data:', errorData);
-
-                if (response.status === 404) {
-                    setError(`Ticket with ID ${ticketId} not found.`);
-                    showFlashMessage(`Ticket with ID ${ticketId} not found.`, 'error');
-                } else {
-                    setError(errorData.error || errorData.message || 'Failed to fetch ticket details.');
-                    showFlashMessage(errorData.error || 'Failed to fetch ticket details.', 'error');
-                }
-            }
-        } catch (err) {
-            console.error('TicketDetailComponent: Critical error during loadTicket:', err);
-            setError(err.message || 'Network error or server unreachable.');
-            showFlashMessage(err.message || 'Network error or server unreachable.', 'error');
-        } finally {
-            setLoading(false); // End loading state
-            // console.log('TicketDetailComponent: Loading state set to false after loadTicket completion.'); // Debugging
         }
-    }, [ticketId, user, showFlashMessage]); // Dependencies for useCallback
+        return newData;
+    };
 
-    // Effect hook to call `loadTicket` when dependencies change
+
+    /**
+     * Effect hook to set up real-time Firestore listener for a single ticket document.
+     * This provides continuous updates for the ticket details.
+     */
     useEffect(() => {
-        loadTicket();
-    }, [loadTicket]); // `loadTicket` itself is a dependency because it's memoized with useCallback
+        if (!ticketId || !user?.firebaseUser || !db) {
+            setLoading(false);
+            showFlashMessage('Authentication or ticket ID missing to view details.', 'info');
+            return () => {};
+        }
+
+        setLoading(true);
+        setError(null);
+
+        const ticketDocRef = doc(db, 'tickets', ticketId);
+
+        const unsubscribe = onSnapshot(ticketDocRef, (docSnapshot) => {
+            if (docSnapshot.exists()) {
+                const fetchedTicket = { id: docSnapshot.id, ...formatTicketData(docSnapshot.data()) };
+
+                // Authorization check: Only reporter or support associate can view
+                if (fetchedTicket.reporter_id !== user.firebaseUser.uid && user.role !== 'support') {
+                    setError('Forbidden: You do not have permission to view this ticket.');
+                    showFlashMessage('Forbidden: You do not have permission to view this ticket.', 'error');
+                    setTicket(null); // Clear ticket data
+                    setLoading(false);
+                    return; // Stop processing if unauthorized
+                }
+
+                setTicket(fetchedTicket);
+                // Also update editable fields if not currently editing
+                // or if the ticket object itself has changed (e.g., status updated by another user)
+                if (!isEditing) {
+                    setEditableFields({
+                        request_for_email: fetchedTicket.request_for_email || '',
+                        short_description: fetchedTicket.short_description || '',
+                        long_description: fetchedTicket.long_description || '',
+                        contact_number: fetchedTicket.contact_number || '',
+                        priority: fetchedTicket.priority || '',
+                        status: fetchedTicket.status || '',
+                        assigned_to_email: fetchedTicket.assigned_to_email || ''
+                    });
+                } else {
+                    // If editing, ensure critical fields like status, assignment, etc., reflect real-time updates
+                    // even if the user is typing in other fields.
+                    setEditableFields(prev => ({
+                        ...prev,
+                        status: fetchedTicket.status,
+                        priority: fetchedTicket.priority,
+                        assigned_to_email: fetchedTicket.assigned_to_email
+                    }));
+                }
+                setLoading(false);
+                setError(null);
+            } else {
+                setError(`Ticket with ID ${ticketId} not found.`);
+                showFlashMessage(`Ticket with ID ${ticketId} not found.`, 'error');
+                setTicket(null);
+                setLoading(false);
+            }
+        }, (err) => {
+            console.error("Firestore onSnapshot error (TicketDetailComponent):", err);
+            setError(`Failed to load ticket details: ${err.message}`);
+            showFlashMessage(`Failed to load ticket details: ${err.message}`, 'error');
+            setLoading(false);
+        });
+
+        // Cleanup function: unsubscribe from the listener when component unmounts or ticketId/user changes
+        return () => unsubscribe();
+    }, [ticketId, user, db, showFlashMessage, isEditing]); // Added isEditing to dependencies for a more robust update of editable fields
 
     // Determine if the ticket is closed or resolved
     const isTicketClosedOrResolved = ticket && ['Resolved', 'Closed'].includes(ticket.status);
@@ -163,8 +194,9 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
      * Checks if there are any changes in the editable fields compared to the original ticket data.
      * @returns {boolean} True if changes exist, false otherwise.
      */
-    const hasChanges = () => {
+    const hasChanges = useCallback(() => {
         if (!ticket) return false;
+        // Compare editable fields with the *current* ticket state
         return (
             editableFields.request_for_email !== ticket.request_for_email ||
             editableFields.short_description !== ticket.short_description ||
@@ -174,7 +206,7 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
             editableFields.status !== ticket.status ||
             editableFields.assigned_to_email !== ticket.assigned_to_email
         );
-    };
+    }, [editableFields, ticket]); // Dependencies for useCallback
 
     /**
      * Handles changes in editable form fields.
@@ -213,7 +245,7 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
             if (response.ok) {
                 setSaveButtonState('success'); // Set button state to 'success'
                // showFlashMessage('Ticket updated successfully!', 'success'); // Show success message
-                loadTicket(ticketId); // Re-fetch ticket to get latest data (including updated_at, comments, etc.)
+                // No need to loadTicket(ticketId) explicitly, onSnapshot will handle it
                 setError(null); // Clear any previous errors
                 setTimeout(() => {
                     setIsEditing(false); // Exit edit mode after a delay
@@ -280,7 +312,7 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
             const data = await response.json();
             if (response.ok) {
                 setCommentText(''); // Clear comment input
-                loadTicket(ticketId); // Re-fetch ticket to display new comment
+                // No need to loadTicket(ticketId) explicitly, onSnapshot will handle it
                 //showFlashMessage('Comment added successfully!', 'success'); // Show success message
             } else {
                 showFlashMessage(data.error || 'Failed to add comment.', 'error');
@@ -401,11 +433,7 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                 if (response.ok) {
                     setAttachmentFiles([]); // Clear selected files after successful addition
                     // Optimistically update ticket state with new attachments (or re-fetch for accuracy)
-                    setTicket(prevTicket => ({
-                        ...prevTicket,
-                        // Ensure attachments are stored as objects {url, fileName}
-                        attachments: [...(prevTicket.attachments || []), ...uploadedAttachmentData] //
-                    }));
+                    // No need to manually update `ticket` state; onSnapshot will handle it.
                     showFlashMessage('Attachments added successfully!', 'success'); // Show success message
 
                     if (!anyUploadFailed) {
@@ -792,6 +820,7 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                 <div className="space-y-4 mb-6">
                      {ticket.comments && ticket.comments.length > 0 ? (
                     // Sort comments by timestamp before mapping
+                    // Ensure comment.timestamp is a valid Date object or ISO string for sorting
                     [...ticket.comments].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)).map((comment, index) => (
                         <div key={index} className="bg-gray-50 p-3 rounded-md border border-gray-200">
                             <div className="flex items-center text-sm text-gray-600 mb-1">
