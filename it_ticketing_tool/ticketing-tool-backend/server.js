@@ -4,6 +4,7 @@ require('dotenv').config(); // Load environment variables from .env file
 const express = require('express');
 const cors = require('cors');
 const admin = require('firebase-admin');
+const nodemailer = require('nodemailer'); // NEW: Import Nodemailer
 
 // Required for file uploads
 const Busboy = require('busboy');
@@ -24,6 +25,7 @@ const SERVICE_ACCOUNT_KEY_PATH = '../serviceAccountKey.json'; // Adjust this pat
 let db;
 let usersCollection;
 let ticketsCollection;
+let notificationsCollection; // NEW: Notifications collection
 let dbConnected = false; // Flag to track database connection status
 
 try {
@@ -41,6 +43,7 @@ try {
     db = admin.firestore(); // Get a Firestore client
     usersCollection = db.collection('users'); // Collection for user roles
     ticketsCollection = db.collection('tickets'); // Reference to your 'tickets' collection
+    notificationsCollection = db.collection('notifications'); // NEW: Reference to notifications collection
     console.log("Connected to Firebase Firestore successfully!");
     dbConnected = true;
 } catch (error) {
@@ -49,6 +52,16 @@ try {
     // In a production app, you'd want more robust error handling here,
     // possibly exiting the process if the database connection is critical.
 }
+
+// NEW: Nodemailer Transporter Configuration
+// Using Gmail for example. For production, use a dedicated email service like SendGrid, Mailgun, etc.
+const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+    },
+});
 
 // Middleware
 app.use(cors()); // Enable CORS for all routes (for development, restrict in production)
@@ -88,6 +101,18 @@ function jsonSerializableTicket(docId, ticketData) {
             }
             return comment;
         });
+    }
+    return data;
+}
+
+// NEW Helper function: JSON Serializable Notification
+function jsonSerializableNotification(docId, notificationData) {
+    if (!notificationData) return null;
+
+    const data = { ...notificationData, id: docId };
+
+    if (data.timestamp && data.timestamp.toDate) {
+        data.timestamp = data.timestamp.toDate().toISOString();
     }
     return data;
 }
@@ -320,6 +345,24 @@ app.get('/profile/:userId', verifyFirebaseToken, async (req, res) => {
     }
 });
 
+// NEW: Helper function to send email alerts
+async function sendEmailAlert(toEmail, subject, text, html) {
+    try {
+        const mailOptions = {
+            from: process.env.EMAIL_USER, // Sender address
+            to: toEmail, // List of receivers
+            subject: subject, // Subject line
+            text: text, // Plain text body
+            html: html, // HTML body
+        };
+        await transporter.sendMail(mailOptions);
+        console.log(`Email sent successfully to ${toEmail}`);
+    } catch (error) {
+        console.error(`Error sending email to ${toEmail}: ${error.message}`);
+    }
+}
+
+
 // --- New Route: Create a new ticket ---
 // @route   POST /tickets
 // @desc    Create a new ticket.
@@ -392,8 +435,49 @@ app.post('/tickets', verifyFirebaseToken, async (req, res) => {
         const docRef = await ticketsCollection.add(newTicket);
         console.log(`New ticket created with ID: ${docRef.id}`);
 
-        // TODO: Implement email alert logic here (requires external email service integration)
-        // Example: sendEmailAlert(reporterEmail, 'Ticket Created', `Your ticket ${newDisplayId} has been created.`);
+        // NEW: Create notifications for relevant users
+        const reporterUserDoc = await usersCollection.doc(reporterId).get();
+        const reporterUserRole = reporterUserDoc.data()?.role;
+
+        if (reporterUserRole === 'user') {
+            // Notify the reporter that their ticket has been created
+            await notificationsCollection.add({
+                userId: reporterId,
+                message: `Your ticket ${newDisplayId} - "${short_description}" has been created.`,
+                type: 'ticket_created',
+                read: false,
+                timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                ticketId: docRef.id // Link to the ticket
+            });
+        }
+
+        // Notify all support users about the new ticket and send email alerts
+        const supportUsersSnapshot = await usersCollection.where('role', '==', 'support').get();
+        const supportUserEmails = supportUsersSnapshot.docs.map(doc => doc.data().email); // Get emails of support users
+
+        for (const supportUserEmail of supportUserEmails) {
+            await notificationsCollection.add({
+                userId: (await usersCollection.where('email', '==', supportUserEmail).limit(1).get()).docs[0].id, // Get UID from email
+                message: `New ticket ${newDisplayId} created by ${reporterEmail}: "${short_description}"`,
+                type: 'new_ticket_for_support',
+                read: false,
+                timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                ticketId: docRef.id // Link to the ticket
+            });
+
+            // NEW: Send email alert to support user
+            const emailSubject = `New Ticket Created: ${newDisplayId}`;
+            const emailText = `A new ticket has been created by ${reporterEmail}.\n\nTicket ID: ${newDisplayId}\nShort Description: ${short_description}\nCategory: ${category}\nPriority: ${priority || 'Low'}\n\nPlease check the ticketing system for more details.`;
+            const emailHtml = `
+                <p>A new ticket has been created by <strong>${reporterEmail}</strong>.</p>
+                <p><strong>Ticket ID:</strong> <strong>${newDisplayId}</strong></p>
+                <p><strong>Short Description:</strong> <strong>${short_description}</strong></p>
+                <p><strong>Category:</strong> ${category}</p>
+                <p><strong>Priority:</strong> ${priority || 'Low'}</p>
+                <p>Please check the ticketing system for more details.</p>
+            `;
+            await sendEmailAlert(supportUserEmail, emailSubject, emailText, emailHtml);
+        }
 
         return res.status(201).json({ message: 'Ticket created successfully!', id: docRef.id, display_id: newDisplayId  });
     } catch (error) {
@@ -494,10 +578,64 @@ app.patch('/ticket/:ticket_id', verifyFirebaseToken, async (req, res) => {
                     const timeSpentMinutes = Math.round(timeDiffMillis / (1000 * 60)); // Convert milliseconds to minutes
                     updateData.time_spent_minutes = timeSpentMinutes;
                 }
+                // NEW: Notify reporter and assigned support user (if any) about status change
+                const ticketReporterId = ticketData.reporter_id;
+                const ticketReporterEmail = ticketData.reporter_email;
+                const ticketAssignedToId = ticketData.assigned_to_id;
+                const ticketAssignedToEmail = ticketData.assigned_to_email;
+
+                // Notify reporter
+                await notificationsCollection.add({
+                    userId: ticketReporterId,
+                    message: `Your ticket ${ticketData.display_id} - "${ticketData.short_description}" has been marked as ${status}.`,
+                    type: 'ticket_status_update',
+                    read: false,
+                    timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                    ticketId: ticketId
+                });
+
+                // Notify assigned support user if different from current user
+                if (ticketAssignedToId && ticketAssignedToId !== authenticatedUid) {
+                    await notificationsCollection.add({
+                        userId: ticketAssignedToId,
+                        message: `Ticket ${ticketData.display_id} - "${ticketData.short_description}" has been marked as ${status}.`,
+                        type: 'ticket_status_update_assigned',
+                        read: false,
+                        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                        ticketId: ticketId
+                    });
+                }
+
             } else if (['Resolved', 'Closed'].includes(ticketData.status) && !['Resolved', 'Closed'].includes(status)) {
                 // If ticket is moved OUT of Resolved/Closed status, clear resolved_at and time_spent
                 updateData.resolved_at = null;
                 updateData.time_spent_minutes = null;
+                // NEW: Notify reporter and assigned support user (if any) about status change
+                const ticketReporterId = ticketData.reporter_id;
+                const ticketReporterEmail = ticketData.reporter_email;
+                const ticketAssignedToId = ticketData.assigned_to_id;
+
+                 // Notify reporter
+                await notificationsCollection.add({
+                    userId: ticketReporterId,
+                    message: `Your ticket ${ticketData.display_id} - "${ticketData.short_description}" has been re-opened to ${status}.`,
+                    type: 'ticket_reopened',
+                    read: false,
+                    timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                    ticketId: ticketId
+                });
+
+                // Notify assigned support user if different from current user
+                if (ticketAssignedToId && ticketAssignedToId !== authenticatedUid) {
+                    await notificationsCollection.add({
+                        userId: ticketAssignedToId,
+                        message: `Ticket ${ticketData.display_id} - "${ticketData.short_description}" has been re-opened to ${status}.`,
+                        type: 'ticket_reopened_assigned',
+                        read: false,
+                        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                        ticketId: ticketId
+                    });
+                }
             }
         }
 
@@ -509,6 +647,17 @@ app.patch('/ticket/:ticket_id', verifyFirebaseToken, async (req, res) => {
             if (assigned_to_email === null || assigned_to_email === '') { // Unassign
                 updateData.assigned_to_id = null;
                 updateData.assigned_to_email = null;
+                // NEW: Notify previous assignee if unassigned
+                if (ticketData.assigned_to_id) {
+                    await notificationsCollection.add({
+                        userId: ticketData.assigned_to_id,
+                        message: `Ticket ${ticketData.display_id} - "${ticketData.short_description}" has been unassigned from you.`,
+                        type: 'ticket_unassigned',
+                        read: false,
+                        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                        ticketId: ticketId
+                    });
+                }
             } else {
                 // Check if the assigned_to_email corresponds to a 'support' user
                 const userQuery = await usersCollection.where('email', '==', assigned_to_email).limit(1).get();
@@ -522,6 +671,29 @@ app.patch('/ticket/:ticket_id', verifyFirebaseToken, async (req, res) => {
                 }
                 updateData.assigned_to_id = assignedUserDoc.id;
                 updateData.assigned_to_email = assigned_to_email;
+
+                // NEW: Notify new assignee
+                if (assignedUserDoc.id !== authenticatedUid) { // Don't notify if assigning to self
+                    await notificationsCollection.add({
+                        userId: assignedUserDoc.id,
+                        message: `Ticket ${ticketData.display_id} - "${ticketData.short_description}" has been assigned to you.`,
+                        type: 'ticket_assigned',
+                        read: false,
+                        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                        ticketId: ticketId
+                    });
+                }
+                // NEW: Notify previous assignee if assignment changes
+                if (ticketData.assigned_to_id && ticketData.assigned_to_id !== assignedUserDoc.id) {
+                    await notificationsCollection.add({
+                        userId: ticketData.assigned_to_id,
+                        message: `Ticket ${ticketData.display_id} - "${ticketData.short_description}" has been reassigned from you.`,
+                        type: 'ticket_reassigned_from',
+                        read: false,
+                        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                        ticketId: ticketId
+                    });
+                }
             }
         }
 
@@ -569,6 +741,33 @@ app.post('/ticket/:ticket_id/add_comment', verifyFirebaseToken, async (req, res)
             updated_at: admin.firestore.FieldValue.serverTimestamp() // Update ticket's updated_at
         });
         console.log(`Comment added to ticket ${ticketId} by ${commenter_name}`);
+
+        // NEW: Create notification for ticket reporter if commenter is different
+        if (req.user.uid !== ticketData.reporter_id) {
+            await notificationsCollection.add({
+                userId: ticketData.reporter_id,
+                message: `New comment on your ticket ${ticketData.display_id} by ${commenter_name}.`,
+                type: 'new_comment_on_my_ticket',
+                read: false,
+                timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                ticketId: ticketId
+            });
+        }
+
+        // NEW: Create notification for assigned support user if commenter is different from them
+        // Removed the condition `req.user.uid !== ticketData.reporter_id`
+        if (ticketData.assigned_to_id && req.user.uid !== ticketData.assigned_to_id) {
+             await notificationsCollection.add({
+                userId: ticketData.assigned_to_id,
+                message: `New comment on assigned ticket ${ticketData.display_id} by ${commenter_name}.`,
+                type: 'new_comment_on_assigned_ticket',
+                read: false,
+                timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                ticketId: ticketId
+            });
+        }
+
+
         return res.status(200).json({ message: 'Comment added successfully!' });
     } catch (error) {
         console.error(`Error adding comment: ${error.message}`);
@@ -762,9 +961,9 @@ app.get('/tickets/export', verifyFirebaseToken, async (req, res) => {
                 ? ticket.comments.map(c => `[${c.commenter} @ ${c.timestamp}]: ${c.text}`).join('; ').replace(/"/g, '""')
                 : '';
 
-            // Handle attachments: map to original fileName if available, otherwise use URL part
-            // ... (inside the backend's /tickets/export route)
-        
+            const attachmentsCsv = ticket.attachments && Array.isArray(ticket.attachments)
+                ? ticket.attachments.map(att => att.fileName || att.url).join('; ').replace(/"/g, '""')
+                : '';
 
             const row = [
                 ticket.display_id || '',
@@ -783,7 +982,7 @@ app.get('/tickets/export', verifyFirebaseToken, async (req, res) => {
                 ticket.resolved_at || '',
                 ticket.time_spent_minutes !== null ? ticket.time_spent_minutes : '',
                 `"${commentsCsv}"`,
-                //`"${attachmentsCsv}"` // Use the modified attachmentsCsv
+                `"${attachmentsCsv}"` // Use the modified attachmentsCsv
             ];
             csv += row.join(',') + '\n';
         });
@@ -961,6 +1160,59 @@ app.post('/upload-attachment', verifyFirebaseToken, async (req, res) => {
 
     req.pipe(busboy);
 });
+
+// NEW: Get notifications for the authenticated user
+// @route   GET /notifications/my
+// @desc    Get notifications for the authenticated user.
+// @access  Private (requires token)
+app.get('/notifications/my', verifyFirebaseToken, async (req, res) => {
+    const authenticatedUid = req.user.uid;
+    try {
+        const snapshot = await notificationsCollection
+            .where('userId', '==', authenticatedUid)
+            .orderBy('timestamp', 'desc')
+            .limit(20) // Limit to a reasonable number of recent notifications
+            .get();
+
+        const notifications = snapshot.docs.map(doc => jsonSerializableNotification(doc.id, doc.data()));
+        return res.status(200).json(notifications);
+    } catch (error) {
+        console.error(`Error fetching notifications for user ${authenticatedUid}: ${error.message}`);
+        return res.status(500).json({ error: `Failed to fetch notifications: ${error.message}` });
+    }
+});
+
+// NEW: Mark a notification as read
+// @route   PATCH /notifications/:notificationId/read
+// @desc    Mark a specific notification as read.
+// @access  Private (requires token and ownership of notification)
+app.patch('/notifications/:notificationId/read', verifyFirebaseToken, async (req, res) => {
+    const notificationId = req.params.notificationId;
+    const authenticatedUid = req.user.uid;
+
+    try {
+        const notificationDoc = await notificationsCollection.doc(notificationId).get();
+
+        if (!notificationDoc.exists) {
+            return res.status(404).json({ error: 'Notification not found.' });
+        }
+
+        const notificationData = notificationDoc.data();
+
+        // Ensure the authenticated user owns this notification
+        if (notificationData.userId !== authenticatedUid) {
+            return res.status(403).json({ error: 'Forbidden: You do not have permission to mark this notification as read.' });
+        }
+
+        await notificationsCollection.doc(notificationId).update({ read: true });
+        return res.status(200).json({ message: 'Notification marked as read.' });
+    } catch (error) {
+        console.error(`Error marking notification ${notificationId} as read: ${error.message}`);
+        return res.status(500).json({ error: `Failed to mark notification as read: ${error.message}` });
+    }
+});
+
+
 // Start the server
 app.listen(port, () => {
     console.log(`Server running on port ${port}`);

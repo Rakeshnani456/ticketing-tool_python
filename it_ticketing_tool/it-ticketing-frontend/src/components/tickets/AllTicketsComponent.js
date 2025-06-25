@@ -1,7 +1,7 @@
 // src/components/tickets/AllTicketsComponent.js
 
-import React, { useState, useEffect, useCallback, useRef } from 'react'; // Import useRef
-import { Loader2, XCircle, ListFilter, Download, User, CheckCircle } from 'lucide-react'; // Import CheckCircle for success icon
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Loader2, XCircle, ListFilter, Download, User, CheckCircle } from 'lucide-react';
 
 // Import common UI components
 import PrimaryButton from '../common/PrimaryButton';
@@ -324,14 +324,14 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
     return (
         <div className="p-4 bg-offwhite flex-1 overflow-auto">
             <h2 className="text-xl font-extrabold text-gray-800 mb-4">
-                {initialFilterAssignment === 'assigned_to_me' ? `Tickets Assigned to Me (${counts.assigned_to_me})` : `All Tickets`}
+                {initialFilterAssignment === 'assigned_to_me' }
             </h2>
 
             {/* Informational message for filter behavior (only if filters are shown and showMessage is true) */}
             {showFilters && showMessage && (
                 <div className="relative text-sm text-gray-600 mb-4 p-2 bg-blue-50 rounded-md border border-blue-200 flex items-start justify-between">
                     <span>
-                        This view shows all tickets. Use the filters below or search by Ticket ID to refine the list.
+                        This view shows tickets assigned to you by default. Use the filters below or search by status to refine the list.
                     </span>
                     <button
                         onClick={() => setShowMessage(false)} // Hide message on click
@@ -348,8 +348,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                 <div className="mb-4 p-3 bg-gray-50 rounded-md shadow-inner border border-gray-100 flex flex-wrap gap-2 items-center relative"> {/* Added relative for popup positioning */}
                     <span className="text-sm font-semibold text-gray-700 flex items-center"><ListFilter className="mr-1" size={16} /> Filter By:</span>
                     {/* Filter buttons for status */}
-                    <button onClick={() => { setFilterStatus(''); setFilterAssignment(''); }} className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors duration-200 shadow-sm ${!filterStatus && !filterAssignment ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`} > All ({counts.total_tickets}) </button>
-                    <button onClick={() => { setFilterStatus('Open'); setFilterAssignment(''); }} className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors duration-200 shadow-sm ${filterStatus === 'Open' ? 'bg-green-600 text-white hover:bg-green-700' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`} > Open ({counts.open_tickets}) </button>
+                    <button onClick={() => { setFilterStatus('Open'); setFilterAssignment(''); }} className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors duration-200 shadow-sm ${filterStatus === 'Open' ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`} > All ({counts.open_tickets}) </button>
                     <button onClick={() => { setFilterStatus('In Progress'); setFilterAssignment(''); }} className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors duration-200 shadow-sm ${filterStatus === 'In Progress' ? 'bg-yellow-600 text-white hover:bg-yellow-700' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`} > In Progress ({counts.in_progress_tickets}) </button>
                     <button onClick={() => { setFilterStatus('Hold'); setFilterAssignment(''); }} className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors duration-200 shadow-sm ${filterStatus === 'Hold' ? 'bg-purple-600 text-white hover:bg-purple-700' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`} > On Hold ({counts.hold_tickets}) </button>
                     <button onClick={() => { setFilterStatus('Closed'); setFilterAssignment(''); }} className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors duration-200 shadow-sm ${filterStatus === 'Closed' || filterStatus === 'Resolved' ? 'bg-gray-600 text-white hover:bg-gray-700' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`} > Closed/Resolved ({counts.closed_resolved_tickets}) </button>
@@ -440,7 +439,8 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                     <td className="px-3 py-2 whitespace-nowrap text-sm text-blue-700 hover:underline font-medium cursor-pointer" onClick={() => navigateTo('ticketDetail', ticket.id)}>
                                         {ticket.display_id}
                                     </td>
-                                    <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-800">
+                                    {/* MODIFICATION HERE: Added truncate and max-w-xs */}
+                                    <td className="px-3 py-2 text-sm text-gray-800 max-w-xs truncate" title={ticket.short_description}>
                                         {ticket.short_description}
                                     </td>
                                     <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-800 flex items-center"><User size={12} className="mr-1" />{ticket.reporter_email}</td>

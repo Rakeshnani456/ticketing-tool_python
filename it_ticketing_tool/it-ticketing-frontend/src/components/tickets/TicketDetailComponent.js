@@ -212,7 +212,7 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
             const data = await response.json();
             if (response.ok) {
                 setSaveButtonState('success'); // Set button state to 'success'
-                showFlashMessage('Ticket updated successfully!', 'success'); // Show success message
+               // showFlashMessage('Ticket updated successfully!', 'success'); // Show success message
                 loadTicket(ticketId); // Re-fetch ticket to get latest data (including updated_at, comments, etc.)
                 setError(null); // Clear any previous errors
                 setTimeout(() => {

@@ -137,7 +137,7 @@ const MyTicketsComponent = ({ user, navigateTo, showFlashMessage, searchKeyword,
     return (
         <div className="p-4 bg-offwhite flex-1 overflow-auto">
             <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
-                <h2 className="text-xl font-extrabold text-gray-800">My Tickets (Home)</h2> {/* Updated label */}
+                <h2 className="text-l font-bold text-green-800">Created by Me: </h2> {/* Updated label */}
                 <LinkButton onClick={() => navigateTo('createTicket')} className="text-sm flex items-center space-x-1">
                     <PlusCircle size={16} /> <span>Create Ticket</span> {/* Link style for Create Ticket */}
                 </LinkButton>

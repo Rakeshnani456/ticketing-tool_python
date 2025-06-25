@@ -1,7 +1,7 @@
 // src/App.js
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { User, LogOut, ChevronDown, Search, CheckCircle, XCircle, Info, AlertTriangle } from 'lucide-react'; // Lucide icons used in App.js directly
+import { User, LogOut, ChevronDown, Search, CheckCircle, XCircle, Info, AlertTriangle, Bell, Menu, LayoutDashboard, List, Tag, ClipboardCheck, PlusCircle } from 'lucide-react'; // Added Menu icon and specific icons
 
 // Import Firebase auth client
 import { authClient } from './config/firebase';
@@ -55,6 +55,21 @@ const App = () => {
     // State to store ticket counts for sidebar badges
     const [ticketCounts, setTicketCounts] = useState({ active_tickets: 0, assigned_to_me: 0, total_tickets: 0 });
 
+    // NEW STATES FOR NOTIFICATIONS
+    const [notifications, setNotifications] = useState([]);
+    const [hasNewNotifications, setHasNewNotifications] = useState(false);
+    const [isNotificationMenuOpen, setIsNotificationMenuOpen] = useState(false);
+    const notificationPollingIntervalRef = useRef(null);
+    const notificationMenuRef = useRef(null); // Ref for the notification menu
+
+    // UPDATED STATES AND REFS FOR SIDEBAR MENU (NOW ALWAYS VISIBLE, ONLY EXPANDS/COLLAPSES)
+    // isSidebarExpanded: controls if the sidebar is expanded (with text) or collapsed (icons only)
+    const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
+    const sidebarMenuRef = useRef(null);
+    // The menuButtonRef is now only needed to prevent closing the notification menu if clicking this button
+    // It does not control `isMenuOpen` anymore.
+
+
     /**
      * Fetches summary counts for tickets (active, assigned to me, total).
      * Used to update sidebar badges for support users.
@@ -79,6 +94,49 @@ const App = () => {
         }
     }, []); // Empty dependency array means this function is created once and doesn't change
 
+    /**
+     * Fetches notifications for the current user.
+     * @param {object} user - The current authenticated user object.
+     * @returns {void}
+     */
+    const fetchNotifications = useCallback(async (user) => {
+        if (!user || !user.firebaseUser) {
+            setNotifications([]);
+            setHasNewNotifications(false);
+            return;
+        }
+        try {
+            const idToken = await user.firebaseUser.getIdToken();
+            const response = await fetch(`${API_BASE_URL}/notifications/my`, {
+                headers: { 'Authorization': `Bearer ${idToken}` }
+            });
+            if (response.ok) {
+                const data = await response.json();
+                setNotifications(data);
+                setHasNewNotifications(data.some(n => !n.read)); // Check if any unread notifications
+            } else {
+                console.error("Failed to fetch notifications:", await response.json());
+            }
+        } catch (error) {
+            console.error("Network error fetching notifications:", error);
+        }
+    }, []);
+
+    // Helper function to format notification messages with bold text for ticket ID and description
+    const formatNotificationMessage = (message) => {
+        // This regex specifically targets the format "New ticket <ticketId> created by <reporterEmail>: "<shortDescription>""
+        const ticketRegex = /(New ticket\s+)(\S+)(\s+created by\s+)([^:]+)(:\s*")([^"]+)(")/;
+
+        const match = message.match(ticketRegex);
+        if (match) {
+            const [, prefix1, ticketId, prefix2, reporterEmail, prefix3, shortDescription, suffix] = match;
+            // Return HTML string with bold and blue text color
+            return `${prefix1}<strong class="text-blue-600">${ticketId}</strong>${prefix2}${reporterEmail}${prefix3}<strong class="text-blue-600">${shortDescription}</strong>${suffix}`;
+        }
+        return message; // Return original message if no specific pattern is matched
+    };
+
+
     // Effect hook to listen for Firebase authentication state changes.
     // This is crucial for maintaining user session and fetching user roles from backend.
     useEffect(() => {
@@ -98,15 +156,26 @@ const App = () => {
                     const data = await response.json();
                     if (response.ok) {
                         // On successful verification, set currentUser state with Firebase user and role
-                        const userProfile = { firebaseUser, role: data.user.role, email: firebaseUser.email };
+                        const userProfile = { firebaseUser, role: data.user.role, email: firebaseUser.email, uid: firebaseUser.uid };
                         setCurrentUser(userProfile);
                         fetchTicketCounts(userProfile); // Fetch ticket counts for logged-in user
+                        fetchNotifications(userProfile); // Fetch notifications for logged-in user
+
+                        // Start polling for notifications
+                        if (notificationPollingIntervalRef.current) {
+                            clearInterval(notificationPollingIntervalRef.current);
+                        }
+                        notificationPollingIntervalRef.current = setInterval(() => {
+                            fetchNotifications(userProfile);
+                        }, 30000); // Poll every 30 seconds
+
                         // Navigate based on user role
                         if (data.user.role === 'support') {
                             setCurrentPage('dashboard'); // Support users go to dashboard
                         } else {
                             setCurrentPage('myTickets'); // Regular users go to their tickets
                         }
+                        setIsSidebarExpanded(false); // Start with sidebar collapsed (icons only)
                     } else {
                         // If backend verification fails, show error and log out from Firebase
                         console.error("Backend login verification failed:", data.error);
@@ -114,6 +183,7 @@ const App = () => {
                         authClient.signOut();
                         setCurrentUser(null);
                         setCurrentPage('login'); // Redirect to login
+                        setIsSidebarExpanded(false); // Ensure sidebar is collapsed
                     }
                 } catch (error) {
                     // Handle network or other errors during auth state change processing
@@ -122,16 +192,46 @@ const App = () => {
                     authClient.signOut();
                     setCurrentUser(null);
                     setCurrentPage('login'); // Redirect to login
+                    setIsSidebarExpanded(false); // Ensure sidebar is collapsed
                 }
             } else {
                 // If no Firebase user is logged in, clear currentUser state and go to login page
                 setCurrentUser(null);
                 setCurrentPage('login');
                 setTicketCounts({ active_tickets: 0, assigned_to_me: 0, total_tickets: 0 }); // Reset counts
+                setNotifications([]); // Clear notifications
+                setHasNewNotifications(false); // Clear new notification flag
+                if (notificationPollingIntervalRef.current) {
+                    clearInterval(notificationPollingIntervalRef.current); // Stop polling
+                }
+                setIsSidebarExpanded(false); // Ensure sidebar is collapsed
             }
         });
-        return () => unsubscribe(); // Cleanup the auth state listener on component unmount
-    }, [fetchTicketCounts]); // `fetchTicketCounts` is a dependency here
+        return () => {
+            unsubscribe(); // Cleanup the auth state listener on component unmount
+            if (notificationPollingIntervalRef.current) {
+                clearInterval(notificationPollingIntervalRef.current); // Clear polling on unmount
+            }
+        };
+    }, [fetchTicketCounts, fetchNotifications]); // `fetchTicketCounts` and `fetchNotifications` are dependencies here
+
+    // Effect hook to handle clicks outside the notification menu
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            // If the notification menu is open and the click is outside of it, close it
+            if (notificationMenuRef.current && !notificationMenuRef.current.contains(event.target) && isNotificationMenuOpen) {
+                setIsNotificationMenuOpen(false);
+            }
+        };
+
+        // Add event listener when component mounts
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => {
+            // Clean up the event listener when component unmounts
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [isNotificationMenuOpen]); // Re-run effect when `isNotificationMenuOpen` changes
+
 
     /**
      * Callback function for successful login.
@@ -142,11 +242,13 @@ const App = () => {
     const handleLoginSuccess = (user) => {
         setCurrentUser(user);
         fetchTicketCounts(user);
+        fetchNotifications(user); // Fetch notifications on login
         if (user.role === 'support') {
             setCurrentPage('dashboard');
         } else {
             setCurrentPage('myTickets');
         }
+        setIsSidebarExpanded(false); // Start with sidebar collapsed (icons only)
     };
 
     /**
@@ -165,7 +267,14 @@ const App = () => {
             showFlashMessage('Failed to log out.', 'error');
         } finally {
             setIsProfileMenuOpen(false); // Close profile menu
+            setIsNotificationMenuOpen(false); // Close notification menu
             setTicketCounts({ active_tickets: 0, assigned_to_me: 0, total_tickets: 0 }); // Reset counts
+            setNotifications([]); // Clear notifications
+            setHasNewNotifications(false); // Clear new notification flag
+            if (notificationPollingIntervalRef.current) {
+                clearInterval(notificationPollingIntervalRef.current); // Stop polling
+            }
+            setIsSidebarExpanded(false); // Collapse sidebar on logout
         }
     };
 
@@ -184,8 +293,10 @@ const App = () => {
         setTicketListRefreshKey(prev => prev + 1); // Increment key to force ticket list refresh
         if (currentUser) {
             fetchTicketCounts(currentUser); // Re-fetch counts on navigation
+            fetchNotifications(currentUser); // Re-fetch notifications on navigation
         }
         setIsProfileMenuOpen(false); // Close profile menu on navigation
+        setIsNotificationMenuOpen(false); // Close notification menu on navigation
     };
 
     /**
@@ -208,13 +319,14 @@ const App = () => {
 
     /**
      * Callback function for when a new ticket is successfully created.
-     * Triggers a refresh of ticket lists and counts.
+     * Triggers a refresh of ticket lists and counts, and new notification fetch.
      * @returns {void}
      */
     const handleTicketCreated = () => {
         setTicketListRefreshKey(prev => prev + 1); // Refresh ticket lists
         if (currentUser) {
             fetchTicketCounts(currentUser); // Refresh ticket counts
+            fetchNotifications(currentUser); // Fetch new notifications
         }
     };
 
@@ -239,6 +351,38 @@ const App = () => {
     };
 
     /**
+     * Marks a notification as read and refreshes the notification list.
+     * @param {string} notificationId - The ID of the notification to mark as read.
+     * @param {string} ticketId - The ID of the ticket associated with the notification (optional).
+     */
+    const markNotificationAsRead = useCallback(async (notificationId, ticketId = null) => {
+        try {
+            const idToken = await currentUser.firebaseUser.getIdToken();
+            const response = await fetch(`${API_BASE_URL}/notifications/${notificationId}/read`, {
+                method: 'PATCH',
+                headers: { 'Authorization': `Bearer ${idToken}` }
+            });
+
+            if (response.ok) {
+                //showFlashMessage('Notification marked as read.', 'info');
+                fetchNotifications(currentUser); // Refresh notifications after marking read
+                if (ticketId) {
+                    navigateTo('ticketDetail', ticketId); // Navigate to ticket detail if provided
+                }
+            } else {
+                console.error('Failed to mark notification as read:', await response.json());
+                showFlashMessage('Failed to mark notification as read.', 'error');
+            }
+        } catch (error) {
+            console.error('Network error marking notification as read:', error);
+            showFlashMessage('Network error marking notification as read.', 'error');
+        } finally {
+            setIsNotificationMenuOpen(false); // Close notification menu
+        }
+    }, [currentUser, fetchNotifications, showFlashMessage, navigateTo]);
+
+
+    /**
      * Returns Tailwind CSS classes for flash message styling based on type.
      * @param {string} type - The type of flash message.
      * @returns {string} Tailwind CSS classes.
@@ -253,24 +397,47 @@ const App = () => {
         }
     };
 
+    // Determine the left margin for the main content based on sidebar state
+    const mainContentMarginClass = currentUser
+        ? (isSidebarExpanded ? 'ml-56' : 'ml-16') // 56 (224px) for expanded, 16 (64px) for collapsed
+        : 'ml-0'; // No margin when sidebar is hidden (e.g., login page)
+
+
     return (
         <div className="flex flex-col min-h-screen bg-gray-100 font-inter overflow-hidden">
             {/* Top Banner Header */}
-            <header className="bg-white text-white p-3 flex items-center justify-between shadow-md flex-shrink-0 fixed top-0 w-full z-50">
-                {/* Kriasol Logo */}
-                <div className="flex-shrink-0">
-                    <img src={KriasolLogo} alt="Kriasol Logo" className="h-8" /> {/* Adjust height as needed */}
+            <header className="bg-white text-grey p-3 flex items-center justify-between shadow-md flex-shrink-0 fixed top-0 w-full z-50">
+                <div className="flex items-center">
+                    {/* Menu Button (now only toggles sidebar expansion) */}
+                    {currentUser && (
+                        <button
+                            onClick={() => setIsSidebarExpanded(prev => !prev)} // Toggle sidebar expanded state
+                            className="p-2 mr-3 rounded-md hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-200"
+                            aria-label="Toggle Menu"
+                        >
+                            <Menu size={24} className="text-gray-800" />
+                        </button>
+                    )}
+                    {/* Kriasol Logo */}
+                    <div className="flex-shrink-0">
+                        <img
+                            src={KriasolLogo}
+                            alt="Kriasol Logo"
+                            className="h-8 cursor-pointer" // Added cursor-pointer for visual feedback
+                            onClick={() => navigateTo('allTickets')} // Navigate to 'allTickets' on click
+                        /> {/* Adjust height as needed */}
+                    </div>
                 </div>
 
                 {/* Search Bar (visible only when logged in and not on login/register pages) */}
                 {currentUser && currentPage !== 'login' && currentPage !== 'register' && (
-                    <form onSubmit={handleSearchSubmit} className="flex items-center space-x-2 flex-1 max-w-md mx-auto">
+                    <form onSubmit={handleSearchSubmit} className="flex items-center text-grey-800 space-x-2 flex-1 max-w-md mx-auto">
                         <FormInput
                             id="search"
                             type="text"
                             value={searchKeyword}
                             onChange={handleSearchChange}
-                            placeholder="Search by Ticket ID (e.g., TICKET-00001)"
+                            placeholder="Search by TicketID/Name"
                             className="flex-1"
                             icon={Search}
                             label="" // Hide label as placeholder is used
@@ -281,56 +448,125 @@ const App = () => {
                     </form>
                 )}
 
-                {/* User Profile Menu (visible when logged in) */}
+                {/* User Profile and Notification Menu (visible when logged in) */}
                 {currentUser && (
-                    <div className="relative">
-                        <button onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)} className="flex items-center text-gray-800 hover:text-blue-600 transition duration-200 text-sm">
-                            <User size={16} className="mr-1" />
-                            <span>{currentUser.email}</span>
-                            <ChevronDown size={16} className="ml-1" />
-                        </button>
-                        {isProfileMenuOpen && (
-                            <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50">
-                                <button
-                                    onClick={() => { navigateTo('profile'); setIsProfileMenuOpen(false); }}
-                                    className="flex items-center w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                                >
-                                    <User size={16} className="mr-2" /> Profile
-                                </button>
-                                <button
-                                    onClick={handleLogout}
-                                    className="flex items-center w-full text-left px-4 py-2 text-sm text-red-700 hover:bg-red-50"
-                                >
-                                    <LogOut size={16} className="mr-2" /> Log Out
-                                </button>
-                            </div>
-                        )}
+                    <div className="flex items-center space-x-4">
+                        {/* Notification Button */}
+                        <div className="relative">
+                            <button
+                                onClick={(e) => { e.stopPropagation(); setIsNotificationMenuOpen(!isNotificationMenuOpen); }} // NEW: Stop propagation
+                                className="relative flex items-center text-gray-800 hover:text-blue-600 transition duration-200 text-sm p-2 rounded-full hover:bg-gray-100"
+                                aria-label="Notifications"
+                            >
+                                <Bell size={20} />
+                                {hasNewNotifications && (
+                                    <span className="absolute top-0 right-0 block h-2 w-2 rounded-full ring-2 ring-white bg-red-600 animate-pulse"></span>
+                                )}
+                            </button>
+                            {isNotificationMenuOpen && (
+                                <div ref={notificationMenuRef} className="absolute right-0 mt-2 w-1/2 md:w-96 bg-white rounded-md shadow-lg py-1 z-50 max-h-96 overflow-y-auto">
+                                    <h3 className="text-sm font-semibold px-4 py-2 text-gray-700 border-b border-gray-200">Notifications</h3>
+                                    {notifications.length > 0 ? (
+                                        notifications.map(notification => (
+                                            <div
+                                                key={notification.id}
+                                                className={`flex items-start px-4 py-3 border-b border-gray-100 hover:bg-gray-50 cursor-pointer ${!notification.read ? 'bg-blue-50 font-medium' : ''}`}
+                                                onClick={() => markNotificationAsRead(notification.id, notification.ticketId)}
+                                            >
+                                                <div className="flex-shrink-0 mt-1">
+                                                    {!notification.read ? <Info size={16} className="text-blue-500" /> : <CheckCircle size={16} className="text-gray-400" />}
+                                                </div>
+                                                <div className="ml-3 text-sm flex-1">
+                                                    {/* Modified line to display bold text with blue color */}
+                                                    <p className="text-gray-800" dangerouslySetInnerHTML={{ __html: formatNotificationMessage(notification.message) }}></p>
+                                                    <p className="text-gray-500 text-xs mt-1">
+                                                        {new Date(notification.timestamp).toLocaleString()}
+                                                    </p>
+                                                </div>
+                                                {!notification.read && (
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); markNotificationAsRead(notification.id); }}
+                                                        className="ml-2 text-blue-500 hover:text-blue-700 text-xs flex-shrink-0"
+                                                    >
+                                                        Mark Read
+                                                    </button>
+                                                )}
+                                            </div>
+                                        ))
+                                    ) : (
+                                        <p className="px-4 py-3 text-sm text-gray-500">No new notifications.</p>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* User Profile Menu */}
+                        <div className="relative">
+                            <button onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)} className="flex items-center text-gray-800 hover:text-blue-600 transition duration-200 text-sm">
+                                <User size={16} className="mr-1" />
+                                <span>{currentUser.email}</span>
+                                <ChevronDown size={16} className="ml-1" />
+                            </button>
+                            {isProfileMenuOpen && (
+                                <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50">
+                                    <button
+                                        onClick={() => { navigateTo('profile'); setIsProfileMenuOpen(false); }}
+                                        className="flex items-center w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                                    >
+                                        <User size={16} className="mr-2" /> Profile
+                                    </button>
+                                    <button
+                                        onClick={handleLogout}
+                                        className="flex items-center w-full text-left px-4 py-2 text-sm text-red-700 hover:bg-red-50"
+                                    >
+                                        <LogOut size={16} className="mr-2" /> Log Out
+                                    </button>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 )}
             </header>
 
             {/* Main Content Area: Left Menu + Main Canvas */}
             <main className="flex flex-1 overflow-hidden pt-16"> {/* Add pt-16 to offset fixed header */}
-                {/* Left Side Menu (visible when logged in) */}
+                {/* Left Side Menu (always visible when logged in) */}
                 {currentUser && (
-                    <nav className="w-56 bg-gray-800 text-white flex flex-col p-3 shadow-lg flex-shrink-0 overflow-y-auto fixed h-full top-0 left-0 z-40 pt-16"> {/* Add pt-16 */}
+                    <nav
+                        ref={sidebarMenuRef}
+                        className={`bg-gray-800 text-white flex flex-col p-3 shadow-lg flex-shrink-0 overflow-y-auto fixed h-full top-0 z-40 pt-16
+                            transition-all duration-500 ease-in-out /* Changed from duration-300 to duration-500 */
+                            ${isSidebarExpanded ? 'w-56' : 'w-16'}
+                        `}
+                        onMouseEnter={() => setIsSidebarExpanded(true)} // Always expand on hover
+                        onMouseLeave={() => setIsSidebarExpanded(false)} // Always collapse on mouse leave
+                    >
                         <ul className="space-y-2 mt-3">
                             {/* Support User Specific Menu Items */}
                             {currentUser.role === 'support' && (
                                 <>
                                     <li>
                                         <button onClick={() => navigateTo('dashboard')} className={`flex items-center w-full p-2 rounded-md text-left transition duration-200 text-sm ${currentPage === 'dashboard' ? 'bg-blue-600' : 'hover:bg-gray-700'}`}>
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-layout-dashboard mr-2"><rect width="7" height="9" x="3" y="3" rx="1" /><rect width="7" height="5" x="14" y="3" rx="1" /><rect width="7" height="9" x="14" y="12" rx="1" /><rect width="7" height="5" x="3" y="16" rx="1" /></svg> Dashboard
+                                            <LayoutDashboard size={16} className="flex-shrink-0 mr-2" />
+                                            <span className={`whitespace-nowrap transition-opacity duration-300 ${isSidebarExpanded ? 'opacity-100 block' : 'opacity-0 hidden'}`}>
+                                                Dashboard
+                                            </span>
                                         </button>
                                     </li>
                                     <li>
                                         <button onClick={() => navigateTo('allTickets')} className={`flex items-center w-full p-2 rounded-md text-left transition duration-200 text-sm ${currentPage === 'allTickets' ? 'bg-blue-600' : 'hover:bg-gray-700'}`}>
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-list mr-2"><line x1="8" x2="21" y1="6" y2="6" /><line x1="8" x2="21" y1="12" y2="12" /><line x1="8" x2="21" y1="18" y2="18" /><line x1="3" x2="3.01" y1="6" y2="6" /><line x1="3" x2="3.01" y1="12" y2="12" /><line x1="3" x2="3.01" y1="18" y2="18" /></svg> All Tickets ({ticketCounts.active_tickets})
+                                            <List size={16} className="flex-shrink-0 mr-2" />
+                                            <span className={`whitespace-nowrap transition-opacity duration-300 ${isSidebarExpanded ? 'opacity-100 block' : 'opacity-0 hidden'}`}>
+                                                All Tickets ({ticketCounts.active_tickets})
+                                            </span>
                                         </button>
                                     </li>
                                     <li>
                                         <button onClick={() => navigateTo('assignedToMe')} className={`flex items-center w-full p-2 rounded-md text-left transition duration-200 text-sm ${currentPage === 'assignedToMe' ? 'bg-blue-600' : 'hover:bg-gray-700'}`}>
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-tag mr-2"><path d="M12.59 2.59c-.39-.39-1.02-.39-1.41 0L2.59 10c-.39.39-.39 1.02 0 1.41l9 9c.39.39 1.02.39 1.41 0l7.41-7.41c.39-.39.39-1.02 0-1.41L12.59 2.59Z" /><path d="M7 7h.01" /></svg> Assigned to Me ({ticketCounts.assigned_to_me})
+                                            <Tag size={16} className="flex-shrink-0 mr-2" />
+                                            <span className={`whitespace-nowrap transition-opacity duration-300 ${isSidebarExpanded ? 'opacity-100 block' : 'opacity-0 hidden'}`}>
+                                                Assigned to Me ({ticketCounts.assigned_to_me})
+                                            </span>
                                         </button>
                                     </li>
                                 </>
@@ -338,7 +574,19 @@ const App = () => {
                             {/* Common Menu Item for All Users */}
                             <li>
                                 <button onClick={() => navigateTo('myTickets')} className={`flex items-center w-full p-2 rounded-md text-left transition duration-200 text-sm ${currentPage === 'myTickets' ? 'bg-blue-600' : 'hover:bg-gray-700'}`}>
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-clipboard-check mr-2"><rect width="8" height="4" x="8" y="2" rx="1" ry="1" /><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" /><path d="m9 14 2 2 4-4" /></svg> My Tickets (Home)
+                                    <ClipboardCheck size={16} className="flex-shrink-0 mr-2" />
+                                    <span className={`whitespace-nowrap transition-opacity duration-300 ${isSidebarExpanded ? 'opacity-100 block' : 'opacity-0 hidden'}`}>
+                                        My Tickets
+                                    </span>
+                                </button>
+                            </li>
+                            {/* Add Create Ticket Here if desired */}
+                            <li>
+                                <button onClick={() => navigateTo('createTicket')} className={`flex items-center w-full p-2 rounded-md text-left transition duration-200 text-sm ${currentPage === 'createTicket' ? 'bg-blue-600' : 'hover:bg-gray-700'}`}>
+                                    <PlusCircle size={16} className="flex-shrink-0 mr-2" />
+                                    <span className={`whitespace-nowrap transition-opacity duration-300 ${isSidebarExpanded ? 'opacity-100 block' : 'opacity-0 hidden'}`}>
+                                        Create Ticket
+                                    </span>
                                 </button>
                             </li>
                         </ul>
@@ -346,7 +594,7 @@ const App = () => {
                 )}
 
                 {/* Main Content Canvas Area */}
-                <section className={`flex-1 bg-gray-100 flex flex-col min-w-0 ${currentUser ? 'ml-56' : ''}`}> {/* Adjust left margin if menu is present */}
+                <section className={`flex-1 bg-gray-100 flex flex-col min-w-0 ${mainContentMarginClass} transition-all duration-300 ease-in-out`}> {/* Adjust left margin based on menu open state */}
                     {/* Flash Message Display */}
                     {flashMessage && (
                         <div className={`fixed top-16 left-0 right-0 z-40 p-3 text-xs rounded-none flex items-center justify-between ${getStatusClasses(flashType)}`} role="alert">
@@ -384,7 +632,7 @@ const App = () => {
                                         return <AccessDeniedComponent />;
                                     }
                                     // Pass all relevant props to AllTicketsComponent
-                                    return <AllTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} showFilters={true} />;
+                                    return <AllTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} initialFilterAssignment="assigned_to_me" showFilters={true} />;
                                 case 'assignedToMe':
                                     if (currentUser.role !== 'support') {
                                         return <AccessDeniedComponent />;
