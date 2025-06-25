@@ -1,17 +1,18 @@
 // src/App.js
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { User, LogOut, ChevronDown, Search, CheckCircle, XCircle, Info, AlertTriangle, Bell, Menu, LayoutDashboard, List, Tag, ClipboardCheck, PlusCircle } from 'lucide-react'; // Added Menu icon and specific icons
+import { User, LogOut, ChevronDown, Search, CheckCircle, XCircle, Info, AlertTriangle, Bell, Menu, LayoutDashboard, List, Tag, ClipboardCheck, PlusCircle } from 'lucide-react';
 
-// Import Firebase auth client
-import { authClient } from './config/firebase';
+// Import Firebase auth client and dbClient
+import { authClient, dbClient } from './config/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth'; // Firebase authentication methods
+import { collection, query, onSnapshot, getFirestore } from 'firebase/firestore'; // NEW: Firestore imports
 
-// Import API Base URL from constants
+// Import API Base URL from constants (still used for other API calls like notifications)
 import { API_BASE_URL } from './config/constants';
 
 // Import local logo image
-import KriasolLogo from './assets/logo/logo.png'; // Assuming logo is in src/assets/logo/logo.png
+import KriasolLogo from './assets/logo/logo.png';
 
 // Import common UI components
 import FormInput from './components/common/FormInput';
@@ -64,35 +65,9 @@ const App = () => {
 
     // UPDATED STATES AND REFS FOR SIDEBAR MENU (NOW ALWAYS VISIBLE, ONLY EXPANDS/COLLAPSES)
     // isSidebarExpanded: controls if the sidebar is expanded (with text) or collapsed (icons only)
-    const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
+    const [isSidebarExpanded, setIsSidebarExpanded] = useState(false); // Initial state for login/register pages
     const sidebarMenuRef = useRef(null);
-    // The menuButtonRef is now only needed to prevent closing the notification menu if clicking this button
-    // It does not control `isMenuOpen` anymore.
 
-
-    /**
-     * Fetches summary counts for tickets (active, assigned to me, total).
-     * Used to update sidebar badges for support users.
-     * @param {object} user - The current authenticated user object.
-     * @returns {void}
-     */
-    const fetchTicketCounts = useCallback(async (user) => {
-        if (!user || !user.firebaseUser) return; // Only fetch if a Firebase user is present
-        try {
-            const idToken = await user.firebaseUser.getIdToken(); // Get ID token for authorization
-            const response = await fetch(`${API_BASE_URL}/tickets/summary-counts`, {
-                headers: { 'Authorization': `Bearer ${idToken}` }
-            });
-            if (response.ok) {
-                const data = await response.json();
-                setTicketCounts(data); // Update ticket counts state
-            } else {
-                console.error("Failed to fetch ticket counts:", await response.json());
-            }
-        } catch (error) {
-            console.error("Network error fetching ticket counts:", error);
-        }
-    }, []); // Empty dependency array means this function is created once and doesn't change
 
     /**
      * Fetches notifications for the current user.
@@ -140,7 +115,7 @@ const App = () => {
     // Effect hook to listen for Firebase authentication state changes.
     // This is crucial for maintaining user session and fetching user roles from backend.
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(authClient, async (firebaseUser) => {
+        const unsubscribeAuth = onAuthStateChanged(authClient, async (firebaseUser) => {
             if (firebaseUser) {
                 try {
                     const idToken = await firebaseUser.getIdToken(); // Get Firebase ID token
@@ -158,7 +133,6 @@ const App = () => {
                         // On successful verification, set currentUser state with Firebase user and role
                         const userProfile = { firebaseUser, role: data.user.role, email: firebaseUser.email, uid: firebaseUser.uid };
                         setCurrentUser(userProfile);
-                        fetchTicketCounts(userProfile); // Fetch ticket counts for logged-in user
                         fetchNotifications(userProfile); // Fetch notifications for logged-in user
 
                         // Start polling for notifications
@@ -169,6 +143,30 @@ const App = () => {
                             fetchNotifications(userProfile);
                         }, 30000); // Poll every 30 seconds
 
+                        // NEW: Set up Firestore listener for ticket counts
+                        const ticketsCollectionRef = collection(dbClient, 'tickets');
+                        const ticketsQuery = query(ticketsCollectionRef);
+
+                        const unsubscribeTickets = onSnapshot(ticketsQuery, (snapshot) => {
+                            const fetchedTickets = snapshot.docs.map(doc => ({
+                                id: doc.id,
+                                ...doc.data() // Get raw data; no need to format timestamps for counts
+                            }));
+
+                            const totalTickets = fetchedTickets.length;
+                            const activeTickets = fetchedTickets.filter(t => ['Open', 'In Progress', 'Hold'].includes(t.status)).length;
+                            const assignedToMeTickets = fetchedTickets.filter(t => t.assigned_to_id === userProfile.uid).length;
+
+                            setTicketCounts({
+                                total_tickets: totalTickets,
+                                active_tickets: activeTickets,
+                                assigned_to_me: assignedToMeTickets
+                            });
+                        }, (err) => {
+                            console.error("Firestore onSnapshot error for ticket counts:", err);
+                            // Optionally show a flash message for count errors
+                        });
+
                         // Navigate based on user role
                         if (data.user.role === 'support') {
                             setCurrentPage('dashboard'); // Support users go to dashboard
@@ -176,6 +174,9 @@ const App = () => {
                             setCurrentPage('myTickets'); // Regular users go to their tickets
                         }
                         setIsSidebarExpanded(false); // Start with sidebar collapsed (icons only)
+                        return () => { // Cleanup for tickets listener if auth state changes again
+                           unsubscribeTickets();
+                        };
                     } else {
                         // If backend verification fails, show error and log out from Firebase
                         console.error("Backend login verification failed:", data.error);
@@ -183,7 +184,7 @@ const App = () => {
                         authClient.signOut();
                         setCurrentUser(null);
                         setCurrentPage('login'); // Redirect to login
-                        setIsSidebarExpanded(false); // Ensure sidebar is collapsed
+                        setIsSidebarExpanded(false); // Ensure sidebar is collapsed on auth failure
                     }
                 } catch (error) {
                     // Handle network or other errors during auth state change processing
@@ -192,7 +193,7 @@ const App = () => {
                     authClient.signOut();
                     setCurrentUser(null);
                     setCurrentPage('login'); // Redirect to login
-                    setIsSidebarExpanded(false); // Ensure sidebar is collapsed
+                    setIsSidebarExpanded(false); // Ensure sidebar is collapsed on error
                 }
             } else {
                 // If no Firebase user is logged in, clear currentUser state and go to login page
@@ -204,16 +205,17 @@ const App = () => {
                 if (notificationPollingIntervalRef.current) {
                     clearInterval(notificationPollingIntervalRef.current); // Stop polling
                 }
-                setIsSidebarExpanded(false); // Ensure sidebar is collapsed
+                setIsSidebarExpanded(false); // Ensure sidebar is collapsed when not logged in
             }
         });
         return () => {
-            unsubscribe(); // Cleanup the auth state listener on component unmount
+            unsubscribeAuth(); // Cleanup the auth state listener on component unmount
             if (notificationPollingIntervalRef.current) {
                 clearInterval(notificationPollingIntervalRef.current); // Clear polling on unmount
             }
+            // No need to clean up ticket listener here, it's handled within the if (firebaseUser) block
         };
-    }, [fetchTicketCounts, fetchNotifications]); // `fetchTicketCounts` and `fetchNotifications` are dependencies here
+    }, [fetchNotifications]);
 
     // Effect hook to handle clicks outside the notification menu
     useEffect(() => {
@@ -230,7 +232,7 @@ const App = () => {
             // Clean up the event listener when component unmounts
             document.removeEventListener('mousedown', handleClickOutside);
         };
-    }, [isNotificationMenuOpen]); // Re-run effect when `isNotificationMenuOpen` changes
+    }, [isNotificationMenuOpen]);
 
 
     /**
@@ -241,7 +243,6 @@ const App = () => {
      */
     const handleLoginSuccess = (user) => {
         setCurrentUser(user);
-        fetchTicketCounts(user);
         fetchNotifications(user); // Fetch notifications on login
         if (user.role === 'support') {
             setCurrentPage('dashboard');
@@ -290,9 +291,8 @@ const App = () => {
         setCurrentPage(page);
         setSelectedTicketId(id);
         setSearchKeyword(''); // Clear search keyword on page change
-        setTicketListRefreshKey(prev => prev + 1); // Increment key to force ticket list refresh
+        setTicketListRefreshKey(prev => prev + 0); // Increment key to force ticket list refresh
         if (currentUser) {
-            fetchTicketCounts(currentUser); // Re-fetch counts on navigation
             fetchNotifications(currentUser); // Re-fetch notifications on navigation
         }
         setIsProfileMenuOpen(false); // Close profile menu on navigation
@@ -325,7 +325,6 @@ const App = () => {
     const handleTicketCreated = () => {
         setTicketListRefreshKey(prev => prev + 1); // Refresh ticket lists
         if (currentUser) {
-            fetchTicketCounts(currentUser); // Refresh ticket counts
             fetchNotifications(currentUser); // Fetch new notifications
         }
     };
@@ -397,257 +396,252 @@ const App = () => {
         }
     };
 
-    // Determine the left margin for the main content based on sidebar state
-    const mainContentMarginClass = currentUser
-        ? (isSidebarExpanded ? 'ml-56' : 'ml-16') // 56 (224px) for expanded, 16 (64px) for collapsed
-        : 'ml-0'; // No margin when sidebar is hidden (e.g., login page)
-
+    // Calculate margin for main content based on sidebar expanded state
+    const mainContentMarginClass = isSidebarExpanded ? 'ml-56' : 'ml-16';
 
     return (
-        <div className="flex flex-col min-h-screen bg-gray-100 font-inter overflow-hidden">
-            {/* Top Banner Header */}
-            <header className="bg-white text-grey p-3 flex items-center justify-between shadow-md flex-shrink-0 fixed top-0 w-full z-50">
-                <div className="flex items-center">
-                    {/* Menu Button (now only toggles sidebar expansion) */}
-                    {currentUser && (
-                        <button
-                            onClick={() => setIsSidebarExpanded(prev => !prev)} // Toggle sidebar expanded state
-                            className="p-2 mr-3 rounded-md hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-200"
-                            aria-label="Toggle Menu"
-                        >
-                            <Menu size={24} className="text-gray-800" />
-                        </button>
-                    )}
-                    {/* Kriasol Logo */}
-                    <div className="flex-shrink-0">
-                        <img
-                            src={KriasolLogo}
-                            alt="Kriasol Logo"
-                            className="h-8 cursor-pointer" // Added cursor-pointer for visual feedback
-                            onClick={() => navigateTo('allTickets')} // Navigate to 'allTickets' on click
-                        /> {/* Adjust height as needed */}
-                    </div>
-                </div>
+        // Removed overflow-hidden from the main container to allow scrolling
+        <div className="flex min-h-screen bg-gray-100 font-inter"> {/* Main flex container (row) */}
 
-                {/* Search Bar with External Search Button Only */}
-            {currentUser && currentPage !== 'login' && currentPage !== 'register' && (
-                <div className="flex items-center flex-1 max-w-md mx-4">
-                    <form onSubmit={handleSearchSubmit} className="flex-1">
-                        <input
-                            type="text"
-                            value={searchKeyword}
-                            onChange={handleSearchChange}
-                            placeholder="Search tickets..."
-                            className="w-full px-4 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        />
-                    </form>
-                    {/* Standalone Search Button */}
-                    <button 
-                        onClick={handleSearchSubmit}
-                        className="ml-2 p-2 text-gray-800 hover:text-blue-600 transition-colors duration-200 focus:outline-none"
-                        aria-label="Search"
-                    >
-                        <Search size={20} />
-                    </button>
-                </div>
+            {/* Left Side Menu (always visible when logged in) */}
+            {currentUser && (
+                <nav
+                    ref={sidebarMenuRef}
+                    // Re-applied fixed positioning
+                    // Changed duration-700 to duration-300 for faster transition
+                    className={`fixed top-0 left-0 bg-gray-800 text-white flex flex-col p-3 shadow-lg flex-shrink-0 overflow-y-auto h-screen z-50
+                        transition-all duration-300 ease-in-out
+                        ${isSidebarExpanded ? 'w-56' : 'w-16'}
+                    `}
+                    // Re-introduced hover functionality
+                    onMouseEnter={() => setIsSidebarExpanded(true)} // Expand on hover
+                    onMouseLeave={() => setIsSidebarExpanded(false)} // Retract on mouse leave
+                >
+                    {/* The 3-bar menu button and its containing div were removed previously. */}
+                    {/* The logo is also removed from here, it resides only in the header now. */}
+
+                    {/* Removed mt-3 to move menu items up and align with logo */}
+                    <ul className="space-y-2"> {/* Menu items moved up */}
+                        {/* Support User Specific Menu Items */}
+                        {currentUser.role === 'support' && (
+                            <>
+                                <li>
+                                        <button onClick={() => navigateTo('dashboard')} className={`relative flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-200 text-base ${currentPage === 'dashboard' ? 'font-bold border-b-2 border-blue-300' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                        <LayoutDashboard size={20} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} />
+                                        <span className={`whitespace-nowrap overflow-hidden transition-[opacity,width] duration-300 ${isSidebarExpanded ? 'opacity-100 w-auto' : 'opacity-0 w-0'}`}>
+                                            Dashboard
+                                        </span>
+                                        {!isSidebarExpanded && (
+                                            <span className="sidebar-count-badge absolute top-0 right-0 text-blue-300 text-xs font-bold rounded-full h-4 w-4 flex items-center justify-center -mt-1 -mr-1">
+                                                {ticketCounts.total_tickets}
+                                            </span>
+                                        )}
+                                        {isSidebarExpanded && (
+                                            <span className="ml-2 text-blue-300 text-xs">
+                                                ({ticketCounts.total_tickets})
+                                            </span>
+                                        )}
+                                    </button>
+                                </li>
+                                <li>
+                                    <button onClick={() => navigateTo('allTickets')} className={`relative flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-200 text-base ${currentPage === 'allTickets' ? 'font-bold border-b-2 border-red-300' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                        <List size={20} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} />
+                                        <span className={`whitespace-nowrap overflow-hidden transition-[opacity,width] duration-300 ${isSidebarExpanded ? 'opacity-100 w-auto' : 'opacity-0 w-0'}`}>
+                                            All Tickets
+                                        </span>
+                                        {!isSidebarExpanded && (
+                                            <span className="sidebar-count-badge absolute top-0 right-0 text-red-300 text-xs font-bold rounded-full h-4 w-4 flex items-center justify-center -mt-1 -mr-1">
+                                                {ticketCounts.active_tickets}
+                                            </span>
+                                        )}
+                                        {isSidebarExpanded && (
+                                            <span className="ml-2 text-red-300 text-xs">
+                                                ({ticketCounts.active_tickets})
+                                            </span>
+                                        )}
+                                    </button>
+                                </li>
+                                <li>
+                                    <button onClick={() => navigateTo('assignedToMe')} className={`relative flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-200 text-base ${currentPage === 'assignedToMe' ? 'font-bold border-b-2 border-green-300' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                        <Tag size={20} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} />
+                                        <span className={`whitespace-nowrap overflow-hidden transition-[opacity,width] duration-300 ${isSidebarExpanded ? 'opacity-100 w-auto' : 'opacity-0 w-0'}`}>
+                                            Assigned to Me
+                                        </span>
+                                        {!isSidebarExpanded && (
+                                            <span className="sidebar-count-badge absolute top-0 right-0 text-green-300 text-xs font-bold rounded-full h-4 w-4 flex items-center justify-center -mt-1 -mr-1">
+                                                {ticketCounts.assigned_to_me}
+                                            </span>
+                                        )}
+                                        {isSidebarExpanded && (
+                                            <span className="ml-2 text-green-300 text-xs">
+                                                ({ticketCounts.assigned_to_me})
+                                            </span>
+                                        )}
+                                    </button>
+                                </li>
+                            </>
+                        )}
+                        {/* Common Menu Item for All Users */}
+                        <li>
+                            <button onClick={() => navigateTo('myTickets')} className={`flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-200 text-base ${currentPage === 'myTickets' ? 'font-bold border-b-2 border-white' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                <ClipboardCheck size={20} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} />
+                                <span className={`whitespace-nowrap overflow-hidden transition-[opacity,width] duration-300 ${isSidebarExpanded ? 'opacity-100 w-auto' : 'opacity-0 w-0'}`}>
+                                    My Tickets
+                                </span>
+                            </button>
+                        </li>
+                        {/* Add Create Ticket Here if desired */}
+                        <li>
+                            <button onClick={() => navigateTo('createTicket')} className={`flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-200 text-base ${currentPage === 'createTicket' ? 'font-bold border-b-2 border-white' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                <PlusCircle size={20} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} />
+                                <span className={`whitespace-nowrap overflow-hidden transition-[opacity,width] duration-300 ${isSidebarExpanded ? 'opacity-100 w-auto' : 'opacity-0 w-0'}`}>
+                                    Create Ticket
+                                </span>
+                            </button>
+                        </li>
+                    </ul>
+                </nav>
             )}
 
-                {/* User Profile and Notification Menu (visible when logged in) */}
-                {currentUser && (
-                    <div className="flex items-center space-x-4">
-                        {/* Notification Button */}
-                        <div className="relative">
-                            <button
-                                onClick={(e) => { e.stopPropagation(); setIsNotificationMenuOpen(!isNotificationMenuOpen); }} // NEW: Stop propagation
-                                className="relative flex items-center text-gray-800 hover:text-blue-600 transition duration-200 text-sm p-2 rounded-full hover:bg-gray-100"
-                                aria-label="Notifications"
-                            >
-                                <Bell size={20} />
-                                {hasNewNotifications && (
-                                    <span className="absolute top-0 right-0 block h-2 w-2 rounded-full ring-2 ring-white bg-red-600 animate-pulse"></span>
-                                )}
-                            </button>
-                            {isNotificationMenuOpen && (
-                                <div ref={notificationMenuRef} className="absolute right-0 mt-2 w-1/2 md:w-96 bg-white rounded-md shadow-lg py-1 z-50 max-h-96 overflow-y-auto">
-                                    <h3 className="text-sm font-semibold px-4 py-2 text-gray-700 border-b border-gray-200">Notifications</h3>
-                                    {notifications.length > 0 ? (
-                                        notifications.map(notification => (
-                                            <div
-                                                key={notification.id}
-                                                className={`flex items-start px-4 py-3 border-b border-gray-100 hover:bg-gray-50 cursor-pointer ${!notification.read ? 'bg-blue-50 font-medium' : ''}`}
-                                                onClick={() => markNotificationAsRead(notification.id, notification.ticketId)}
-                                            >
-                                                <div className="flex-shrink-0 mt-1">
-                                                    {!notification.read ? <Info size={16} className="text-blue-500" /> : <CheckCircle size={16} className="text-gray-400" />}
-                                                </div>
-                                                <div className="ml-3 text-sm flex-1">
-                                                    {/* Modified line to display bold text with blue color */}
-                                                    <p className="text-gray-800" dangerouslySetInnerHTML={{ __html: formatNotificationMessage(notification.message) }}></p>
-                                                    <p className="text-gray-500 text-xs mt-1">
-                                                        {new Date(notification.timestamp).toLocaleString()}
-                                                    </p>
-                                                </div>
-                                                {!notification.read && (
-                                                    <button
-                                                        onClick={(e) => { e.stopPropagation(); markNotificationAsRead(notification.id); }}
-                                                        className="ml-2 text-blue-500 hover:text-blue-700 text-xs flex-shrink-0"
-                                                    >
-                                                        Mark Read
-                                                    </button>
-                                                )}
-                                            </div>
-                                        ))
-                                    ) : (
-                                        <p className="px-4 py-3 text-sm text-gray-500">No new notifications.</p>
-                                    )}
-                                </div>
-                            )}
-                        </div>
-
-                        {/* User Profile Menu */}
-                        <div className="relative">
-                            <button onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)} className="flex items-center text-gray-800 hover:text-blue-600 transition duration-200 text-sm">
-                                <User size={16} className="mr-1" />
-                                <span>{currentUser.email}</span>
-                                <ChevronDown size={16} className="ml-1" />
-                            </button>
-                            {isProfileMenuOpen && (
-                                <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50">
-                                    <button
-                                        onClick={() => { navigateTo('profile'); setIsProfileMenuOpen(false); }}
-                                        className="flex items-center w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                                    >
-                                        <User size={16} className="mr-2" /> Profile
-                                    </button>
-                                    <button
-                                        onClick={handleLogout}
-                                        className="flex items-center w-full text-left px-4 py-2 text-sm text-red-700 hover:bg-red-50"
-                                    >
-                                        <LogOut size={16} className="mr-2" /> Log Out
-                                    </button>
-                                </div>
-                            )}
+            {/* Right Content Area (Header + Main Content + Footer - flex column) */}
+            {/* Added dynamic margin-left to push content away from the fixed sidebar */}
+            <div className={`flex flex-col flex-1 ${currentUser ? mainContentMarginClass : ''} transition-all duration-300 ease-in-out`}>
+                {/* Top Banner Header - no longer fixed, part of flow */}
+                <header className="bg-white text-grey p-3 flex items-center justify-between shadow-md flex-shrink-0 w-full z-40">
+                    <div className="flex items-center">
+                        {/* Kriasol Logo - Remains in header only */}
+                        <div className="flex-shrink-0">
+                            <img
+                                src={KriasolLogo}
+                                alt="Kriasol Logo"
+                                className="h-8 cursor-pointer"
+                                onClick={() => navigateTo('allTickets')}
+                            />
                         </div>
                     </div>
-                )}
-            </header>
 
-            {/* Main Content Area: Left Menu + Main Canvas */}
-            <main className="flex flex-1 overflow-hidden pt-16"> {/* Add pt-16 to offset fixed header */}
-                {/* Left Side Menu (always visible when logged in) */}
-                {currentUser && (
-                    <nav
-                        ref={sidebarMenuRef}
-                        className={`bg-gray-800 text-white flex flex-col p-3 shadow-lg flex-shrink-0 overflow-y-auto fixed h-full top-0 z-40 pt-16
-                            transition-all duration-300 ease-in-out /* Changed from duration-500 to duration-300 */
-                            ${isSidebarExpanded ? 'w-56' : 'w-16'}
-                        `}
-                        onMouseEnter={() => setIsSidebarExpanded(true)} // Always expand on hover
-                        onMouseLeave={() => setIsSidebarExpanded(false)} // Always collapse on mouse leave
-                    >
-                        <ul className="space-y-2 mt-3">
-                            {/* Support User Specific Menu Items */}
-                            {currentUser.role === 'support' && (
-                                <>
-                                    <li>
-                                        <button onClick={() => navigateTo('dashboard')} className={`relative flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-200 text-base ${currentPage === 'dashboard' ? 'bg-blue-700 shadow-md' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
-                                            <LayoutDashboard size={20} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} />
-                                            <span className={`whitespace-nowrap overflow-hidden transition-[opacity,width] duration-300 ${isSidebarExpanded ? 'opacity-100 w-auto' : 'opacity-0 w-0'}`}>
-                                                Dashboard
-                                            </span>
-                                            {!isSidebarExpanded && (
-                                                <span className="sidebar-count-badge absolute top-0 right-0 text-blue-300 text-xs font-bold rounded-full h-4 w-4 flex items-center justify-center -mt-1 -mr-1">
-                                                    {ticketCounts.total_tickets}
-                                                </span>
-                                            )}
-                                            {isSidebarExpanded && (
-                                                <span className="ml-2 text-blue-300 text-xs">
-                                                    ({ticketCounts.total_tickets})
-                                                </span>
-                                            )}
-                                        </button>
-                                    </li>
-                                    <li>
-                                        <button onClick={() => navigateTo('allTickets')} className={`relative flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-200 text-base ${currentPage === 'allTickets' ? 'bg-blue-700 shadow-md' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
-                                            <List size={20} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} />
-                                            <span className={`whitespace-nowrap overflow-hidden transition-[opacity,width] duration-300 ${isSidebarExpanded ? 'opacity-100 w-auto' : 'opacity-0 w-0'}`}>
-                                                All Tickets
-                                            </span>
-                                            {!isSidebarExpanded && (
-                                                <span className="sidebar-count-badge absolute top-0 right-0 text-red-300 text-xs font-bold rounded-full h-4 w-4 flex items-center justify-center -mt-1 -mr-1">
-                                                    {ticketCounts.active_tickets}
-                                                </span>
-                                            )}
-                                            {isSidebarExpanded && (
-                                                <span className="ml-2 text-red-300 text-xs">
-                                                    ({ticketCounts.active_tickets})
-                                                </span>
-                                            )}
-                                        </button>
-                                    </li>
-                                    <li>
-                                        <button onClick={() => navigateTo('assignedToMe')} className={`relative flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-200 text-base ${currentPage === 'assignedToMe' ? 'bg-blue-700 shadow-md' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
-                                            <Tag size={20} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} />
-                                            <span className={`whitespace-nowrap overflow-hidden transition-[opacity,width] duration-300 ${isSidebarExpanded ? 'opacity-100 w-auto' : 'opacity-0 w-0'}`}>
-                                                Assigned to Me
-                                            </span>
-                                            {!isSidebarExpanded && (
-                                                <span className="sidebar-count-badge absolute top-0 right-0 text-green-300 text-xs font-bold rounded-full h-4 w-4 flex items-center justify-center -mt-1 -mr-1">
-                                                    {ticketCounts.assigned_to_me}
-                                                </span>
-                                            )}
-                                            {isSidebarExpanded && (
-                                                <span className="ml-2 text-green-300 text-xs">
-                                                    ({ticketCounts.assigned_to_me})
-                                                </span>
-                                            )}
-                                        </button>
-                                    </li>
-                                </>
-                            )}
-                            {/* Common Menu Item for All Users */}
-                            <li>
-                                <button onClick={() => navigateTo('myTickets')} className={`flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-200 text-base ${currentPage === 'myTickets' ? 'bg-blue-700 shadow-md' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
-                                    <ClipboardCheck size={20} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} />
-                                    <span className={`whitespace-nowrap overflow-hidden transition-[opacity,width] duration-300 ${isSidebarExpanded ? 'opacity-100 w-auto' : 'opacity-0 w-0'}`}>
-                                        My Tickets
-                                    </span>
-                                    {/* My Tickets count for regular users, if you have a specific count for them */}
-                                    {/* You'd need to fetch this count similarly to how ticketCounts is fetched */}
-                                    {/* For now, let's assume `ticketCounts.my_tickets` exists or calculate it */}
-                                   
+                    {/* Search Bar with External Search Button Only */}
+                    {currentUser && currentPage !== 'login' && currentPage !== 'register' && (
+                        <div className="flex items-center flex-1 max-w-md mx-4">
+                            <form onSubmit={handleSearchSubmit} className="flex-1">
+                                <input
+                                    type="text"
+                                    value={searchKeyword}
+                                    onChange={handleSearchChange}
+                                    placeholder="Search tickets..."
+                                    className="w-full px-4 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                />
+                            </form>
+                            {/* Standalone Search Button */}
+                            <button
+                                onClick={handleSearchSubmit}
+                                className="ml-2 p-2 text-gray-800 hover:text-blue-600 transition-colors duration-200 focus:outline-none"
+                                aria-label="Search"
+                            >
+                                <Search size={20} />
+                            </button>
+                        </div>
+                    )}
+
+                    {/* User Profile and Notification Menu (visible when logged in) */}
+                    {currentUser && (
+                        <div className="flex items-center space-x-4">
+                            {/* Notification Button */}
+                            <div className="relative">
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); setIsNotificationMenuOpen(!isNotificationMenuOpen); }}
+                                    className="relative flex items-center text-gray-800 hover:text-blue-600 transition duration-200 text-sm p-2 rounded-full hover:bg-gray-100"
+                                    aria-label="Notifications"
+                                >
+                                    <Bell size={20} />
+                                    {hasNewNotifications && (
+                                        <span className="absolute top-0 right-0 block h-2 w-2 rounded-full ring-2 ring-white bg-red-600 animate-pulse"></span>
+                                    )}
                                 </button>
-                            </li>
-                            {/* Add Create Ticket Here if desired */}
-                            <li>
-                                <button onClick={() => navigateTo('createTicket')} className={`flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-200 text-base ${currentPage === 'createTicket' ? 'bg-blue-700 shadow-md' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
-                                    <PlusCircle size={20} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} />
-                                    <span className={`whitespace-nowrap overflow-hidden transition-[opacity,width] duration-300 ${isSidebarExpanded ? 'opacity-100 w-auto' : 'opacity-0 w-0'}`}>
-                                        Create Ticket
-                                    </span>
+                                {isNotificationMenuOpen && (
+                                    <div ref={notificationMenuRef} className="absolute right-0 mt-2 w-1/2 md:w-96 bg-white rounded-md shadow-lg py-1 z-50 max-h-96 overflow-y-auto">
+                                        <h3 className="text-sm font-semibold px-4 py-2 text-gray-700 border-b border-gray-200">Notifications</h3>
+                                        {notifications.length > 0 ? (
+                                            notifications.map(notification => (
+                                                <div
+                                                    key={notification.id}
+                                                    // Added 'py-4' for more vertical space and 'border-b border-gray-200' for a clear separator
+                                                    // Added 'last:border-b-0' to remove the border from the last item
+                                                    className={`flex items-start px-4 py-4 border-b border-gray-200 hover:bg-gray-50 cursor-pointer last:border-b-0 ${!notification.read ? 'bg-blue-50 font-medium' : ''}`}
+                                                    onClick={() => markNotificationAsRead(notification.id, notification.ticketId)}
+                                                >
+                                                    <div className="flex-shrink-0 mt-1">
+                                                        {!notification.read ? <Info size={16} className="text-blue-500" /> : <CheckCircle size={16} className="text-gray-400" />}
+                                                    </div>
+                                                    <div className="ml-3 text-sm flex-1">
+                                                        <p className="text-gray-800" dangerouslySetInnerHTML={{ __html: formatNotificationMessage(notification.message) }}></p>
+                                                        <p className="text-gray-500 text-xs mt-1">
+                                                            {new Date(notification.timestamp).toLocaleString()}
+                                                        </p>
+                                                    </div>
+                                                    {!notification.read && (
+                                                        <button
+                                                            onClick={(e) => { e.stopPropagation(); markNotificationAsRead(notification.id); }}
+                                                            className="ml-2 text-blue-500 hover:text-blue-700 text-xs flex-shrink-0"
+                                                        >
+                                                            Mark Read
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            ))
+                                        ) : (
+                                            <p className="px-4 py-3 text-sm text-gray-500">No new notifications.</p>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* User Profile Menu */}
+                            <div className="relative">
+                                <button onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)} className="flex items-center text-gray-800 hover:text-blue-600 transition duration-200 text-sm">
+                                    <User size={16} className="mr-1" />
+                                    <span>{currentUser.email}</span>
+                                    <ChevronDown size={16} className="ml-1" />
                                 </button>
-                            </li>
-                        </ul>
-                    </nav>
+                                {isProfileMenuOpen && (
+                                    <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50">
+                                        <button
+                                            onClick={() => { navigateTo('profile'); setIsProfileMenuOpen(false); }}
+                                            className="flex items-center w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                                        >
+                                            <User size={16} className="mr-2" /> Profile
+                                        </button>
+                                        <button
+                                            onClick={handleLogout}
+                                            className="flex items-center w-full text-left px-4 py-2 text-sm text-red-700 hover:bg-red-50"
+                                        >
+                                            <LogOut size={16} className="mr-2" /> Log Out
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+                </header>
+
+                {/* Flash Message Display (adjust positioning since header is no longer fixed) */}
+                {flashMessage && (
+                    <div className={`p-3 text-xs rounded-none flex items-center justify-between ${getStatusClasses(flashType)}`} role="alert">
+                        <div className="flex items-center">
+                            {flashType === 'success' && <CheckCircle size={16} className="mr-1" />}
+                            {flashType === 'error' && <XCircle size={16} className="mr-1" />}
+                            {flashType === 'info' && <Info size={16} className="mr-1" />}
+                            {flashType === 'warning' && <AlertTriangle size={16} className="mr-1" />}
+                            <div className="text-sm">{flashMessage}</div>
+                        </div>
+                        <button onClick={() => setFlashMessage(null)} className="text-current hover:opacity-75">
+                            <XCircle size={16} />
+                        </button>
+                    </div>
                 )}
 
                 {/* Main Content Canvas Area */}
-                <section className={`flex-1 bg-gray-100 flex flex-col min-w-0 ${mainContentMarginClass} transition-all duration-300 ease-in-out`}> {/* Adjust left margin based on menu open state */}
-                    {/* Flash Message Display */}
-                    {flashMessage && (
-                        <div className={`fixed top-16 left-0 right-0 z-40 p-3 text-xs rounded-none flex items-center justify-between ${getStatusClasses(flashType)}`} role="alert">
-                            <div className="flex items-center">
-                                {flashType === 'success' && <CheckCircle size={16} className="mr-1" />}
-                                {flashType === 'error' && <XCircle size={16} className="mr-1" />}
-                                {flashType === 'info' && <Info size={16} className="mr-1" />}
-                                {flashType === 'warning' && <AlertTriangle size={16} className="mr-1" />}
-                                <div className="text-sm">{flashMessage}</div>
-                            </div>
-                            <button onClick={() => setFlashMessage(null)} className="text-current hover:opacity-75">
-                                <XCircle size={16} />
-                            </button>
-                        </div>
-                    )}
+                <section className={`flex-1 bg-gray-100 flex flex-col min-w-0`}>
                     {/* Conditional Rendering of Components based on currentPage and currentUser */}
                     {(() => {
                         if (!currentUser) {
@@ -669,16 +663,13 @@ const App = () => {
                                     if (currentUser.role !== 'support') {
                                         return <AccessDeniedComponent />;
                                     }
-                                    // Pass all relevant props to AllTicketsComponent, remove initialFilterAssignment
                                     return <AllTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} showFilters={true} />;
                                 case 'assignedToMe':
                                     if (currentUser.role !== 'support') {
                                         return <AccessDeniedComponent />;
                                     }
-                                    // Pass initialFilterAssignment to AllTicketsComponent for specific view
                                     return <AllTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} initialFilterAssignment="assigned_to_me" showFilters={false} />;
                                 case 'ticketDetail':
-                                    // console.log(`App: Rendering TicketDetailComponent with selectedTicketId: ${selectedTicketId}`); // Debugging
                                     return <TicketDetailComponent key={selectedTicketId} ticketId={selectedTicketId} navigateTo={navigateTo} user={currentUser} showFlashMessage={showFlashMessage} />;
                                 case 'createTicket':
                                     return (
@@ -687,7 +678,7 @@ const App = () => {
                                                 <CreateTicketComponent
                                                     user={currentUser}
                                                     showFlashMessage={showFlashMessage}
-                                                    onTicketCreated={handleTicketCreated} // Callback for successful ticket creation
+                                                    onTicketCreated={handleTicketCreated}
                                                     navigateTo={navigateTo}
                                                 />
                                             </div>
@@ -696,18 +687,17 @@ const App = () => {
                                 case 'profile':
                                     return <ProfileComponent user={currentUser} showFlashMessage={showFlashMessage} navigateTo={navigateTo} handleLogout={handleLogout} />;
                                 default:
-                                    // Default page for logged-in users is MyTicketsComponent
                                     return <MyTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} />;
                             }
                         }
                     })()}
                 </section>
-            </main>
 
-            {/* Footer */}
-            <footer className="bg-gray-800 text-white text-center p-2 w-full shadow-inner text-xs flex-shrink-0">
-                <p>&copy; {new Date().getFullYear()} Kriasol. All rights reserved.</p>
-            </footer>
+                {/* Footer */}
+                <footer className={`bg-gray-800 text-white text-center p-2 w-full shadow-inner text-xs flex-shrink-0`}>
+                    <p>&copy; {new Date().getFullYear()} Kriasol. All rights reserved.</p>
+                </footer>
+            </div>
         </div>
     );
 }

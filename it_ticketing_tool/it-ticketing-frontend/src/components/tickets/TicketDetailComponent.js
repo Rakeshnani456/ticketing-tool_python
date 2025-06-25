@@ -512,7 +512,7 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
         <div className="p-4 bg-gray-100 min-h-screen flex-1 overflow-auto font-sans">
             {/* Header with back button and edit/save actions */}
             <div className="flex items-center bg-white border-b border-gray-200 px-4 py-3 shadow-sm sticky top-0 z-10">
-                <button onClick={() => navigateTo(user?.role === 'support' ? 'allTickets' : 'myTickets')} className="text-gray-500 hover:text-gray-700 mr-4">
+                <button onClick={() => navigateTo(user?.role === 'support' ? 'allTickets' : 'myTickets')}  className="p-2 border border-gray-300 rounded-md text-gray-600 hover:bg-red-100 hover:border-red-800 hover:text-red-800 mr-4 transition-colors duration-200">
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-chevron-left"><path d="m15 18-6-6 6-6" /></svg>
                 </button>
                 <h1 className="text-lg font-semibold text-gray-800 flex-grow">{ticket.display_id} (Ticket Detail)</h1>
@@ -522,7 +522,7 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                     {canEdit && !isEditing && !isTicketClosedOrResolved && (
                         <button
                             onClick={() => setIsEditing(true)}
-                            className="px-3 py-1.5 text-sm font-medium text-blue-700 bg-blue-50 rounded-md hover:bg-blue-100 transition-colors duration-200"
+                            className="px-3 py-1.5 text-sm font-medium text-black-700 bg-blue-50 rounded-md border border-gray-300 border-black-800 hover:bg-blue-200 hover:text-black-800 mr-4 transition-colors duration-200 rounded-md"
                         >
                             Edit Ticket
                         </button>
