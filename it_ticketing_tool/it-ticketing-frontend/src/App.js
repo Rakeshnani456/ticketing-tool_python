@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { User, LogOut, ChevronDown, Search, CheckCircle, XCircle, Info, AlertTriangle, Bell, Menu, LayoutDashboard, List, Tag, ClipboardCheck, PlusCircle } from 'lucide-react';
+import { motion } from 'framer-motion'; // Import motion from framer-motion
 
 // Import Firebase auth client and dbClient
 import { authClient, dbClient } from './config/firebase';
@@ -47,7 +48,7 @@ const App = () => {
     const [flashType, setFlashType] = useState('info');
     // Ref to manage the timeout for hiding flash messages
     const flashMessageTimeoutRef = useRef(null);
-    // Key to force refresh of ticket lists (e.g., after creating a new ticket)
+    // Key to force refresh of ticket lists (e.e., after creating a new ticket)
     const [ticketListRefreshKey, setTicketListRefreshKey] = useState(0);
     // State for the global search keyword
     const [searchKeyword, setSearchKeyword] = useState('');
@@ -67,6 +68,25 @@ const App = () => {
     // isSidebarExpanded: controls if the sidebar is expanded (with text) or collapsed (icons only)
     const [isSidebarExpanded, setIsSidebarExpanded] = useState(false); // Initial state for login/register pages
     const sidebarMenuRef = useRef(null);
+
+    // Define variants for Framer Motion animation for the sidebar
+    // w-56 is 224px, w-16 is 64px
+    const sidebarVariants = {
+        expanded: { width: 224, transition: { type: "spring", stiffness: 300, damping: 30 } },
+        collapsed: { width: 64, transition: { type: "spring", stiffness: 300, damping: 30 } }
+    };
+
+    // Define variants for Framer Motion animation for the sidebar text
+    const textVariants = {
+        expanded: { opacity: 1, width: "auto", transition: { delay: 0.1, duration: 0.2 } },
+        collapsed: { opacity: 0, width: 0, transition: { duration: 0.2 } }
+    };
+
+    // Define variants for Framer Motion animation for the main content's left margin
+    const mainContentVariants = {
+        expanded: { marginLeft: 224, transition: { type: "spring", stiffness: 300, damping: 30 } },
+        collapsed: { marginLeft: 64, transition: { type: "spring", stiffness: 300, damping: 30 } }
+    };
 
 
     /**
@@ -396,8 +416,9 @@ const App = () => {
         }
     };
 
-    // Calculate margin for main content based on sidebar expanded state
-    const mainContentMarginClass = isSidebarExpanded ? 'ml-56' : 'ml-16';
+    // mainContentMarginClass is no longer directly used for styling, but for context
+    // The actual margin will be driven by Framer Motion's `marginLeft` property.
+    // const mainContentMarginClass = isSidebarExpanded ? 'ml-56' : 'ml-16';
 
     return (
         // Removed overflow-hidden from the main container to allow scrolling
@@ -405,15 +426,12 @@ const App = () => {
 
             {/* Left Side Menu (always visible when logged in) */}
             {currentUser && (
-                <nav
+                <motion.nav
                     ref={sidebarMenuRef}
-                    // Re-applied fixed positioning
-                    // Changed duration-700 to duration-300 for faster transition
-                    className={`fixed top-0 left-0 bg-gray-800 text-white flex flex-col p-3 shadow-lg flex-shrink-0 overflow-y-auto h-screen z-50
-                        transition-all duration-300 ease-in-out
-                        ${isSidebarExpanded ? 'w-56' : 'w-16'}
-                    `}
-                    // Re-introduced hover functionality
+                    initial={false}
+                    animate={isSidebarExpanded ? "expanded" : "collapsed"}
+                    variants={sidebarVariants}
+                    className="fixed top-0 left-0 bg-gray-800 text-white flex flex-col p-3 shadow-lg flex-shrink-0 overflow-y-auto h-screen z-50"
                     onMouseEnter={() => setIsSidebarExpanded(true)} // Expand on hover
                     onMouseLeave={() => setIsSidebarExpanded(false)} // Retract on mouse leave
                 >
@@ -428,9 +446,13 @@ const App = () => {
                                 <li>
                                         <button onClick={() => navigateTo('dashboard')} className={`relative flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-200 text-base ${currentPage === 'dashboard' ? 'font-bold border-b-2 border-blue-300' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
                                         <LayoutDashboard size={20} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} />
-                                        <span className={`whitespace-nowrap overflow-hidden transition-[opacity,width] duration-300 ${isSidebarExpanded ? 'opacity-100 w-auto' : 'opacity-0 w-0'}`}>
+                                        <motion.span
+                                            variants={textVariants}
+                                            animate={isSidebarExpanded ? "expanded" : "collapsed"}
+                                            className="whitespace-nowrap overflow-hidden"
+                                        >
                                             Dashboard
-                                        </span>
+                                        </motion.span>
                                         {!isSidebarExpanded && (
                                             <span className="sidebar-count-badge absolute top-0 right-0 text-blue-300 text-xs font-bold rounded-full h-4 w-4 flex items-center justify-center -mt-1 -mr-1">
                                                 {ticketCounts.total_tickets}
@@ -446,9 +468,13 @@ const App = () => {
                                 <li>
                                     <button onClick={() => navigateTo('allTickets')} className={`relative flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-200 text-base ${currentPage === 'allTickets' ? 'font-bold border-b-2 border-red-300' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
                                         <List size={20} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} />
-                                        <span className={`whitespace-nowrap overflow-hidden transition-[opacity,width] duration-300 ${isSidebarExpanded ? 'opacity-100 w-auto' : 'opacity-0 w-0'}`}>
+                                        <motion.span
+                                            variants={textVariants}
+                                            animate={isSidebarExpanded ? "expanded" : "collapsed"}
+                                            className="whitespace-nowrap overflow-hidden"
+                                        >
                                             All Tickets
-                                        </span>
+                                        </motion.span>
                                         {!isSidebarExpanded && (
                                             <span className="sidebar-count-badge absolute top-0 right-0 text-red-300 text-xs font-bold rounded-full h-4 w-4 flex items-center justify-center -mt-1 -mr-1">
                                                 {ticketCounts.active_tickets}
@@ -464,9 +490,13 @@ const App = () => {
                                 <li>
                                     <button onClick={() => navigateTo('assignedToMe')} className={`relative flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-200 text-base ${currentPage === 'assignedToMe' ? 'font-bold border-b-2 border-green-300' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
                                         <Tag size={20} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} />
-                                        <span className={`whitespace-nowrap overflow-hidden transition-[opacity,width] duration-300 ${isSidebarExpanded ? 'opacity-100 w-auto' : 'opacity-0 w-0'}`}>
+                                        <motion.span
+                                            variants={textVariants}
+                                            animate={isSidebarExpanded ? "expanded" : "collapsed"}
+                                            className="whitespace-nowrap overflow-hidden"
+                                        >
                                             Assigned to Me
-                                        </span>
+                                        </motion.span>
                                         {!isSidebarExpanded && (
                                             <span className="sidebar-count-badge absolute top-0 right-0 text-green-300 text-xs font-bold rounded-full h-4 w-4 flex items-center justify-center -mt-1 -mr-1">
                                                 {ticketCounts.assigned_to_me}
@@ -485,27 +515,40 @@ const App = () => {
                         <li>
                             <button onClick={() => navigateTo('myTickets')} className={`flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-200 text-base ${currentPage === 'myTickets' ? 'font-bold border-b-2 border-white' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
                                 <ClipboardCheck size={20} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} />
-                                <span className={`whitespace-nowrap overflow-hidden transition-[opacity,width] duration-300 ${isSidebarExpanded ? 'opacity-100 w-auto' : 'opacity-0 w-0'}`}>
+                                <motion.span
+                                    variants={textVariants}
+                                    animate={isSidebarExpanded ? "expanded" : "collapsed"}
+                                    className="whitespace-nowrap overflow-hidden"
+                                >
                                     My Tickets
-                                </span>
+                                </motion.span>
                             </button>
                         </li>
                         {/* Add Create Ticket Here if desired */}
                         <li>
                             <button onClick={() => navigateTo('createTicket')} className={`flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-200 text-base ${currentPage === 'createTicket' ? 'font-bold border-b-2 border-white' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
                                 <PlusCircle size={20} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} />
-                                <span className={`whitespace-nowrap overflow-hidden transition-[opacity,width] duration-300 ${isSidebarExpanded ? 'opacity-100 w-auto' : 'opacity-0 w-0'}`}>
+                                <motion.span
+                                    variants={textVariants}
+                                    animate={isSidebarExpanded ? "expanded" : "collapsed"}
+                                    className="whitespace-nowrap overflow-hidden"
+                                >
                                     Create Ticket
-                                </span>
+                                </motion.span>
                             </button>
                         </li>
                     </ul>
-                </nav>
+                </motion.nav>
             )}
 
             {/* Right Content Area (Header + Main Content + Footer - flex column) */}
-            {/* Added dynamic margin-left to push content away from the fixed sidebar */}
-            <div className={`flex flex-col flex-1 ${currentUser ? mainContentMarginClass : ''} transition-all duration-300 ease-in-out`}>
+            {/* NOW USING MOTION.DIV FOR SMOOTH MARGIN TRANSITION */}
+            <motion.div
+                className={`flex flex-col flex-1`}
+                initial={false}
+                animate={currentUser ? (isSidebarExpanded ? "expanded" : "collapsed") : { marginLeft: 0 }} // Animate margin only when logged in
+                variants={mainContentVariants}
+            >
                 {/* Top Banner Header - no longer fixed, part of flow */}
                 <header className="bg-white text-grey p-3 flex items-center justify-between shadow-md flex-shrink-0 w-full z-40">
                     <div className="flex items-center">
@@ -694,10 +737,10 @@ const App = () => {
                 </section>
 
                 {/* Footer */}
-                <footer className={`bg-gray-800 text-white text-center p-2 w-full shadow-inner text-xs flex-shrink-0`}>
+                <footer className={`text-red-800 text-center p-2 w-full shadow-inner text-xs flex-shrink-0`}>
                     <p>&copy; {new Date().getFullYear()} Kriasol. All rights reserved.</p>
                 </footer>
-            </div>
+            </motion.div>
         </div>
     );
 }
