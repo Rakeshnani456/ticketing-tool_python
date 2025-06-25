@@ -342,7 +342,7 @@ app.post('/tickets', verifyFirebaseToken, async (req, res) => {
     const reporterEmail = req.user.email;
 
     // 1. Validate mandatory fields
-    if (!request_for_email || !category || !short_description || !contact_number || !priority || !hostname_asset_id) {
+    if (!request_for_email || !category || !short_description || !contact_number || !hostname_asset_id) { // Priority now has a default
         return res.status(400).json({ error: 'Missing mandatory ticket fields.' });
     }
 
@@ -353,9 +353,10 @@ app.post('/tickets', verifyFirebaseToken, async (req, res) => {
     if (!validTicketCategories.includes(category)) {
         return res.status(400).json({ error: 'Invalid category specified.' });
     }
-    if (!validTicketPriorities.includes(priority)) {
-        return res.status(400).json({ error: 'Invalid priority specified.' });
-    }
+    // Priority is handled below by setting a default
+    // if (!validTicketPriorities.includes(priority)) {
+    //     return res.status(400).json({ error: 'Invalid priority specified.' });
+    // }
     // Basic email format validation for request_for_email
     if (!/^\S+@\S+\.\S+$/.test(request_for_email)) {
          return res.status(400).json({ error: 'Invalid email format for "Request for".' });
@@ -375,7 +376,7 @@ app.post('/tickets', verifyFirebaseToken, async (req, res) => {
             short_description: short_description,
             long_description: long_description,
             contact_number: contact_number,
-            priority: 'Low',
+            priority: priority || 'Low', // Set default priority if not provided
             hostname_asset_id: hostname_asset_id,
             status: 'Open', // Default status for new tickets
             created_at: admin.firestore.FieldValue.serverTimestamp(),
@@ -762,9 +763,8 @@ app.get('/tickets/export', verifyFirebaseToken, async (req, res) => {
                 : '';
 
             // Handle attachments: map to original fileName if available, otherwise use URL part
-            const attachmentsCsv = ticket.attachments && Array.isArray(ticket.attachments)
-                ? ticket.attachments.map(att => att.fileName || att.url.substring(att.url.lastIndexOf('/') + 1)).join('; ').replace(/"/g, '""')
-                : '';
+            // ... (inside the backend's /tickets/export route)
+        
 
             const row = [
                 ticket.display_id || '',
@@ -783,7 +783,7 @@ app.get('/tickets/export', verifyFirebaseToken, async (req, res) => {
                 ticket.resolved_at || '',
                 ticket.time_spent_minutes !== null ? ticket.time_spent_minutes : '',
                 `"${commentsCsv}"`,
-                `"${attachmentsCsv}"` // Use the modified attachmentsCsv
+                //`"${attachmentsCsv}"` // Use the modified attachmentsCsv
             ];
             csv += row.join(',') + '\n';
         });
@@ -893,7 +893,7 @@ app.post('/upload-attachment', verifyFirebaseToken, async (req, res) => {
                 .then(() => {
                     const publicUrl = `https://storage.googleapis.com/${bucket.name}/${destination}`;
                     // *** Push an object with originalFilename and url to the uploads array ***
-                    uploads.push({ originalFilename: originalFilename, url: publicUrl, mimetype: mimetype });
+                    uploads.push({ originalFilename: originalFilename, url: publicUrl, mimetype: mimetype }); //
                     fs.unlink(filepath, () => {});
                     resolve();
                 })
