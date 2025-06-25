@@ -429,24 +429,28 @@ const App = () => {
                     </div>
                 </div>
 
-                {/* Search Bar (visible only when logged in and not on login/register pages) */}
-                {currentUser && currentPage !== 'login' && currentPage !== 'register' && (
-                    <form onSubmit={handleSearchSubmit} className="flex items-center text-grey-800 space-x-2 flex-1 max-w-md mx-auto">
-                        <FormInput
-                            id="search"
+                {/* Search Bar with External Search Button Only */}
+            {currentUser && currentPage !== 'login' && currentPage !== 'register' && (
+                <div className="flex items-center flex-1 max-w-md mx-4">
+                    <form onSubmit={handleSearchSubmit} className="flex-1">
+                        <input
                             type="text"
                             value={searchKeyword}
                             onChange={handleSearchChange}
-                            placeholder="Search by TicketID/Name"
-                            className="flex-1"
-                            icon={Search}
-                            label="" // Hide label as placeholder is used
+                            placeholder="Search tickets..."
+                            className="w-full px-4 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         />
-                        <PrimaryButton type="submit" Icon={Search} className="w-auto px-3 py-1.5">
-                            Search
-                        </PrimaryButton>
                     </form>
-                )}
+                    {/* Standalone Search Button */}
+                    <button 
+                        onClick={handleSearchSubmit}
+                        className="ml-2 p-2 text-gray-800 hover:text-blue-600 transition-colors duration-200 focus:outline-none"
+                        aria-label="Search"
+                    >
+                        <Search size={20} />
+                    </button>
+                </div>
+            )}
 
                 {/* User Profile and Notification Menu (visible when logged in) */}
                 {currentUser && (
@@ -535,7 +539,7 @@ const App = () => {
                     <nav
                         ref={sidebarMenuRef}
                         className={`bg-gray-800 text-white flex flex-col p-3 shadow-lg flex-shrink-0 overflow-y-auto fixed h-full top-0 z-40 pt-16
-                            transition-all duration-500 ease-in-out /* Changed from duration-300 to duration-500 */
+                            transition-all duration-300 ease-in-out /* Changed from duration-500 to duration-300 */
                             ${isSidebarExpanded ? 'w-56' : 'w-16'}
                         `}
                         onMouseEnter={() => setIsSidebarExpanded(true)} // Always expand on hover
@@ -546,25 +550,25 @@ const App = () => {
                             {currentUser.role === 'support' && (
                                 <>
                                     <li>
-                                        <button onClick={() => navigateTo('dashboard')} className={`flex items-center w-full p-2 rounded-md text-left transition duration-200 text-sm ${currentPage === 'dashboard' ? 'bg-blue-600' : 'hover:bg-gray-700'}`}>
+                                        <button onClick={() => navigateTo('dashboard')} className={`flex items-center w-full p-2 rounded-md text-left transition-colors duration-200 text-sm ${currentPage === 'dashboard' ? 'bg-blue-600' : 'hover:bg-gray-700'}`}>
                                             <LayoutDashboard size={16} className="flex-shrink-0 mr-2" />
-                                            <span className={`whitespace-nowrap transition-opacity duration-300 ${isSidebarExpanded ? 'opacity-100 block' : 'opacity-0 hidden'}`}>
+                                            <span className={`whitespace-nowrap overflow-hidden transition-[opacity,width] duration-300 ${isSidebarExpanded ? 'opacity-100 w-auto' : 'opacity-0 w-0'}`}>
                                                 Dashboard
                                             </span>
                                         </button>
                                     </li>
                                     <li>
-                                        <button onClick={() => navigateTo('allTickets')} className={`flex items-center w-full p-2 rounded-md text-left transition duration-200 text-sm ${currentPage === 'allTickets' ? 'bg-blue-600' : 'hover:bg-gray-700'}`}>
+                                        <button onClick={() => navigateTo('allTickets')} className={`flex items-center w-full p-2 rounded-md text-left transition-colors duration-200 text-sm ${currentPage === 'allTickets' ? 'bg-blue-600' : 'hover:bg-gray-700'}`}>
                                             <List size={16} className="flex-shrink-0 mr-2" />
-                                            <span className={`whitespace-nowrap transition-opacity duration-300 ${isSidebarExpanded ? 'opacity-100 block' : 'opacity-0 hidden'}`}>
+                                            <span className={`whitespace-nowrap overflow-hidden transition-[opacity,width] duration-300 ${isSidebarExpanded ? 'opacity-100 w-auto' : 'opacity-0 w-0'}`}>
                                                 All Tickets ({ticketCounts.active_tickets})
                                             </span>
                                         </button>
                                     </li>
                                     <li>
-                                        <button onClick={() => navigateTo('assignedToMe')} className={`flex items-center w-full p-2 rounded-md text-left transition duration-200 text-sm ${currentPage === 'assignedToMe' ? 'bg-blue-600' : 'hover:bg-gray-700'}`}>
+                                        <button onClick={() => navigateTo('assignedToMe')} className={`flex items-center w-full p-2 rounded-md text-left transition-colors duration-200 text-sm ${currentPage === 'assignedToMe' ? 'bg-blue-600' : 'hover:bg-gray-700'}`}>
                                             <Tag size={16} className="flex-shrink-0 mr-2" />
-                                            <span className={`whitespace-nowrap transition-opacity duration-300 ${isSidebarExpanded ? 'opacity-100 block' : 'opacity-0 hidden'}`}>
+                                            <span className={`whitespace-nowrap overflow-hidden transition-[opacity,width] duration-300 ${isSidebarExpanded ? 'opacity-100 w-auto' : 'opacity-0 w-0'}`}>
                                                 Assigned to Me ({ticketCounts.assigned_to_me})
                                             </span>
                                         </button>
@@ -573,18 +577,18 @@ const App = () => {
                             )}
                             {/* Common Menu Item for All Users */}
                             <li>
-                                <button onClick={() => navigateTo('myTickets')} className={`flex items-center w-full p-2 rounded-md text-left transition duration-200 text-sm ${currentPage === 'myTickets' ? 'bg-blue-600' : 'hover:bg-gray-700'}`}>
+                                <button onClick={() => navigateTo('myTickets')} className={`flex items-center w-full p-2 rounded-md text-left transition-colors duration-200 text-sm ${currentPage === 'myTickets' ? 'bg-blue-600' : 'hover:bg-gray-700'}`}>
                                     <ClipboardCheck size={16} className="flex-shrink-0 mr-2" />
-                                    <span className={`whitespace-nowrap transition-opacity duration-300 ${isSidebarExpanded ? 'opacity-100 block' : 'opacity-0 hidden'}`}>
+                                    <span className={`whitespace-nowrap overflow-hidden transition-[opacity,width] duration-300 ${isSidebarExpanded ? 'opacity-100 w-auto' : 'opacity-0 w-0'}`}>
                                         My Tickets
                                     </span>
                                 </button>
                             </li>
                             {/* Add Create Ticket Here if desired */}
                             <li>
-                                <button onClick={() => navigateTo('createTicket')} className={`flex items-center w-full p-2 rounded-md text-left transition duration-200 text-sm ${currentPage === 'createTicket' ? 'bg-blue-600' : 'hover:bg-gray-700'}`}>
+                                <button onClick={() => navigateTo('createTicket')} className={`flex items-center w-full p-2 rounded-md text-left transition-colors duration-200 text-sm ${currentPage === 'createTicket' ? 'bg-blue-600' : 'hover:bg-gray-700'}`}>
                                     <PlusCircle size={16} className="flex-shrink-0 mr-2" />
-                                    <span className={`whitespace-nowrap transition-opacity duration-300 ${isSidebarExpanded ? 'opacity-100 block' : 'opacity-0 hidden'}`}>
+                                    <span className={`whitespace-nowrap overflow-hidden transition-[opacity,width] duration-300 ${isSidebarExpanded ? 'opacity-100 w-auto' : 'opacity-0 w-0'}`}>
                                         Create Ticket
                                     </span>
                                 </button>
