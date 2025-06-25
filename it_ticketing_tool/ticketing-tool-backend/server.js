@@ -135,14 +135,14 @@ async function generateDisplayId() {
     if (!lastTicketQuery.empty) {
         const lastTicket = lastTicketQuery.docs[0].data();
         const lastDisplayId = lastTicket.display_id;
-        if (lastDisplayId && lastDisplayId.startsWith('TICKET-')) {
+        if (lastDisplayId && lastDisplayId.startsWith('RITM')) {
             const numPart = parseInt(lastDisplayId.split('-')[1]);
             if (!isNaN(numPart)) {
                 nextIdNum = numPart + 1;
             }
         }
     }
-    return `TICKET-${String(nextIdNum).padStart(5, '0')}`;
+    return `RITM${String(nextIdNum).padStart(5, '0')}`;
 }
 
 // --- Middleware to verify Firebase ID token for protected routes ---

@@ -515,7 +515,7 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                 <button onClick={() => navigateTo(user?.role === 'support' ? 'allTickets' : 'myTickets')} className="text-gray-500 hover:text-gray-700 mr-4">
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-chevron-left"><path d="m15 18-6-6 6-6" /></svg>
                 </button>
-                <h1 className="text-lg font-semibold text-gray-800 flex-grow">TASK{ticket.display_id} (Portal view)</h1>
+                <h1 className="text-lg font-semibold text-gray-800 flex-grow">{ticket.display_id} (Ticket Detail)</h1>
 
                 <div className="flex space-x-2">
                     {/* Edit Button (visible if not editing and can edit) */}
@@ -565,10 +565,11 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                 </div>
             </div>
 
-            {/* Main Ticket Details Content */}
-            <div className="bg-white p-6 rounded-lg shadow-md w-full max-w-4xl mx-auto mt-4 border border-gray-200">
+            {/* Main Ticket Details Content - Increased max-width for more fill, removed shadow for minimalistic feel */}
+            {/* Adjusted max-w-6xl to max-w-7xl for even wider content area */}
+            <div className="bg-white p-6 rounded-lg w-full max-w-7xl mx-auto mt-4 border border-gray-200"> {/* Changed max-w-6xl to max-w-7xl, still no shadow */}
                 {/* Grid for key ticket information */}
-                <div className="grid grid-cols-2 gap-x-8 gap-y-4 mb-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 mb-6"> {/* Ensured responsiveness with md:grid-cols-2 */}
                     <div className="space-y-3">
                         <div className="flex items-center">
                             <label className="text-gray-700 text-sm font-semibold w-28 shrink-0">Number:</label>
@@ -584,7 +585,7 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                         </div>
                         <div className="flex items-center">
                             <label className="text-gray-700 text-sm font-semibold w-28 shrink-0">Request Item:</label>
-                            <span className="text-gray-900 text-sm font-medium flex-1">{ticket.request_item_id || 'RITM000000'}</span>
+                            <span className="text-gray-900 text-sm font-medium flex-1">{ticket.display_id || 'RITM000000'}</span>
                         </div>
                         <div className="flex items-center">
                             <label className="text-gray-700 text-sm font-semibold w-28 shrink-0">Due date:</label>
@@ -659,40 +660,42 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                 </div>
 
                 {/* Short Description */}
+                {/* Aligned labels and increased rows for description fields */}
                 <div className="mb-6 border-t border-gray-200 pt-6">
-                    <div className="flex items-center mb-2">
-                        <label className="text-gray-700 text-sm font-semibold w-36 shrink-0">Short description:</label>
+                    <div className="flex flex-col sm:flex-row mb-2"> {/* Changed to flex-col for smaller screens, flex-row for larger */}
+                        <label className="text-gray-700 text-sm font-semibold w-full sm:w-36 shrink-0 mb-1 sm:mb-0 pt-2">Short description:</label> {/* Added pt-2 for vertical alignment */}
                         {isEditing && canEdit ? (
                             <FormTextarea
                                 id="short_description"
                                 value={editableFields.short_description}
                                 onChange={handleEditChange}
-                                rows={2}
-                                maxLength={250}
+                                rows={4} // Increased rows from 3 to 4
+                                maxLength={750} // Increased maxLength from 500 to 750
                                 disabled={!canEdit || isTicketClosedOrResolved}
                                 className="flex-1"
                                 label=""
                             />
                         ) : (
-                            <span className="text-gray-900 text-sm bg-gray-50 p-2 rounded-sm border border-gray-200 flex-1">{ticket.short_description}</span>
+                            <span className="text-gray-900 text-sm bg-gray-50 p-2 rounded-sm border border-gray-200 flex-1 whitespace-pre-wrap">{ticket.short_description}</span> 
                         )}
                     </div>
-                    {/* Character count for short description */}
+                    {/* Character count for short description - updated maxLength */}
                     <div className="flex justify-end text-xs text-gray-500 mt-1">
-                        Characters left: {isEditing && canEdit ? 250 - editableFields.short_description.length : ticket.short_description.length ? 250 - ticket.short_description.length : 250}
+                        Characters left: {isEditing && canEdit ? 750 - editableFields.short_description.length : ticket.short_description.length ? 750 - ticket.short_description.length : 750}
                     </div>
                 </div>
 
                 {/* Long Description */}
                 <div className="mb-6">
-                    <div className="flex items-start mb-2">
-                        <label className="text-gray-700 text-sm font-semibold w-36 shrink-0 pt-2">Description:</label>
+                    <div className="flex flex-col sm:flex-row mb-2"> {/* Changed to flex-col for smaller screens, flex-row for larger */}
+                        <label className="text-gray-700 text-sm font-semibold w-full sm:w-36 shrink-0 pt-2 mb-1 sm:mb-0">Description:</label>
                         {isEditing && canEdit ? (
                             <FormTextarea
                                 id="long_description"
                                 value={editableFields.long_description}
                                 onChange={handleEditChange}
-                                rows={6}
+                                rows={15} // Increased rows from 10 to 15
+                                maxLength={4000} // Added maxLength for consistency
                                 disabled={!canEdit || isTicketClosedOrResolved}
                                 className="flex-1"
                                 label=""
@@ -701,14 +704,14 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                             <span className="text-gray-900 text-sm bg-gray-50 p-2 rounded-sm border border-gray-200 whitespace-pre-wrap flex-1">{ticket.long_description || 'No long description provided.'}</span>
                         )}
                     </div>
-                    {/* Character count for long description */}
+                    {/* Character count for long description - ensured consistency with maxLength */}
                     <div className="flex justify-end text-xs text-gray-500 mt-1">
                         Characters left: {isEditing && canEdit ? 4000 - editableFields.long_description.length : ticket.long_description.length ? 4000 - ticket.long_description.length : 4000}
                     </div>
                 </div>
 
                 {/* Other details like Reporter Email and Category */}
-                <div className="grid grid-cols-2 gap-x-8 gap-y-4 mb-6 border-t border-gray-200 pt-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 mb-6 border-t border-gray-200 pt-6"> {/* Ensured responsiveness with md:grid-cols-2 */}
                     <div className="flex items-center">
                         <label className="text-gray-700 text-sm font-semibold w-28 shrink-0">Reporter Email:</label>
                         <span className="text-gray-900 text-sm font-medium flex-1">{ticket.reporter_email}</span>
@@ -744,16 +747,17 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                     )}
                 </div>
 
-                {/* Add Attachments Section (visible if can add attachments) */}
+                {/* Add Attachments Section - Further refined for minimalistic look */}
                 {canAddAttachments && (
-                    <div className="border border-gray-300 p-3 rounded-md mt-4 bg-gray-50">
-                        <div className="flex items-center space-x-2 mb-3">
+                    <div className="mt-4 p-4 border border-gray-100 rounded-md bg-white"> {/* Even lighter border and background */}
+                        <h3 className="text-md font-semibold text-gray-800 mb-3">Add Attachments</h3>
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-3 sm:space-y-0 sm:space-x-3 mb-3">
                             <label
                                 htmlFor="attachment-upload"
-                                className="inline-flex items-center px-2 py-1 text-xs font-medium text-blue-700 bg-blue-100 rounded-md cursor-pointer hover:bg-blue-200 transition-colors"
+                                className="flex-grow inline-flex items-center justify-center w-full sm:w-auto px-4 py-2 text-sm font-medium text-gray-700 bg-gray-50 border border-gray-200 rounded-md cursor-pointer hover:bg-gray-100 transition-colors duration-200" // More subtle button style
                             >
-                                <UploadCloud className="mr-1" size={14} />
-                                Choose Files
+                                <UploadCloud className="mr-2" size={16} />
+                                Choose Files to Upload
                             </label>
                             <input
                                 id="attachment-upload"
@@ -762,46 +766,49 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                                 onChange={handleFileChange}
                                 className="hidden"
                                 disabled={uploadButtonState === 'uploading'}
-                                // Clear input value so selecting the same file again triggers change
                                 value=""
                             />
+                            {/* Replaced 'No files chosen' with a more dynamic message */}
                             {attachmentFiles.length === 0 && (
-                                <span className="text-sm text-gray-600 flex-grow">No files chosen</span>
+                                <span className="text-sm text-gray-600 flex-grow sm:flex-none">Select files to attach.</span>
                             )}
-                            <button
-                                onClick={handleAddAttachmentsToTicket}
-                                disabled={attachmentFiles.length === 0 || uploadButtonState === 'uploading'}
-                                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-300 ease-in-out flex items-center justify-center h-7 ${
-                                    uploadButtonState === 'uploading'
-                                        ? 'bg-blue-200 text-blue-500 cursor-not-allowed'
-                                        : uploadButtonState === 'success'
-                                            ? 'bg-green-500 text-white'
-                                            : uploadButtonState === 'error'
-                                                ? 'bg-red-500 text-white'
-                                                : attachmentFiles.length > 0
-                                                    ? 'bg-blue-600 text-white hover:bg-blue-700'
-                                                    : 'bg-blue-200 text-blue-500 cursor-not-allowed'
-                                }`}
-                            >
-                                {uploadButtonState === 'uploading' && <Loader2 className="animate-spin mr-1" size={14} />}
-                                {uploadButtonState === 'success' && <CheckCircle className="mr-1" size={14} />}
-                                {uploadButtonState === 'error' && <XCircle className="mr-1" size={14} />}
-                                {uploadButtonState === 'uploading' && 'Uploading...'}
-                                {uploadButtonState === 'success' && 'Success!'}
-                                {uploadButtonState === 'error' && 'Failed!'}
-                                {uploadButtonState === 'upload' && 'Upload'}
-                            </button>
+                            {attachmentFiles.length > 0 && (
+                                <button
+                                    onClick={handleAddAttachmentsToTicket}
+                                    disabled={attachmentFiles.length === 0 || uploadButtonState === 'uploading'}
+                                    className={`px-4 py-2 text-sm font-medium rounded-md transition-all duration-300 ease-in-out flex items-center justify-center w-full sm:w-auto
+                                    ${uploadButtonState === 'uploading'
+                                            ? 'bg-blue-200 text-blue-500 cursor-not-allowed'
+                                            : uploadButtonState === 'success'
+                                                ? 'bg-green-500 text-white'
+                                                : uploadButtonState === 'error'
+                                                    ? 'bg-red-500 text-white'
+                                                    : attachmentFiles.length > 0
+                                                        ? 'bg-blue-600 text-white hover:bg-blue-700'
+                                                        : 'bg-blue-200 text-blue-500 cursor-not-allowed'
+                                        }`}
+                                >
+                                    {uploadButtonState === 'uploading' && <Loader2 className="animate-spin mr-2" size={16} />}
+                                    {uploadButtonState === 'success' && <CheckCircle className="mr-2" size={16} />}
+                                    {uploadButtonState === 'error' && <XCircle className="mr-2" size={16} />}
+                                    {uploadButtonState === 'uploading' && 'Uploading...'}
+                                    {uploadButtonState === 'success' && 'Success!'}
+                                    {uploadButtonState === 'error' && 'Failed!'}
+                                    {uploadButtonState === 'upload' && 'Upload Selected'} {/* Changed button text */}
+                                </button>
+                            )}
                         </div>
 
-                        {/* List of selected files to be uploaded */}
+                        {/* List of selected files to be uploaded - Simplified appearance */}
                         {attachmentFiles.length > 0 && (
-                            <div className="mt-2 space-y-1">
+                            <div className="mt-4 space-y-2 border-t pt-3 border-gray-100"> {/* Added top border for separation */}
+                                <p className="text-sm text-gray-700 font-semibold mb-2">Files ready for upload:</p>
                                 {attachmentFiles.map((file, index) => (
-                                    <div key={index} className="flex items-center justify-between bg-white px-3 py-1.5 rounded-md border border-gray-200 text-sm">
+                                    <div key={index} className="flex items-center justify-between bg-white px-3 py-2 rounded-md border border-gray-100 text-sm"> {/* White background, lighter border */}
                                         <span className="truncate mr-2">{file.name}</span>
                                         <button
                                             onClick={() => handleRemoveFile(file)}
-                                            className="text-red-500 hover:text-red-700 p-1 rounded-full hover:bg-red-100 transition-colors"
+                                            className="text-gray-400 hover:text-red-500 p-1 rounded-full hover:bg-red-50 transition-colors" // More subtle removal button
                                             title={`Remove ${file.name}`}
                                             aria-label={`Remove ${file.name}`}
                                         >
@@ -837,34 +844,32 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                 )}
                 </div>
 
-                {/* Add Comment Form (visible if can add comments) */}
-                {canAddComments && (
-                    <form onSubmit={handleAddComment} className="mt-4 p-4 border border-gray-300 rounded-md bg-white shadow-sm">
-                        <h3 className="text-md font-semibold text-gray-800 mb-3">Add a Comment</h3>
-                        <textarea
-                            className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                            rows="4"
-                            placeholder="Type your comment here..."
-                            value={commentText}
-                            onChange={(e) => setCommentText(e.target.value)}
-                            disabled={commentLoading}
-                        ></textarea>
-                        <div className="flex justify-end mt-3">
-                            <button
-                                type="submit"
-                                disabled={commentLoading || !commentText.trim()} // Disable if loading or text is empty
-                                className={`px-4 py-2 text-sm font-medium rounded-md transition-colors duration-200 flex items-center justify-center
-                                ${commentLoading
-                                        ? 'bg-blue-200 text-blue-500 cursor-not-allowed'
-                                        : 'bg-blue-600 text-white hover:bg-blue-700'
-                                    }`}
-                            >
-                                {commentLoading && <Loader2 className="animate-spin mr-2" size={16} />}
-                                Add Comment
-                            </button>
-                        </div>
-                    </form>
-                )}
+                {/* Add Comment Form */}
+                <form onSubmit={handleAddComment} className="mt-4 p-4 border border-gray-200 rounded-md bg-white"> {/* Simplified styling */}
+                    <h3 className="text-md font-semibold text-gray-800 mb-3">Add a Comment</h3>
+                    <textarea
+                        className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                        rows="4"
+                        placeholder="Type your comment here..."
+                        value={commentText}
+                        onChange={(e) => setCommentText(e.target.value)}
+                        disabled={commentLoading}
+                    ></textarea>
+                    <div className="flex justify-end mt-3">
+                        <button
+                            type="submit"
+                            disabled={commentLoading || !commentText.trim()} // Disable if loading or text is empty
+                            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors duration-200 flex items-center justify-center
+                            ${commentLoading
+                                    ? 'bg-blue-200 text-blue-500 cursor-not-allowed'
+                                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                                }`}
+                        >
+                            {commentLoading && <Loader2 className="animate-spin mr-2" size={16} />}
+                            Add Comment
+                        </button>
+                    </div>
+                </form>
             </div>
         </div>
     );

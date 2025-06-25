@@ -550,44 +550,78 @@ const App = () => {
                             {currentUser.role === 'support' && (
                                 <>
                                     <li>
-                                        <button onClick={() => navigateTo('dashboard')} className={`flex items-center w-full p-2 rounded-md text-left transition-colors duration-200 text-sm ${currentPage === 'dashboard' ? 'bg-blue-600' : 'hover:bg-gray-700'}`}>
-                                            <LayoutDashboard size={16} className="flex-shrink-0 mr-2" />
+                                        <button onClick={() => navigateTo('dashboard')} className={`relative flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-200 text-base ${currentPage === 'dashboard' ? 'bg-blue-700 shadow-md' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                            <LayoutDashboard size={20} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} />
                                             <span className={`whitespace-nowrap overflow-hidden transition-[opacity,width] duration-300 ${isSidebarExpanded ? 'opacity-100 w-auto' : 'opacity-0 w-0'}`}>
                                                 Dashboard
                                             </span>
+                                            {!isSidebarExpanded && (
+                                                <span className="sidebar-count-badge absolute top-0 right-0 text-blue-300 text-xs font-bold rounded-full h-4 w-4 flex items-center justify-center -mt-1 -mr-1">
+                                                    {ticketCounts.total_tickets}
+                                                </span>
+                                            )}
+                                            {isSidebarExpanded && (
+                                                <span className="ml-2 text-blue-300 text-xs">
+                                                    ({ticketCounts.total_tickets})
+                                                </span>
+                                            )}
                                         </button>
                                     </li>
                                     <li>
-                                        <button onClick={() => navigateTo('allTickets')} className={`flex items-center w-full p-2 rounded-md text-left transition-colors duration-200 text-sm ${currentPage === 'allTickets' ? 'bg-blue-600' : 'hover:bg-gray-700'}`}>
-                                            <List size={16} className="flex-shrink-0 mr-2" />
+                                        <button onClick={() => navigateTo('allTickets')} className={`relative flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-200 text-base ${currentPage === 'allTickets' ? 'bg-blue-700 shadow-md' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                            <List size={20} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} />
                                             <span className={`whitespace-nowrap overflow-hidden transition-[opacity,width] duration-300 ${isSidebarExpanded ? 'opacity-100 w-auto' : 'opacity-0 w-0'}`}>
-                                                All Tickets ({ticketCounts.active_tickets})
+                                                All Tickets
                                             </span>
+                                            {!isSidebarExpanded && (
+                                                <span className="sidebar-count-badge absolute top-0 right-0 text-red-300 text-xs font-bold rounded-full h-4 w-4 flex items-center justify-center -mt-1 -mr-1">
+                                                    {ticketCounts.active_tickets}
+                                                </span>
+                                            )}
+                                            {isSidebarExpanded && (
+                                                <span className="ml-2 text-red-300 text-xs">
+                                                    ({ticketCounts.active_tickets})
+                                                </span>
+                                            )}
                                         </button>
                                     </li>
                                     <li>
-                                        <button onClick={() => navigateTo('assignedToMe')} className={`flex items-center w-full p-2 rounded-md text-left transition-colors duration-200 text-sm ${currentPage === 'assignedToMe' ? 'bg-blue-600' : 'hover:bg-gray-700'}`}>
-                                            <Tag size={16} className="flex-shrink-0 mr-2" />
+                                        <button onClick={() => navigateTo('assignedToMe')} className={`relative flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-200 text-base ${currentPage === 'assignedToMe' ? 'bg-blue-700 shadow-md' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                            <Tag size={20} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} />
                                             <span className={`whitespace-nowrap overflow-hidden transition-[opacity,width] duration-300 ${isSidebarExpanded ? 'opacity-100 w-auto' : 'opacity-0 w-0'}`}>
-                                                Assigned to Me ({ticketCounts.assigned_to_me})
+                                                Assigned to Me
                                             </span>
+                                            {!isSidebarExpanded && (
+                                                <span className="sidebar-count-badge absolute top-0 right-0 text-green-300 text-xs font-bold rounded-full h-4 w-4 flex items-center justify-center -mt-1 -mr-1">
+                                                    {ticketCounts.assigned_to_me}
+                                                </span>
+                                            )}
+                                            {isSidebarExpanded && (
+                                                <span className="ml-2 text-green-300 text-xs">
+                                                    ({ticketCounts.assigned_to_me})
+                                                </span>
+                                            )}
                                         </button>
                                     </li>
                                 </>
                             )}
                             {/* Common Menu Item for All Users */}
                             <li>
-                                <button onClick={() => navigateTo('myTickets')} className={`flex items-center w-full p-2 rounded-md text-left transition-colors duration-200 text-sm ${currentPage === 'myTickets' ? 'bg-blue-600' : 'hover:bg-gray-700'}`}>
-                                    <ClipboardCheck size={16} className="flex-shrink-0 mr-2" />
+                                <button onClick={() => navigateTo('myTickets')} className={`flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-200 text-base ${currentPage === 'myTickets' ? 'bg-blue-700 shadow-md' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                    <ClipboardCheck size={20} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} />
                                     <span className={`whitespace-nowrap overflow-hidden transition-[opacity,width] duration-300 ${isSidebarExpanded ? 'opacity-100 w-auto' : 'opacity-0 w-0'}`}>
                                         My Tickets
                                     </span>
+                                    {/* My Tickets count for regular users, if you have a specific count for them */}
+                                    {/* You'd need to fetch this count similarly to how ticketCounts is fetched */}
+                                    {/* For now, let's assume `ticketCounts.my_tickets` exists or calculate it */}
+                                   
                                 </button>
                             </li>
                             {/* Add Create Ticket Here if desired */}
                             <li>
-                                <button onClick={() => navigateTo('createTicket')} className={`flex items-center w-full p-2 rounded-md text-left transition-colors duration-200 text-sm ${currentPage === 'createTicket' ? 'bg-blue-600' : 'hover:bg-gray-700'}`}>
-                                    <PlusCircle size={16} className="flex-shrink-0 mr-2" />
+                                <button onClick={() => navigateTo('createTicket')} className={`flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-200 text-base ${currentPage === 'createTicket' ? 'bg-blue-700 shadow-md' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                    <PlusCircle size={20} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} />
                                     <span className={`whitespace-nowrap overflow-hidden transition-[opacity,width] duration-300 ${isSidebarExpanded ? 'opacity-100 w-auto' : 'opacity-0 w-0'}`}>
                                         Create Ticket
                                     </span>
