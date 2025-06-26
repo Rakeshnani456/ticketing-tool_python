@@ -567,7 +567,7 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
 
             {/* Main Ticket Details Content - Increased max-width for more fill, removed shadow for minimalistic feel */}
             {/* Adjusted max-w-6xl to max-w-7xl for even wider content area */}
-            <div className="bg-white p-6 rounded-lg w-full max-w-7xl mx-auto mt-4 border border-gray-200"> {/* Changed max-w-6xl to max-w-7xl, still no shadow */}
+            <div className="bg-white p-6 rounded-lg w-full mx-auto mt-4 border border-gray-200"> {/* Changed max-w-6xl to max-w-7xl, still no shadow */}
                 {/* Grid for key ticket information */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 mb-6"> {/* Ensured responsiveness with md:grid-cols-2 */}
                     <div className="space-y-3">
@@ -662,23 +662,23 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                 {/* Short Description */}
                 {/* Aligned labels and increased rows for description fields */}
                 <div className="mb-6 border-t border-gray-200 pt-6">
-                    <div className="flex flex-col sm:flex-row mb-2"> {/* Changed to flex-col for smaller screens, flex-row for larger */}
-                        <label className="text-gray-700 text-sm font-semibold w-full sm:w-36 shrink-0 mb-1 sm:mb-0 pt-2">Short description:</label> {/* Added pt-2 for vertical alignment */}
-                        {isEditing && canEdit ? (
-                            <FormTextarea
-                                id="short_description"
-                                value={editableFields.short_description}
-                                onChange={handleEditChange}
-                                rows={4} // Increased rows from 3 to 4
-                                maxLength={750} // Increased maxLength from 500 to 750
-                                disabled={!canEdit || isTicketClosedOrResolved}
-                                className="flex-1"
-                                label=""
-                            />
-                        ) : (
-                            <span className="text-gray-900 text-sm bg-gray-50 p-2 rounded-sm border border-gray-200 flex-1 whitespace-pre-wrap">{ticket.short_description}</span> 
-                        )}
-                    </div>
+                <div className="flex flex-col sm:flex-row mb-2"> {/* This flex container is important */}
+                    <label className="text-gray-700 text-sm font-semibold w-full sm:w-36 shrink-0 mb-1 sm:mb-0 pt-2">Short description:</label>
+                    {isEditing && canEdit ? (
+                        <FormTextarea
+                            id="short_description"
+                            value={editableFields.short_description}
+                            onChange={handleEditChange}
+                            rows={4}
+                            maxLength={750}
+                            disabled={!canEdit || isTicketClosedOrResolved}
+                            className="flex-1" // This is where the textarea should expand
+                            label=""
+                        />
+                    ) : (
+                        <span className="text-gray-900 text-sm bg-gray-50 p-2 rounded-sm border border-gray-200 flex-1 whitespace-pre-wrap">{ticket.short_description}</span>
+                    )}
+                </div>
                     {/* Character count for short description - updated maxLength */}
                     <div className="flex justify-end text-xs text-gray-500 mt-1">
                         Characters left: {isEditing && canEdit ? 750 - editableFields.short_description.length : ticket.short_description.length ? 750 - ticket.short_description.length : 750}
