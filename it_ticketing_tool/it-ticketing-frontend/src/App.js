@@ -29,6 +29,7 @@ import TicketDetailComponent from './components/tickets/TicketDetailComponent';
 import DashboardComponent from './components/DashboardComponent';
 import ProfileComponent from './components/ProfileComponent';
 import AccessDeniedComponent from './components/AccessDeniedComponent';
+import ChangePasswordComponent from './components/ChangePasswordComponent'; // NEW: Import ChangePasswordComponent
 
 /**
  * Main application component.
@@ -444,29 +445,29 @@ const App = () => {
                         {currentUser.role === 'support' && (
                             <>
                                 <li>
-                                        <button onClick={() => navigateTo('dashboard')} className={`relative flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-200 text-base ${currentPage === 'dashboard' ? 'font-bold border-b-2 border-blue-300' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
-                                        <LayoutDashboard size={20} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} />
-                                        <motion.span
-                                            variants={textVariants}
-                                            animate={isSidebarExpanded ? "expanded" : "collapsed"}
-                                            className="whitespace-nowrap overflow-hidden"
-                                        >
-                                            Dashboard
-                                        </motion.span>
-                                        {!isSidebarExpanded && (
-                                            <span className="sidebar-count-badge absolute top-0 right-0 text-blue-300 text-xs font-bold rounded-full h-4 w-4 flex items-center justify-center -mt-1 -mr-1">
-                                                {ticketCounts.total_tickets}
-                                            </span>
-                                        )}
-                                        {isSidebarExpanded && (
-                                            <span className="ml-2 text-blue-300 text-xs">
-                                                ({ticketCounts.total_tickets})
-                                            </span>
-                                        )}
-                                    </button>
+                                        <button onClick={() => navigateTo('dashboard')} className={`relative flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-300 text-base ${currentPage === 'dashboard' ? 'font-bold border-b-2 border-blue-500' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                            <LayoutDashboard size={20} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} />
+                                            <motion.span
+                                                variants={textVariants}
+                                                animate={isSidebarExpanded ? "expanded" : "collapsed"}
+                                                className="whitespace-nowrap overflow-hidden"
+                                            >
+                                                Dashboard
+                                            </motion.span>
+                                            {!isSidebarExpanded && (
+                                                <span className="sidebar-count-badge absolute top-0 right-0 text-blue-300 text-xs rounded-full h-4 w-4 flex items-center justify-center -mt-1 -mr-1 font-normal"> {/* Added font-normal */}
+                                                    {ticketCounts.total_tickets}
+                                                </span>
+                                            )}
+                                            {isSidebarExpanded && (
+                                                <span className="ml-2 text-blue-300 text-xs font-normal"> {/* Added font-normal */}
+                                                    ({ticketCounts.total_tickets})
+                                                </span>
+                                            )}
+                                        </button>
                                 </li>
                                 <li>
-                                    <button onClick={() => navigateTo('allTickets')} className={`relative flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-200 text-base ${currentPage === 'allTickets' ? 'font-bold border-b-2 border-red-300' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                    <button onClick={() => navigateTo('allTickets')} className={`relative flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-300 text-base ${currentPage === 'allTickets' ? 'font-bold border-b-2 border-red-500' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
                                         <List size={20} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} />
                                         <motion.span
                                             variants={textVariants}
@@ -476,7 +477,7 @@ const App = () => {
                                             All Tickets
                                         </motion.span>
                                         {!isSidebarExpanded && (
-                                            <span className="sidebar-count-badge absolute top-0 right-0 text-red-300 text-xs font-bold rounded-full h-4 w-4 flex items-center justify-center -mt-1 -mr-1">
+                                            <span className="sidebar-count-badge absolute top-0 right-0 text-red-300 text-xs rounded-full h-4 w-4 flex items-center justify-center -mt-1 -mr-1">
                                                 {ticketCounts.active_tickets}
                                             </span>
                                         )}
@@ -488,7 +489,7 @@ const App = () => {
                                     </button>
                                 </li>
                                 <li>
-                                    <button onClick={() => navigateTo('assignedToMe')} className={`relative flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-200 text-base ${currentPage === 'assignedToMe' ? 'font-bold border-b-2 border-green-300' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                    <button onClick={() => navigateTo('assignedToMe')} className={`relative flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-300 text-base ${currentPage === 'assignedToMe' ? 'font-bold border-b-2 border-green-600' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
                                         <Tag size={20} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} />
                                         <motion.span
                                             variants={textVariants}
@@ -498,7 +499,7 @@ const App = () => {
                                             Assigned to Me
                                         </motion.span>
                                         {!isSidebarExpanded && (
-                                            <span className="sidebar-count-badge absolute top-0 right-0 text-green-300 text-xs font-bold rounded-full h-4 w-4 flex items-center justify-center -mt-1 -mr-1">
+                                            <span className="sidebar-count-badge absolute top-0 right-0 text-green-300 text-xs rounded-full h-4 w-4 flex items-center justify-center -mt-1 -mr-1">
                                                 {ticketCounts.assigned_to_me}
                                             </span>
                                         )}
@@ -513,7 +514,7 @@ const App = () => {
                         )}
                         {/* Common Menu Item for All Users */}
                         <li>
-                            <button onClick={() => navigateTo('myTickets')} className={`flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-200 text-base ${currentPage === 'myTickets' ? 'font-bold border-b-2 border-white' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                            <button onClick={() => navigateTo('myTickets')} className={`flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-300 text-base ${currentPage === 'myTickets' ? 'font-bold border-b-2 border-white' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
                                 <ClipboardCheck size={20} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} />
                                 <motion.span
                                     variants={textVariants}
@@ -526,7 +527,7 @@ const App = () => {
                         </li>
                         {/* Add Create Ticket Here if desired */}
                         <li>
-                            <button onClick={() => navigateTo('createTicket')} className={`flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-200 text-base ${currentPage === 'createTicket' ? 'font-bold border-b-2 border-white' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                            <button onClick={() => navigateTo('createTicket')} className={`flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-300 text-base ${currentPage === 'createTicket' ? 'font-bold border-b-2 border-white' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
                                 <PlusCircle size={20} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} />
                                 <motion.span
                                     variants={textVariants}
@@ -729,6 +730,8 @@ const App = () => {
                                     );
                                 case 'profile':
                                     return <ProfileComponent user={currentUser} showFlashMessage={showFlashMessage} navigateTo={navigateTo} handleLogout={handleLogout} />;
+                                case 'changePassword': // NEW: Case for Change Password page
+                                    return <ChangePasswordComponent user={currentUser} showFlashMessage={showFlashMessage} navigateTo={navigateTo} />;
                                 default:
                                     return <MyTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} />;
                             }

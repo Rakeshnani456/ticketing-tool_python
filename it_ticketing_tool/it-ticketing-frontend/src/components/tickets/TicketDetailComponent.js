@@ -576,7 +576,7 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                             <span className="text-gray-900 text-sm font-medium flex-1">{ticket.display_id}</span>
                         </div>
                         <div className="flex items-center">
-                            <label className="text-gray-700 text-sm font-semibold w-28 shrink-0">Customer:</label>
+                            <label className="text-gray-700 text-sm font-semibold w-28 shrink-0">Requested by:</label>
                             <span className="text-gray-900 text-sm font-medium flex-1">{ticket.request_for_email}</span>
                         </div>
                         <div className="flex items-center">
@@ -845,31 +845,34 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                 </div>
 
                 {/* Add Comment Form */}
-                <form onSubmit={handleAddComment} className="mt-4 p-4 border border-gray-200 rounded-md bg-white"> {/* Simplified styling */}
-                    <h3 className="text-md font-semibold text-gray-800 mb-3">Add a Comment</h3>
-                    <textarea
-                        className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                        rows="4"
-                        placeholder="Type your comment here..."
-                        value={commentText}
-                        onChange={(e) => setCommentText(e.target.value)}
-                        disabled={commentLoading}
-                    ></textarea>
-                    <div className="flex justify-end mt-3">
-                        <button
-                            type="submit"
-                            disabled={commentLoading || !commentText.trim()} // Disable if loading or text is empty
-                            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors duration-200 flex items-center justify-center
-                            ${commentLoading
-                                    ? 'bg-blue-200 text-blue-500 cursor-not-allowed'
-                                    : 'bg-blue-600 text-white hover:bg-blue-700'
-                                }`}
-                        >
-                            {commentLoading && <Loader2 className="animate-spin mr-2" size={16} />}
-                            Add Comment
-                        </button>
-                    </div>
-                </form>
+                {/* Add Comment Form */}
+                {canAddComments && ( // Only render if comments can be added
+                    <form onSubmit={handleAddComment} className="mt-4 p-4 border border-gray-200 rounded-md bg-white">
+                        <h3 className="text-md font-semibold text-gray-800 mb-3">Add a Comment</h3>
+                        <textarea
+                            className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                            rows="4"
+                            placeholder="Type your comment here..."
+                            value={commentText}
+                            onChange={(e) => setCommentText(e.target.value)}
+                            disabled={commentLoading || !canAddComments} // Also disable if comments cannot be added
+                        ></textarea>
+                        <div className="flex justify-end mt-3">
+                            <button
+                                type="submit"
+                                disabled={commentLoading || !commentText.trim() || !canAddComments} // Also disable if comments cannot be added
+                                className={`px-4 py-2 text-sm font-medium rounded-md transition-colors duration-200 flex items-center justify-center
+                                ${commentLoading || !canAddComments
+                                        ? 'bg-blue-200 text-blue-500 cursor-not-allowed'
+                                        : 'bg-blue-600 text-white hover:bg-blue-700'
+                                    }`}
+                            >
+                                {commentLoading && <Loader2 className="animate-spin mr-2" size={16} />}
+                                Add Comment
+                            </button>
+                        </div>
+                    </form>
+                )}
             </div>
         </div>
     );

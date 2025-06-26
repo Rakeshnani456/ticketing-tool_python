@@ -10,9 +10,9 @@ import PrimaryButton from '../common/PrimaryButton';
 import LinkButton from '../common/LinkButton';
 
 // Import Firebase auth client from config
-import { authClient } from '../../config/firebase';
+import { authClient } from '../../config/firebase'; // Corrected syntax
 // Import API Base URL from constants
-import { API_BASE_URL } from '../../config/constants';
+import { API_BASE_URL } from '../../config/constants'; // Corrected syntax
 
 /**
  * Component for user login.
@@ -28,6 +28,7 @@ const LoginComponent = ({ onLoginSuccess, navigateTo, showFlashMessage }) => {
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [passwordError, setPasswordError] = useState(false); // State to indicate password error for styling
+    const [formError, setFormError] = useState(''); // State for general form error message
 
     /**
      * Handles the form submission for login.
@@ -37,6 +38,7 @@ const LoginComponent = ({ onLoginSuccess, navigateTo, showFlashMessage }) => {
     const handleSubmit = async (e) => {
         e.preventDefault(); // Prevent default form submission behavior
         setPasswordError(false); // Reset password error on new submission attempt
+        setFormError(''); // Clear any previous general form errors
         setLoading(true); // Start loading state
 
         try {
@@ -62,8 +64,8 @@ const LoginComponent = ({ onLoginSuccess, navigateTo, showFlashMessage }) => {
                 // If backend verification is successful, call onLoginSuccess with user data
                 onLoginSuccess({ firebaseUser, role: data.user.role, email: firebaseUser.email });
             } else {
-                // If backend verification fails, show error and sign out from Firebase
-                showFlashMessage(data.error || 'Login failed after token verification.', 'error');
+                // If backend verification fails, set form error and sign out from Firebase
+                setFormError(data.error || 'Login failed after token verification. Please try again.');
                 authClient.signOut(); // Ensure user is signed out if backend rejects
             }
         } catch (error) {
@@ -74,8 +76,10 @@ const LoginComponent = ({ onLoginSuccess, navigateTo, showFlashMessage }) => {
                 switch (error.code) {
                     case 'auth/user-not-found':
                     case 'auth/wrong-password':
-                        errorMessage = 'Invalid email or password.';
+                    case 'auth/invalid-credential': // Explicitly handle this common error
+                        errorMessage = 'Invalid email or password. Please try again.';
                         setPasswordError(true); // Set password error for visual feedback
+                        setPassword(''); // Clear password field for re-entry
                         break;
                     case 'auth/invalid-email':
                         errorMessage = 'Invalid email format.';
@@ -87,22 +91,30 @@ const LoginComponent = ({ onLoginSuccess, navigateTo, showFlashMessage }) => {
                         errorMessage = 'Network error. Please check your internet connection.';
                         break;
                     default:
-                        errorMessage = error.message; // Generic Firebase error message
+                        errorMessage = error.message || 'An unexpected authentication error occurred.'; // Fallback for other Firebase errors
                 }
             } else {
                 errorMessage = 'An unexpected network error occurred or server is unreachable.';
             }
-            showFlashMessage(errorMessage, 'error'); // Display error message to user
+            setFormError(errorMessage); // Display error message inside the form
         } finally {
             setLoading(false); // End loading state
         }
     };
 
     /**
-     * Resets password error state when the password input is focused.
+     * Resets password error state and clears general form error when the password input is focused.
      */
     const handlePasswordFocus = () => {
         setPasswordError(false);
+        setFormError(''); // Clear general form error when user focuses on password
+    };
+
+    /**
+     * Resets general form error when the email input is focused.
+     */
+    const handleEmailFocus = () => {
+        setFormError(''); // Clear general form error when user focuses on email
     };
 
     return (
@@ -110,12 +122,18 @@ const LoginComponent = ({ onLoginSuccess, navigateTo, showFlashMessage }) => {
             <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-sm border border-gray-200 animate-fade-in">
                 <h2 className="text-2xl font-extrabold text-gray-800 mb-5 text-center">Welcome Back!</h2>
                 <form onSubmit={handleSubmit} className="space-y-3">
+                    {formError && (
+                        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-2 rounded relative text-sm" role="alert">
+                            <span className="block sm:inline">{formError}</span>
+                        </div>
+                    )}
                     <FormInput
                         id="email"
                         label="Email Address"
                         type="email"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
+                        onFocus={handleEmailFocus} // Add onFocus handler for email
                         required
                     />
                     <FormInput

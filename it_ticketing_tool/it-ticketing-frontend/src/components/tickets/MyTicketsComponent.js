@@ -75,7 +75,7 @@ const MyTicketsComponent = ({ user, navigateTo, showFlashMessage, searchKeyword,
         let q = query(
             ticketsRef,
             where('reporter_id', '==', firebaseUser.uid), // Filter by current user's ID
-            where('status', 'in', ['Open', 'In Progress', 'Hold']), // Default filter: show active tickets
+            where('status', 'in', ['Open', 'In Progress', 'Hold', 'Closed', 'Resolved']), // Default filter: show ALL active and inactive tickets
             orderBy('created_at', 'desc') // Order by creation date
         );
 
