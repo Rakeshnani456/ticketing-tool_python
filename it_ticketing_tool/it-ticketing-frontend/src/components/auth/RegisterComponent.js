@@ -91,7 +91,8 @@ const RegisterComponent = ({ navigateTo, showFlashMessage }) => {
                         onChange={(e) => setRole(e.target.value)}
                         options={[
                             { value: 'user', label: 'User' },
-                            { value: 'support', label: 'Support Associate' }
+                            { value: 'support', label: 'Support Associate' },
+                            { value: 'admin', label: 'Admin' }
                         ]}
                     />
                     <PrimaryButton type="submit" loading={loading ? "Registering..." : null} Icon={User} className="bg-green-600 hover:bg-green-700 focus:ring-green-300">

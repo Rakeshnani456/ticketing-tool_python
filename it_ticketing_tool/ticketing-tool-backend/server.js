@@ -73,6 +73,9 @@ const validTicketCategories = ['software', 'hardware', 'troubleshoot'];
 const validTicketPriorities = ['Low', 'Medium', 'High', 'Critical'];
 const validTicketStatuses = ['Open', 'In Progress', 'Hold', 'Resolved', 'Closed'];
 
+// NEW: Valid User Roles
+const validUserRoles = ['user', 'support', 'admin'];
+
 // --- Helper function: JSON Serializable Ticket ---
 // Converts Firestore Timestamp objects and adds document ID
 function jsonSerializableTicket(docId, ticketData) {
@@ -146,20 +149,108 @@ async function generateDisplayId() {
 }
 
 // --- Middleware to verify Firebase ID token for protected routes ---
+// MODIFIED: Fetch user role and attach to req.user
+// server.js (excerpt)
+
+// Middleware to verify Firebase ID token
+// server.js (Modified verifyFirebaseToken middleware)
+
+// Middleware to verify Firebase ID token and fetch user role
 const verifyFirebaseToken = async (req, res, next) => {
     const authHeader = req.headers.authorization;
+
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return res.status(401).json({ message: 'No authentication token provided or invalid format.' });
+        console.warn('Authorization header missing or not Bearer token.');
+        return res.status(401).json({ error: 'Unauthorized: No token provided or token format is invalid.' });
     }
-    const idToken = authHeader.split('Bearer ')[1];
+
+    const idToken = authHeader.split(' ')[1];
+
     try {
         const decodedToken = await admin.auth().verifyIdToken(idToken);
-        req.user = decodedToken; // Attach user info (uid, email, etc.) to request object
-        next(); // Proceed to the next middleware/route handler
+        req.user = decodedToken;
+
+        // Fetch user's role from Firestore
+        console.log(`Attempting to fetch user document for UID: ${decodedToken.uid}`);
+        const userDoc = await db.collection('users').doc(decodedToken.uid).get();
+
+        if (!userDoc.exists) {
+            console.error(`ERROR: User document NOT found for UID: ${decodedToken.uid}`);
+            return res.status(403).json({ error: 'Forbidden: User profile not found.' });
+        }
+
+        const userData = userDoc.data();
+        console.log(`User data retrieved for ${decodedToken.uid}:`, userData); // Log the full user data
+
+        if (!userData || !userData.role) {
+            console.error(`ERROR: Role not found or is empty for user: ${decodedToken.uid}. User data:`, userData);
+            return res.status(403).json({ error: 'Forbidden: User role not found.' });
+        }
+
+        req.user.role = userData.role;
+        console.log(`Successfully set role for ${decodedToken.uid} to: ${req.user.role}`);
+        next();
     } catch (error) {
-        console.error('Error verifying Firebase ID token:', error);
-        return res.status(403).json({ message: 'Unauthorized: Invalid or expired token.' });
+        console.error('Error verifying Firebase ID token or fetching user role:', error);
+        if (error.code === 'auth/argument-error' || error.code === 'auth/invalid-credential' || error.code === 'auth/id-token-expired') {
+             return res.status(401).json({ error: 'Unauthorized: Invalid or expired token. Please log in again.' });
+        }
+        return res.status(500).json({ error: 'Failed to authenticate token or retrieve user data.' });
     }
+};
+// Middleware to check if the user has an admin role
+const requireAdmin = (req, res, next) => {
+    // This assumes req.user.role has been set by verifyFirebaseToken
+    if (!req.user || req.user.role !== 'admin') {
+        return res.status(403).json({ error: 'Forbidden: Admin access required.' });
+    }
+    next();
+};
+
+// ... then apply these middlewares to your routes
+// Example:
+// app.get('/admin/users', verifyFirebaseToken, requireAdmin, async (req, res) => {
+//     // ... your logic for fetching users, which will now have req.user.role available
+// });
+
+// Example for a login route where role is retrieved and token generated
+// app.post('/login', async (req, res) => {
+//     const { idToken } = req.body; // Token from client after Firebase sign-in
+//     try {
+//         const decodedToken = await admin.auth().verifyIdToken(idToken);
+//         const userDoc = await db.collection('users').doc(decodedToken.uid).get();
+//         if (!userDoc.exists) {
+//             // If user doesn't exist in Firestore, create basic profile
+//             await db.collection('users').doc(decodedToken.uid).set({
+//                 email: decodedToken.email,
+//                 role: 'user', // Default role for new users
+//                 createdAt: admin.firestore.FieldValue.serverTimestamp()
+//             });
+//             return res.status(200).json({ user: { uid: decodedToken.uid, email: decodedToken.email, role: 'user' } });
+//         }
+//         const userData = userDoc.data();
+//         res.status(200).json({ user: { uid: decodedToken.uid, email: decodedToken.email, role: userData.role } });
+//     } catch (error) {
+//         console.error("Login endpoint token verification error:", error);
+//         res.status(401).json({ error: 'Invalid token or login failed.' });
+//     }
+// });
+
+// ... then use this middleware for protected routes
+// app.get('/admin/users', verifyFirebaseToken, async (req, res) => { ... });
+
+// NEW: Middleware to check user role
+const checkRole = (roles) => {
+    return (req, res, next) => {
+        if (!req.user || !req.user.role) {
+            return res.status(403).json({ error: 'Forbidden: User role not found.' });
+        }
+        if (roles.includes(req.user.role)) {
+            next();
+        } else {
+            return res.status(403).json({ error: 'Forbidden: Insufficient permissions.' });
+        }
+    };
 };
 
 // --- New Endpoint: Get Ticket Summary Counts ---
@@ -168,7 +259,7 @@ const verifyFirebaseToken = async (req, res, next) => {
 // @access  Private (requires token)
 app.get('/tickets/summary-counts', verifyFirebaseToken, async (req, res) => {
     const authenticatedUid = req.user.uid;
-    const authenticatedUserRole = (await usersCollection.doc(authenticatedUid).get()).data().role;
+    const authenticatedUserRole = req.user.role; // Now available directly from req.user
 
     try {
         // Query for active tickets (Open, In Progress, Hold)
@@ -247,7 +338,7 @@ app.post('/register', async (req, res) => {
         return res.status(400).json({ error: 'Email and password are required!' });
     }
 
-    if (!['user', 'support'].includes(role)) {
+    if (!validUserRoles.includes(role)) { // Use new validUserRoles
         return res.status(400).json({ error: 'Invalid role specified.' });
     }
 
@@ -322,14 +413,16 @@ app.post('/login', async (req, res) => {
 // --- Get User Profile ---
 // @route GET /profile/:userId
 // @desc Get user profile details (email, role).
-// @access Private (requires token)
+// @access Private (requires token, self-access or admin role)
+// MODIFIED: Allow admin to view any profile
 app.get('/profile/:userId', verifyFirebaseToken, async (req, res) => {
     const requestedUid = req.params.userId;
     const authenticatedUid = req.user.uid; // UID from the verified token
+    const authenticatedUserRole = req.user.role; // Role from the verified token
 
-    // Ensure the authenticated user is requesting their own profile
-    if (requestedUid !== authenticatedUid) {
-        return res.status(403).json({ error: 'Unauthorized: You can only view your own profile.' });
+    // Allow user to view their own profile, or admin to view any profile
+    if (requestedUid !== authenticatedUid && authenticatedUserRole !== 'admin') {
+        return res.status(403).json({ error: 'Unauthorized: You can only view your own profile unless you are an admin.' });
     }
 
     try {
@@ -436,8 +529,7 @@ app.post('/tickets', verifyFirebaseToken, async (req, res) => {
         console.log(`New ticket created with ID: ${docRef.id}`);
 
         // NEW: Create notifications for relevant users
-        const reporterUserDoc = await usersCollection.doc(reporterId).get();
-        const reporterUserRole = reporterUserDoc.data()?.role;
+        const reporterUserRole = req.user.role; // Use role directly from req.user
 
         if (reporterUserRole === 'user') {
             // Notify the reporter that their ticket has been created
@@ -451,33 +543,38 @@ app.post('/tickets', verifyFirebaseToken, async (req, res) => {
             });
         }
 
-        // Notify all support users about the new ticket and send email alerts
-        const supportUsersSnapshot = await usersCollection.where('role', '==', 'support').get();
-        const supportUserEmails = supportUsersSnapshot.docs.map(doc => doc.data().email); // Get emails of support users
+        // Notify all support and admin users about the new ticket and send email alerts
+        const supportAndAdminUsersSnapshot = await usersCollection.where('role', 'in', ['support', 'admin']).get();
+        const supportAndAdminUserEmails = supportAndAdminUsersSnapshot.docs.map(doc => doc.data().email);
 
-        for (const supportUserEmail of supportUserEmails) {
-            await notificationsCollection.add({
-                userId: (await usersCollection.where('email', '==', supportUserEmail).limit(1).get()).docs[0].id, // Get UID from email
-                message: `New ticket ${newDisplayId} created by ${reporterEmail}: "${short_description}"`,
-                type: 'new_ticket_for_support',
-                read: false,
-                timestamp: admin.firestore.FieldValue.serverTimestamp(),
-                ticketId: docRef.id // Link to the ticket
-            });
+        for (const userEmail of supportAndAdminUserEmails) {
+            const userDocSnapshot = await usersCollection.where('email', '==', userEmail).limit(1).get();
+            if (!userDocSnapshot.empty) {
+                const userIdToNotify = userDocSnapshot.docs[0].id;
+                await notificationsCollection.add({
+                    userId: userIdToNotify,
+                    message: `New ticket ${newDisplayId} created by ${reporterEmail}: "${short_description}"`,
+                    type: 'new_ticket_for_support',
+                    read: false,
+                    timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                    ticketId: docRef.id // Link to the ticket
+                });
 
-            // NEW: Send email alert to support user
-            const emailSubject = `New Ticket Created: ${newDisplayId}`;
-            const emailText = `A new ticket has been created by ${reporterEmail}.\n\nTicket ID: ${newDisplayId}\nShort Description: ${short_description}\nCategory: ${category}\nPriority: ${priority || 'Low'}\n\nPlease check the ticketing system for more details.`;
-            const emailHtml = `
-                <p>A new ticket has been created by <strong>${reporterEmail}</strong>.</p>
-                <p><strong>Ticket ID:</strong> <strong>${newDisplayId}</strong></p>
-                <p><strong>Short Description:</strong> <strong>${short_description}</strong></p>
-                <p><strong>Category:</strong> ${category}</p>
-                <p><strong>Priority:</strong> ${priority || 'Low'}</p>
-                <p>Please check the ticketing system for more details.</p>
-            `;
-            await sendEmailAlert(supportUserEmail, emailSubject, emailText, emailHtml);
+                // NEW: Send email alert
+                const emailSubject = `New Ticket Created: ${newDisplayId}`;
+                const emailText = `A new ticket has been created by ${reporterEmail}.\n\nTicket ID: ${newDisplayId}\nShort Description: ${short_description}\nCategory: ${category}\nPriority: ${priority || 'Low'}\n\nPlease check the ticketing system for more details.`;
+                const emailHtml = `
+                    <p>A new ticket has been created by <strong>${reporterEmail}</strong>.</p>
+                    <p><strong>Ticket ID:</strong> <strong>${newDisplayId}</strong></p>
+                    <p><strong>Short Description:</strong> <strong>${short_description}</strong></p>
+                    <p><strong>Category:</strong> ${category}</p>
+                    <p><strong>Priority:</strong> ${priority || 'Low'}</p>
+                    <p>Please check the ticketing system for more details.</p>
+                `;
+                await sendEmailAlert(userEmail, emailSubject, emailText, emailHtml);
+            }
         }
+
 
         return res.status(201).json({ message: 'Ticket created successfully!', id: docRef.id, display_id: newDisplayId  });
     } catch (error) {
@@ -489,7 +586,8 @@ app.post('/tickets', verifyFirebaseToken, async (req, res) => {
 // --- Update an existing ticket ---
 // @route   PATCH /ticket/:ticket_id
 // @desc    Update a ticket.
-// @access  Private (requires token)
+// @access  Private (requires token, support/admin role, or reporter if not resolved/closed)
+// MODIFIED: Use req.user.role directly for authorization
 app.patch('/ticket/:ticket_id', verifyFirebaseToken, async (req, res) => {
     const ticketId = req.params.ticket_id;
     const {
@@ -503,7 +601,7 @@ app.patch('/ticket/:ticket_id', verifyFirebaseToken, async (req, res) => {
     } = req.body;
 
     const authenticatedUid = req.user.uid;
-    const authenticatedUserRole = (await usersCollection.doc(authenticatedUid).get()).data().role;
+    const authenticatedUserRole = req.user.role; // Get role directly from req.user
 
     // Validate incoming fields
     if (status && !validTicketStatuses.includes(status)) {
@@ -525,17 +623,15 @@ app.patch('/ticket/:ticket_id', verifyFirebaseToken, async (req, res) => {
 
         const ticketData = ticketDoc.data();
 
-        // Prevent updates by users if ticket is Resolved or Closed
+        // Prevent updates by 'user' role if ticket is Resolved or Closed
         if (['Resolved', 'Closed'].includes(ticketData.status) && authenticatedUserRole === 'user') {
             return res.status(403).json({ error: 'Forbidden: Cannot update a resolved or closed ticket as a regular user.' });
         }
 
-        // Support users can update resolved/closed tickets (e.g., re-open them)
         // Regular users can only update their own tickets if they are not resolved/closed
         if (authenticatedUserRole === 'user' && ticketData.reporter_id !== authenticatedUid) {
             return res.status(403).json({ error: 'Forbidden: You can only update your own tickets.' });
         }
-
 
         const updateData = {
             updated_at: admin.firestore.FieldValue.serverTimestamp()
@@ -641,8 +737,9 @@ app.patch('/ticket/:ticket_id', verifyFirebaseToken, async (req, res) => {
 
         // Handle assignment logic
         if (assigned_to_email !== undefined) {
-            if (authenticatedUserRole !== 'support') { // Only support can assign/unassign
-                return res.status(403).json({ error: 'Forbidden: Only support associates can assign tickets.' });
+            // Only support or admin can assign/unassign
+            if (!['support', 'admin'].includes(authenticatedUserRole)) {
+                return res.status(403).json({ error: 'Forbidden: Only support associates or admins can assign tickets.' });
             }
             if (assigned_to_email === null || assigned_to_email === '') { // Unassign
                 updateData.assigned_to_id = null;
@@ -659,15 +756,15 @@ app.patch('/ticket/:ticket_id', verifyFirebaseToken, async (req, res) => {
                     });
                 }
             } else {
-                // Check if the assigned_to_email corresponds to a 'support' user
+                // Check if the assigned_to_email corresponds to a 'support' or 'admin' user
                 const userQuery = await usersCollection.where('email', '==', assigned_to_email).limit(1).get();
                 if (userQuery.empty) {
                     return res.status(404).json({ error: 'Assigned user email not found.' });
                 }
                 const assignedUserDoc = userQuery.docs[0];
                 const assignedUserData = assignedUserDoc.data();
-                if (assignedUserData.role !== 'support') {
-                    return res.status(400).json({ error: 'User cannot be assigned as they are not a support associate.' });
+                if (!['support', 'admin'].includes(assignedUserData.role)) {
+                    return res.status(400).json({ error: 'User cannot be assigned as they are not a support associate or admin.' });
                 }
                 updateData.assigned_to_id = assignedUserDoc.id;
                 updateData.assigned_to_email = assigned_to_email;
@@ -797,7 +894,7 @@ app.get('/tickets/my', verifyFirebaseToken, async (req, res) => {
         if (searchKeyword) {
             // For exact display_id search, we check here, including closed tickets if matched.
             // This allows searching for closed tickets by ID within 'My Tickets'.
-            const exactIdMatch = `TICKET-${searchKeyword.toUpperCase().padStart(5, '0')}`;
+            const exactIdMatch = `RITM${searchKeyword.toUpperCase().padStart(5, '0')}`; // Corrected prefix
             const exactIdMatchQuery = ticketsCollection
                 .where('reporter_id', '==', userId)
                 .where('display_id', '==', exactIdMatch);
@@ -818,26 +915,22 @@ app.get('/tickets/my', verifyFirebaseToken, async (req, res) => {
     }
 });
 
-// --- Get All Tickets (for support users) ---
+// --- Get All Tickets (for support and admin users) ---
 // @route   GET /tickets/all
 // @desc    Get all tickets in the system.
-// @access  Private (requires support role)
-app.get('/tickets/all', verifyFirebaseToken, async (req, res) => {
-    const authenticatedUserRole = (await usersCollection.doc(req.user.uid).get()).data().role;
+// @access  Private (requires support or admin role)
+// MODIFIED: Use checkRole middleware
+app.get('/tickets/all', verifyFirebaseToken, checkRole(['support', 'admin']), async (req, res) => {
     const filterStatus = req.query.status;
     const filterAssignment = req.query.assignment;
     const searchKeyword = req.query.keyword ? req.query.keyword.toLowerCase() : '';
-
-    if (authenticatedUserRole !== 'support') {
-        return res.status(403).json({ error: 'Forbidden: Only support associates can view all tickets.' });
-    }
 
     try {
         let query = ticketsCollection; // Start with fetching ALL tickets by default
 
         if (searchKeyword) {
             // Check for exact display_id match first, including closed/resolved tickets
-            const exactIdMatch = `TICKET-${searchKeyword.toUpperCase().padStart(5, '0')}`;
+            const exactIdMatch = `RITM${searchKeyword.toUpperCase().padStart(5, '0')}`; // Corrected prefix
             const exactIdMatchQuery = ticketsCollection.where('display_id', '==', exactIdMatch);
             const exactIdMatchSnapshot = await exactIdMatchQuery.get();
             if (!exactIdMatchSnapshot.empty) {
@@ -878,10 +971,11 @@ app.get('/tickets/all', verifyFirebaseToken, async (req, res) => {
 // @route   GET /ticket/:ticket_id
 // @desc    Get details of a specific ticket.
 // @access  Private (requires token and proper authorization)
+// MODIFIED: Use req.user.role directly for authorization
 app.get('/ticket/:ticket_id', verifyFirebaseToken, async (req, res) => {
     const ticketId = req.params.ticket_id;
     const authenticatedUid = req.user.uid;
-    const authenticatedUserRole = (await usersCollection.doc(authenticatedUid).get()).data().role;
+    const authenticatedUserRole = req.user.role; // Get role directly from req.user
 
     try {
         const ticketDoc = await ticketsCollection.doc(ticketId).get();
@@ -892,8 +986,8 @@ app.get('/ticket/:ticket_id', verifyFirebaseToken, async (req, res) => {
 
         const ticketData = ticketDoc.data();
 
-        // Authorization check: Only reporter or support associate can view
-        if (ticketData.reporter_id !== authenticatedUid && authenticatedUserRole !== 'support') {
+        // Authorization check: Only reporter, support associate, or admin can view
+        if (ticketData.reporter_id !== authenticatedUid && !['support', 'admin'].includes(authenticatedUserRole)) {
             return res.status(403).json({ error: 'Forbidden: You do not have permission to view this ticket.' });
         }
 
@@ -909,13 +1003,9 @@ app.get('/ticket/:ticket_id', verifyFirebaseToken, async (req, res) => {
 // --- New Route: Export all tickets to CSV ---
 // @route   GET /tickets/export
 // // @desc    Export all tickets (including closed/resolved) to CSV based on duration.
-// @access  Private (requires support role)
-app.get('/tickets/export', verifyFirebaseToken, async (req, res) => {
-    const authenticatedUserRole = (await usersCollection.doc(req.user.uid).get()).data().role;
-    if (authenticatedUserRole !== 'support') {
-        return res.status(403).json({ error: 'Forbidden: Only support associates can export tickets.' });
-    }
-
+// @access  Private (requires support or admin role)
+// MODIFIED: Use checkRole middleware
+app.get('/tickets/export', verifyFirebaseToken, checkRole(['support', 'admin']), async (req, res) => {
     const { start_date, end_date } = req.query; // Optional date range
 
     try {
@@ -1209,6 +1299,113 @@ app.patch('/notifications/:notificationId/read', verifyFirebaseToken, async (req
     } catch (error) {
         console.error(`Error marking notification ${notificationId} as read: ${error.message}`);
         return res.status(500).json({ error: `Failed to mark notification as read: ${error.message}` });
+    }
+});
+
+
+// --- NEW ADMIN ROUTES (User Management) ---
+
+// @route   GET /admin/users
+// @desc    Get a list of all users.
+// @access  Private (requires admin role)
+// server.js
+// ...
+app.get('/admin/users', verifyFirebaseToken, requireAdmin, async (req, res) => {
+    try {
+        const usersSnapshot = await usersCollection.get();
+        // Add this line to see how many documents are fetched
+        console.log(`DEBUG: Found ${usersSnapshot.size} documents in 'users' collection.`);
+        const usersList = [];
+        for (const doc of usersSnapshot.docs) {
+            const userData = doc.data();
+            const authUser = await admin.auth().getUser(doc.id);
+            usersList.push({
+                uid: doc.id,
+                email: authUser.email,
+                role: userData.role || 'user'
+            });
+        }
+        return res.status(200).json(usersList);
+    } catch (error) {
+        console.error('Error fetching all users (admin):', error);
+        return res.status(500).json({ error: 'Failed to retrieve users.' });
+    }
+});
+// ...
+
+// @route   GET /admin/users/:uid
+// @desc    Get details of a specific user.
+// @access  Private (requires admin role)
+app.get('/admin/users/:uid', verifyFirebaseToken, checkRole(['admin']), async (req, res) => {
+    const userId = req.params.uid;
+    try {
+        const userDoc = await usersCollection.doc(userId).get();
+        if (!userDoc.exists) {
+            return res.status(404).json({ error: 'User not found in Firestore.' });
+        }
+        const userData = userDoc.data();
+        // You might want to fetch additional data from Firebase Auth here if needed
+        // const authUser = await admin.auth().getUser(userId);
+        return res.status(200).json({ uid: userId, email: userData.email, role: userData.role });
+    } catch (error) {
+        console.error(`Error fetching user ${userId}: ${error.message}`);
+        return res.status(500).json({ error: `Failed to fetch user: ${error.message}` });
+    }
+});
+
+// @route   PATCH /admin/users/:uid
+// @desc    Update a user's role.
+// @access  Private (requires admin role)
+// Admin route to update user role
+app.patch('/admin/users/:uid', verifyFirebaseToken, requireAdmin, async (req, res) => {
+    const { uid } = req.params;
+    const { role } = req.body;
+
+    if (!role || !['user', 'support', 'admin'].includes(role)) {
+        return res.status(400).json({ error: 'Invalid role provided.' });
+    }
+
+    // Prevent an admin from changing their own role via this endpoint
+    if (uid === req.user.uid) {
+        return res.status(403).json({ error: 'Forbidden: You cannot change your own role through this interface.' });
+    }
+
+    try {
+        // Update role in Firestore
+        await usersCollection.doc(uid).update({ role });
+
+        // Optionally, update custom claims for the user in Firebase Auth
+        // This makes the role available directly in the ID token on subsequent logins
+        await admin.auth().setCustomUserClaims(uid, { role });
+
+        return res.status(200).json({ message: 'User role updated successfully.' });
+    } catch (error) {
+        console.error(`Error updating user role for ${uid}:`, error);
+        return res.status(500).json({ error: 'Failed to update user role.' });
+    }
+});
+// @route   DELETE /admin/users/:uid
+// @desc    Delete a user (from Firebase Auth and Firestore).
+// @access  Private (requires admin role)
+app.delete('/admin/users/:uid', verifyFirebaseToken, requireAdmin, async (req, res) => {
+    const { uid } = req.params;
+
+    if (uid === req.user.uid) {
+        return res.status(403).json({ error: 'Forbidden: You cannot delete your own account.' });
+    }
+
+    try {
+        // Delete user from Firebase Authentication
+        await admin.auth().deleteUser(uid);
+        // Delete user's document from Firestore
+        await usersCollection.doc(uid).delete();
+        // Optionally, delete their tickets or reassign them if applicable
+        // ... (add logic to handle associated data like tickets)
+
+        return res.status(200).json({ message: 'User deleted successfully.' });
+    } catch (error) {
+        console.error(`Error deleting user ${uid}:`, error);
+        return res.status(500).json({ error: 'Failed to delete user.' });
     }
 });
 

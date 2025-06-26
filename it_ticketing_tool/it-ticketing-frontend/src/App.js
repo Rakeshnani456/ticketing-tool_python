@@ -1,7 +1,7 @@
 // src/App.js
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { User, LogOut, ChevronDown, Search, CheckCircle, XCircle, Info, AlertTriangle, Bell, Menu, LayoutDashboard, List, Tag, ClipboardCheck, PlusCircle } from 'lucide-react';
+import { User, LogOut, ChevronDown, Search, CheckCircle, XCircle, Info, AlertTriangle, Bell, Menu, LayoutDashboard, List, Tag, ClipboardCheck, PlusCircle, Users } from 'lucide-react'; // NEW: Import Users icon
 import { motion } from 'framer-motion'; // Import motion from framer-motion
 
 // Import Firebase auth client and dbClient
@@ -30,6 +30,7 @@ import DashboardComponent from './components/DashboardComponent';
 import ProfileComponent from './components/ProfileComponent';
 import AccessDeniedComponent from './components/AccessDeniedComponent';
 import ChangePasswordComponent from './components/ChangePasswordComponent'; // NEW: Import ChangePasswordComponent
+import UserManagementComponent from './components/admin/UserManagementComponent'; // NEW: Import UserManagementComponent
 
 /**
  * Main application component.
@@ -189,8 +190,8 @@ const App = () => {
                         });
 
                         // Navigate based on user role
-                        if (data.user.role === 'support') {
-                            setCurrentPage('dashboard'); // Support users go to dashboard
+                        if (data.user.role === 'support' || data.user.role === 'admin') { // Modified: Admin also goes to dashboard
+                            setCurrentPage('dashboard');
                         } else {
                             setCurrentPage('myTickets'); // Regular users go to their tickets
                         }
@@ -265,7 +266,7 @@ const App = () => {
     const handleLoginSuccess = (user) => {
         setCurrentUser(user);
         fetchNotifications(user); // Fetch notifications on login
-        if (user.role === 'support') {
+        if (user.role === 'support' || user.role === 'admin') { // Modified: Admin also goes to dashboard
             setCurrentPage('dashboard');
         } else {
             setCurrentPage('myTickets');
@@ -441,8 +442,8 @@ const App = () => {
 
                     {/* Removed mt-3 to move menu items up and align with logo */}
                     <ul className="space-y-2"> {/* Menu items moved up */}
-                        {/* Support User Specific Menu Items */}
-                        {currentUser.role === 'support' && (
+                        {/* Support User Specific Menu Items - MODIFIED: Now includes admin role */}
+                        {(currentUser.role === 'support' || currentUser.role === 'admin') && (
                             <>
                                 <li>
                                         <button onClick={() => navigateTo('dashboard')} className={`relative flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-300 text-base ${currentPage === 'dashboard' ? 'font-bold border-b-2 border-blue-500' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
@@ -455,12 +456,12 @@ const App = () => {
                                                 Dashboard
                                             </motion.span>
                                             {!isSidebarExpanded && (
-                                                <span className="sidebar-count-badge absolute top-0 right-0 text-blue-300 text-xs rounded-full h-4 w-4 flex items-center justify-center -mt-1 -mr-1 font-normal"> {/* Added font-normal */}
+                                                <span className="sidebar-count-badge absolute top-0 right-0 text-blue-300 text-xs rounded-full h-4 w-4 flex items-center justify-center -mt-1 -mr-1 font-normal">
                                                     {ticketCounts.total_tickets}
                                                 </span>
                                             )}
                                             {isSidebarExpanded && (
-                                                <span className="ml-2 text-blue-300 text-xs font-normal"> {/* Added font-normal */}
+                                                <span className="ml-2 text-blue-300 text-xs font-normal">
                                                     ({ticketCounts.total_tickets})
                                                 </span>
                                             )}
@@ -538,6 +539,21 @@ const App = () => {
                                 </motion.span>
                             </button>
                         </li>
+                        {/* NEW: Admin Specific Menu Item */}
+                        {currentUser.role === 'admin' && (
+                            <li>
+                                <button onClick={() => navigateTo('userManagement')} className={`flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-300 text-base ${currentPage === 'userManagement' ? 'font-bold border-b-2 border-white' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                    <Users size={20} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} />
+                                    <motion.span
+                                        variants={textVariants}
+                                        animate={isSidebarExpanded ? "expanded" : "collapsed"}
+                                        className="whitespace-nowrap overflow-hidden"
+                                    >
+                                        User Management
+                                    </motion.span>
+                                </button>
+                            </li>
+                        )}
                     </ul>
                 </motion.nav>
             )}
@@ -656,6 +672,12 @@ const App = () => {
                                             <User size={16} className="mr-2" /> Profile
                                         </button>
                                         <button
+                                            onClick={() => { navigateTo('changePassword'); setIsProfileMenuOpen(false); }} // Link to ChangePasswordComponent
+                                            className="flex items-center w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                                        >
+                                            <ClipboardCheck size={16} className="mr-2" /> Change Password
+                                        </button>
+                                        <button
                                             onClick={handleLogout}
                                             className="flex items-center w-full text-left px-4 py-2 text-sm text-red-700 hover:bg-red-50"
                                         >
@@ -699,17 +721,17 @@ const App = () => {
                             // If a user is logged in, render components based on currentPage and user role
                             switch (currentPage) {
                                 case 'dashboard':
-                                    if (currentUser.role !== 'support') {
+                                    if (currentUser.role !== 'support' && currentUser.role !== 'admin') { // Admin can also see dashboard
                                         return <AccessDeniedComponent />;
                                     }
                                     return <DashboardComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} />;
                                 case 'allTickets':
-                                    if (currentUser.role !== 'support') {
+                                    if (currentUser.role !== 'support' && currentUser.role !== 'admin') { // Admin can also see all tickets
                                         return <AccessDeniedComponent />;
                                     }
                                     return <AllTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} showFilters={true} />;
                                 case 'assignedToMe':
-                                    if (currentUser.role !== 'support') {
+                                    if (currentUser.role !== 'support' && currentUser.role !== 'admin') { // Admin can also see assigned tickets
                                         return <AccessDeniedComponent />;
                                     }
                                     return <AllTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} initialFilterAssignment="assigned_to_me" showFilters={false} />;
@@ -732,6 +754,11 @@ const App = () => {
                                     return <ProfileComponent user={currentUser} showFlashMessage={showFlashMessage} navigateTo={navigateTo} handleLogout={handleLogout} />;
                                 case 'changePassword': // NEW: Case for Change Password page
                                     return <ChangePasswordComponent user={currentUser} showFlashMessage={showFlashMessage} navigateTo={navigateTo} />;
+                                case 'userManagement': // NEW: Admin User Management page
+                                    if (currentUser.role !== 'admin') {
+                                        return <AccessDeniedComponent />;
+                                    }
+                                    return <UserManagementComponent user={currentUser} showFlashMessage={showFlashMessage} navigateTo={navigateTo} />;
                                 default:
                                     return <MyTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} />;
                             }
