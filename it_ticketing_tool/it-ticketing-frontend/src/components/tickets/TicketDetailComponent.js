@@ -131,7 +131,7 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                 const fetchedTicket = { id: docSnapshot.id, ...formatTicketData(docSnapshot.data()) };
 
                 // Authorization check: Only reporter or support associate can view
-                if (fetchedTicket.reporter_id !== user.firebaseUser.uid && user.role !== 'support') {
+               if (fetchedTicket.reporter_id !== user.firebaseUser.uid && user.role !== 'support' && user.role !== 'admin') {
                     setError('Forbidden: You do not have permission to view this ticket.');
                     showFlashMessage('Forbidden: You do not have permission to view this ticket.', 'error');
                     setTicket(null); // Clear ticket data

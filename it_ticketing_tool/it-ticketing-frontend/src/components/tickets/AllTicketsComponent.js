@@ -41,6 +41,16 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
     const [endDate, setEndDate] = useState('');     // State for end date filter for export
     // State to control the visibility of the informational message at the top
     const [showMessage, setShowMessage] = useState(true);
+    // State to control the message box's opacity and position for fade-out effect
+    const [messageOpacity, setMessageOpacity] = useState(1);
+    const [messageTransform, setMessageTransform] = useState('translateY(0)');
+    // NEW: State to control the margin-bottom for the "move up" effect on grid content
+    const [messageMarginBottom, setMessageMarginBottom] = useState('1rem'); // Use explicit px/rem for margin-bottom for smoother transition
+
+    // NEW: Ref to get the actual height of the message box for accurate margin adjustment
+    const messageBoxRef = useRef(null);
+    const initialMessageBoxHeight = useRef(0); // Store initial height including its margin
+
     // New state for export date range popup visibility
     const [showExportPopup, setShowExportPopup] = useState(false);
     // Ref to detect clicks outside the export popup
@@ -183,18 +193,40 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
     }, [allTickets, filterStatus, filterAssignment, searchKeyword, user]); // Dependencies include all filtering states and user
 
 
-    // Effect hook to reset filters when `initialFilterAssignment` changes (e.g., navigating from menu)
+    // Effect hook to measure message box height and set up auto-hide timer
     useEffect(() => {
-        // This effect runs whenever initialFilterAssignment changes, resetting filter states
+        // Reset filter states based on initialFilterAssignment
         setFilterAssignment(initialFilterAssignment);
-        // MODIFIED: If initialFilterAssignment is provided, do not override default filterStatus
         if (!initialFilterAssignment) {
             setFilterStatus('Open'); // Re-default to Open if no assignment filter is active
         } else {
             setFilterStatus(''); // Clear status filter if an assignment filter is explicitly set
         }
-        setShowMessage(true); // Show message again when assignment filter changes
-    }, [initialFilterAssignment]);
+
+        // Reset message visibility and animation states
+        setShowMessage(true);
+        setMessageOpacity(1);
+        setMessageTransform('translateY(0)');
+        setMessageMarginBottom('1rem'); // Reset margin to initial Tailwind 'mb-4' which is 1rem
+
+        // NEW: Measure the message box height once it's rendered
+        if (messageBoxRef.current) {
+            // Get clientHeight (includes padding) + any rendered margin-bottom
+            const computedStyle = getComputedStyle(messageBoxRef.current);
+            const height = messageBoxRef.current.offsetHeight; // Includes padding and border
+            const marginBottom = parseFloat(computedStyle.marginBottom);
+            initialMessageBoxHeight.current = height + marginBottom; // Total space occupied
+        }
+
+        // NEW: Automatically close message after 2 seconds when the component mounts or filters change
+        const timer = setTimeout(() => {
+            handleCloseMessage();
+        }, 2000); // 2000 milliseconds = 2 seconds
+
+        // Cleanup the timer if the component unmounts or dependencies change before it fires
+        return () => clearTimeout(timer);
+    }, [initialFilterAssignment]); // Re-run this effect when initialFilterAssignment changes
+
 
     // Effect hook to handle clicks outside the export popup to close it
     useEffect(() => {
@@ -390,6 +422,39 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
         return 'All Tickets'; // Default if no specific filter is active
     }, [filterStatus, filterAssignment, searchKeyword]);
 
+    // Function to handle closing the message with a fade-out effect and upward movement
+    const handleCloseMessage = useCallback(() => {
+        if (messageBoxRef.current) {
+            // Calculate total height to move up
+            const currentHeight = messageBoxRef.current.offsetHeight; // Get current rendered height
+            const currentComputedStyle = getComputedStyle(messageBoxRef.current);
+            const currentMarginBottom = parseFloat(currentComputedStyle.marginBottom);
+
+            // Set transform to move up by its full height (including its original margin)
+            setMessageTransform(`translateY(-${currentHeight + currentMarginBottom}px)`);
+            setMessageOpacity(0); // Start fade out
+            setMessageMarginBottom(`-${currentHeight}px`); // Set negative margin to pull content up
+
+            // After animation, hide completely
+            setTimeout(() => {
+                setShowMessage(false);
+                setMessageMarginBottom('0'); // Ensure no lingering negative margin
+                setMessageTransform('translateY(0)'); // Reset transform for next time it might show
+                setMessageOpacity(1); // Reset opacity for next time it might show
+            }, 500); // Matches the CSS transition duration
+        } else {
+            // Fallback if ref is not yet set (e.g., during initial render)
+            setMessageOpacity(0);
+            setMessageTransform('translateY(-100%)'); // Generic large move up
+            setMessageMarginBottom('-5rem'); // Generic large negative margin
+            setTimeout(() => {
+                setShowMessage(false);
+                setMessageMarginBottom('0');
+                setMessageTransform('translateY(0)');
+                setMessageOpacity(1);
+            }, 500);
+        }
+    }, []); // No dependencies for handleCloseMessage itself, uses refs
 
     // Conditional rendering for loading or error states
     if (loading && !showExportPopup) return <div className="text-center text-gray-600 mt-8 text-base flex items-center justify-center space-x-2"><Loader2 className="animate-spin" size={20} /> <span>Loading tickets...</span></div>;
@@ -397,18 +462,31 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
 
     return (
         <div className="p-4 bg-offwhite flex-1 overflow-auto">
-            <h2 className="text-xl font-extrabold text-gray-800 mb-4">
+            {/* Decreased heading size from text-xl to text-lg */}
+            <h2 className="text-lg font-extrabold text-gray-800 mb-4">
                 {getPageHeading()}
             </h2>
 
             {/* Informational message for filter behavior (only if filters are shown and showMessage is true) */}
             {showFilters && showMessage && (
-                <div className="relative text-sm text-gray-600 mb-4 p-2 bg-blue-50 rounded-md border border-blue-200 flex items-start justify-between">
+                <div
+                    ref={messageBoxRef} // Attach ref here
+                    className={`relative text-sm text-gray-600 p-2 bg-blue-50 rounded-md border border-blue-200 flex items-start justify-between transition-all duration-500 ease-in-out`}
+                    style={{
+                        opacity: messageOpacity,
+                        transform: messageTransform,
+                        marginBottom: messageMarginBottom, // Use style for dynamic margin-bottom
+                        // Transition applies to opacity, transform, and margin-bottom
+                        transition: 'opacity 0.5s ease-in-out, transform 0.5s ease-in-out, margin-bottom 0.5s ease-in-out',
+                        pointerEvents: messageOpacity === 0 ? 'none' : 'auto' // Disable pointer events when fully faded
+                    }}
+                >
                     <span>
-                        This view is showing {getPageHeading().toLowerCase()}. Use the filters below or search by keyword to refine the list.
+                        {/* Shorter message content */}
+                        Showing {getPageHeading().toLowerCase()}. Use filters to refine.
                     </span>
                     <button
-                        onClick={() => setShowMessage(false)} // Hide message on click
+                        onClick={handleCloseMessage} // Use the new handler
                         className="ml-4 p-1 rounded-full hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-300 transition-colors duration-200"
                         aria-label="Close message"
                     >

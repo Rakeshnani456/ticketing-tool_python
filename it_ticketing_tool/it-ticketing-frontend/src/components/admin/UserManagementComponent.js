@@ -210,85 +210,97 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                         placeholder="Search by email, role, or UID..."
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        className="pl-9 pr-3 py-1.5 rounded-md w-full text-sm border border-gray-300 focus:ring-blue-400 focus:border-blue-400"
+                        className="pl-9 pr-3 py-1.5 rounded-md w-full text-sm border border-gray-300 focus:ring-gray-400 focus:border-gray-400"
                     />
                     <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
                 </div>
                 <PrimaryButton
                     onClick={() => setShowCreateUserForm(!showCreateUserForm)}
-                    className="w-full sm:w-auto flex items-center justify-center space-x-1 px-3 py-1.5 text-sm
-                               bg-blue-500 hover:bg-blue-600 focus:ring-blue-500 focus:ring-offset-2 transition ease-in-out duration-150"
+                    type="button"
+                    className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] bg-gray-700 hover:bg-gray-800 text-white rounded transition w-auto"
                 >
-                    <UserPlus size={16} />
-                    <span>{showCreateUserForm ? 'Hide Form' : 'Add User'}</span>
+                    <UserPlus size={12} />
+                    <span>{showCreateUserForm ? 'Hide' : 'Add'}</span>
                 </PrimaryButton>
             </div>
 
             {/* Create New User Form */}
-            {showCreateUserForm && (
-                <div className="mb-5 p-4 border border-gray-200 rounded-md bg-gray-50 animate-slide-down">
-                    <h3 className="text-lg font-semibold text-gray-700 mb-3">Add New User</h3>
-                    <form onSubmit={handleCreateUserSubmit} className="space-y-3">
-                        <div>
-                            <label htmlFor="newUserEmail" className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                            <input
-                                id="newUserEmail"
-                                type="email"
-                                name="email"
-                                value={newUserData.email}
-                                onChange={handleCreateUserChange}
-                                placeholder="user@example.com"
-                                required
-                                className="mt-0.5 block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm focus:outline-none focus:ring-blue-400 focus:border-blue-400"
-                            />
-                        </div>
-                        
-                        <div>
-                            <label htmlFor="newUserPassword" className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-                            <input
-                                id="newUserPassword"
-                                type="password"
-                                name="password"
-                                value={newUserData.password}
-                                onChange={handleCreateUserChange}
-                                placeholder="Choose a strong password"
-                                required
-                                className="mt-0.5 block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm focus:outline-none focus:ring-blue-400 focus:border-blue-400"
-                            />
-                        </div>
-                        <div>
-                            <label htmlFor="newUserRole" className="block text-sm font-medium text-gray-700 mb-1">Role</label>
-                            <select
-                                id="newUserRole"
-                                name="role"
-                                value={newUserData.role}
-                                onChange={handleCreateUserChange}
-                                className="mt-0.5 block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm focus:outline-none focus:ring-blue-400 focus:border-blue-400"
-                            >
-                                {validUserRoles
-                                    .filter(role => !(user.role === 'admin' && role === 'admin'))
-                                    .map(role => (
-                                        <option key={role} value={role}>{role.charAt(0).toUpperCase() + role.slice(1)}</option>
-                                    ))}
-                            </select>
-                        </div>
-                        <div className="flex justify-end space-x-2">
-                            <PrimaryButton type="button" onClick={() => setShowCreateUserForm(false)}
-                                className="px-3 py-1.5 text-sm bg-gray-400 hover:bg-gray-500 focus:ring-gray-400 focus:ring-offset-2 transition ease-in-out duration-150">
-                                <XCircle size={16} className="inline mr-1" /> Cancel
-                            </PrimaryButton>
-                            <PrimaryButton type="submit" disabled={loading}
-                                className="px-3 py-1.5 text-sm bg-green-500 hover:bg-green-600 focus:ring-green-500 focus:ring-offset-2 transition ease-in-out duration-150">
-                                <CheckCircle size={16} className="inline mr-1" /> {loading ? 'Creating...' : 'Create User'}
-                            </PrimaryButton>
-                        </div>
-                    </form>
-                </div>
-            )}
+            {/* Conditional rendering with transition for smooth slide down */}
+            <div
+                className="mb-5 p-4 border border-gray-200 rounded-md bg-gray-50 transition-all duration-300 ease-out overflow-hidden"
+                style={{
+                    maxHeight: showCreateUserForm ? '350px' : '0', // Adjusted maxHeight
+                    opacity: showCreateUserForm ? '1' : '0',
+                    paddingTop: showCreateUserForm ? '1rem' : '0',
+                    paddingBottom: showCreateUserForm ? '1rem' : '0',
+                    borderWidth: showCreateUserForm ? '1px' : '0',
+                }}
+            >
+                {showCreateUserForm && (
+                    <>
+                        <h3 className="text-lg font-semibold text-gray-700 mb-3">Add New User</h3>
+                        <form onSubmit={handleCreateUserSubmit} className="space-y-3">
+                            <div>
+                                <label htmlFor="newUserEmail" className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                                <input
+                                    id="newUserEmail"
+                                    type="email"
+                                    name="email"
+                                    value={newUserData.email}
+                                    onChange={handleCreateUserChange}
+                                    placeholder="user@example.com"
+                                    required
+                                    className="mt-0.5 block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm focus:outline-none focus:ring-gray-400 focus:border-gray-400"
+                                />
+                            </div>
+
+                            <div>
+                                <label htmlFor="newUserPassword" className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                                <input
+                                    id="newUserPassword"
+                                    type="password"
+                                    name="password"
+                                    value={newUserData.password}
+                                    onChange={handleCreateUserChange}
+                                    placeholder="Choose a strong password"
+                                    required
+                                    className="mt-0.5 block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm focus:outline-none focus:ring-gray-400 focus:border-gray-400"
+                                />
+                            </div>
+                            <div>
+                                <label htmlFor="newUserRole" className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+                                <select
+                                    id="newUserRole"
+                                    name="role"
+                                    value={newUserData.role}
+                                    onChange={handleCreateUserChange}
+                                    className="mt-0.5 block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm focus:outline-none focus:ring-gray-400 focus:border-gray-400"
+                                >
+                                    {validUserRoles
+                                        .filter(role => !(user.role === 'admin' && role === 'admin'))
+                                        .map(role => (
+                                            <option key={role} value={role}>{role.charAt(0).toUpperCase() + role.slice(1)}</option>
+                                        ))}
+                                </select>
+                            </div>
+                            <div className="flex justify-end space-x-2">
+                                <PrimaryButton type="button" onClick={() => setShowCreateUserForm(false)}
+                                    className="px-3 py-1.5 text-sm bg-gray-200 hover:bg-gray-300 text-gray-800 focus:ring-gray-300 focus:ring-offset-2 transition ease-in-out duration-150 border border-gray-300">
+                                    <XCircle size={16} className="inline mr-1" /> Cancel
+                                </PrimaryButton>
+                                <PrimaryButton type="submit" disabled={loading}
+                                    className="px-3 py-1.5 text-sm bg-gray-700 hover:bg-gray-800 text-white focus:ring-gray-500 focus:ring-offset-2 transition ease-in-out duration-150">
+                                    <CheckCircle size={16} className="inline mr-1" /> {loading ? 'Creating...' : 'Create User'}
+                                </PrimaryButton>
+                            </div>
+                        </form>
+                    </>
+                )}
+            </div>
 
             {loading && (
                 <div className="flex items-center justify-center h-32">
-                    <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+                    <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-gray-500"></div>
                     <p className="ml-3 text-gray-600">Loading users...</p>
                 </div>
             )}
@@ -334,7 +346,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                                             <select
                                                 value={newRole}
                                                 onChange={(e) => setNewRole(e.target.value)}
-                                                className="block w-full p-1.5 border border-gray-300 rounded-md shadow-sm text-sm focus:outline-none focus:ring-blue-400 focus:border-blue-400"
+                                                className="block w-full p-1.5 border border-gray-300 rounded-md shadow-sm text-sm focus:outline-none focus:ring-gray-400 focus:border-gray-400"
                                             >
                                                 {validUserRoles.map(role => (
                                                     <option key={role} value={role}>{role.charAt(0).toUpperCase() + role.slice(1)}</option>
@@ -342,9 +354,9 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                                             </select>
                                         ) : (
                                             <span className={`px-2 py-0.5 inline-flex text-xs leading-4 font-medium rounded-full
-                                                ${u.role === 'admin' ? 'bg-purple-100 text-purple-800' :
-                                                  u.role === 'support' ? 'bg-blue-100 text-blue-800' :
-                                                  'bg-gray-100 text-gray-800'}`}>
+                                                ${u.role === 'admin' ? 'bg-gray-200 text-gray-800' :
+                                                  u.role === 'support' ? 'bg-gray-100 text-gray-700' :
+                                                  'bg-gray-50 text-gray-600'}`}>
                                                 {u.role}
                                             </span>
                                         )}
@@ -352,7 +364,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                                     <td className="px-5 py-3 whitespace-nowrap text-sm font-medium">
                                         {editingUser && editingUser.uid === u.uid ? (
                                             <div className="flex space-x-1">
-                                                <button onClick={handleSaveRole} className="p-1.5 text-green-600 hover:text-green-800 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-1 rounded">
+                                                <button onClick={handleSaveRole} className="p-1.5 text-gray-700 hover:text-black focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-1 rounded">
                                                     <Save size={16} />
                                                 </button>
                                                 <button onClick={handleCancelEdit} className="p-1.5 text-gray-500 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-1 rounded">
@@ -361,11 +373,11 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                                             </div>
                                         ) : (
                                             <div className="flex space-x-1">
-                                                <button onClick={() => handleEditClick(u)} className="p-1.5 text-blue-600 hover:text-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded">
+                                                <button onClick={() => handleEditClick(u)} className="p-1.5 text-gray-600 hover:text-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-1 rounded">
                                                     <Edit size={16} />
                                                 </button>
                                                 {u.uid !== user.uid && (
-                                                    <button onClick={() => handleDeleteUser(u)} className="p-1.5 text-red-600 hover:text-red-800 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1 rounded">
+                                                    <button onClick={() => handleDeleteUser(u)} className="p-1.5 text-red-500 hover:text-red-700 focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-1 rounded">
                                                         <Trash2 size={16} />
                                                     </button>
                                                 )}

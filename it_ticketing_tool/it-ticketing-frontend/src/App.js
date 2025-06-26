@@ -50,7 +50,7 @@ const App = () => {
     const [flashType, setFlashType] = useState('info');
     // Ref to manage the timeout for hiding flash messages
     const flashMessageTimeoutRef = useRef(null);
-    // Key to force refresh of ticket lists (e.e., after creating a new ticket)
+    // Key to force refresh of ticket lists (e.g., after creating a new ticket)
     const [ticketListRefreshKey, setTicketListRefreshKey] = useState(0);
     // State for the global search keyword
     const [searchKeyword, setSearchKeyword] = useState('');
@@ -227,7 +227,7 @@ const App = () => {
                 if (notificationPollingIntervalRef.current) {
                     clearInterval(notificationPollingIntervalRef.current); // Stop polling
                 }
-                setIsSidebarExpanded(false); // Ensure sidebar is collapsed when not logged in
+                setIsSidebarExpanded(false); // Collapse sidebar on logout
             }
         });
         return () => {
@@ -619,15 +619,14 @@ const App = () => {
                                     )}
                                 </button>
                                 {isNotificationMenuOpen && (
-                                    <div ref={notificationMenuRef} className="absolute right-0 mt-2 w-1/2 md:w-96 bg-white rounded-md shadow-lg py-1 z-50 max-h-96 overflow-y-auto">
+                                    <div ref={notificationMenuRef} className="absolute right-0 mt-2 w-1/2 md:w-96 bg-white rounded-md shadow-lg py-1 z-50 max-h-96 overflow-y-auto notification-scroll-area">
                                         <h3 className="text-sm font-semibold px-4 py-2 text-gray-700 border-b border-gray-200">Notifications</h3>
                                         {notifications.length > 0 ? (
                                             notifications.map(notification => (
                                                 <div
                                                     key={notification.id}
-                                                    // Added 'py-4' for more vertical space and 'border-b border-gray-200' for a clear separator
-                                                    // Added 'last:border-b-0' to remove the border from the last item
-                                                    className={`flex items-start px-4 py-4 border-b border-gray-200 hover:bg-gray-50 cursor-pointer last:border-b-0 ${!notification.read ? 'bg-blue-50 font-medium' : ''}`}
+                                                    // Make the container relative for absolute positioning of the button
+                                                    className={`relative flex items-start px-4 py-4 border-b border-gray-300 hover:bg-orange-100 cursor-pointer last:border-b-0 ${!notification.read ? 'bg-blue-50 font-xs' : ''}`}
                                                     onClick={() => markNotificationAsRead(notification.id, notification.ticketId)}
                                                 >
                                                     <div className="flex-shrink-0 mt-1">
@@ -642,7 +641,8 @@ const App = () => {
                                                     {!notification.read && (
                                                         <button
                                                             onClick={(e) => { e.stopPropagation(); markNotificationAsRead(notification.id); }}
-                                                            className="ml-2 text-blue-500 hover:text-blue-700 text-xs flex-shrink-0"
+                                                            // Absolute positioning for dynamic placement
+                                                            className="absolute top-2 right-2 text-grey-500 hover:text-red-700 text-xs flex-shrink-0 px-2 py-1 rounded hover:bg-blue-100"
                                                         >
                                                             Mark Read
                                                         </button>
@@ -729,12 +729,12 @@ const App = () => {
                                     if (currentUser.role !== 'support' && currentUser.role !== 'admin') { // Admin can also see all tickets
                                         return <AccessDeniedComponent />;
                                     }
-                                    return <AllTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} showFilters={true} />;
+                                    return <AllTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} showFilters={true} isSidebarExpanded={isSidebarExpanded} />;
                                 case 'assignedToMe':
                                     if (currentUser.role !== 'support' && currentUser.role !== 'admin') { // Admin can also see assigned tickets
                                         return <AccessDeniedComponent />;
                                     }
-                                    return <AllTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} initialFilterAssignment="assigned_to_me" showFilters={false} />;
+                                    return <AllTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} initialFilterAssignment="assigned_to_me" showFilters={false} isSidebarExpanded={isSidebarExpanded} />;
                                 case 'ticketDetail':
                                     return <TicketDetailComponent key={selectedTicketId} ticketId={selectedTicketId} navigateTo={navigateTo} user={currentUser} showFlashMessage={showFlashMessage} />;
                                 case 'createTicket':
@@ -760,7 +760,7 @@ const App = () => {
                                     }
                                     return <UserManagementComponent user={currentUser} showFlashMessage={showFlashMessage} navigateTo={navigateTo} />;
                                 default:
-                                    return <MyTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} />;
+                                    return <MyTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} isSidebarExpanded={isSidebarExpanded} />;
                             }
                         }
                     })()}
