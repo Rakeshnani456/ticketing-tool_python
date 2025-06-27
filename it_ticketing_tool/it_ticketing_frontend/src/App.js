@@ -23,9 +23,15 @@ import KriasolLogo from './assets/logo/logo.png';
 // import { User, LogOut, ChevronDown, Search, CheckCircle, XCircle, Info, AlertTriangle, Bell, Menu, LayoutDashboard, List, Tag, ClipboardCheck, PlusCircle, Users, Book } from 'lucide-react';
 
 // After (SVG imports):
-import { ReactComponent as Userrs } from './assets/icons/users.svg'; // Assuming you have a user icon SVG
-import { ReactComponent as LayoutDashboardIcon } from './assets/icons/dashboard.svg'; // Corrected import name for clarity
-import { ReactComponent as MenuItem } from './assets/icons/menu.svg'; // Corrected import name for clarity
+import { ReactComponent as UsersIconSvg } from './assets/icons/UsersIcon.svg'; // Assuming you have a user icon SVG
+import { ReactComponent as LayoutDashboardIcon } from './assets/icons/LayoutDashboardIcon.svg'; // Corrected import name for clarity
+import { ReactComponent as MenuIconSvg } from './assets/icons/MenuIcon.svg'; // 
+import { ReactComponent as MyTicketsIcon } from './assets/icons/MyTicketsIcon.svg'; // 
+import { ReactComponent as AssignedToMeIcon } from './assets/icons/AssignedToMeIcon.svg'; // 
+import { ReactComponent as CreateTicketIcon } from './assets/icons/CreateTicketIcon.svg'; // 
+
+
+
 
 
 // You already have the Settings SVG embedded, so no import needed for that.
@@ -554,7 +560,7 @@ const App = () => {
                             <>
                                 <li>
                                         <button onClick={() => navigateTo('dashboard')} className={`relative flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-300 text-base ${currentPage === 'dashboard' ? 'font-bold border-b-2 border-blue-500' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
-                                            <LayoutDashboardIcon width={20} height={20} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} fill="currentColor" />
+                                            <LayoutDashboardIcon width={20} height={18} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} fill="currentColor" />
                                             <motion.span
                                                 variants={textVariants}
                                                 animate={isSidebarExpanded ? "expanded" : "collapsed"}
@@ -576,13 +582,11 @@ const App = () => {
                                 </li>
                                 <li>
                                     <button onClick={() => navigateTo('allTickets')} className={`relative flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-300 text-base ${currentPage === 'allTickets' ? 'font-bold border-b-2 border-red-500' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
-                                        <MenuItem width={25} height={25} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} />
+                                        <MenuIconSvg width={22} height={20} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} fill="currentColor" />
                                         <motion.span
                                             variants={textVariants}
                                             animate={isSidebarExpanded ? "expanded" : "collapsed"}
-                                            className="whitespace-nowrap overflow-hidden"
-                                        >
-                                            All Tickets
+                                            className="whitespace-nowrap overflow-hidden">All Tickets
                                         </motion.span>
                                         {!isSidebarExpanded && (
                                             <span className="sidebar-count-badge absolute top-0 right-0 text-red-300 text-xs rounded-full h-4 w-4 flex items-center justify-center -mt-1 -mr-1">
@@ -598,7 +602,12 @@ const App = () => {
                                 </li>
                                 <li>
                                     <button onClick={() => navigateTo('assignedToMe')} className={`relative flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-300 text-base ${currentPage === 'assignedToMe' ? 'font-bold border-b-2 border-green-600' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
-                                        <Tag size={20} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} />
+                                        <MyTicketsIcon
+                                                width={20}
+                                                height={20}
+                                                className={`flex-shrink-0 transform -translate-x-0 ${isSidebarExpanded ? 'mr-2' : ''}`}
+                                            />
+
                                         <motion.span
                                             variants={textVariants}
                                             animate={isSidebarExpanded ? "expanded" : "collapsed"}
@@ -623,7 +632,7 @@ const App = () => {
                         {/* Common Menu Item for All Users */}
                         <li>
                             <button onClick={() => navigateTo('myTickets')} className={`flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-300 text-base ${currentPage === 'myTickets' ? 'font-bold border-b-2 border-white' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
-                                <ClipboardCheck size={20} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} />
+                                <AssignedToMeIcon height={18} width={20} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} />
                                 <motion.span
                                     variants={textVariants}
                                     animate={isSidebarExpanded ? "expanded" : "collapsed"}
@@ -636,7 +645,7 @@ const App = () => {
                         {/* Add Create Ticket Here if desired */}
                         <li>
                             <button onClick={() => navigateTo('createTicket')} className={`flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-300 text-base ${currentPage === 'createTicket' ? 'font-bold border-b-2 border-white' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
-                                <PlusCircle size={20} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} />
+                                <CreateTicketIcon height={18} width={20} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} />
                                 <motion.span
                                     variants={textVariants}
                                     animate={isSidebarExpanded ? "expanded" : "collapsed"}
@@ -650,7 +659,7 @@ const App = () => {
                         {currentUser.role === 'admin' && (
                             <li>
                                 <button onClick={() => navigateTo('userManagement')} className={`flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-300 text-base ${currentPage === 'userManagement' ? 'font-bold border-b-2 border-white' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
-                                    <Userrs width={20} height={20} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} fill="currentColor" /> {/* MODIFIED LINE */}
+                                    <UsersIconSvg width={22} height={22} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} fill="currentColor" /> {/* MODIFIED LINE */}
                                     <motion.span
                                         variants={textVariants}
                                         animate={isSidebarExpanded ? "expanded" : "collapsed"}
