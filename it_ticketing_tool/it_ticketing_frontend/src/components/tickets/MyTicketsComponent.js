@@ -181,9 +181,12 @@ const MyTicketsComponent = ({ user, navigateTo, showFlashMessage, searchKeyword,
                 </div>
             ) : (
                 // Table to display tickets
+                // Added overflow-x-auto to handle horizontal scrolling on smaller screens
                 <div className="overflow-x-auto rounded-lg shadow-md border border-gray-200 bg-white">
-                    <table className="min-w-full bg-white table-auto"> {/* Added table-auto */}
-                        <thead className="bg-gray-100 border-b border-gray-200">
+                    {/* min-w-full ensures the table takes full width but can extend if content is wider */}
+                    <table className="min-w-full bg-white">
+                        {/* Hidden on small screens, shown as a standard table header on medium+ screens */}
+                        <thead className="hidden sm:table-header-group bg-gray-100 border-b border-gray-200">
                             <tr>
                                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">#</th>
                                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Ticket ID</th>
@@ -193,39 +196,50 @@ const MyTicketsComponent = ({ user, navigateTo, showFlashMessage, searchKeyword,
                                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Status</th>
                                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Assigned To</th>
                                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Last Updated</th>
-                               
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200">
                             {tickets.map((ticket, index) => (
-                                <tr key={ticket.id} className="hover:bg-gray-50 transition-colors duration-150 odd:bg-white even:bg-gray-50">
-                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-800">{index + 1}</td>
-                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-blue-700 hover:underline font-medium cursor-pointer" onClick={() => navigateTo('ticketDetail', ticket.id)}>
+                                // On small screens, each tr becomes a block; on medium+ it's a table row
+                                <tr key={ticket.id} className="block sm:table-row bg-white border-b border-gray-200 hover:bg-gray-50 transition-colors duration-150 odd:bg-white even:bg-gray-50">
+                                    {/* Each td becomes a block on small screens, table cell on medium+ */}
+                                    <td className="block sm:table-cell px-4 py-3 text-sm text-gray-800">
+                                        <span className="block sm:hidden font-semibold text-gray-600">#:</span>
+                                        {index + 1}
+                                    </td>
+                                    <td className="block sm:table-cell px-4 py-3 text-sm text-blue-700 hover:underline font-medium cursor-pointer" onClick={() => navigateTo('ticketDetail', ticket.id)}>
+                                        <span className="block sm:hidden font-semibold text-gray-600">Ticket ID:</span>
                                         {ticket.display_id} {/* Clickable Ticket ID */}
                                     </td>
-                                    <td className="px-4 py-3 text-sm text-gray-800 max-w-xs truncate" title={ticket.short_description}> {/* Added truncate and max-w-xs */}
+                                    <td className="block sm:table-cell px-4 py-3 text-sm text-gray-800 max-w-xs truncate" title={ticket.short_description}> {/* Added truncate and max-w-xs */}
+                                        <span className="block sm:hidden font-semibold text-gray-600">Short Description:</span>
                                         {ticket.short_description}
                                     </td>
-                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-800">
+                                    <td className="block sm:table-cell px-4 py-3 text-sm text-gray-800">
+                                        <span className="block sm:hidden font-semibold text-gray-600">Category:</span>
                                         {ticket.category}
                                     </td>
-                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-800">
+                                    <td className="block sm:table-cell px-4 py-3 text-sm text-gray-800">
+                                        <span className="block sm:hidden font-semibold text-gray-600">Priority:</span>
                                         <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getPriorityClasses(ticket.priority)}`}>
                                             {ticket.priority}
                                         </span>
                                     </td>
-                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-800">
+                                    <td className="block sm:table-cell px-4 py-3 whitespace-nowrap text-sm text-gray-800">
+                                        <span className="block sm:hidden font-semibold text-gray-600">Status:</span>
                                         <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getStatusClasses(ticket.status)}`}>
                                             {ticket.status}
                                         </span>
                                     </td>
-                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-800">
+                                    <td className="block sm:table-cell px-4 py-3 whitespace-nowrap text-sm text-gray-800">
+                                        <span className="block sm:hidden font-semibold text-gray-600">Assigned To:</span>
                                         {ticket.assigned_to_email || 'Unassigned'}
                                     </td>
-                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-800">
+                                    <td className="block sm:table-cell px-4 py-3 whitespace-nowrap text-sm text-gray-800">
+                                        <span className="block sm:hidden font-semibold text-gray-600">Last Updated:</span>
                                         {ticket.updated_at ? new Date(ticket.updated_at).toLocaleString() : 'N/A'}
                                     </td>
-                                    
+
                                 </tr>
                             ))}
                         </tbody>

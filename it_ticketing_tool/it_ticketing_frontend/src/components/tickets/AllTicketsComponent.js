@@ -60,7 +60,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
     // New state for export success message on the export button
     const [exportSuccess, setExportSuccess] = useState(false);
 
-    // Get today's date in YYYY-MM-DD format for the max attribute of the end date input
+    // Get today's date in ISO-MM-DD format for the max attribute of the end date input
     const today = new Date().toISOString().split('T')[0];
 
     // Initialize Firestore DB client. This will be the same instance as exported from firebase.js.
@@ -251,7 +251,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
     }, [showExportPopup]);
 
     /**
-     * Helper function to safely get a date string in YYYY-MM-DD format.
+     * Helper function to safely get a date string in ISO-MM-DD format.
      * Returns an empty string if the date is invalid or an error occurs.
      * @param {Date | string} dateInput - The date object or date string.
      * @returns {string} Formatted date string or empty string.
@@ -481,7 +481,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                         pointerEvents: messageOpacity === 0 ? 'none' : 'auto' // Disable pointer events when fully faded
                     }}
                 >
-                    
+
                     <span>
                         {/* Shorter message content */}
                         Showing {getPageHeading().toLowerCase()}. Use filters to refine.
@@ -575,59 +575,61 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                     {searchKeyword ? `No tickets found matching "${searchKeyword}".` : "No tickets found matching the criteria."}
                 </p>
             ) : (
-                <div className="overflow-x-auto rounded-lg bg-white border border-gray-200">
-                    <table className="min-w-full bg-white table-auto">
-                        <thead className="bg-gray-50 border-b border-gray-200">
-                            <tr>
-                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">#</th>
-                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Ticket ID</th>
-                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Short Description</th>
-                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Raised by</th>
-                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Category</th>
-                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Priority</th>
-                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Status</th>
-                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Assigned To</th>
-                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Last Updated</th>
-                                <th className="px-4 py-3 whitespace-nowrap text-sm text-gray-800">Time Spent</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-200">
-                            {displayedTickets.map((ticket, index) => (
-                                <tr key={ticket.id} className="hover:bg-gray-100 transition-colors duration-150">
-                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-800">{index + 1}</td>
-                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-blue-700 hover:underline font-medium cursor-pointer" onClick={() => navigateTo('ticketDetail', ticket.id)}>
-                                        {ticket.display_id}
-                                    </td>
-                                    <td className="px-4 py-3 text-sm text-gray-800 max-w-xs truncate" title={ticket.short_description}>
-                                        {ticket.short_description}
-                                    </td>
-                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-800 flex items-center"><User size={12} className="mr-1" />{ticket.reporter_email}</td>
-                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-800">
-                                        {ticket.category}
-                                    </td>
-                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-800">
-                                        <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getPriorityClasses(ticket.priority)}`}>
-                                            {ticket.priority}
-                                        </span>
-                                    </td>
-                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-800">
-                                        <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getStatusClasses(ticket.status)}`}>
-                                            {ticket.status}
-                                        </span>
-                                    </td>
-                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-800">
-                                        {ticket.assigned_to_email || 'Unassigned'}
-                                    </td>
-                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-800">
-                                        {ticket.updated_at ? new Date(ticket.updated_at).toLocaleString() : 'N/A'}
-                                    </td>
-                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-800">
-                                        {ticket.time_spent_minutes !== null ? `${ticket.time_spent_minutes} mins` : 'N/A'}
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                // Replaced table structure with CSS Grid
+                <div className="rounded-lg bg-white border border-gray-200 overflow-x-auto">
+                    {/* Grid Header */}
+                    <div className="grid grid-cols-[auto_120px_minmax(150px,_2fr)_150px_100px_80px_100px_150px_150px_100px] gap-x-2 py-3 px-4 bg-gray-50 border-b border-gray-200 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                        <div className="min-w-[20px]">#</div>
+                        <div className="min-w-[100px]">Ticket ID</div>
+                        <div className="min-w-[150px]">Short Description</div>
+                        <div className="min-w-[120px]">Raised by</div>
+                        <div className="min-w-[80px]">Category</div>
+                        <div className="min-w-[60px]">Priority</div>
+                        <div className="min-w-[80px]">Status</div>
+                        <div className="min-w-[120px]">Assigned To</div>
+                        <div className="min-w-[120px]">Last Updated</div>
+                        <div className="min-w-[80px]">Time Spent</div>
+                    </div>
+
+                    {/* Grid Rows */}
+                    <div className="divide-y divide-gray-200">
+                        {displayedTickets.map((ticket, index) => (
+                            <div key={ticket.id} className="grid grid-cols-[auto_120px_minmax(150px,_2fr)_150px_100px_80px_100px_150px_150px_100px] gap-x-2 py-3 px-4 hover:bg-gray-100 transition-colors duration-150 items-center">
+                                {/* Removed 'whitespace-nowrap' from all cells */}
+                                <div className="text-sm text-gray-800 min-w-[20px]">{index + 1}</div>
+                                <div className="text-sm text-blue-700 hover:underline font-medium cursor-pointer min-w-[100px]" onClick={() => navigateTo('ticketDetail', ticket.id)}>
+                                    {ticket.display_id}
+                                </div>
+                                {/* Added 'line-clamp-2' for multi-line truncation with ellipsis */}
+                                <div className="text-sm text-gray-800 max-w-xs line-clamp-2" title={ticket.short_description}>
+                                    {ticket.short_description}
+                                </div>
+                                <div className="text-sm text-gray-800 flex items-center min-w-[120px]"><User size={12} className="mr-1" />{ticket.reporter_email}</div>
+                                <div className="text-sm text-gray-800 min-w-[80px]">
+                                    {ticket.category}
+                                </div>
+                                <div className="text-sm text-gray-800 min-w-[60px]">
+                                    <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getPriorityClasses(ticket.priority)}`}>
+                                        {ticket.priority}
+                                    </span>
+                                </div>
+                                <div className="text-sm text-gray-800 min-w-[80px]">
+                                    <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getStatusClasses(ticket.status)}`}>
+                                        {ticket.status}
+                                    </span>
+                                </div>
+                                <div className="text-sm text-gray-800 min-w-[120px]">
+                                    {ticket.assigned_to_email || 'Unassigned'}
+                                </div>
+                                <div className="text-sm text-gray-800 min-w-[120px]">
+                                    {ticket.updated_at ? new Date(ticket.updated_at).toLocaleString() : 'N/A'}
+                                </div>
+                                <div className="text-sm text-gray-800 min-w-[80px]">
+                                    {ticket.time_spent_minutes !== null ? `${ticket.time_spent_minutes} mins` : 'N/A'}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
                 </div>
             )}
         </div>
