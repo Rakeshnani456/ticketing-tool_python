@@ -1,19 +1,34 @@
 // src/App.js
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { User, LogOut, ChevronDown, Search, CheckCircle, XCircle, Info, AlertTriangle, Bell, Menu, LayoutDashboard, List, Tag, ClipboardCheck, PlusCircle, Users } from 'lucide-react'; // NEW: Import Users icon
+import { User, LogOut, ChevronDown, Search, CheckCircle, XCircle, Info, AlertTriangle, Bell, Menu, LayoutDashboard, List, Tag, ClipboardCheck, PlusCircle, Users, Book, MenuIcon } from 'lucide-react'; // NEW: Import Users and Book icon
 import { motion } from 'framer-motion'; // Import motion from framer-motion
+import { AiOutlineEye, AiFillEye } from 'react-icons/ai'; // Or choose another icon library like 'fa' for Font Awesome
+import { X } from 'lucide-react'; // Assuming you have lucide-react for Info, CheckCircle, and X
+
+
 
 // Import Firebase auth client and dbClient
 import { authClient, dbClient } from './config/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth'; // Firebase authentication methods
-import { collection, query, onSnapshot, getFirestore, where } from 'firebase/firestore'; // NEW: Firestore imports and 'where'
+import { collection, query, onSnapshot, getFirestore, where, deleteDoc, doc } from 'firebase/firestore'; // NEW: Firestore imports and 'where', deleteDoc, doc
 
 // Import API Base URL from constants (still used for other API calls like notifications)
 import { API_BASE_URL } from './config/constants';
 
 // Import local logo image
 import KriasolLogo from './assets/logo/logo.png';
+
+// Before (Lucide React imports):
+// import { User, LogOut, ChevronDown, Search, CheckCircle, XCircle, Info, AlertTriangle, Bell, Menu, LayoutDashboard, List, Tag, ClipboardCheck, PlusCircle, Users, Book } from 'lucide-react';
+
+// After (SVG imports):
+import { ReactComponent as Userrs } from './assets/icons/users.svg'; // Assuming you have a user icon SVG
+import { ReactComponent as LayoutDashboardIcon } from './assets/icons/dashboard.svg'; // Corrected import name for clarity
+import { ReactComponent as MenuItem } from './assets/icons/menu.svg'; // Corrected import name for clarity
+
+
+// You already have the Settings SVG embedded, so no import needed for that.
 
 // Import common UI components
 import FormInput from './components/common/FormInput';
@@ -429,9 +444,70 @@ const App = () => {
             console.error('Network error marking notification as read:', error);
             showFlashMessage('Network error marking notification as read.', 'error');
         } finally {
-            setIsNotificationMenuOpen(false); // Close notification menu
+            // We don't close the menu here anymore, as `viewTicket` will handle navigation which closes it.
+            // If only marking read, it will remain open for user to clear.
         }
     }, [currentUser, fetchNotifications, showFlashMessage, navigateTo]);
+
+    /**
+     * Navigates to the ticket detail page.
+     * @param {string} ticketId - The ID of the ticket to view.
+     */
+    const viewTicket = useCallback((ticketId) => {
+        navigateTo('ticketDetail', ticketId);
+        setIsNotificationMenuOpen(false); // Close notification menu after navigating
+    }, [navigateTo]);
+
+    /**
+     * Clears a single notification from the list and from the backend.
+     * @param {string} notificationId - The ID of the notification to clear.
+     */
+    const clearNotification = useCallback(async (notificationId) => {
+        try {
+            const idToken = await currentUser.firebaseUser.getIdToken();
+            const response = await fetch(`${API_BASE_URL}/notifications/${notificationId}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${idToken}` }
+            });
+
+            if (response.ok) {
+                showFlashMessage('Notification cleared.', 'success');
+                fetchNotifications(currentUser); // Refresh notifications after clearing
+            } else {
+                console.error('Failed to clear notification:', await response.json());
+                showFlashMessage('Failed to clear notification.', 'error');
+            }
+        } catch (error) {
+            console.error('Network error clearing notification:', error);
+            showFlashMessage('Network error clearing notification.', 'error');
+        }
+    }, [currentUser, fetchNotifications, showFlashMessage]);
+
+    /**
+     * Clears all notifications for the current user from the backend.
+     */
+    const clearAllNotifications = useCallback(async () => {
+        try {
+            const idToken = await currentUser.firebaseUser.getIdToken();
+            const response = await fetch(`${API_BASE_URL}/notifications/clear-all`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${idToken}` }
+            });
+
+            if (response.ok) {
+                showFlashMessage('All notifications cleared.', 'success');
+                setNotifications([]); // Immediately clear local state for responsiveness
+                setHasNewNotifications(false);
+                setIsNotificationMenuOpen(false); // Close the menu
+            } else {
+                console.error('Failed to clear all notifications:', await response.json());
+                showFlashMessage('Failed to clear all notifications.', 'error');
+            }
+        } catch (error) {
+            console.error('Network error clearing all notifications:', error);
+            showFlashMessage('Network error clearing all notifications.', 'error');
+        }
+    }, [currentUser, showFlashMessage]);
 
 
     /**
@@ -478,7 +554,7 @@ const App = () => {
                             <>
                                 <li>
                                         <button onClick={() => navigateTo('dashboard')} className={`relative flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-300 text-base ${currentPage === 'dashboard' ? 'font-bold border-b-2 border-blue-500' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
-                                            <LayoutDashboard size={20} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} />
+                                            <LayoutDashboardIcon width={20} height={20} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} fill="currentColor" />
                                             <motion.span
                                                 variants={textVariants}
                                                 animate={isSidebarExpanded ? "expanded" : "collapsed"}
@@ -500,7 +576,7 @@ const App = () => {
                                 </li>
                                 <li>
                                     <button onClick={() => navigateTo('allTickets')} className={`relative flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-300 text-base ${currentPage === 'allTickets' ? 'font-bold border-b-2 border-red-500' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
-                                        <List size={20} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} />
+                                        <MenuItem width={25} height={25} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} />
                                         <motion.span
                                             variants={textVariants}
                                             animate={isSidebarExpanded ? "expanded" : "collapsed"}
@@ -574,7 +650,7 @@ const App = () => {
                         {currentUser.role === 'admin' && (
                             <li>
                                 <button onClick={() => navigateTo('userManagement')} className={`flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-300 text-base ${currentPage === 'userManagement' ? 'font-bold border-b-2 border-white' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
-                                    <Users size={20} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} />
+                                    <Userrs width={20} height={20} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} fill="currentColor" /> {/* MODIFIED LINE */}
                                     <motion.span
                                         variants={textVariants}
                                         animate={isSidebarExpanded ? "expanded" : "collapsed"}
@@ -585,6 +661,37 @@ const App = () => {
                                 </button>
                             </li>
                         )}
+                        {/* NEW: Settings Menu Item */}
+                        <li>
+                            <button onClick={() => navigateTo('settings')} className={`flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-300 text-base ${currentPage === 'settings' ? 'font-bold border-b-2 border-white' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                {/* SVG for Settings Icon */}
+                                <svg xmlns="http://www.w3.org/2000/svg" x="0px" y="0px" width="20" height="20" viewBox="0 0 48 48" className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} fill="currentColor">
+                                    <path fill="#607D8B" d="M39.6,27.2c0.1-0.7,0.2-1.4,0.2-2.2s-0.1-1.5-0.2-2.2l4.5-3.2c0.4-0.3,0.6-0.9,0.3-1.4L40,10.8c-0.3-0.5-0.8-0.7-1.3-0.4l-5,2.3c-1.2-0.9-2.4-1.6-3.8-2.2l-0.5-5.5c-0.1-0.5-0.5-0.9-1-0.9h-8.6c-0.5,0-1,0.4-1,0.9l-0.5,5.5c-1.4,0.6-2.7,1.3-3.8,2.2l-5-2.3c-0.5-0.2-1.1,0-1.3,0.4l-4.3,7.4c-0.3,0.5-0.1,1.1,0.3,1.4l4.5,3.2c-0.1,0.7-0.2,1.4-0.2,2.2s0.1,1.5,0.2,2.2L4,30.4c-0.4,0.3-0.6,0.9-0.3,1.4L8,39.2c0.3,0.5,0.8,0.7,1.3,0.4l5-2.3c1.2,0.9,2.4,1.6,3.8,2.2l0.5,5.5c0.1,0.5,0.5,0.9,1,0.9h8.6c0.5,0,1-0.4,1-0.9l0.5-5.5c1.4-0.6,2.7-1.3,3.8-2.2l5,2.3c0.5,0.2,1.1,0,1.3-0.4l4.3-7.4c0.3-0.5,0.1-1.1-0.3-1.4L39.6,27.2z M24,35c-5.5,0-10-4.5-10-10c0-5.5,4.5-10,10-10c5.5,0,10,4.5,10,10C34,30.5,29.5,35,24,35z"></path>
+                                    <path fill="#455A64" d="M24,13c-6.6,0-12,5.4-12,12c0,6.6,5.4,12,12,12s12-5.4,12-12C36,18.4,30.6,13,24,13z M24,30c-2.8,0-5-2.2-5-5c0-2.8,2.2-5,5-5s5,2.2,5,5C29,27.8,26.8,30,24,30z"></path>
+                                </svg>
+                                <motion.span
+                                    variants={textVariants}
+                                    animate={isSidebarExpanded ? "expanded" : "collapsed"}
+                                    className="whitespace-nowrap overflow-hidden"
+                                >
+                                    Settings
+                                </motion.span>
+                            </button>
+                        </li>
+
+                        {/* NEW: Knowledge Base Menu Item */}
+                        <li>
+                            <button onClick={() => navigateTo('knowledgeBase')} className={`flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-300 text-base ${currentPage === 'knowledgeBase' ? 'font-bold border-b-2 border-white' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                <Book size={20} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} /> {/* Using Book icon from lucide-react */}
+                                <motion.span
+                                    variants={textVariants}
+                                    animate={isSidebarExpanded ? "expanded" : "collapsed"}
+                                    className="whitespace-nowrap overflow-hidden"
+                                >
+                                    Knowledge Base
+                                </motion.span>
+                            </button>
+                        </li>
                     </ul>
                 </motion.nav>
             )}
@@ -649,42 +756,77 @@ const App = () => {
                                         <span className="absolute top-0 right-0 block h-2 w-2 rounded-full ring-2 ring-white bg-red-600 animate-pulse"></span>
                                     )}
                                 </button>
-                                {isNotificationMenuOpen && (
-                                    <div ref={notificationMenuRef} className="absolute right-0 mt-2 w-1/2 md:w-96 bg-white rounded-md shadow-lg py-1 z-50 max-h-96 overflow-y-auto notification-scroll-area">
-                                        <h3 className="text-sm font-semibold px-4 py-2 text-gray-700 border-b border-gray-200">Notifications</h3>
-                                        {notifications.length > 0 ? (
-                                            notifications.map(notification => (
-                                                <div
-                                                    key={notification.id}
-                                                    // Make the container relative for absolute positioning of the button
-                                                    className={`relative flex items-start px-4 py-4 border-b border-gray-300 hover:bg-orange-100 cursor-pointer last:border-b-0 ${!notification.read ? 'bg-blue-50 font-xs' : ''}`}
-                                                    onClick={() => markNotificationAsRead(notification.id, notification.ticketId)}
-                                                >
-                                                    <div className="flex-shrink-0 mt-1">
-                                                        {!notification.read ? <Info size={16} className="text-blue-500" /> : <CheckCircle size={16} className="text-gray-400" />}
-                                                    </div>
-                                                    <div className="ml-3 text-sm flex-1">
-                                                        <p className="text-gray-800" dangerouslySetInnerHTML={{ __html: formatNotificationMessage(notification.message) }}></p>
-                                                        <p className="text-gray-500 text-xs mt-1">
-                                                            {new Date(notification.timestamp).toLocaleString()}
-                                                        </p>
-                                                    </div>
-                                                    {!notification.read && (
-                                                        <button
-                                                            onClick={(e) => { e.stopPropagation(); markNotificationAsRead(notification.id); }}
-                                                            // Absolute positioning for dynamic placement
-                                                            className="absolute top-2 right-2 text-grey-500 hover:text-red-700 text-xs flex-shrink-0 px-2 py-1 rounded hover:bg-blue-100"
-                                                        >
-                                                            Mark Read
-                                                        </button>
-                                                    )}
-                                                </div>
-                                            ))
-                                        ) : (
-                                            <p className="px-4 py-3 text-sm text-gray-500">No new notifications.</p>
-                                        )}
-                                    </div>
-                                )}
+                               {isNotificationMenuOpen && (
+    <div ref={notificationMenuRef} className="absolute right-0 mt-2 w-1/2 md:w-96 bg-white rounded-md shadow-lg py-1 z-50 max-h-96 overflow-y-auto notification-scroll-area">
+        <div className="flex justify-between items-center px-4 py-2 border-b border-gray-200">
+            <h3 className="text-sm font-semibold text-gray-700">Notifications</h3>
+            {/* Clear All Notifications Button */}
+            {notifications.length > 0 && (
+                <button
+                    onClick={clearAllNotifications}
+                    className="p-1 rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-600 focus:outline-none focus:ring-1 focus:ring-gray-300"
+                    title="Clear All Notifications"
+                >
+                    <X size={16} />
+                </button>
+            )}
+        </div>
+
+        {notifications.length > 0 ? (
+            notifications.map(notification => (
+                <div
+                    key={notification.id}
+                    className={`relative flex flex-col px-4 py-4 border-b border-gray-300 hover:bg-orange-100 cursor-pointer last:border-b-0 ${!notification.read ? 'bg-blue-50 font-xs' : ''}`}
+                    // Keep onClick for marking as read when clicking the main notification body
+                    onClick={() => markNotificationAsRead(notification.id, notification.ticketId)}
+                >
+                    {/* Notification content */}
+                    <div className="flex items-start">
+                        <div className="flex-shrink-0 mt-1">
+                            {!notification.read ? <Info size={16} className="text-blue-500" /> : <CheckCircle size={16} className="text-gray-400" />}
+                        </div>
+                        <div className="ml-3 text-sm flex-1">
+                            <p className="text-gray-800" dangerouslySetInnerHTML={{ __html: formatNotificationMessage(notification.message) }}></p>
+                            <p className="text-gray-500 text-xs mt-1">
+                                {new Date(notification.timestamp).toLocaleString()}
+                            </p>
+                        </div>
+                        {/* Mark Read Icon Button */}
+                        {!notification.read && (
+                            <button
+                                onClick={(e) => { e.stopPropagation(); markNotificationAsRead(notification.id); }}
+                                className="absolute top-1 right-1 text-blue-500 hover:text-blue-700 p-1 rounded-full text-xs font-medium focus:outline-none focus:ring-1 focus:ring-blue-300 focus:ring-opacity-75"
+                                title="Mark as Read"
+                            >
+                                <AiOutlineEye size={18} />
+                            </button>
+                        )}
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="flex justify-end gap-2 mt-3 text-xs">
+                        {notification.ticketId && ( // Only show "View Ticket" if ticketId exists
+                            <button
+                                onClick={(e) => { e.stopPropagation(); viewTicket(notification.ticketId); }} // Prevent parent click
+                                className="px-3 py-1 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 focus:outline-none focus:ring-1 focus:ring-gray-400"
+                            >
+                                View Ticket
+                            </button>
+                        )}
+                        <button
+                            onClick={(e) => { e.stopPropagation(); clearNotification(notification.id); }} // Prevent parent click
+                            className="px-3 py-1 bg-red-100 text-red-700 rounded-md hover:bg-red-200 focus:outline-none focus:ring-1 focus:ring-red-300"
+                        >
+                            Clear
+                        </button>
+                    </div>
+                </div>
+            ))
+        ) : (
+            <p className="px-4 py-3 text-sm text-gray-500">No new notifications.</p>
+        )}
+    </div>
+)}
                             </div>
 
                             {/* User Profile Menu */}
@@ -790,6 +932,20 @@ const App = () => {
                                         return <AccessDeniedComponent />;
                                     }
                                     return <UserManagementComponent user={currentUser} showFlashMessage={showFlashMessage} navigateTo={navigateTo} />;
+                                case 'settings': // NEW: Case for Settings page
+                                    return (
+                                        <div className="p-6">
+                                            <h2 className="text-2xl font-bold mb-4">Settings Page (Placeholder)</h2>
+                                            <p>Content for settings will go here.</p>
+                                        </div>
+                                    );
+                                case 'knowledgeBase': // NEW: Case for Knowledge Base page
+                                    return (
+                                        <div className="p-6">
+                                            <h2 className="text-2xl font-bold mb-4">Knowledge Base Page (Placeholder)</h2>
+                                            <p>Content for knowledge base will go here.</p>
+                                        </div>
+                                    );
                                 default:
                                     return <MyTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} isSidebarExpanded={isSidebarExpanded} />;
                             }

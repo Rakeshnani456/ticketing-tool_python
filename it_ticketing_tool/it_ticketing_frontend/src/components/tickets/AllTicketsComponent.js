@@ -477,10 +477,11 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                         transform: messageTransform,
                         marginBottom: messageMarginBottom, // Use style for dynamic margin-bottom
                         // Transition applies to opacity, transform, and margin-bottom
-                        transition: 'opacity 0.5s ease-in-out, transform 0.5s ease-in-out, margin-bottom 0.5s ease-in-out',
+                        transition: 'opacity 1s ease-in-out, transform 1 ease-in-out, margin-bottom 1 ease-in-out',
                         pointerEvents: messageOpacity === 0 ? 'none' : 'auto' // Disable pointer events when fully faded
                     }}
                 >
+                    
                     <span>
                         {/* Shorter message content */}
                         Showing {getPageHeading().toLowerCase()}. Use filters to refine.

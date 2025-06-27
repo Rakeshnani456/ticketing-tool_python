@@ -1335,6 +1335,61 @@ app.patch('/notifications/:notificationId/read', verifyFirebaseToken, async (req
     }
 });
 
+app.delete('/notifications/:id', verifyFirebaseToken, async (req, res) => {
+    const { id } = req.params;
+    const userId = req.user.uid; // Get authenticated user's UID from req.user
+
+    try {
+        const notificationRef = notificationsCollection.doc(id);
+        const notificationDoc = await notificationRef.get();
+
+        if (!notificationDoc.exists) {
+            return res.status(404).json({ error: 'Notification not found.' });
+        }
+
+        // Ensure the notification belongs to the authenticated user
+        if (notificationDoc.data().userId !== userId) {
+            return res.status(403).json({ error: 'Forbidden: You do not have permission to clear this notification.' });
+        }
+
+        await notificationRef.delete();
+        return res.status(200).json({ message: 'Notification cleared successfully.' });
+    } catch (error) {
+        console.error(`Error clearing notification ${id} for user ${userId}:`, error);
+        return res.status(500).json({ error: 'Failed to clear notification.' });
+    }
+});
+
+// @route   DELETE /notifications/clear-all
+// @desc    Clear all notifications for the authenticated user.
+// @access  Private (requires authentication)
+app.delete('/notifications/clear-all', verifyFirebaseToken, async (req, res) => {
+    const userId = req.user.uid; // Get authenticated user's UID
+
+    try {
+        // Query for all notifications belonging to the user
+        const userNotificationsQuery = notificationsCollection.where('userId', '==', userId);
+        const snapshot = await userNotificationsQuery.get();
+
+        if (snapshot.empty) {
+            return res.status(200).json({ message: 'No notifications to clear.' });
+        }
+
+        // Create a batch to delete all documents found in the snapshot
+        const batch = db.batch();
+        snapshot.docs.forEach(doc => {
+            batch.delete(doc.ref);
+        });
+
+        await batch.commit(); // Commit the batch delete operation
+
+        return res.status(200).json({ message: 'All notifications cleared successfully.' });
+    } catch (error) {
+        console.error(`Error clearing all notifications for user ${userId}:`, error);
+        return res.status(500).json({ error: 'Failed to clear all notifications.' });
+    }
+});
+
 
 // --- NEW ADMIN ROUTES (User Management) ---
 
