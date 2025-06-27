@@ -17,6 +17,6 @@
     "express": "^5.1.0",
     "firebase-admin": "^13.4.0",
     "nodemailer": "^7.0.3",
-    "busboy": "^2.1.0"
+    "busboy": "^1.6.0"
   }
 }
