@@ -14,7 +14,8 @@ const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 
 const app = express();
-const PORT = process.env.PORT || 5000; // Use process.env.PORT for Render
+//const PORT = process.env.REACT_APP_API_URL
+const PORT =  process.env.PORT || 5000; // Use process.env.PORT for Render
 // IMPORTANT: app.listen should be at the end of the file after all routes are defined.
 // Moving this down to the end of the file for correct express setup.
 // app.listen(PORT, () => {

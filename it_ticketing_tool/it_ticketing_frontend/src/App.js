@@ -7,7 +7,7 @@ import { motion } from 'framer-motion'; // Import motion from framer-motion
 // Import Firebase auth client and dbClient
 import { authClient, dbClient } from './config/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth'; // Firebase authentication methods
-import { collection, query, onSnapshot, getFirestore } from 'firebase/firestore'; // NEW: Firestore imports
+import { collection, query, onSnapshot, getFirestore, where } from 'firebase/firestore'; // NEW: Firestore imports and 'where'
 
 // Import API Base URL from constants (still used for other API calls like notifications)
 import { API_BASE_URL } from './config/constants';
@@ -79,9 +79,27 @@ const App = () => {
     };
 
     // Define variants for Framer Motion animation for the sidebar text
+    // Define variants for Framer Motion animation for the sidebar text
     const textVariants = {
-        expanded: { opacity: 1, width: "auto", transition: { delay: 0.1, duration: 0.2 } },
-        collapsed: { opacity: 0, width: 0, transition: { duration: 0.2 } }
+        expanded: {
+            opacity: 1,
+            width: "auto",
+            x: 0, // Text ends at its natural position (0 translation)
+            transition: {
+                delay: 0.05, // Slightly less delay for a smoother start
+                duration: 0.2,
+                ease: "easeOut" // Use an easing function for smoother motion
+            }
+        },
+        collapsed: {
+            opacity: 0,
+            width: 0,
+            x: -20, // Text moves 20px to the left and fades out
+            transition: {
+                duration: 0.2,
+                ease: "easeIn" // Use an easing function for smoother motion
+            }
+        }
     };
 
     // Define variants for Framer Motion animation for the main content's left margin
@@ -167,7 +185,19 @@ const App = () => {
 
                         // NEW: Set up Firestore listener for ticket counts
                         const ticketsCollectionRef = collection(dbClient, 'tickets');
-                        const ticketsQuery = query(ticketsCollectionRef);
+                        let ticketsQuery;
+
+                        // <--- MODIFICATION STARTS HERE --->
+                        // Adjust the Firestore query based on user role to match security rules
+                        if (userProfile.role === 'support' || userProfile.role === 'admin') {
+                            // Admins and Support can read all tickets (as per your rules)
+                            ticketsQuery = query(ticketsCollectionRef);
+                        } else {
+                            // Regular users can only read their own tickets
+                            ticketsQuery = query(ticketsCollectionRef, where('reporter_id', '==', userProfile.uid));
+                        }
+                        // <--- MODIFICATION ENDS HERE --->
+
 
                         const unsubscribeTickets = onSnapshot(ticketsQuery, (snapshot) => {
                             const fetchedTickets = snapshot.docs.map(doc => ({
@@ -175,6 +205,7 @@ const App = () => {
                                 ...doc.data() // Get raw data; no need to format timestamps for counts
                             }));
 
+                            // These counts are now based on the tickets the *current user is allowed to see*
                             const totalTickets = fetchedTickets.length;
                             const activeTickets = fetchedTickets.filter(t => ['Open', 'In Progress', 'Hold'].includes(t.status)).length;
                             const assignedToMeTickets = fetchedTickets.filter(t => t.assigned_to_id === userProfile.uid).length;
