@@ -15,15 +15,18 @@ const { v4: uuidv4 } = require('uuid');
 
 const app = express();
 const PORT = process.env.PORT || 5000; // Use process.env.PORT for Render
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+// IMPORTANT: app.listen should be at the end of the file after all routes are defined.
+// Moving this down to the end of the file for correct express setup.
+// app.listen(PORT, () => {
+//   console.log(`Server running on port ${PORT}`);
+// });
+
 
 // --- Firebase Firestore & Auth Configuration ---
 // IMPORTANT: Adjust the path to your serviceAccountKey.json if necessary.
 // For production, consider using environment variables for the key content directly
 // instead of a file for better security.
-const SERVICE_ACCOUNT_KEY_PATH = '../serviceAccountKey.json'; // Adjust this path!
+// const SERVICE_ACCOUNT_KEY_PATH = '../serviceAccountKey.json'; // <--- REMOVE OR COMMENT THIS LINE
 
 let db;
 let usersCollection;
@@ -34,14 +37,40 @@ let dbConnected = false; // Flag to track database connection status
 try {
     // Initialize Firebase Admin SDK only once
     if (!admin.apps.length) { // Check if Firebase app is already initialized
-        const serviceAccount = require(SERVICE_ACCOUNT_KEY_PATH);
+        // --- MODIFIED SECTION START ---
+        // Use environment variables for Firebase credentials
+        // The private_key from Firebase service account JSON is often multiline.
+        // Render usually handles newline characters if you copy it directly,
+        // but sometimes you need to replace '\n' with actual newlines in your Render env var.
+        // Ensure your Render environment variables match these names.
+        const firebaseConfig = {
+            type: process.env.type, // e.g., "service_account"
+            project_id: process.env.project_id,
+            private_key_id: process.env.private_key_id,
+            // The `\n` in the private key must be actual newlines in the Render environment variable.
+            // If you copy-paste the private key from the JSON into Render's UI, it usually handles this.
+            // If not, you might need to manually replace '\n' with actual newlines in your Render setup.
+            private_key: process.env.private_key ? process.env.private_key.replace(/\\n/g, '\n') : undefined,
+            client_email: process.env.client_email,
+            client_id: process.env.client_id,
+            auth_uri: process.env.auth_uri,
+            token_uri: process.env.token_uri,
+            auth_provider_x509_cert_url: process.env.auth_provider_x509_cert_url,
+            client_x509_cert_url: process.env.client_x509_cert_url,
+            universe_domain: process.env.universe_domain // Often "googleapis.com"
+        };
+
+        // Basic validation for critical config
+        if (!firebaseConfig.project_id || !firebaseConfig.private_key || !firebaseConfig.client_email) {
+            throw new Error('Missing essential Firebase environment variables for Admin SDK initialization.');
+        }
+
         admin.initializeApp({
-            credential: admin.credential.cert(serviceAccount),
-            // Add storageBucket for Firebase Storage integration
-            // IMPORTANT: This is hardcoded for debugging. In production, use environment variables.
-            // The correct format is your-project-id.appspot.com (e.g., 'it-ticketing-tool-dd679.appspot.com')
-            storageBucket: 'it-ticketing-tool-dd679.firebasestorage.app'
+            credential: admin.credential.cert(firebaseConfig),
+            // IMPORTANT: Use environment variable for storageBucket
+            storageBucket: process.env.FIREBASE_STORAGE_BUCKET // e.g., 'it-ticketing-tool-dd679.appspot.com'
         });
+        // --- MODIFIED SECTION END ---
     }
     db = admin.firestore(); // Get a Firestore client
     usersCollection = db.collection('users'); // Collection for user roles
@@ -50,7 +79,7 @@ try {
     console.log("Connected to Firebase Firestore successfully!");
     dbConnected = true;
 } catch (error) {
-    console.error(`Error connecting to Firebase Firestore. Make sure '${SERVICE_ACCOUNT_KEY_PATH}' is correct and accessible: ${error.message}`);
+    console.error(`Error connecting to Firebase Firestore. Make sure environment variables are correct and accessible: ${error.message}`);
     dbConnected = false;
     // In a production app, you'd want more robust error handling here,
     // possibly exiting the process if the database connection is critical.
@@ -1413,7 +1442,7 @@ app.delete('/admin/users/:uid', verifyFirebaseToken, requireAdmin, async (req, r
 });
 
 
-// Start the server
-app.listen(port, () => {
-    console.log(`Server running on port ${port}`);
+// Start the server (Moved to the end of the file)
+app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
 });
