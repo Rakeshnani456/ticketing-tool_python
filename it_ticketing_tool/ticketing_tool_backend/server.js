@@ -164,21 +164,50 @@ app.use(checkDbConnection); // Apply this middleware to all routes
 
 // --- Helper for generating a simple display ID ---
 async function generateDisplayId() {
+    console.log("Starting generateDisplayId...");
+
     // Note: Using `orderBy('created_at', 'desc').limit(1)` is generally suitable for small to medium scale.
     // For very high-volume systems, a distributed counter or a dedicated ID generation service might be needed.
     const lastTicketQuery = await ticketsCollection.orderBy('created_at', 'desc').limit(1).get();
-    let nextIdNum = 1;
+
+    console.log("Query executed. Documents found:", lastTicketQuery.empty ? "None" : lastTicketQuery.docs.length);
+
+    let nextIdNum = 1; // Default starting number
+
     if (!lastTicketQuery.empty) {
         const lastTicket = lastTicketQuery.docs[0].data();
+        console.log("Last ticket data:", lastTicket);
+
         const lastDisplayId = lastTicket.display_id;
-        if (lastDisplayId && lastDisplayId.startsWith('RITM')) {
-            const numPart = parseInt(lastDisplayId.split('-')[1]);
+        console.log("Last display ID found:", lastDisplayId);
+
+        // Check if the last display ID exists and starts with "TT"
+        if (lastDisplayId && lastDisplayId.startsWith('TT')) {
+            // Extract the numeric part directly after "TT"
+            // Example: For "TT0001", we want "0001"
+            const numPartString = lastDisplayId.substring(2); // Get substring from index 2 onwards
+            console.log("Number part string:", numPartString);
+
+            const numPart = parseInt(numPartString);
+            console.log("Parsed number part:", numPart);
+
             if (!isNaN(numPart)) {
                 nextIdNum = numPart + 1;
+                console.log("Next ID number calculated:", nextIdNum);
+            } else {
+                console.warn("Warning: Numeric part of last display ID is NaN. Falling back to nextIdNum = 1.");
             }
+        } else {
+            console.warn("Warning: lastDisplayId not found or does not start with 'TT'. Falling back to nextIdNum = 1.");
         }
+    } else {
+        console.log("No existing tickets found. Starting with TT0001.");
     }
-    return `RITM${String(nextIdNum).padStart(5, '0')}`;
+
+    // Format the number to have at least 4 digits, padded with leading zeros
+    const newDisplayId = `TT${String(nextIdNum).padStart(4, '0')}`;
+    console.log("Generated new display ID:", newDisplayId);
+    return newDisplayId;
 }
 
 // --- Middleware to verify Firebase ID token for protected routes ---
@@ -930,7 +959,7 @@ app.get('/tickets/my', verifyFirebaseToken, async (req, res) => {
         if (searchKeyword) {
             // For exact display_id search, we check here, including closed tickets if matched.
             // This allows searching for closed tickets by ID within 'My Tickets'.
-            const exactIdMatch = `RITM${searchKeyword.toUpperCase().padStart(5, '0')}`; // Corrected prefix
+            const exactIdMatch = `TT${searchKeyword.toUpperCase().padStart(5, '0')}`; // Corrected prefix
             const exactIdMatchQuery = ticketsCollection
                 .where('reporter_id', '==', userId)
                 .where('display_id', '==', exactIdMatch);
@@ -966,7 +995,7 @@ app.get('/tickets/all', verifyFirebaseToken, checkRole(['support', 'admin']), as
 
         if (searchKeyword) {
             // Check for exact display_id match first, including closed/resolved tickets
-            const exactIdMatch = `RITM${searchKeyword.toUpperCase().padStart(5, '0')}`; // Corrected prefix
+            const exactIdMatch = `TT${searchKeyword.toUpperCase().padStart(5, '0')}`; // Corrected prefix
             const exactIdMatchQuery = ticketsCollection.where('display_id', '==', exactIdMatch);
             const exactIdMatchSnapshot = await exactIdMatchQuery.get();
             if (!exactIdMatchSnapshot.empty) {
