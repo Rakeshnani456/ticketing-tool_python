@@ -552,11 +552,8 @@ const App = () => {
                     onMouseEnter={() => setIsSidebarExpanded(true)} // Expand on hover
                     onMouseLeave={() => setIsSidebarExpanded(false)} // Retract on mouse leave
                 >
-                    {/* The 3-bar menu button and its containing div were removed previously. */}
-                    {/* The logo is also removed from here, it resides only in the header now. */}
-
-                    {/* Removed mt-3 to move menu items up and align with logo */}
-                    <ul className="space-y-2"> {/* Menu items moved up */}
+                    {/* Top Menu Items */}
+                    <ul className="space-y-2">
                         {/* Support User Specific Menu Items - MODIFIED: Now includes admin role */}
                         {(currentUser.role === 'support' || currentUser.role === 'admin') && (
                             <>
@@ -672,34 +669,39 @@ const App = () => {
                                 </button>
                             </li>
                         )}
-                        {/* NEW: Settings Menu Item */}
-                        <li>
-                            <button onClick={() => navigateTo('settings')} className={`flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-300 text-base ${currentPage === 'settings' ? 'font-bold border-b-2 border-white' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
-                               <SettingsIconSvg width={22} height={22} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} fill="currentColor" /> {/* MODIFIED LINE */}
-                                <motion.span
-                                    variants={textVariants}
-                                    animate={isSidebarExpanded ? "expanded" : "collapsed"}
-                                    className="whitespace-nowrap overflow-hidden"
-                                >
-                                    Settings
-                                </motion.span>
-                            </button>
-                        </li>
-
-                        {/* NEW: Knowledge Base Menu Item */}
-                        <li>
-                            <button onClick={() => navigateTo('knowledgeBase')} className={`flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-300 text-base ${currentPage === 'knowledgeBase' ? 'font-bold border-b-2 border-white' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
-                                <Book size={20} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} /> {/* Using Book icon from lucide-react */}
-                                <motion.span
-                                    variants={textVariants}
-                                    animate={isSidebarExpanded ? "expanded" : "collapsed"}
-                                    className="whitespace-nowrap overflow-hidden"
-                                >
-                                    Knowledge Base
-                                </motion.span>
-                            </button>
-                        </li>
                     </ul>
+                    
+                    {/* Bottom Menu Items */}
+                    <div className="mt-auto pt-4 border-t border-gray-700">
+                        <ul className="space-y-2">
+                            {/* NEW: Knowledge Base Menu Item */}
+                            <li>
+                                <button onClick={() => navigateTo('knowledgeBase')} className={`flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-300 text-base ${currentPage === 'knowledgeBase' ? 'font-bold border-t-2 border-white' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                    <Book size={20} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} /> {/* Using Book icon from lucide-react */}
+                                    <motion.span
+                                        variants={textVariants}
+                                        animate={isSidebarExpanded ? "expanded" : "collapsed"}
+                                        className="whitespace-nowrap overflow-hidden"
+                                    >
+                                        Knowledge Base
+                                    </motion.span>
+                                </button>
+                            </li>
+                            {/* NEW: Settings Menu Item */}
+                            <li>
+                                <button onClick={() => navigateTo('settings')} className={`flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-300 text-base ${currentPage === 'settings' ? 'font-bold border-t-2 border-white' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                <SettingsIconSvg width={22} height={22} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} fill="currentColor" /> {/* MODIFIED LINE */}
+                                    <motion.span
+                                        variants={textVariants}
+                                        animate={isSidebarExpanded ? "expanded" : "collapsed"}
+                                        className="whitespace-nowrap overflow-hidden"
+                                    >
+                                        Settings
+                                    </motion.span>
+                                </button>
+                            </li>
+                        </ul>
+                    </div>
                 </motion.nav>
             )}
 
@@ -961,7 +963,7 @@ const App = () => {
                 </section>
 
                 {/* Footer */}
-                <footer className={`text-red-800 text-center p-2 w-full shadow-inner text-xs flex-shrink-0`}>
+                <footer className={`text-white-500 text-center p-2 w-full shadow-inner text-xs flex-shrink-0`}>
                     <p>&copy; {new Date().getFullYear()} Kriasol. All rights reserved.</p>
                 </footer>
             </motion.div>

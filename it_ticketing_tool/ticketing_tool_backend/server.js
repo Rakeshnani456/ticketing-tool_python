@@ -14,8 +14,8 @@ const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 
 const app = express();
-//const PORT = process.env.REACT_APP_API_URL
-const PORT =  process.env.PORT || 5000; // Use process.env.PORT for Render
+const PORT = process.env.REACT_APP_API_URL
+//const PORT =  process.env.PORT || 5000; // Use process.env.PORT for Render
 // IMPORTANT: app.listen should be at the end of the file after all routes are defined.
 // Moving this down to the end of the file for correct express setup.
 // app.listen(PORT, () => {
@@ -840,6 +840,9 @@ app.patch('/ticket/:ticket_id', verifyFirebaseToken, async (req, res) => {
 // @route   POST /ticket/:ticket_id/add_comment
 // @desc    Add a comment to a ticket.
 // @access  Private (requires token)
+// @route   POST /ticket/:ticket_id/add_comment
+// @desc    Add a comment to a ticket.
+// @access  Private (requires token)
 app.post('/ticket/:ticket_id/add_comment', verifyFirebaseToken, async (req, res) => {
     const ticketId = req.params.ticket_id;
     const { comment_text, commenter_name = req.user.email } = req.body; // Default commenter to user's email
@@ -863,12 +866,14 @@ app.post('/ticket/:ticket_id/add_comment', verifyFirebaseToken, async (req, res)
         const newComment = {
             text: comment_text,
             commenter: commenter_name,
-            timestamp: new Date() // Firestore server timestamp
+            // FIX: Use a regular JavaScript Date object here.
+            // Firestore will automatically convert this to a Timestamp when written to the database.
+            timestamp: new Date()
         };
 
         await ticketsCollection.doc(ticketId).update({
             comments: admin.firestore.FieldValue.arrayUnion(newComment),
-            updated_at: admin.firestore.FieldValue.serverTimestamp() // Update ticket's updated_at
+            updated_at: admin.firestore.FieldValue.serverTimestamp() // This is correct for top-level fields
         });
         console.log(`Comment added to ticket ${ticketId} by ${commenter_name}`);
 
@@ -885,7 +890,6 @@ app.post('/ticket/:ticket_id/add_comment', verifyFirebaseToken, async (req, res)
         }
 
         // NEW: Create notification for assigned support user if commenter is different from them
-        // Removed the condition `req.user.uid !== ticketData.reporter_id`
         if (ticketData.assigned_to_id && req.user.uid !== ticketData.assigned_to_id) {
              await notificationsCollection.add({
                 userId: ticketData.assigned_to_id,
@@ -896,7 +900,6 @@ app.post('/ticket/:ticket_id/add_comment', verifyFirebaseToken, async (req, res)
                 ticketId: ticketId
             });
         }
-
 
         return res.status(200).json({ message: 'Comment added successfully!' });
     } catch (error) {
