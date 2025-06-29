@@ -1192,41 +1192,52 @@ app.get('/tickets/export', verifyFirebaseToken, checkRole(['support', 'admin']),
 
         // CSV Generation Logic
         const headers = [
-            "Ticket ID", "Short Description", "Long Description", "Category", "Priority",
-            "Status", "Reporter Email", "Requested For Email", "Contact Number",
-            "Hostname/Asset ID", "Assigned To Email", "Created At", "Updated At",
-            "Resolved At", "Time Spent (Minutes)", "Comments", "Attachments", "Closure Notes" // NEW: Add Closure Notes to headers
+            "Ticket ID",
+            "Short Description",
+            "Category",
+            "Priority",
+            "Status",
+            "Reporter Email",
+            "Requested For Email", // Added
+            "Contact Number", // Added
+            "Hostname/Asset ID", // Added
+            "Assigned To Email",
+            "Created At", // Added
+            "Updated At", // Added
+            "Resolved At", // Added
+            "Time Spent (Minutes)", // Added
+            "Closure Notes", // Added
+            "Closed By Email" // Added
         ];
         let csv = headers.join(',') + '\n';
 
         allTickets.forEach(ticket => {
-            const commentsCsv = ticket.comments && Array.isArray(ticket.comments)
-                ? ticket.comments.map(c => `[${c.commenter} @ ${c.timestamp}]: ${c.text}`).join('; ').replace(/"/g, '""')
-                : '';
+            // Remove commentsCsv and attachmentsCsv as requested
+            // const commentsCsv = ticket.comments && Array.isArray(ticket.comments)
+            //     ? ticket.comments.map(c => `[${c.commenter} @ ${c.timestamp}]: ${c.text}`).join('; ').replace(/"/g, '""')
+            //     : '';
 
-            const attachmentsCsv = ticket.attachments && Array.isArray(ticket.attachments)
-                ? ticket.attachments.map(att => att.fileName || att.url).join('; ').replace(/"/g, '""')
-                : '';
+            // const attachmentsCsv = ticket.attachments && Array.isArray(ticket.attachments)
+            //     ? ticket.attachments.map(att => att.fileName || att.url).join('; ').replace(/"/g, '""')
+            //     : '';
 
             const row = [
                 ticket.display_id || '',
                 `"${ticket.short_description ? ticket.short_description.replace(/"/g, '""') : ''}"`, // Enclose with quotes and escape double quotes
-                `"${ticket.long_description ? ticket.long_description.replace(/"/g, '""') : ''}"`,
                 ticket.category || '',
                 ticket.priority || '',
                 ticket.status || '',
                 ticket.reporter_email || '',
-                ticket.request_for_email || '',
-                ticket.contact_number || '',
-                ticket.hostname_asset_id || '',
+                ticket.request_for_email || '', // Added
+                ticket.contact_number || '', // Added
+                ticket.hostname_asset_id || '', // Added
                 ticket.assigned_to_email || '',
-                ticket.created_at || '',
-                ticket.updated_at || '',
-                ticket.resolved_at || '',
-                ticket.time_spent_minutes !== null ? ticket.time_spent_minutes : '',
-                `"${commentsCsv}"`,
-                `"${attachmentsCsv}"`,
-                `"${ticket.closure_notes ? ticket.closure_notes.replace(/"/g, '""') : ''}"` // NEW: Add Closure Notes to CSV row
+                ticket.created_at || '', // Added
+                ticket.updated_at || '', // Added
+                ticket.resolved_at || '', // Added
+                ticket.time_spent_minutes !== null ? ticket.time_spent_minutes : '', // Added
+                `"${ticket.closure_notes ? ticket.closure_notes.replace(/"/g, '""') : ''}"`, // Added
+                ticket.closed_by_email || '' // Added
             ];
             csv += row.join(',') + '\n';
         });

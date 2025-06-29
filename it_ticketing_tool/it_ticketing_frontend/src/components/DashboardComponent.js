@@ -131,7 +131,7 @@ const DashboardComponent = ({ user, navigateTo, showFlashMessage }) => {
 
                 {/* Create Ticket Quick Action Card */}
                 <div className="bg-gradient-to-br from-green-500 to-green-700 text-white p-6 rounded-lg shadow-lg flex items-center justify-between cursor-pointer hover:from-green-600 hover:to-green-800 transition duration-300"
-                    onClick={() => navigateTo('createTicket')}>
+                    onClick={() => navigateTo('create-ticket')}>
                     <div>
                         <div className="text-sm opacity-90">Quick Action</div>
                         <div className="text-4xl font-bold mt-1">Create New Ticket</div>

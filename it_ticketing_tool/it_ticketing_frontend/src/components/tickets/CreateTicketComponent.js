@@ -242,7 +242,7 @@ const CreateTicketComponent = ({ user, onClose, showFlashMessage, onTicketCreate
      */
     const handleViewTicket = () => {
         if (createdTicketId) {
-            navigateTo('ticketDetail', createdTicketId);
+            navigateTo('/tickets', createdTicketId);
         }
     };
 
