@@ -34,8 +34,8 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
 
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-    // MODIFIED: Default filterStatus to 'Open' to show open tickets initially
-    const [filterStatus, setFilterStatus] = useState('Open'); // State for status filter
+    // MODIFIED: Default filterStatus to '' to show all active tickets initially
+    const [filterStatus, setFilterStatus] = useState(''); // State for status filter
     const [filterAssignment, setFilterAssignment] = useState(initialFilterAssignment); // State for assignment filter
     const [startDate, setStartDate] = useState(''); // State for start date filter for export
     const [endDate, setEndDate] = useState('');     // State for end date filter for export
@@ -150,14 +150,13 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
     useEffect(() => {
         let currentFilteredTickets = [...allTickets]; // Start with all tickets fetched by Firestore
 
+        // Always filter out 'Closed' and 'Resolved' tickets from being displayed in the grid
+// Always filter out 'Closed', 'Resolved', and 'Cancelled' tickets from being displayed in the grid
+        currentFilteredTickets = currentFilteredTickets.filter(ticket => !['Closed', 'Resolved', 'Cancelled'].includes(ticket.status));
         // Apply status filter based on filterStatus state
         // If filterStatus is an empty string, no status filter is applied, showing all statuses
         if (filterStatus) {
-            if (filterStatus === 'Closed') {
-                currentFilteredTickets = currentFilteredTickets.filter(ticket => ['Closed', 'Resolved'].includes(ticket.status));
-            } else {
-                currentFilteredTickets = currentFilteredTickets.filter(ticket => ticket.status === filterStatus);
-            }
+            currentFilteredTickets = currentFilteredTickets.filter(ticket => ticket.status === filterStatus);
         }
 
         // Apply assignment filter
@@ -197,7 +196,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
     useEffect(() => {
         // Reset filter states based on initialFilterAssignment
         setFilterAssignment(initialFilterAssignment);
-        if (!initialFilterAssignment) {
+        if (!initialFilterAssignment && filterStatus !== '') { // Only reset to 'Open' if no assignment filter AND filterStatus is not already empty
             setFilterStatus('Open'); // Re-default to Open if no assignment filter is active
         } else {
             setFilterStatus(''); // Clear status filter if an assignment filter is explicitly set
@@ -225,7 +224,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
 
         // Cleanup the timer if the component unmounts or dependencies change before it fires
         return () => clearTimeout(timer);
-    }, [initialFilterAssignment]); // Re-run this effect when initialFilterAssignment changes
+    }, [initialFilterAssignment]);
 
 
     // Effect hook to handle clicks outside the export popup to close it
@@ -391,17 +390,18 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
     };
 
     // Calculate counts based on the *allTickets* array, which now contains the full dataset
-    const counts = {
-        // 'All' button now shows count of ALL tickets fetched
-        total_tickets: allTickets.length,
+const counts = {
+        // 'All' button now shows count of ALL active tickets (Open, In Progress, Hold)
+        total_tickets: allTickets.filter(t => ['Open', 'In Progress', 'Hold'].includes(t.status)).length,
         open_tickets: allTickets.filter(t => t.status === 'Open').length,
         in_progress_tickets: allTickets.filter(t => t.status === 'In Progress').length,
         hold_tickets: allTickets.filter(t => t.status === 'Hold').length,
-        closed_resolved_tickets: allTickets.filter(t => ['Closed', 'Resolved'].includes(t.status)).length, // Corrected to include 'Resolved'
-        unassigned: allTickets.filter(t => !t.assigned_to_email).length,
+        // This count still shows Closed/Resolved for potential future use or specific filter button
+        closed_resolved_tickets: allTickets.filter(t => ['Closed', 'Resolved'].includes(t.status)).length,
+        // Exclude Closed, Resolved, and Cancelled from unassigned count for consistency
+        unassigned: allTickets.filter(t => !t.assigned_to_email && !['Closed', 'Resolved', 'Cancelled'].includes(t.status)).length,
         // Removed assigned_to_me count as the button is being removed
     };
-
     // Function to determine the page heading based on active filters
     const getPageHeading = useCallback(() => {
         if (searchKeyword) {
@@ -502,16 +502,16 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                     <span className="text-sm font-semibold text-gray-700 flex items-center"><ListFilter className="mr-1" size={16} /> Filter By:</span>
                     {/* MODIFIED: 'All' button now sets filterStatus to empty string to show all tickets */}
                     <button
-                        onClick={() => { setFilterStatus(''); setFilterAssignment(''); }} // Set to empty string for 'All' and clear assignment
-                        className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors duration-200 shadow-sm ${filterStatus === '' && filterAssignment === '' ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}
-                    >
-                        All ({counts.total_tickets})
-                    </button>
+    onClick={() => { setFilterStatus(''); setFilterAssignment(''); }} // Set to empty string for 'All' and clear assignment
+    className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors duration-200 shadow-sm ${filterStatus === '' && filterAssignment === '' ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}
+>
+    All ({counts.total_tickets}) {/* Now simply show the total_tickets which are already filtered for active ones */}
+</button>
                     {/* MODIFIED: Ensure setFilterAssignment('') is called for status filters */}
                     <button onClick={() => { setFilterStatus('Open'); setFilterAssignment(''); }} className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors duration-200 shadow-sm ${filterStatus === 'Open' && filterAssignment === '' ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`} > Open ({counts.open_tickets}) </button>
                     <button onClick={() => { setFilterStatus('In Progress'); setFilterAssignment(''); }} className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors duration-200 shadow-sm ${filterStatus === 'In Progress' && filterAssignment === '' ? 'bg-yellow-600 text-white hover:bg-yellow-700' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`} > In Progress ({counts.in_progress_tickets}) </button>
                     <button onClick={() => { setFilterStatus('Hold'); setFilterAssignment(''); }} className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors duration-200 shadow-sm ${filterStatus === 'Hold' && filterAssignment === '' ? 'bg-purple-600 text-white hover:bg-purple-700' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`} > On Hold ({counts.hold_tickets}) </button>
-                    <button onClick={() => { setFilterStatus('Closed'); setFilterAssignment(''); }} className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors duration-200 shadow-sm ${filterStatus === 'Closed' && filterAssignment === '' ? 'bg-gray-600 text-white hover:bg-gray-700' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`} > Closed/Resolved ({counts.closed_resolved_tickets}) </button>
+                    {/* Removed the "Closed/Resolved" filter button */}
 
                     {/* MODIFIED: Filter button for 'Unassigned' - ensure setFilterStatus('') is called */}
                     <button onClick={() => { setFilterAssignment('unassigned'); setFilterStatus(''); }} className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors duration-200 shadow-sm ${filterAssignment === 'unassigned' && filterStatus === '' ? 'bg-orange-600 text-white hover:bg-orange-700' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`} > Unassigned ({counts.unassigned}) </button>
@@ -597,7 +597,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                             <div key={ticket.id} className="grid grid-cols-[auto_120px_minmax(150px,_2fr)_150px_100px_80px_100px_150px_150px_100px] gap-x-2 py-3 px-4 hover:bg-gray-100 transition-colors duration-150 items-center">
                                 {/* Removed 'whitespace-nowrap' from all cells */}
                                 <div className="text-sm text-gray-800 min-w-[20px]">{index + 1}</div>
-                                <div className="text-sm text-blue-700 hover:underline font-medium cursor-pointer min-w-[100px]" onClick={() => navigateTo('ticketDetail', ticket.id)}>
+                                    <div className="text-sm text-blue-700 hover:underline font-medium cursor-pointer min-w-[100px]" onClick={() => navigateTo('/tickets', ticket.id)}>
                                     {ticket.display_id}
                                 </div>
                                 {/* Added 'line-clamp-2' for multi-line truncation with ellipsis */}

@@ -1,46 +1,46 @@
 // src/App.js
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { User, LogOut, ChevronDown, Search, CheckCircle, XCircle, Info, AlertTriangle, Bell, Menu, LayoutDashboard, List, Tag, ClipboardCheck, PlusCircle, Users, Book, MenuIcon } from 'lucide-react'; // NEW: Import Users and Book icon
-import { motion } from 'framer-motion'; // Import motion from framer-motion
-import { AiOutlineEye, AiFillEye } from 'react-icons/ai'; // Or choose another icon library like 'fa' for Font Awesome
-import { X } from 'lucide-react'; // Assuming you have lucide-react for Info, CheckCircle, and X
-
+// Import Routes, Route, Link, useNavigate, useLocation from react-router-dom (BrowserRouter is now in index.js)
+import { Routes, Route, Link, useNavigate, useLocation } from 'react-router-dom';
+import {
+    User,
+    LogOut,
+    ChevronDown,
+    Search,
+    CheckCircle,
+    XCircle,
+    Info,
+    AlertTriangle,
+    Bell,
+    ClipboardCheck, // Ensure this is imported for use in JSX
+    Book,           // Ensure this is imported for use in JSX
+} from 'lucide-react';
+import { motion } from 'framer-motion';
+import { AiOutlineEye } from 'react-icons/ai'; // Or choose another icon library like 'fa' for Font Awesome
+import { X } from 'lucide-react'; // Assuming you have lucide-react for X (for closing flash messages)
 
 
 // Import Firebase auth client and dbClient
 import { authClient, dbClient } from './config/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth'; // Firebase authentication methods
-import { collection, query, onSnapshot, getFirestore, where, deleteDoc, doc } from 'firebase/firestore'; // NEW: Firestore imports and 'where', deleteDoc, doc
+import { collection, query, onSnapshot, where } from 'firebase/firestore'; // Firestore imports and 'where'
 
-// Import API Base URL from constants (still used for other API calls like notifications)
+// Import API Base URL from constants
 import { API_BASE_URL } from './config/constants';
 
 // Import local logo image
 import KriasolLogo from './assets/logo/logo.png';
 
-// Before (Lucide React imports):
-// import { User, LogOut, ChevronDown, Search, CheckCircle, XCircle, Info, AlertTriangle, Bell, Menu, LayoutDashboard, List, Tag, ClipboardCheck, PlusCircle, Users, Book } from 'lucide-react';
+// SVG imports (ensure these paths are correct and icons exist)
+import { ReactComponent as UsersIconSvg } from './assets/icons/UsersIcon.svg';
+import { ReactComponent as LayoutDashboardIcon } from './assets/icons/LayoutDashboardIcon.svg';
+import { ReactComponent as MenuIconSvg } from './assets/icons/MenuIcon.svg';
+import { ReactComponent as MyTicketsIcon } from './assets/icons/MyTicketsIcon.svg';
+import { ReactComponent as AssignedToMeIcon } from './assets/icons/AssignedToMeIcon.svg';
+import { ReactComponent as CreateTicketIcon } from './assets/icons/CreateTicketIcon.svg';
+import { ReactComponent as SettingsIconSvg } from './assets/icons/SettingsIconSvg.svg';
 
-// After (SVG imports):
-import { ReactComponent as UsersIconSvg } from './assets/icons/UsersIcon.svg'; // Assuming you have a user icon SVG
-import { ReactComponent as LayoutDashboardIcon } from './assets/icons/LayoutDashboardIcon.svg'; // Corrected import name for clarity
-import { ReactComponent as MenuIconSvg } from './assets/icons/MenuIcon.svg'; // 
-import { ReactComponent as MyTicketsIcon } from './assets/icons/MyTicketsIcon.svg'; // 
-import { ReactComponent as AssignedToMeIcon } from './assets/icons/AssignedToMeIcon.svg'; // 
-import { ReactComponent as CreateTicketIcon } from './assets/icons/CreateTicketIcon.svg'; // 
-import { ReactComponent as SettingsIconSvg } from './assets/icons/SettingsIconSvg.svg'; // 
-
-
-
-
-
-
-// You already have the Settings SVG embedded, so no import needed for that.
-
-// Import common UI components
-import FormInput from './components/common/FormInput';
-import PrimaryButton from './components/common/PrimaryButton';
 
 // Import feature components
 import LoginComponent from './components/auth/LoginComponent';
@@ -48,12 +48,28 @@ import RegisterComponent from './components/auth/RegisterComponent';
 import CreateTicketComponent from './components/tickets/CreateTicketComponent';
 import MyTicketsComponent from './components/tickets/MyTicketsComponent';
 import AllTicketsComponent from './components/tickets/AllTicketsComponent';
-import TicketDetailComponent from './components/tickets/TicketDetailComponent';
+import TicketDetailComponent from './components/tickets/TicketDetailComponent'; // TicketDetailComponent will use useParams
 import DashboardComponent from './components/DashboardComponent';
 import ProfileComponent from './components/ProfileComponent';
 import AccessDeniedComponent from './components/AccessDeniedComponent';
-import ChangePasswordComponent from './components/ChangePasswordComponent'; // NEW: Import ChangePasswordComponent
-import UserManagementComponent from './components/admin/UserManagementComponent'; // NEW: Import UserManagementComponent
+import ChangePasswordComponent from './components/ChangePasswordComponent';
+import UserManagementComponent from './components/admin/UserManagementComponent';
+
+
+// Placeholder components for new pages mentioned in sidebar
+const SettingsComponent = () => (
+    <div className="p-6">
+        <h2 className="text-2xl font-bold mb-4">Settings Page (Placeholder)</h2>
+        <p>Content for settings will go here.</p>
+    </div>
+);
+
+const KnowledgeBaseComponent = () => (
+    <div className="p-6">
+        <h2 className="text-2xl font-bold mb-4">Knowledge Base Page (Placeholder)</h2>
+        <p>Content for knowledge base will go here.</p>
+    </div>
+);
 
 /**
  * Main application component.
@@ -63,10 +79,6 @@ import UserManagementComponent from './components/admin/UserManagementComponent'
 const App = () => {
     // State for the current authenticated user (Firebase user + custom role)
     const [currentUser, setCurrentUser] = useState(null);
-    // State for managing the current active page/view
-    const [currentPage, setCurrentPage] = useState('myTickets');
-    // State to hold the ID of the selected ticket for detail view
-    const [selectedTicketId, setSelectedTicketId] = useState(null);
     // State for displaying temporary flash messages
     const [flashMessage, setFlashMessage] = useState(null);
     // State for the type of flash message (e.g., 'success', 'error', 'info')
@@ -91,8 +103,13 @@ const App = () => {
 
     // UPDATED STATES AND REFS FOR SIDEBAR MENU (NOW ALWAYS VISIBLE, ONLY EXPANDS/COLLAPSES)
     // isSidebarExpanded: controls if the sidebar is expanded (with text) or collapsed (icons only)
-    const [isSidebarExpanded, setIsSidebarExpanded] = useState(false); // Initial state for login/register pages
+    const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
     const sidebarMenuRef = useRef(null);
+
+    // React Router hooks
+    const navigate = useNavigate(); // For programmatic navigation
+    const location = useLocation(); // To get current path for active link highlighting
+
 
     // Define variants for Framer Motion animation for the sidebar
     // w-56 is 224px, w-16 is 64px
@@ -101,7 +118,6 @@ const App = () => {
         collapsed: { width: 64, transition: { type: "spring", stiffness: 300, damping: 30 } }
     };
 
-    // Define variants for Framer Motion animation for the sidebar text
     // Define variants for Framer Motion animation for the sidebar text
     const textVariants = {
         expanded: {
@@ -210,7 +226,6 @@ const App = () => {
                         const ticketsCollectionRef = collection(dbClient, 'tickets');
                         let ticketsQuery;
 
-                        // <--- MODIFICATION STARTS HERE --->
                         // Adjust the Firestore query based on user role to match security rules
                         if (userProfile.role === 'support' || userProfile.role === 'admin') {
                             // Admins and Support can read all tickets (as per your rules)
@@ -219,7 +234,6 @@ const App = () => {
                             // Regular users can only read their own tickets
                             ticketsQuery = query(ticketsCollectionRef, where('reporter_id', '==', userProfile.uid));
                         }
-                        // <--- MODIFICATION ENDS HERE --->
 
 
                         const unsubscribeTickets = onSnapshot(ticketsQuery, (snapshot) => {
@@ -231,7 +245,7 @@ const App = () => {
                             // These counts are now based on the tickets the *current user is allowed to see*
                             const totalTickets = fetchedTickets.length;
                             const activeTickets = fetchedTickets.filter(t => ['Open', 'In Progress', 'Hold'].includes(t.status)).length;
-                            const assignedToMeTickets = fetchedTickets.filter(t => t.assigned_to_id === userProfile.uid).length;
+                            const assignedToMeTickets = fetchedTickets.filter(t => t.assigned_to_id === userProfile.uid && !['Closed', 'Resolved'].includes(t.status)).length;
 
                             setTicketCounts({
                                 total_tickets: totalTickets,
@@ -244,10 +258,14 @@ const App = () => {
                         });
 
                         // Navigate based on user role
-                        if (data.user.role === 'support' || data.user.role === 'admin') { // Modified: Admin also goes to dashboard
-                            setCurrentPage('dashboard');
-                        } else {
-                            setCurrentPage('myTickets'); // Regular users go to their tickets
+                        // Note: React Router handles the initial page load based on URL.
+                        // This `Maps` call ensures a default route upon successful login if the current path isn't ideal.
+                        if (location.pathname === '/login' || location.pathname === '/register' || location.pathname === '/') {
+                             if (data.user.role === 'support' || data.user.role === 'admin') {
+                                 navigate('/dashboard');
+                             } else {
+                                 navigate('/my-tickets');
+                             }
                         }
                         setIsSidebarExpanded(false); // Start with sidebar collapsed (icons only)
                         return () => { // Cleanup for tickets listener if auth state changes again
@@ -259,7 +277,7 @@ const App = () => {
                         showFlashMessage(data.error || "Authentication failed during login.", 'error');
                         authClient.signOut();
                         setCurrentUser(null);
-                        setCurrentPage('login'); // Redirect to login
+                        navigate('/login'); // Redirect to login
                         setIsSidebarExpanded(false); // Ensure sidebar is collapsed on auth failure
                     }
                 } catch (error) {
@@ -268,13 +286,16 @@ const App = () => {
                     showFlashMessage("Network error during re-authentication. Please log in again.", 'error');
                     authClient.signOut();
                     setCurrentUser(null);
-                    setCurrentPage('login'); // Redirect to login
+                    navigate('/login'); // Redirect to login
                     setIsSidebarExpanded(false); // Ensure sidebar is collapsed on error
                 }
             } else {
                 // If no Firebase user is logged in, clear currentUser state and go to login page
                 setCurrentUser(null);
-                setCurrentPage('login');
+                // Ensure we are on a public route if no user is logged in
+                if (location.pathname !== '/login' && location.pathname !== '/register') {
+                    navigate('/login');
+                }
                 setTicketCounts({ active_tickets: 0, assigned_to_me: 0, total_tickets: 0 }); // Reset counts
                 setNotifications([]); // Clear notifications
                 setHasNewNotifications(false); // Clear new notification flag
@@ -291,7 +312,7 @@ const App = () => {
             }
             // No need to clean up ticket listener here, it's handled within the if (firebaseUser) block
         };
-    }, [fetchNotifications]);
+    }, [fetchNotifications, navigate, location.pathname]); // Added navigate and location.pathname to dependency array
 
     // Effect hook to handle clicks outside the notification menu
     useEffect(() => {
@@ -320,10 +341,10 @@ const App = () => {
     const handleLoginSuccess = (user) => {
         setCurrentUser(user);
         fetchNotifications(user); // Fetch notifications on login
-        if (user.role === 'support' || user.role === 'admin') { // Modified: Admin also goes to dashboard
-            setCurrentPage('dashboard');
+        if (user.role === 'support' || user.role === 'admin') {
+            navigate('/dashboard'); // Use navigate hook
         } else {
-            setCurrentPage('myTickets');
+            navigate('/my-tickets'); // Use navigate hook
         }
         setIsSidebarExpanded(false); // Start with sidebar collapsed (icons only)
     };
@@ -338,7 +359,7 @@ const App = () => {
             await signOut(authClient); // Sign out from Firebase
             setCurrentUser(null); // Clear current user state
             showFlashMessage('Logged out successfully.', 'success');
-            navigateTo('login'); // Navigate to login page
+            navigate('/login'); // Navigate to login page
         } catch (error) {
             console.error('Logout error:', error);
             showFlashMessage('Failed to log out.', 'error');
@@ -358,22 +379,27 @@ const App = () => {
     /**
      * Global navigation function.
      * Updates the current page and selected ticket ID, and triggers data refreshes.
-     * @param {string} page - The name of the page to navigate to.
+     * Now primarily a wrapper for `Maps` from react-router-dom, also handles other UI resets.
+     * @param {string} path - The path to navigate to.
      * @param {string|null} [id=null] - Optional ID for detail pages (e.g., ticket ID).
      * @returns {void}
      */
-    const navigateTo = (page, id = null) => {
-        // console.log(`App: Navigating to page: ${page}, with ID: ${id}`); // Debugging
-        setCurrentPage(page);
-        setSelectedTicketId(id);
+    const navigateTo = useCallback((path, id = null) => {
+        // console.log(`App: Navigating to path: ${path}, with ID: ${id}`); // Debugging
+        if (id) {
+            navigate(`${path}/${id}`); // Append ID to path for detail pages
+        } else {
+            navigate(path);
+        }
         setSearchKeyword(''); // Clear search keyword on page change
-        setTicketListRefreshKey(prev => prev + 0); // Increment key to force ticket list refresh
+        setTicketListRefreshKey(prev => prev + 1); // Increment key to force ticket list refresh
         if (currentUser) {
             fetchNotifications(currentUser); // Re-fetch notifications on navigation
         }
         setIsProfileMenuOpen(false); // Close profile menu on navigation
         setIsNotificationMenuOpen(false); // Close notification menu on navigation
-    };
+    }, [navigate, currentUser, fetchNotifications]);
+
 
     /**
      * Displays a temporary flash message to the user.
@@ -439,10 +465,10 @@ const App = () => {
             });
 
             if (response.ok) {
-                //showFlashMessage('Notification marked as read.', 'info');
+                //showFlashMessage('Notification marked as read.', 'info'); // Commented out to avoid too many pop-ups
                 fetchNotifications(currentUser); // Refresh notifications after marking read
                 if (ticketId) {
-                    navigateTo('ticketDetail', ticketId); // Navigate to ticket detail if provided
+                    navigateTo(`/tickets/${ticketId}`); // Navigate to ticket detail if provided
                 }
             } else {
                 console.error('Failed to mark notification as read:', await response.json());
@@ -462,7 +488,7 @@ const App = () => {
      * @param {string} ticketId - The ID of the ticket to view.
      */
     const viewTicket = useCallback((ticketId) => {
-        navigateTo('ticketDetail', ticketId);
+        navigateTo(`/tickets/${ticketId}`);
         setIsNotificationMenuOpen(false); // Close notification menu after navigating
     }, [navigateTo]);
 
@@ -533,12 +559,8 @@ const App = () => {
         }
     };
 
-    // mainContentMarginClass is no longer directly used for styling, but for context
-    // The actual margin will be driven by Framer Motion's `marginLeft` property.
-    // const mainContentMarginClass = isSidebarExpanded ? 'ml-56' : 'ml-16';
-
     return (
-        // Removed overflow-hidden from the main container to allow scrolling
+        // No BrowserRouter here, it's in index.js now.
         <div className="flex min-h-screen bg-gray-100 font-inter"> {/* Main flex container (row) */}
 
             {/* Left Side Menu (always visible when logged in) */}
@@ -558,7 +580,7 @@ const App = () => {
                         {(currentUser.role === 'support' || currentUser.role === 'admin') && (
                             <>
                                 <li>
-                                        <button onClick={() => navigateTo('dashboard')} className={`relative flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-300 text-base ${currentPage === 'dashboard' ? 'font-bold border-b-2 border-blue-500' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                        <Link to="/dashboard" className={`relative flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-300 text-base ${location.pathname === '/dashboard' ? 'font-bold border-b-2 border-blue-500' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
                                             <LayoutDashboardIcon width={20} height={18} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} fill="currentColor" />
                                             <motion.span
                                                 variants={textVariants}
@@ -577,10 +599,10 @@ const App = () => {
                                                     ({ticketCounts.total_tickets})
                                                 </span>
                                             )}
-                                        </button>
+                                        </Link>
                                 </li>
                                 <li>
-                                    <button onClick={() => navigateTo('allTickets')} className={`relative flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-300 text-base ${currentPage === 'allTickets' ? 'font-bold border-b-2 border-red-500' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                    <Link to="/all-tickets" className={`relative flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-300 text-base ${location.pathname === '/all-tickets' ? 'font-bold border-b-2 border-red-500' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
                                         <MenuIconSvg width={22} height={20} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} fill="currentColor" />
                                         <motion.span
                                             variants={textVariants}
@@ -597,10 +619,10 @@ const App = () => {
                                                 ({ticketCounts.active_tickets})
                                             </span>
                                         )}
-                                    </button>
+                                    </Link>
                                 </li>
                                 <li>
-                                    <button onClick={() => navigateTo('assignedToMe')} className={`relative flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-300 text-base ${currentPage === 'assignedToMe' ? 'font-bold border-b-2 border-green-600' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                    <Link to="/assigned-to-me" className={`relative flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-300 text-base ${location.pathname === '/assigned-to-me' ? 'font-bold border-b-2 border-green-600' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
                                         <MyTicketsIcon
                                                 width={20}
                                                 height={20}
@@ -624,13 +646,13 @@ const App = () => {
                                                 ({ticketCounts.assigned_to_me})
                                             </span>
                                         )}
-                                    </button>
+                                    </Link>
                                 </li>
                             </>
                         )}
                         {/* Common Menu Item for All Users */}
                         <li>
-                            <button onClick={() => navigateTo('myTickets')} className={`flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-300 text-base ${currentPage === 'myTickets' ? 'font-bold border-b-2 border-white' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                            <Link to="/my-tickets" className={`flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-300 text-base ${location.pathname === '/my-tickets' ? 'font-bold border-b-2 border-white' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
                                 <AssignedToMeIcon height={18} width={20} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} />
                                 <motion.span
                                     variants={textVariants}
@@ -639,11 +661,11 @@ const App = () => {
                                 >
                                     My Tickets
                                 </motion.span>
-                            </button>
+                            </Link>
                         </li>
                         {/* Add Create Ticket Here if desired */}
                         <li>
-                            <button onClick={() => navigateTo('createTicket')} className={`flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-300 text-base ${currentPage === 'createTicket' ? 'font-bold border-b-2 border-white' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                            <Link to="/create-ticket" className={`flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-300 text-base ${location.pathname === '/create-ticket' ? 'font-bold border-b-2 border-white' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
                                 <CreateTicketIcon height={18} width={20} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} />
                                 <motion.span
                                     variants={textVariants}
@@ -652,13 +674,13 @@ const App = () => {
                                 >
                                     Create Ticket
                                 </motion.span>
-                            </button>
+                            </Link>
                         </li>
                         {/* NEW: Admin Specific Menu Item */}
                         {currentUser.role === 'admin' && (
                             <li>
-                                <button onClick={() => navigateTo('userManagement')} className={`flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-300 text-base ${currentPage === 'userManagement' ? 'font-bold border-b-2 border-white' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
-                                    <UsersIconSvg width={22} height={22} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} fill="currentColor" /> {/* MODIFIED LINE */}
+                                <Link to="/user-management" className={`flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-300 text-base ${location.pathname === '/user-management' ? 'font-bold border-b-2 border-white' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                    <UsersIconSvg width={22} height={22} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} fill="currentColor" />
                                     <motion.span
                                         variants={textVariants}
                                         animate={isSidebarExpanded ? "expanded" : "collapsed"}
@@ -666,18 +688,18 @@ const App = () => {
                                     >
                                         User Management
                                     </motion.span>
-                                </button>
+                                </Link>
                             </li>
                         )}
                     </ul>
-                    
+
                     {/* Bottom Menu Items */}
                     <div className="mt-auto pt-4 border-t border-gray-700">
                         <ul className="space-y-2">
                             {/* NEW: Knowledge Base Menu Item */}
                             <li>
-                                <button onClick={() => navigateTo('knowledgeBase')} className={`flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-300 text-base ${currentPage === 'knowledgeBase' ? 'font-bold border-t-2 border-white' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
-                                    <Book size={20} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} /> {/* Using Book icon from lucide-react */}
+                                <Link to="/knowledge-base" className={`flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-300 text-base ${location.pathname === '/knowledge-base' ? 'font-bold border-t-2 border-white' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                    <Book size={20} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} />
                                     <motion.span
                                         variants={textVariants}
                                         animate={isSidebarExpanded ? "expanded" : "collapsed"}
@@ -685,12 +707,12 @@ const App = () => {
                                     >
                                         Knowledge Base
                                     </motion.span>
-                                </button>
+                                </Link>
                             </li>
                             {/* NEW: Settings Menu Item */}
                             <li>
-                                <button onClick={() => navigateTo('settings')} className={`flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-300 text-base ${currentPage === 'settings' ? 'font-bold border-t-2 border-white' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
-                                <SettingsIconSvg width={22} height={22} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} fill="currentColor" /> {/* MODIFIED LINE */}
+                                <Link to="/settings" className={`flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-300 text-base ${location.pathname === '/settings' ? 'font-bold border-t-2 border-white' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                <SettingsIconSvg width={22} height={22} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} fill="currentColor" />
                                     <motion.span
                                         variants={textVariants}
                                         animate={isSidebarExpanded ? "expanded" : "collapsed"}
@@ -698,7 +720,7 @@ const App = () => {
                                     >
                                         Settings
                                     </motion.span>
-                                </button>
+                                </Link>
                             </li>
                         </ul>
                     </div>
@@ -706,29 +728,29 @@ const App = () => {
             )}
 
             {/* Right Content Area (Header + Main Content + Footer - flex column) */}
-            {/* NOW USING MOTION.DIV FOR SMOOTH MARGIN TRANSITION */}
             <motion.div
                 className={`flex flex-col flex-1`}
                 initial={false}
-                animate={currentUser ? (isSidebarExpanded ? "expanded" : "collapsed") : { marginLeft: 0 }} // Animate margin only when logged in
+                animate={currentUser ? (isSidebarExpanded ? "expanded" : "collapsed") : { marginLeft: 0 }}
                 variants={mainContentVariants}
             >
-                {/* Top Banner Header - no longer fixed, part of flow */}
+                {/* Top Banner Header */}
                 <header className="bg-white text-grey p-3 flex items-center justify-between shadow-md flex-shrink-0 w-full z-40">
                     <div className="flex items-center">
-                        {/* Kriasol Logo - Remains in header only */}
+                        {/* Kriasol Logo */}
                         <div className="flex-shrink-0">
-                            <img
-                                src={KriasolLogo}
-                                alt="Kriasol Logo"
-                                className="h-8 cursor-pointer"
-                                onClick={() => navigateTo('allTickets')}
-                            />
+                            <Link to={currentUser ? '/my-tickets' : '/login'}> {/* Navigate based on auth state */}
+                                <img
+                                    src={KriasolLogo}
+                                    alt="Kriasol Logo"
+                                    className="h-8 cursor-pointer"
+                                />
+                            </Link>
                         </div>
                     </div>
 
                     {/* Search Bar with External Search Button Only */}
-                    {currentUser && currentPage !== 'login' && currentPage !== 'register' && (
+                    {currentUser && location.pathname !== '/login' && location.pathname !== '/register' && (
                         <div className="flex items-center flex-1 max-w-md mx-4">
                             <form onSubmit={handleSearchSubmit} className="flex-1">
                                 <input
@@ -847,18 +869,20 @@ const App = () => {
                                 </button>
                                 {isProfileMenuOpen && (
                                     <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50">
-                                        <button
-                                            onClick={() => { navigateTo('profile'); setIsProfileMenuOpen(false); }}
+                                        <Link // Use Link for navigation
+                                            to="/profile"
+                                            onClick={() => setIsProfileMenuOpen(false)}
                                             className="flex items-center w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                                         >
                                             <User size={16} className="mr-2" /> Profile
-                                        </button>
-                                        <button
-                                            onClick={() => { navigateTo('changePassword'); setIsProfileMenuOpen(false); }} // Link to ChangePasswordComponent
+                                        </Link>
+                                        <Link // Use Link for navigation
+                                            to="/change-password"
+                                            onClick={() => setIsProfileMenuOpen(false)} // Link to ChangePasswordComponent
                                             className="flex items-center w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                                         >
                                             <ClipboardCheck size={16} className="mr-2" /> Change Password
-                                        </button>
+                                        </Link>
                                         <button
                                             onClick={handleLogout}
                                             className="flex items-center w-full text-left px-4 py-2 text-sm text-red-700 hover:bg-red-50"
@@ -872,7 +896,7 @@ const App = () => {
                     )}
                 </header>
 
-                {/* Flash Message Display (adjust positioning since header is no longer fixed) */}
+                {/* Flash Message Display */}
                 {flashMessage && (
                     <div className={`p-3 text-xs rounded-none flex items-center justify-between ${getStatusClasses(flashType)}`} role="alert">
                         <div className="flex items-center">
@@ -890,76 +914,75 @@ const App = () => {
 
                 {/* Main Content Canvas Area */}
                 <section className={`flex-1 bg-gray-100 flex flex-col min-w-0`}>
-                    {/* Conditional Rendering of Components based on currentPage and currentUser */}
-                    {(() => {
-                        if (!currentUser) {
-                            // If no user is logged in, show Login or Register components
-                            return currentPage === 'register' ? (
-                                <RegisterComponent navigateTo={navigateTo} showFlashMessage={showFlashMessage} />
-                            ) : (
-                                <LoginComponent onLoginSuccess={handleLoginSuccess} navigateTo={navigateTo} showFlashMessage={showFlashMessage} />
-                            );
-                        } else {
-                            // If a user is logged in, render components based on currentPage and user role
-                            switch (currentPage) {
-                                case 'dashboard':
-                                    if (currentUser.role !== 'support' && currentUser.role !== 'admin') { // Admin can also see dashboard
-                                        return <AccessDeniedComponent />;
-                                    }
-                                    return <DashboardComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} />;
-                                case 'allTickets':
-                                    if (currentUser.role !== 'support' && currentUser.role !== 'admin') { // Admin can also see all tickets
-                                        return <AccessDeniedComponent />;
-                                    }
-                                    return <AllTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} showFilters={true} isSidebarExpanded={isSidebarExpanded} />;
-                                case 'assignedToMe':
-                                    if (currentUser.role !== 'support' && currentUser.role !== 'admin') { // Admin can also see assigned tickets
-                                        return <AccessDeniedComponent />;
-                                    }
-                                    return <AllTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} initialFilterAssignment="assigned_to_me" showFilters={false} isSidebarExpanded={isSidebarExpanded} />;
-                                case 'ticketDetail':
-                                    return <TicketDetailComponent key={selectedTicketId} ticketId={selectedTicketId} navigateTo={navigateTo} user={currentUser} showFlashMessage={showFlashMessage} />;
-                                case 'createTicket':
-                                    return (
-                                        <div className="flex flex-col items-center justify-center p-4">
-                                            <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-3xl relative border border-gray-200">
-                                                <CreateTicketComponent
-                                                    user={currentUser}
-                                                    showFlashMessage={showFlashMessage}
-                                                    onTicketCreated={handleTicketCreated}
-                                                    navigateTo={navigateTo}
-                                                />
-                                            </div>
+                    <Routes> {/* Define your routes here */}
+                        {/* Public Routes (Login/Register) */}
+                        <Route path="/login" element={<LoginComponent onLoginSuccess={handleLoginSuccess} navigateTo={navigateTo} showFlashMessage={showFlashMessage} />} />
+                        <Route path="/register" element={<RegisterComponent navigateTo={navigateTo} showFlashMessage={showFlashMessage} />} />
+
+                        {/* Protected Routes (require currentUser) */}
+                        {currentUser ? (
+                            <>
+                                {/* Default route for logged-in users, redirect based on role */}
+                                <Route path="/" element={
+                                    currentUser.role === 'support' || currentUser.role === 'admin' ?
+                                    <DashboardComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} /> :
+                                    <MyTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} isSidebarExpanded={isSidebarExpanded} />
+                                } />
+
+                                <Route path="/dashboard" element={
+                                    (currentUser.role === 'support' || currentUser.role === 'admin') ?
+                                        <DashboardComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} /> :
+                                        <AccessDeniedComponent />
+                                } />
+                                <Route path="/all-tickets" element={
+                                    (currentUser.role === 'support' || currentUser.role === 'admin') ?
+                                        <AllTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} showFilters={true} isSidebarExpanded={isSidebarExpanded} /> :
+                                        <AccessDeniedComponent />
+                                } />
+                                <Route path="/assigned-to-me" element={
+                                    (currentUser.role === 'support' || currentUser.role === 'admin') ?
+                                        <AllTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} initialFilterAssignment="assigned_to_me" showFilters={false} isSidebarExpanded={isSidebarExpanded} /> :
+                                        <AccessDeniedComponent />
+                                } />
+                                <Route path="/my-tickets" element={<MyTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} isSidebarExpanded={isSidebarExpanded} />} />
+                                <Route path="/create-ticket" element={
+                                    <div className="flex flex-col items-center justify-center p-4">
+                                        <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-3xl relative border border-gray-200">
+                                            <CreateTicketComponent
+                                                user={currentUser}
+                                                showFlashMessage={showFlashMessage}
+                                                onTicketCreated={handleTicketCreated}
+                                                navigateTo={navigateTo}
+                                            />
                                         </div>
-                                    );
-                                case 'profile':
-                                    return <ProfileComponent user={currentUser} showFlashMessage={showFlashMessage} navigateTo={navigateTo} handleLogout={handleLogout} />;
-                                case 'changePassword': // NEW: Case for Change Password page
-                                    return <ChangePasswordComponent user={currentUser} showFlashMessage={showFlashMessage} navigateTo={navigateTo} />;
-                                case 'userManagement': // NEW: Admin User Management page
-                                    if (currentUser.role !== 'admin') {
-                                        return <AccessDeniedComponent />;
-                                    }
-                                    return <UserManagementComponent user={currentUser} showFlashMessage={showFlashMessage} navigateTo={navigateTo} />;
-                                case 'settings': // NEW: Case for Settings page
-                                    return (
-                                        <div className="p-6">
-                                            <h2 className="text-2xl font-bold mb-4">Settings Page (Placeholder)</h2>
-                                            <p>Content for settings will go here.</p>
-                                        </div>
-                                    );
-                                case 'knowledgeBase': // NEW: Case for Knowledge Base page
-                                    return (
-                                        <div className="p-6">
-                                            <h2 className="text-2xl font-bold mb-4">Knowledge Base Page (Placeholder)</h2>
-                                            <p>Content for knowledge base will go here.</p>
-                                        </div>
-                                    );
-                                default:
-                                    return <MyTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} isSidebarExpanded={isSidebarExpanded} />;
-                            }
-                        }
-                    })()}
+                                    </div>
+                                } />
+                                {/* Dynamic route for Ticket Detail */}
+                                <Route path="/tickets/:ticketId" element={<TicketDetailComponent navigateTo={navigateTo} user={currentUser} showFlashMessage={showFlashMessage} />} />
+
+                                <Route path="/profile" element={<ProfileComponent user={currentUser} showFlashMessage={showFlashMessage} navigateTo={navigateTo} handleLogout={handleLogout} />} />
+                                <Route path="/change-password" element={<ChangePasswordComponent user={currentUser} showFlashMessage={showFlashMessage} navigateTo={navigateTo} />} />
+                                <Route path="/user-management" element={
+                                    currentUser.role === 'admin' ?
+                                        <UserManagementComponent user={currentUser} showFlashMessage={showFlashMessage} navigateTo={navigateTo} /> :
+                                        <AccessDeniedComponent />
+                                } />
+                                <Route path="/settings" element={<SettingsComponent />} />
+                                <Route path="/knowledge-base" element={<KnowledgeBaseComponent />} />
+
+                                {/* Catch-all for logged-in users if no other route matches */}
+                                {/* This ensures that if they go to an invalid path, they are redirected to their default view */}
+                                <Route path="*" element={
+                                    currentUser.role === 'support' || currentUser.role === 'admin' ?
+                                    <DashboardComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} /> :
+                                    <MyTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} isSidebarExpanded={isSidebarExpanded} />
+                                } />
+                            </>
+                        ) : (
+                            // If not logged in, redirect any unmatched route to login
+                            <Route path="*" element={<LoginComponent onLoginSuccess={handleLoginSuccess} navigateTo={navigateTo} showFlashMessage={showFlashMessage} />} />
+                        )}
+                    </Routes>
                 </section>
 
                 {/* Footer */}

@@ -1,13 +1,15 @@
+// src/index.js (or similar root file, where your React app is mounted)
 import React from 'react';
-import ReactDOM from 'react-dom/client';
+import ReactDOM from 'react-dom/client'; // For React 18
+import './index.css'; // Your global CSS
 import App from './App';
-import './index.css';
-// You might also have an index.css here if you have global styles not handled by Tailwind
-// import './index.css';
+import { BrowserRouter } from 'react-router-dom'; // Make sure this import is here
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
   <React.StrictMode>
-    <App />
+    <BrowserRouter> {/* THIS IS THE ONLY PLACE BrowserRouter SHOULD BE */}
+      <App />
+    </BrowserRouter>
   </React.StrictMode>
 );

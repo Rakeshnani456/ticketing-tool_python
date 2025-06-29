@@ -19,7 +19,7 @@ import {
     File,
 } from 'lucide-react';
 import { doc, onSnapshot, getFirestore } from 'firebase/firestore';
-
+import { useParams } from 'react-router-dom';
 import { getFileNameFromUrl } from '../../utils/utils';
 import { API_BASE_URL } from '../../config/constants';
 import { app, dbClient } from '../../config/firebase';
@@ -94,7 +94,8 @@ const FileIcon = ({ fileName, className = "w-14 h-14" }) => {
     }
 };
 
-const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage }) => {
+const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
+    const { ticketId } = useParams();
     const [ticket, setTicket] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -111,12 +112,10 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
     const [assignedToErrorMessage, setAssignedToErrorMessage] = useState('');
     const [highlightClosureNotes, setHighlightClosureNotes] = useState(false);
     const [closureNotesErrorMessage, setClosureNotesErrorMessage] = useState('');
-    // NEW: State for Close Ticket button feedback
-    const [closeButtonState, setCloseButtonState] = useState('default'); // 'default', 'closing', 'success', 'error'
-
+    const [closeButtonState, setCloseButtonState] = useState('default');
 
     const commentsSectionRef = useRef(null);
-    const closureNotesRef = useRef(null); // Ref for closure notes textarea
+    const closureNotesRef = useRef(null);
 
     const [editableFields, setEditableFields] = useState({
         request_for_email: '',
@@ -195,7 +194,6 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                 }
 
                 setTicket(fetchedTicket);
-                // When ticket data is fetched, if it's resolved/cancelled, ensure isEditing is false
                 if (['Resolved', 'Cancelled'].includes(fetchedTicket.status)) {
                     setIsEditing(false);
                 }
@@ -224,7 +222,6 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                 }
                 setLoading(false);
                 setError(null);
-                // NEW: Reset highlight and error message when ticket data is fetched/updated
                 setHighlightAssignedTo(false);
                 setAssignedToErrorMessage('');
                 setHighlightClosureNotes(false);
@@ -247,7 +244,6 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
     }, [ticketId, user, db, showFlashMessage, isEditing, isSupportUser]);
 
     const isTicketClosedOrResolved = ticket && ['Resolved', 'Cancelled'].includes(ticket.status);
-    // Modified canEdit: if ticket is closed/resolved, no one can edit.
     const canEdit = !isTicketClosedOrResolved && (isSupportUser || (ticket && ticket.reporter_id === user?.firebaseUser.uid));
     const canAddComments = !isTicketClosedOrResolved;
     const canAddAttachments = !isTicketClosedOrResolved;
@@ -260,9 +256,7 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
             editableFields.long_description !== ticket.long_description ||
             editableFields.contact_number !== ticket.contact_number ||
             editableFields.priority !== ticket.priority ||
-            // Special handling for 'Cancelled' which maps to 'Closed' in backend for status comparison
-            // This line needs to be adjusted based on the new logic. For now, keeping it as is to focus on backend payload.
-            (editableFields.status === 'Cancelled' ? 'Cancelled' : editableFields.status) !== ticket.status || // Keep 'Cancelled' as is for comparison
+            (editableFields.status === 'Cancelled' ? 'Cancelled' : editableFields.status) !== ticket.status ||
             editableFields.assigned_to_email !== ticket.assigned_to_email ||
             editableFields.closed_by_email !== ticket.closed_by_email ||
             closureNotes !== (ticket.closure_notes || '')
@@ -275,7 +269,6 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
         if (saveButtonState !== 'save') {
             setSaveButtonState('save');
         }
-        // If user types in assigned_to_email, remove highlight and error message
         if (id === 'assigned_to_email' && (highlightAssignedTo || assignedToErrorMessage)) {
             setHighlightAssignedTo(false);
             setAssignedToErrorMessage('');
@@ -287,7 +280,6 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
         if (saveButtonState !== 'save') {
             setSaveButtonState('save');
         }
-        // If status is changed, remove highlight and error message for assigned_to_email
         if (field === 'status' && (highlightAssignedTo || assignedToErrorMessage)) {
             setHighlightAssignedTo(false);
             setAssignedToErrorMessage('');
@@ -300,18 +292,13 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
         if (saveButtonState !== 'save') {
             setSaveButtonState('save');
         }
-        // NEW: If user types in closure notes, remove highlight and error message
         if (highlightClosureNotes || closureNotesErrorMessage) {
             setHighlightClosureNotes(false);
             setClosureNotesErrorMessage('');
         }
     }, [saveButtonState, highlightClosureNotes, closureNotesErrorMessage]);
 
-    // NEW: Consolidated update function with button state management
     const handleUpdateTicket = async (actionType = 'save') => {
-        let currentSaveButtonState = 'saving';
-        let currentCloseButtonState = 'closing';
-
         if (actionType === 'close') {
             setCloseButtonState('closing');
         } else {
@@ -319,7 +306,6 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
             setSaveButtonState('saving');
         }
 
-        // Clear highlight and error messages on attempt to update
         setHighlightAssignedTo(false);
         setAssignedToErrorMessage('');
         setHighlightClosureNotes(false);
@@ -329,20 +315,13 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
             const idToken = await user.firebaseUser.getIdToken();
             const payload = { ...editableFields };
 
-            // Determine the status based on actionType
             if (actionType === 'close') {
-                payload.status = 'Resolved'; // Always mark as resolved when 'Close Ticket' is clicked
-            } else {
-                // If the status is 'Cancelled' it should be sent as 'Cancelled', not 'Closed'
-                // Remove the mapping of 'Cancelled' to 'Closed'
-                // payload.status = payload.status === 'Cancelled' ? 'Closed' : payload.status;
+                payload.status = 'Resolved';
             }
 
-            const newStatusIsTerminalForClosure = ['Resolved'].includes(payload.status); // Only 'Resolved' requires closure notes and assigned_to
-            const oldStatusWasTerminal = ['Resolved', 'Cancelled'].includes(ticket.status); // Check original ticket status
+            const newStatusIsTerminalForClosure = ['Resolved'].includes(payload.status);
+            const oldStatusWasTerminal = ['Resolved', 'Cancelled'].includes(ticket.status);
 
-            // Check for Assigned to email, highlight and show message if missing for support user when resolving
-            // Only require assigned_to_email if status is 'Resolved'
             if (payload.status === 'Resolved' && !payload.assigned_to_email && isSupportUser) {
                 setHighlightAssignedTo(true);
                 setAssignedToErrorMessage('Assigned to field cannot be empty when resolving.');
@@ -354,41 +333,36 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                     setAssignedToErrorMessage('');
                     if (actionType === 'close') setCloseButtonState('default');
                     else setSaveButtonState('save');
-                }, 3000); // Message disappears after 3 seconds
+                }, 3000);
                 return;
             }
 
-            // Closure notes validation
-            // Only require closure notes if new status is 'Resolved' and it wasn't already a terminal status
             if (newStatusIsTerminalForClosure && !oldStatusWasTerminal && isSupportUser && !closureNotes.trim()) {
                 setHighlightClosureNotes(true);
-                setClosureNotesErrorMessage('Closure notes are required to resolve this ticket.'); // Updated message
+                setClosureNotesErrorMessage('Closure notes are required to resolve this ticket.');
                 if (actionType === 'close') setCloseButtonState('error');
                 else setSaveButtonState('error');
                 setUpdateLoading(false);
-                setActiveTab('closure'); // Navigate to closure tab
+                setActiveTab('closure');
 
-                // Ensure focus and scroll into view immediately
                 setTimeout(() => {
                     closureNotesRef.current?.focus();
                     closureNotesRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }, 0); // Use 0 timeout to push to next event loop, ensuring DOM update first
+                }, 0);
 
-                // Clear highlight and message after 3 seconds
                 setTimeout(() => {
                     setHighlightClosureNotes(false);
                     setClosureNotesErrorMessage('');
                     if (actionType === 'close') setCloseButtonState('default');
                     else setSaveButtonState('save');
                 }, 3000);
-                return; // Stop update process
+                return;
             }
 
 
             payload.closure_notes = closureNotes.trim() || null;
 
-            // Handle closed_by_email and resolved_at for 'Resolved' status transitions
-            if (payload.status === 'Resolved' && !['Resolved', 'Cancelled'].includes(ticket.status)) { // Transition to Resolved
+            if (payload.status === 'Resolved' && !['Resolved', 'Cancelled'].includes(ticket.status)) {
                 payload.closed_by_email = user.email;
                 payload.resolved_at = new Date().toISOString();
                 setEditableFields(prev => ({
@@ -396,10 +370,10 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                     closed_by_email: user.email,
                     resolved_at: payload.resolved_at,
                 }));
-            } else if (payload.status === 'Cancelled' && !['Resolved', 'Cancelled'].includes(ticket.status)) { // Transition to Cancelled
+            } else if (payload.status === 'Cancelled' && !['Resolved', 'Cancelled'].includes(ticket.status)) {
                 payload.closed_by_email = user.email;
-                payload.resolved_at = new Date().toISOString(); // Still set resolved_at for cancelled as it's a final state
-                payload.closure_notes = closureNotes.trim() || null; // Allow closure notes for cancelled if provided
+                payload.resolved_at = new Date().toISOString();
+                payload.closure_notes = closureNotes.trim() || null;
                 setEditableFields(prev => ({
                     ...prev,
                     closed_by_email: user.email,
@@ -407,9 +381,7 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                 }));
             }
             else if (!newStatusIsTerminalForClosure && oldStatusWasTerminal) {
-                // If status is changed from a terminal (Resolved/Cancelled) to non-terminal, clear closed_by_email, resolved_at, and closure_notes
-                // This logic might need refinement if 'Cancelled' is not strictly cleared but user changes it back to 'Open'
-                if (payload.status !== 'Cancelled') { // Do not clear if status is 'Cancelled'
+                if (payload.status !== 'Cancelled') {
                     payload.closed_by_email = null;
                     payload.resolved_at = null;
                     payload.closure_notes = null;
@@ -421,7 +393,6 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                     setClosureNotes('');
                 }
             }
-            // Ensure resolved_at is set if status becomes Resolved and wasn't already
             if (payload.status === 'Resolved' && !ticket.resolved_at && !payload.resolved_at) {
                 payload.resolved_at = new Date().toISOString();
                 setEditableFields(prev => ({ ...prev, resolved_at: payload.resolved_at }));
@@ -441,22 +412,20 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
             if (response.ok) {
                 if (actionType === 'close') {
                     setCloseButtonState('success');
-                    // Scroll to top of the page for 'Close Ticket' success
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                 } else {
                     setSaveButtonState('success');
-                    showFlashMessage('Ticket updated successfully!', 'success');
+                    //showFlashMessage('Ticket updated successfully!', 'success');
                 }
                 setError(null);
 
                 setTimeout(() => {
-                    setIsEditing(false); // This will also be handled by the useEffect for resolved/cancelled tickets
+                    setIsEditing(false);
                     if (actionType === 'close') {
                         setCloseButtonState('default');
                     } else {
                         setSaveButtonState('save');
                     }
-                    // Reset highlight and error messages after successful save
                     setHighlightAssignedTo(false);
                     setAssignedToErrorMessage('');
                     setHighlightClosureNotes(false);
@@ -465,7 +434,7 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
             } else {
                 if (actionType === 'close') {
                     setCloseButtonState('error');
-                    showFlashMessage(data.error || 'Failed to close ticket.', 'error'); // Flash message for close ticket error
+                    showFlashMessage(data.error || 'Failed to close ticket.', 'error');
                 } else {
                     setSaveButtonState('error');
                     showFlashMessage(data.error || 'Failed to update ticket.', 'error');
@@ -479,7 +448,7 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
             console.error('Update ticket error:', error);
             if (actionType === 'close') {
                 setCloseButtonState('error');
-                showFlashMessage('Network error or server unreachable during ticket closure.', 'error'); // Flash message for close ticket network error
+                showFlashMessage('Network error or server unreachable during ticket closure.', 'error');
             } else {
                 setSaveButtonState('error');
                 showFlashMessage('Network error or server unreachable during update.', 'error');
@@ -509,7 +478,6 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
         setClosureNotes(ticket.closure_notes || '');
         setIsEditing(false);
         setSaveButtonState('save');
-        // Reset highlight and error message on cancel
         setHighlightAssignedTo(false);
         setAssignedToErrorMessage('');
         setHighlightClosureNotes(false);
@@ -548,7 +516,7 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
         }
     };
 
-    const handleFileChange = (e) => {
+    const handleFileChange = async (e) => {
         const files = Array.from(e.target.files);
         const validFiles = [];
 
@@ -564,21 +532,22 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
             }
             validFiles.push(file);
         }
-        setAttachmentFiles(prevFiles => [...prevFiles, ...validFiles]);
-        if (uploadButtonState !== 'upload') {
+
+        if (validFiles.length > 0) {
+            setAttachmentFiles(prevFiles => [...prevFiles, ...validFiles]);
+            await handleAddAttachmentsToTicket(validFiles);
+        } else {
             setUploadButtonState('upload');
         }
     };
 
     const handleRemoveFile = (fileToRemove) => {
         setAttachmentFiles(prevFiles => prevFiles.filter(file => file !== fileToRemove));
-        if (uploadButtonState !== 'upload') {
-            setUploadButtonState('upload');
-        }
     };
 
-    const handleAddAttachmentsToTicket = async () => {
-        if (attachmentFiles.length === 0) {
+    const handleAddAttachmentsToTicket = async (filesToUpload) => {
+        if (filesToUpload.length === 0) {
+            setUploadButtonState('upload');
             return;
         }
 
@@ -587,7 +556,7 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
         const uploadedAttachmentData = [];
         let anyUploadFailed = false;
 
-        const uploadPromises = attachmentFiles.map(async (file) => {
+        const uploadPromises = filesToUpload.map(async (file) => {
             const formData = new FormData();
             formData.append('attachment', file);
 
@@ -719,40 +688,46 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                         </div>
                     </div>
                     <div className="flex items-center space-x-3">
-                        {/* Render Edit button only if not closed/resolved and user has permission */}
+                        {/* Edit button */}
                         {canEdit && !isEditing && (
                             <button
                                 onClick={() => setIsEditing(true)}
-                                className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                                className="flex items-center space-x-2 px-3 py-1 bg-gray-700 text-yellow-300 rounded-md text-sm hover:bg-gray-800 transition-colors"
                             >
                                 <Edit3 className="w-4 h-4" />
                                 <span>Edit</span>
                             </button>
                         )}
-                        {isEditing && canEdit && ( // Ensure controls are only visible if canEdit and isEditing
+                        {isEditing && canEdit && (
                             <div className="flex items-center space-x-2">
+                                {/* Cancel button */}
                                 <button
                                     onClick={handleCancelEdit}
                                     disabled={updateLoading}
-                                    className="flex items-center space-x-2 px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
+                                    className={`flex items-center space-x-2 px-3 py-1 rounded-md text-sm transition-colors
+                                        ${updateLoading
+                                            ? 'bg-gray-400 text-gray-700 cursor-not-allowed'
+                                            : 'bg-gray-500 text-white hover:bg-gray-600' // Keeping grey for cancel for distinction
+                                        }`}
                                 >
                                     <X className="w-4 h-4" />
                                     <span>Cancel</span>
                                 </button>
+                                {/* Save button */}
                                 <button
-                                    onClick={() => handleUpdateTicket('save')} // Pass action type
+                                    onClick={() => handleUpdateTicket('save')}
                                     disabled={updateLoading || !hasChanges()}
-                                    className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors
-                                ${saveButtonState === 'saving'
-                                            ? 'bg-blue-200 text-blue-500 cursor-not-allowed'
+                                    className={`flex items-center space-x-2 px-3 py-1 rounded-md text-sm transition-colors
+                                        ${saveButtonState === 'saving'
+                                            ? 'bg-gray-400 text-gray-700 cursor-not-allowed'
                                             : saveButtonState === 'success'
                                                 ? 'bg-green-600 text-white'
                                                 : saveButtonState === 'error'
                                                     ? 'bg-red-600 text-white'
                                                     : hasChanges()
-                                                        ? 'bg-green-600 text-white hover:bg-green-700'
-                                                        : 'bg-gray-300 text-gray-600 cursor-not-allowed'
-                                    }`}
+                                                        ? 'bg-gray-700 text-yellow-300 hover:bg-gray-800'
+                                                        : 'bg-gray-400 text-gray-700 cursor-not-allowed'
+                                        }`}
                                 >
                                     {saveButtonState === 'saving' && <Loader2 className="animate-spin mr-2" size={16} />}
                                     {saveButtonState === 'success' && <CheckCircle className="mr-2" size={16} />}
@@ -787,9 +762,9 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                                         Ticket ID:
                                     </label>
                                     <FieldBox className="w-[30ch]" isDisplayOnly={true}>
-                                        <span className="text-gray-900 font-medium">{ticket.display_id}</span>
+                                        <span className="text-gray-900 font-medium font-mono">{ticket.display_id}</span>
                                     </FieldBox>
-                                </div>
+                              </div>
                                 {/* Priority - Replaced with buttons in edit mode */}
                                 <div className="flex items-center">
                                     <label className="text-sm font-medium text-gray-700 w-32 shrink-0">
@@ -804,7 +779,7 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                                                     className={`px-2.5 py-0.5 rounded-md text-xs font-medium border transition-colors
                                                                 ${getPriorityClasses(p.value)}
                                                                 ${editableFields.priority === p.value
-                                                                    ? 'ring-2 ring-offset-1 ring-blue-500'
+                                                                    ? 'ring-2 ring-offset-1 ring-gray-700' // Ring color changed
                                                                     : 'hover:opacity-80'
                                                                 }
                                                                 ${updateLoading ? 'opacity-70 cursor-not-allowed' : ''}
@@ -834,7 +809,7 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                                     </label>
                                     <FieldBox className="w-[30ch]" isDisplayOnly={true}>
                                         <User className="w-4 h-4 text-gray-400 mr-2" />
-                                        <span className="text-gray-900">{ticket.request_for_email || ticket.reporter_email}</span>
+                                        <span className="text-gray-900 font-mono">{ticket.request_for_email || ticket.reporter_email}</span>
                                     </FieldBox>
                                 </div>
                                 {/* Status - Replaced with buttons in edit mode */}
@@ -842,7 +817,7 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                                     <label className="text-sm font-medium text-gray-700 w-32 shrink-0">
                                         Status:
                                     </label>
-                                    {isEditing && isSupportUser && !isTicketClosedOrResolved ? ( // Only support user can edit status if not closed/resolved
+                                    {isEditing && isSupportUser && !isTicketClosedOrResolved ? (
                                         <div className="flex flex-wrap gap-2 flex-1">
                                             {statuses.map(s => (
                                                 <button
@@ -851,7 +826,7 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                                                     className={`px-2.5 py-0.5 rounded-md text-xs font-medium border transition-colors
                                                                 ${getStatusClasses(s.value)}
                                                                 ${editableFields.status === s.value
-                                                                    ? 'ring-2 ring-offset-1 ring-blue-500'
+                                                                    ? 'ring-2 ring-offset-1 ring-gray-700' // Ring color changed
                                                                     : 'hover:opacity-80'
                                                                 }
                                                                 ${updateLoading ? 'opacity-70 cursor-not-allowed' : ''}
@@ -880,7 +855,7 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                                         Requested for:
                                     </label>
                                     <FieldBox className="w-[30ch]" isDisplayOnly={true}>
-                                        <span className="text-gray-900">{ticket.request_item_id || 'N/A'}</span>
+                                        <span className="text-gray-900 font-mono">{ticket.request_item_id || 'N/A'}</span>
                                     </FieldBox>
                                 </div>
                                 {/* Assigned to - Modified for error message */}
@@ -888,8 +863,8 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                                     <label className="text-sm font-medium text-gray-700 w-32 shrink-0">
                                         Assigned to:
                                     </label>
-                                    <div className="flex flex-col flex-1 max-w-[18rem]"> {/* Wrapper for input and message */}
-                                        {isEditing && isSupportUser && !isTicketClosedOrResolved ? ( // Only support user can edit and not if closed/resolved
+                                    <div className="flex flex-col flex-1 max-w-[18rem]">
+                                        {isEditing && isSupportUser && !isTicketClosedOrResolved ? (
                                             <EditableInput
                                                 id="assigned_to_email"
                                                 type="email"
@@ -901,7 +876,7 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                                         ) : (
                                             <FieldBox className={`${highlightAssignedTo ? 'border-red-500 bg-red-50 ring-red-500 ring-2' : ''}`} isDisplayOnly={true}>
                                                 <User className="w-4 h-4 text-gray-400 mr-2" />
-                                                <span className="text-gray-900">{ticket.assigned_to_email || 'Unassigned'}</span>
+                                                <span className="text-gray-900 font-mono">{ticket.assigned_to_email || 'Unassigned'}</span>
                                             </FieldBox>
                                         )}
                                         {assignedToErrorMessage && (
@@ -922,7 +897,7 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                                     </label>
                                     <FieldBox className="w-[30ch]" isDisplayOnly={true}>
                                         <Calendar className="w-4 h-4 text-gray-400 mr-2" />
-                                        <span className="text-gray-900">
+                                        <span className="text-gray-900 font-mono">
                                             {ticket.created_at ? new Date(ticket.created_at).toLocaleString() : 'N/A'}
                                         </span>
                                     </FieldBox>
@@ -934,7 +909,7 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                                     </label>
                                     <FieldBox className="w-[30ch]" isDisplayOnly={true}>
                                         <Calendar className="w-4 h-4 text-gray-400 mr-2" />
-                                        <span className="text-gray-900">
+                                        <span className="text-gray-900 font-mono">
                                             {ticket.resolved_at ? new Date(ticket.resolved_at).toLocaleString() : 'N/A'}
                                         </span>
                                     </FieldBox>
@@ -949,7 +924,7 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                                         Category:
                                     </label>
                                     <FieldBox className="w-[30ch]" isDisplayOnly={true}>
-                                        <span className="text-gray-900">{ticket.category || 'N/A'}</span>
+                                        <span className="text-gray-900 font-mono">{ticket.category || 'N/A'}</span>
                                     </FieldBox>
                                 </div>
                                 {/* Closed By (Always rendered) - Display Only */}
@@ -959,7 +934,7 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                                     </label>
                                     <FieldBox className="w-[30ch]" isDisplayOnly={true}>
                                         <User className="w-4 h-4 text-gray-400 mr-2" />
-                                        <span className="text-gray-900">
+                                        <span className="text-gray-900 font-mono">
                                             {ticket.closed_by_email || 'N/A'}
                                         </span>
                                     </FieldBox>
@@ -973,7 +948,7 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                                         </label>
                                         <FieldBox className="w-[30ch]" isDisplayOnly={true}>
                                             <Calendar className="w-4 h-4 text-gray-400 mr-2" />
-                                            <span className="text-gray-900">{new Date(ticket.due_date).toLocaleDateString()}</span>
+                                            <span className="text-gray-900 font-mono">{new Date(ticket.due_date).toLocaleDateString()}</span>
                                         </FieldBox>
                                     </div>
                                     <div></div>
@@ -993,12 +968,12 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                                     value={editableFields.short_description}
                                     onChange={handleEditChange}
                                     rows={2}
-                                    disabled={!canEdit && !isSupportUser} // Disabled if not editable by current user
+                                    disabled={!canEdit && !isSupportUser}
                                     className="max-w-none w-full"
                                 />
                             ) : (
                                 <FieldBox className="min-h-[60px] max-h-[120px] overflow-y-auto items-start py-3 w-full bg-gray-50 shadow-inner max-w-none" isDisplayOnly={true}>
-                                    <span className="text-gray-900 whitespace-pre-wrap">{ticket.short_description}</span>
+                                    <span className="text-gray-900 font-mono whitespace-pre-wrap">{ticket.short_description}</span>
                                 </FieldBox>
                             )}
                         </div>
@@ -1014,37 +989,55 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                                     value={editableFields.long_description}
                                     onChange={handleEditChange}
                                     rows={6}
-                                    disabled={!canEdit && !isSupportUser} // Disabled if not editable by current user
+                                    disabled={!canEdit && !isSupportUser}
                                     className="max-w-none w-full"
                                 />
                             ) : (
                                 <FieldBox className="min-h-[120px] max-h-[240px] overflow-y-auto items-start py-3 w-full bg-gray-50 shadow-inner max-w-none" isDisplayOnly={true}>
-                                    <span className="text-gray-900 whitespace-pre-wrap">{ticket.long_description || 'No long description provided.'}</span>
+                                    <span className="text-gray-900 font-mono whitespace-pre-wrap">{ticket.long_description || 'No long description provided.'}</span>
                                                 </FieldBox>
                                             )}
                                         </div>
 
                         {/* Attachments */}
                         <div className="mb-8">
-                            <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center mb-4">
                                 <h3 className="text-lg font-medium text-gray-900 flex items-center">
                                     <Paperclip className="w-5 h-5 mr-2" />
                                     Attachments
                                 </h3>
-                                {canAddAttachments && ( // Render upload button only if allowed
+                                {canAddAttachments && (
                                     <label
                                         htmlFor="attachment-upload-btn"
-                                        className="flex items-center space-x-2 px-3 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors cursor-pointer"
+                                        className={`flex items-center space-x-1 px-2 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer ml-3
+                                            ${uploadButtonState === 'uploading'
+                                                ? 'bg-gray-400 text-gray-700 cursor-not-allowed'
+                                                : uploadButtonState === 'success'
+                                                    ? 'bg-green-600 text-white'
+                                                    : uploadButtonState === 'error'
+                                                        ? 'bg-red-600 text-white'
+                                                        : 'bg-gray-700 text-yellow-300 hover:bg-gray-800'
+                                            }`}
                                     >
-                                        <UploadCloud className="w-4 h-4" />
-                                        <span>Upload</span>
+                                        {uploadButtonState === 'uploading' && <Loader2 className="animate-spin mr-1" size={12} />}
+                                        {uploadButtonState === 'success' && <CheckCircle className="mr-1" size={12} />}
+                                        {uploadButtonState === 'error' && <XCircle className="mr-1" size={12} />}
+                                        {uploadButtonState === 'uploading' && 'Uploading...'}
+                                        {uploadButtonState === 'success' && 'Uploaded!'}
+                                        {uploadButtonState === 'error' && 'Failed!'}
+                                        {uploadButtonState === 'upload' && (
+                                            <>
+                                                <UploadCloud className="w-4 h-4" />
+                                                <span>Upload</span>
+                                            </>
+                                        )}
                                         <input
                                             id="attachment-upload-btn"
                                             type="file"
                                             multiple
                                             onChange={handleFileChange}
                                             className="hidden"
-                                            disabled={uploadButtonState === 'uploading' || !canAddAttachments} // Also disable if not allowed to add attachments
+                                            disabled={uploadButtonState === 'uploading' || !canAddAttachments}
                                             value=""
                                         />
                                     </label>
@@ -1059,7 +1052,7 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                                             target="_blank"
                                             rel="noopener noreferrer"
                                             download={attachment.fileName}
-                                            className="flex flex-col items-center justify-start  transition-colors text-center group w-14 h-24 overflow-hidden relative"
+                                            className="flex flex-col items-center justify-start transition-colors text-center group w-14 h-24 overflow-hidden relative"
                                             title={attachment.fileName}
                                         >
                                             <div className="absolute inset-x-0 top-0 flex items-center justify-center h-14 w-14 opacity-100 group-hover:opacity-0 transition-opacity duration-200">
@@ -1080,22 +1073,19 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                                 )}
                             </div>
 
-                            {attachmentFiles.length > 0 && canAddAttachments && ( // Render upload preview only if allowed
+                            {attachmentFiles.length > 0 && (
                                 <div className="mt-4 p-4 border border-gray-200 rounded-md bg-white">
-                                    <p className="text-sm font-semibold mb-3">Files ready for upload:</p>
+                                    <p className="text-sm font-semibold mb-3">Files selected for upload:</p>
                                     <div className="grid grid-cols-5 sm:grid-cols-6 md:grid-cols-7 lg:grid-cols-8 xl:grid-cols-9 gap-x-0 gap-y-1 mb-4">
                                         {attachmentFiles.map((file, index) => (
                                             <div key={index} className="flex flex-col items-center justify-start text-center relative group w-14 h-24 overflow-hidden">
-                                                {/* FileIcon component for pending uploads */}
                                                 <div className="absolute inset-x-0 top-0 flex items-center justify-center h-14 w-14 opacity-100 group-hover:opacity-0 transition-opacity duration-200">
                                                     <FileIcon fileName={file.name} />
                                                 </div>
-                                                {/* Download icon that fades in (for preview of uploaded files) */}
                                                 <div className="absolute inset-x-0 top-0 flex items-center justify-center h-14 w-14 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                                                     <Download className="w-10 h-10 text-blue-600" />
                                                 </div>
 
-                                                {/* File name under the thumbnail. Changed `line-clamp-2` to `truncate` */}
                                                 <span className="text-xs text-gray-700 mt-14 font-medium leading-tight truncate w-full px-0.5">
                                                     {file.name}
                                                 </span>
@@ -1110,29 +1100,6 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                                             </div>
                                         ))}
                                     </div>
-                                    <div className="flex justify-end">
-                                        <button
-                                            onClick={handleAddAttachmentsToTicket}
-                                            disabled={attachmentFiles.length === 0 || uploadButtonState === 'uploading'}
-                                            className={`px-4 py-2 text-sm font-medium rounded-lg transition-all duration-300 ease-in-out flex items-center justify-center
-                                            ${uploadButtonState === 'uploading'
-                                                    ? 'bg-blue-200 text-blue-500 cursor-not-allowed'
-                                                    : uploadButtonState === 'success'
-                                                        ? 'bg-green-600 text-white'
-                                                        : uploadButtonState === 'error'
-                                                            ? 'bg-red-600 text-white'
-                                                            : 'bg-blue-600 text-white hover:bg-blue-700'
-                                                }`}
-                                        >
-                                            {uploadButtonState === 'uploading' && <Loader2 className="animate-spin mr-2" size={16} />}
-                                            {uploadButtonState === 'success' && <CheckCircle className="mr-2" size={16} />}
-                                            {uploadButtonState === 'error' && <XCircle className="mr-2" size={16} />}
-                                            {uploadButtonState === 'uploading' && 'Uploading...'}
-                                            {uploadButtonState === 'success' && 'Success!'}
-                                            {uploadButtonState === 'error' && 'Failed!'}
-                                            {uploadButtonState === 'upload' && 'Upload Selected Files'}
-                                        </button>
-                                    </div>
                                 </div>
                             )}
                         </div>
@@ -1144,7 +1111,7 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                                     <button
                                         onClick={() => setActiveTab('comments')}
                                         className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'comments'
-                                                ? 'border-blue-500 text-blue-600'
+                                                ? 'border-gray-700 text-gray-900' // Active tab style
                                                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                                             }`}
                                     >
@@ -1154,7 +1121,7 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                                     <button
                                         onClick={() => setActiveTab('closure')}
                                         className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'closure'
-                                                ? 'border-blue-500 text-blue-600'
+                                                ? 'border-gray-700 text-gray-900' // Active tab style
                                                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                                             }`}
                                     >
@@ -1177,7 +1144,7 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                                                             {new Date(comment.timestamp).toLocaleString()}
                                                         </span>
                                                     </div>
-                                                    <p className="text-gray-700 whitespace-pre-wrap">{comment.text}</p>
+                                                    <p className="text-gray-700 font-mono whitespace-pre-wrap">{comment.text}</p>
                                                 </div>
                                             ))
                                         ) : (
@@ -1186,7 +1153,7 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                                     </div>
 
                                     {/* Add Comment Form */}
-                                    {canAddComments && ( // Render add comment form only if allowed
+                                    {canAddComments && (
                                         <div className="bg-white border border-gray-200 rounded-lg p-4">
                                             <label className="block text-sm font-medium text-gray-700 mb-2">
                                                 Add a comment:
@@ -1195,7 +1162,7 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                                                 value={commentText}
                                                 onChange={(e) => setCommentText(e.target.value)}
                                                 rows={4}
-                                                className="w-full border-2 border-gray-300 rounded-sm px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                                className="w-full border-2 border-gray-300 rounded-sm px-2 py-1 focus:outline-none focus:ring-2 focus:ring-gray-700 focus:border-transparent" // Focus ring changed
                                                 placeholder="Type your comment here..."
                                                 disabled={commentLoading || !canAddComments}
                                             ></textarea>
@@ -1203,10 +1170,10 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                                                 <button
                                                     onClick={handleAddComment}
                                                     disabled={commentLoading || !commentText.trim() || !canAddComments}
-                                                    className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors duration-200 flex items-center justify-center
+                                                    className={`px-3 py-1 text-sm font-medium rounded-md transition-colors duration-200 flex items-center justify-center
                                                     ${commentLoading || !commentText.trim() || !canAddComments
-                                                            ? 'bg-blue-200 text-blue-500 cursor-not-allowed'
-                                                            : 'bg-blue-600 text-white hover:bg-blue-700'
+                                                            ? 'bg-gray-400 text-gray-700 cursor-not-allowed'
+                                                            : 'bg-gray-700 text-yellow-300 hover:bg-gray-800' // Themed button
                                                         }`}
                                                 >
                                                     {commentLoading && <Loader2 className="animate-spin mr-2" size={16} />}
@@ -1225,35 +1192,34 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                                         Closure notes:
                                     </label>
                                     <textarea
-                                        ref={closureNotesRef} // Attach ref here
+                                        ref={closureNotesRef}
                                         value={closureNotes}
                                         onChange={handleClosureNotesChange}
                                         rows={6}
-                                        className={`w-full border-2 rounded-sm px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                                        className={`w-full border-2 rounded-sm px-2 py-1 focus:outline-none focus:ring-2 focus:ring-gray-700 focus:border-transparent // Focus ring changed
                                                     ${highlightClosureNotes ? 'border-red-500 ring-red-500 ring-2' : 'border-gray-300'}
                                                   `}
                                         placeholder="Enter closure notes here..."
-                                        disabled={!isSupportUser || isTicketClosedOrResolved} // Disable if not support user or if ticket is resolved/cancelled
+                                        disabled={!isSupportUser || isTicketClosedOrResolved}
                                     />
                                     {closureNotesErrorMessage && (
                                         <p className="text-xs text-red-600 mt-1">
                                             {closureNotesErrorMessage}
                                         </p>
                                     )}
-                                    {/* Only show "Close Ticket" button for support users and if not already closed/resolved */}
                                     {isSupportUser && !isTicketClosedOrResolved && (
                                         <div className="flex justify-end mt-3">
                                             <button
-                                                onClick={() => handleUpdateTicket('close')} // Pass action type 'close'
+                                                onClick={() => handleUpdateTicket('close')}
                                                 disabled={!isSupportUser || isTicketClosedOrResolved || closeButtonState === 'closing'}
-                                                className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors flex items-center justify-center
+                                                className={`px-3 py-1 text-sm font-medium rounded-md transition-colors flex items-center justify-center
                                                     ${closeButtonState === 'closing'
-                                                        ? 'bg-blue-200 text-blue-500 cursor-not-allowed'
+                                                        ? 'bg-gray-400 text-gray-700 cursor-not-allowed'
                                                         : closeButtonState === 'success'
                                                             ? 'bg-green-600 text-white'
                                                             : closeButtonState === 'error'
                                                                 ? 'bg-red-600 text-white'
-                                                                : 'bg-green-600 text-white hover:bg-green-700' // Changed to green as it resolves the ticket
+                                                                : 'bg-gray-700 text-yellow-300 hover:bg-gray-800' // Themed button
                                                     }`}
                                             >
                                                 {closeButtonState === 'closing' && <Loader2 className="animate-spin mr-2" size={16} />}
@@ -1264,7 +1230,7 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
                                                 {closeButtonState === 'error' && 'Error!'}
                                                 {closeButtonState === 'default' && (
                                                     <>
-                                                        <CheckCircle2 className="w-4 h-4" /> {/* Changed icon to CheckCircle2 for closing */}
+                                                        <CheckCircle2 className="w-4 h-4" />
                                                         <span>Close Ticket</span>
                                                     </>
                                                 )}
