@@ -1,52 +1,117 @@
-/* index.css */
+/* --- Global Scrollbar Styles (apply to all scrollable elements) --- */
 
-/* For WebKit browsers (Chrome, Safari) - specifically for notification menu */
-.notification-scroll-area::-webkit-scrollbar {
-    width: 10px;
+/* For WebKit browsers (Chrome, Safari, Edge, Brave, etc.) */
+/* This targets the scrollbar itself */
+::-webkit-scrollbar {
+    width: 4px; /* Very thin vertical scrollbar */
+    height: 4px; /* Very thin horizontal scrollbar */
+    background-color: transparent; /* Ensure the background of the scrollbar area is transparent */
+}
+
+/* This targets the track (the area the thumb slides on) */
+::-webkit-scrollbar-track {
+    background: rgba(241, 241, 241, 0.351); /* Extremely low opacity, almost invisible track */
+    border-radius: 10px; /* Rounded corners for the track */
+}
+
+/* This targets the thumb (the draggable part) */
+::-webkit-scrollbar-thumb {
+    background: rgba(92, 91, 91, 0.491); /* Very light, semi-transparent grey thumb */
+    border-radius: 10px; /* Rounded corners for the thumb */
+}
+
+/* This targets the thumb on hover */
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(96, 96, 96, 0.3); /* Slightly more visible on hover, but still light */
+}
+
+/* IMPORTANT: These pseudo-elements remove the scrollbar buttons/arrows in WebKit */
+::-webkit-scrollbar-button {
+    display: none; /* Hides the up/down and left/right arrow buttons */
+}
+
+/* Optional: To remove scrollbar corner if present (when both horizontal and vertical scrollbars are visible) */
+::-webkit-scrollbar-corner {
+    background: transparent;
+}
+
+
+/* For Firefox */
+/* Note: Firefox has more limited styling options and does not support removing arrows directly via CSS.
+   'thin' is the most minimal width, and the color will be for the thumb and track. */
+html {
+    scrollbar-width: thin; /* Make scrollbar explicitly thin */
+    scrollbar-color: rgba(128, 128, 128, 0.649) rgba(241, 241, 241, 0.02); /* thumb color track color */
+}
+
+/* --- Specific Styles for your TicketDetailComponent (Optional but Recommended for targeted control) --- */
+
+/* If you want to ensure these styles apply specifically to the description boxes,
+   even if a global rule might be less specific. */
+/* Apply to the FieldBox when it has overflow (for display mode) */
+.FieldBox.overflow-y-auto {
+    /* For Firefox within FieldBox */
+    scrollbar-width: auto;
+    scrollbar-color: rgba(128, 128, 128, 0.15) rgba(241, 241, 241, 0.02);
+}
+
+.FieldBox.overflow-y-auto::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
     background-color: transparent;
 }
 
-.notification-scroll-area::-webkit-scrollbar-thumb {
-    background-color: #333;
-    border-radius: 4px;
-    border: 2px solid transparent;
-    background-clip: padding-box;
+.FieldBox.overflow-y-auto::-webkit-scrollbar-track {
+    background: rgba(241, 241, 241, 0.02);
 }
 
-.notification-scroll-area::-webkit-scrollbar-thumb:hover {
-    background-color: #555;
+.FieldBox.overflow-y-auto::-webkit-scrollbar-thumb {
+    background: rgba(128, 128, 128, 0.15);
 }
 
-/* For Firefox - specifically for notification menu */
-.notification-scroll-area {
-    scrollbar-color: #c5c3c3 transparent; /* thumb color track color */
+.FieldBox.overflow-y-auto::-webkit-scrollbar-thumb:hover {
+    background: rgba(96, 96, 96, 0.3);
+}
+
+.FieldBox.overflow-y-auto::-webkit-scrollbar-button {
+    display: none;
+}
+
+.FieldBox.overflow-y-auto::-webkit-scrollbar-corner {
+    background: transparent;
+}
+
+
+/* Also apply to the EditableTextarea for consistency in edit mode, if it scrolls */
+/* Assuming EditableTextarea is the direct element that scrolls in edit mode */
+textarea.max-w-none.w-full { /* Target the specific textarea if it needs its own scrollbar styling */
+    /* For Firefox within EditableTextarea */
     scrollbar-width: thin;
+    scrollbar-color: rgba(152, 130, 130, 0.15) rgba(241, 241, 241, 0.02);
 }
 
-/* Keep the body styles if you want them for the main page scrollbar too */
-::-webkit-scrollbar {
-    width: 10px; /* Increased from 8px to 10px */
-    background-color: transparent; /* Transparent background for the scrollbar track */
+textarea.max-w-none.w-full::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+    background-color: transparent;
 }
 
-::-webkit-scrollbar-thumb {
-    background-color: #333; /* Black color for the scrollbar thumb */
-    border-radius: 4px; /* Rounded corners for the thumb */
-    border: 2px solid transparent; /* Transparent border to make it appear thinner */
-    background-clip: padding-box; /* Ensures the border doesn't cover the thumb's background */
+textarea.max-w-none.w-full::-webkit-scrollbar-track {
+    background: rgba(241, 241, 241, 0.02);
 }
 
-::-webkit-scrollbar-thumb:hover {
-    background-color: #555; /* Slightly lighter black on hover */
+textarea.max-w-none.w-full::-webkit-scrollbar-thumb {
+    background: rgba(128, 128, 128, 0.15);
 }
 
-/* For Firefox (requires a different approach) */
-body {
-    scrollbar-color: #333 transparent; /* thumb color track color */
-    scrollbar-width: thin; /* "auto" or "none" */
+textarea.max-w-none.w-full::-webkit-scrollbar-thumb:hover {
+    background: rgba(96, 96, 96, 0.3);
 }
 
-/* For Microsoft Edge (uses -ms- prefixed properties, but modern Edge is Chromium-based) */
-body {
-    -ms-overflow-style: -ms-autohiding-scrollbar; /* Auto-hide scrollbar */
+textarea.max-w-none.w-full::-webkit-scrollbar-button {
+    display: none;
+}
+
+textarea.max-w-none.w-full::-webkit-scrollbar-corner {
+    background: transparent;
 }

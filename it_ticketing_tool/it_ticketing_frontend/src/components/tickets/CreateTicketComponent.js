@@ -258,7 +258,7 @@ const CreateTicketComponent = ({ user, onClose, showFlashMessage, onTicketCreate
             <form onSubmit={handleSubmit} className="space-y-4">
                 <FormInput
                     id="request_for_email"
-                    label="*Request for (Email)"
+                    label="*Request for"
                     type="email"
                     value={formData.request_for_email}
                     onChange={handleChange}
@@ -277,7 +277,7 @@ const CreateTicketComponent = ({ user, onClose, showFlashMessage, onTicketCreate
                 />
                 <FormInput
                     id="short_description"
-                    label="*Short Description (max 250 characters)"
+                    label="*Short Description"
                     type="text"
                     value={formData.short_description}
                     onChange={handleChange}

@@ -71,7 +71,6 @@ try {
             // IMPORTANT: Use environment variable for storageBucket
             storageBucket: process.env.FIREBASE_STORAGE_BUCKET // e.g., 'it-ticketing-tool-dd679.appspot.com'
         });
-        // --- MODIFIED SECTION END ---
     }
     db = admin.firestore(); // Get a Firestore client
     usersCollection = db.collection('users'); // Collection for user roles
@@ -104,7 +103,7 @@ app.use(express.json()); // For parsing application/json request bodies
 const validTicketCategories = ['software', 'hardware', 'troubleshoot'];
 // Added 'Hold' status
 const validTicketPriorities = ['Low', 'Medium', 'High', 'Critical'];
-const validTicketStatuses = ['Open', 'In Progress', 'Hold', 'Resolved', 'Closed'];
+const validTicketStatuses = ['Open', 'In Progress', 'Hold', 'Resolved', 'Cancelled']; // Changed 'Closed' to 'Cancelled' as per the client's request.
 
 // NEW: Valid User Roles
 const validUserRoles = ['user', 'support', 'admin'];
@@ -585,6 +584,7 @@ app.post('/tickets', verifyFirebaseToken, async (req, res) => {
             assigned_to_email: null,
             resolved_at: null, // New field for time spent calculation
             time_spent_minutes: null, // New field for time spent calculation
+            closure_notes: null, // NEW: Add closure_notes field
         };
 
         const docRef = await ticketsCollection.add(newTicket);
@@ -648,7 +648,7 @@ app.post('/tickets', verifyFirebaseToken, async (req, res) => {
 // --- Update an existing ticket ---
 // @route   PATCH /ticket/:ticket_id
 // @desc    Update a ticket.
-// @access  Private (requires token, support/admin role, or reporter if not resolved/closed)
+// @access  Private (requires token, support/admin role, or reporter if not resolved/cancelled)
 // MODIFIED: Use req.user.role directly for authorization
 app.patch('/ticket/:ticket_id', verifyFirebaseToken, async (req, res) => {
     const ticketId = req.params.ticket_id;
@@ -659,7 +659,8 @@ app.patch('/ticket/:ticket_id', verifyFirebaseToken, async (req, res) => {
         short_description,
         long_description,
         contact_number,
-        attachments // Now expecting an array of objects: [{ url: '...', fileName: '...' }]
+        attachments, // Now expecting an array of objects: [{ url: '...', fileName: '...' }]
+        closure_notes // NEW: Add closure_notes here
     } = req.body;
 
     const authenticatedUid = req.user.uid;
@@ -685,12 +686,12 @@ app.patch('/ticket/:ticket_id', verifyFirebaseToken, async (req, res) => {
 
         const ticketData = ticketDoc.data();
 
-        // Prevent updates by 'user' role if ticket is Resolved or Closed
-        if (['Resolved', 'Closed'].includes(ticketData.status) && authenticatedUserRole === 'user') {
-            return res.status(403).json({ error: 'Forbidden: Cannot update a resolved or closed ticket as a regular user.' });
+        // Prevent updates by 'user' role if ticket is Resolved or Cancelled
+        if (['Resolved', 'Cancelled'].includes(ticketData.status) && authenticatedUserRole === 'user') {
+            return res.status(403).json({ error: 'Forbidden: Cannot update a resolved or cancelled ticket as a regular user.' });
         }
 
-        // Regular users can only update their own tickets if they are not resolved/closed
+        // Regular users can only update their own tickets if they are not resolved/cancelled
         if (authenticatedUserRole === 'user' && ticketData.reporter_id !== authenticatedUid) {
             return res.status(403).json({ error: 'Forbidden: You can only update your own tickets.' });
         }
@@ -704,6 +705,8 @@ app.patch('/ticket/:ticket_id', verifyFirebaseToken, async (req, res) => {
         if (short_description !== undefined) updateData.short_description = short_description;
         if (long_description !== undefined) updateData.long_description = long_description;
         if (contact_number !== undefined) updateData.contact_number = contact_number;
+        if (closure_notes !== undefined) updateData.closure_notes = closure_notes; // NEW: Add closure_notes to updateData
+
 
         // --- MODIFICATION START ---
         // If the frontend sends an 'attachments' array (now expected to be objects),
@@ -726,9 +729,10 @@ app.patch('/ticket/:ticket_id', verifyFirebaseToken, async (req, res) => {
         if (status && status !== ticketData.status) {
             updateData.status = status;
 
-            // If status changes to Resolved or Closed, record resolved_at and calculate time_spent
-            if (['Resolved', 'Closed'].includes(status)) {
+            // If status changes to Resolved or Cancelled, record resolved_at and calculate time_spent
+            if (['Resolved', 'Cancelled'].includes(status)) { // Include 'Cancelled' here for closure logic
                 updateData.resolved_at = admin.firestore.FieldValue.serverTimestamp();
+                updateData.closed_by_email = req.user.email; // Set the email of the user who performed the action
                 if (ticketData.created_at && ticketData.created_at.toDate) {
                     const createdAt = ticketData.created_at.toDate();
                     const resolvedAt = new Date(); // Use current server time for resolution
@@ -764,10 +768,12 @@ app.patch('/ticket/:ticket_id', verifyFirebaseToken, async (req, res) => {
                     });
                 }
 
-            } else if (['Resolved', 'Closed'].includes(ticketData.status) && !['Resolved', 'Closed'].includes(status)) {
-                // If ticket is moved OUT of Resolved/Closed status, clear resolved_at and time_spent
+            } else if (['Resolved', 'Cancelled'].includes(ticketData.status) && !validTicketStatuses.includes(status)) { // Check against all valid statuses to see if it's no longer terminal
+                // If ticket is moved OUT of Resolved/Cancelled status, clear resolved_at, time_spent, closed_by_email, and closure_notes
                 updateData.resolved_at = null;
                 updateData.time_spent_minutes = null;
+                updateData.closed_by_email = null; // Also clear closed_by_email when reopening
+                updateData.closure_notes = null; // NEW: Also clear closure_notes when reopening
                 // NEW: Notify reporter and assigned support user (if any) about status change
                 const ticketReporterId = ticketData.reporter_id;
                 const ticketReporterEmail = ticketData.reporter_email;
@@ -865,6 +871,88 @@ app.patch('/ticket/:ticket_id', verifyFirebaseToken, async (req, res) => {
     }
 });
 
+// NEW API: Cancel a ticket
+// @route   PATCH /ticket/:ticket_id/cancel
+// @desc    Cancels a ticket, setting its status to 'Cancelled'
+// @access  Private (requires token, support/admin role, or reporter)
+app.patch('/ticket/:ticket_id/cancel', verifyFirebaseToken, async (req, res) => {
+    const ticketId = req.params.ticket_id;
+    const authenticatedUid = req.user.uid;
+    const authenticatedUserRole = req.user.role;
+    const { closure_notes } = req.body; // Allow optional closure notes for cancellation
+
+    try {
+        const ticketDoc = await ticketsCollection.doc(ticketId).get();
+
+        if (!ticketDoc.exists) {
+            return res.status(404).json({ error: 'Ticket not found.' });
+        }
+
+        const ticketData = ticketDoc.data();
+
+        // Check if the ticket is already in a terminal state
+        if (['Resolved', 'Cancelled'].includes(ticketData.status)) {
+            return res.status(400).json({ error: `Ticket is already ${ticketData.status.toLowerCase()}. Cannot cancel.` });
+        }
+
+        // Authorization check: Only reporter, support associate, or admin can cancel
+        if (ticketData.reporter_id !== authenticatedUid && !['support', 'admin'].includes(authenticatedUserRole)) {
+            return res.status(403).json({ error: 'Forbidden: You do not have permission to cancel this ticket.' });
+        }
+
+        const updateData = {
+            status: 'Cancelled',
+            updated_at: admin.firestore.FieldValue.serverTimestamp(),
+            resolved_at: admin.firestore.FieldValue.serverTimestamp(), // Mark as resolved_at as it's a final state
+            closed_by_email: req.user.email, // Record who cancelled it
+            // Clear assigned_to and comments as they become irrelevant for a cancelled ticket
+            assigned_to_id: null,
+            assigned_to_email: null,
+            closure_notes: closure_notes || null, // Optional closure notes for cancellation
+        };
+
+        // Calculate time spent from creation to cancellation
+        if (ticketData.created_at && ticketData.created_at.toDate) {
+            const createdAt = ticketData.created_at.toDate();
+            const cancelledAt = new Date();
+            const timeDiffMillis = cancelledAt.getTime() - createdAt.getTime();
+            const timeSpentMinutes = Math.round(timeDiffMillis / (1000 * 60));
+            updateData.time_spent_minutes = timeSpentMinutes;
+        }
+
+        await ticketsCollection.doc(ticketId).update(updateData);
+        console.log(`Ticket ${ticketId} cancelled successfully by ${req.user.email}!`);
+
+        // Notify reporter (if different from canceller) and assigned support user (if any)
+        if (ticketData.reporter_id !== authenticatedUid) {
+            await notificationsCollection.add({
+                userId: ticketData.reporter_id,
+                message: `Your ticket ${ticketData.display_id} - "${ticketData.short_description}" has been cancelled.`,
+                type: 'ticket_cancelled',
+                read: false,
+                timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                ticketId: ticketId
+            });
+        }
+        if (ticketData.assigned_to_id && ticketData.assigned_to_id !== authenticatedUid) {
+            await notificationsCollection.add({
+                userId: ticketData.assigned_to_id,
+                message: `Ticket ${ticketData.display_id} - "${ticketData.short_description}" has been cancelled.`,
+                type: 'ticket_cancelled_assigned',
+                read: false,
+                timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                ticketId: ticketId
+            });
+        }
+
+        return res.status(200).json({ message: 'Ticket cancelled successfully!', id: ticketId });
+
+    } catch (error) {
+        console.error(`Error cancelling ticket ${ticketId}: ${error.message}`);
+        return res.status(500).json({ error: `Failed to cancel ticket: ${error.message}` });
+    }
+});
+
 
 // @route   POST /ticket/:ticket_id/add_comment
 // @desc    Add a comment to a ticket.
@@ -887,9 +975,9 @@ app.post('/ticket/:ticket_id/add_comment', verifyFirebaseToken, async (req, res)
         }
 
         const ticketData = ticketDoc.data();
-        // Prevent adding comments to resolved or closed tickets
-        if (['Resolved', 'Closed'].includes(ticketData.status)) {
-            return res.status(403).json({ error: 'Cannot add comments to a resolved or closed ticket.' });
+        // Prevent adding comments to resolved or cancelled tickets
+        if (['Resolved', 'Cancelled'].includes(ticketData.status)) {
+            return res.status(403).json({ error: 'Cannot add comments to a resolved or cancelled ticket.' });
         }
 
         const newComment = {
@@ -953,7 +1041,7 @@ app.get('/tickets/my', verifyFirebaseToken, async (req, res) => {
     try {
         let query = ticketsCollection.where('reporter_id', '==', userId);
 
-        // Default filter for 'My Tickets': exclude Resolved and Closed tickets
+        // Default filter for 'My Tickets': exclude Resolved and Cancelled tickets
         query = query.where('status', 'in', ['Open', 'In Progress', 'Hold']);
 
         if (searchKeyword) {
@@ -965,7 +1053,7 @@ app.get('/tickets/my', verifyFirebaseToken, async (req, res) => {
                 .where('display_id', '==', exactIdMatch);
             const exactIdMatchSnapshot = await exactIdMatchQuery.get();
             if (!exactIdMatchSnapshot.empty) {
-                // If an exact ID matches, return only that ticket, even if it's closed/resolved.
+                // If an exact ID matches, return only that ticket, even if it's resolved/cancelled.
                 return res.status(200).json(exactIdMatchSnapshot.docs.map(doc => jsonSerializableTicket(doc.id, doc.data())));
             }
             // If no exact ID match for a closed ticket, then the default query (excluding closed) applies.
@@ -994,7 +1082,7 @@ app.get('/tickets/all', verifyFirebaseToken, checkRole(['support', 'admin']), as
         let query = ticketsCollection; // Start with fetching ALL tickets by default
 
         if (searchKeyword) {
-            // Check for exact display_id match first, including closed/resolved tickets
+            // Check for exact display_id match first, including resolved/cancelled tickets
             const exactIdMatch = `TT${searchKeyword.toUpperCase().padStart(5, '0')}`; // Corrected prefix
             const exactIdMatchQuery = ticketsCollection.where('display_id', '==', exactIdMatch);
             const exactIdMatchSnapshot = await exactIdMatchQuery.get();
@@ -1012,7 +1100,7 @@ app.get('/tickets/all', verifyFirebaseToken, checkRole(['support', 'admin']), as
             query = query.where('status', '==', filterStatus);
         }
         // Removed the 'else' block that previously filtered out Resolved/Closed tickets by default
-        // This ensures that if no status filter is applied, all tickets (active, resolved, closed) are returned.
+        // This ensures that if no status filter is applied, all tickets (active, resolved, cancelled) are returned.
 
 
         // Apply assignment filter
@@ -1067,7 +1155,7 @@ app.get('/ticket/:ticket_id', verifyFirebaseToken, async (req, res) => {
 
 // --- New Route: Export all tickets to CSV ---
 // @route   GET /tickets/export
-// // @desc    Export all tickets (including closed/resolved) to CSV based on duration.
+// // @desc    Export all tickets (including cancelled/resolved) to CSV based on duration.
 // @access  Private (requires support or admin role)
 // MODIFIED: Use checkRole middleware
 app.get('/tickets/export', verifyFirebaseToken, checkRole(['support', 'admin']), async (req, res) => {
@@ -1107,7 +1195,7 @@ app.get('/tickets/export', verifyFirebaseToken, checkRole(['support', 'admin']),
             "Ticket ID", "Short Description", "Long Description", "Category", "Priority",
             "Status", "Reporter Email", "Requested For Email", "Contact Number",
             "Hostname/Asset ID", "Assigned To Email", "Created At", "Updated At",
-            "Resolved At", "Time Spent (Minutes)", "Comments", "Attachments"
+            "Resolved At", "Time Spent (Minutes)", "Comments", "Attachments", "Closure Notes" // NEW: Add Closure Notes to headers
         ];
         let csv = headers.join(',') + '\n';
 
@@ -1137,7 +1225,8 @@ app.get('/tickets/export', verifyFirebaseToken, checkRole(['support', 'admin']),
                 ticket.resolved_at || '',
                 ticket.time_spent_minutes !== null ? ticket.time_spent_minutes : '',
                 `"${commentsCsv}"`,
-                `"${attachmentsCsv}"` // Use the modified attachmentsCsv
+                `"${attachmentsCsv}"`,
+                `"${ticket.closure_notes ? ticket.closure_notes.replace(/"/g, '""') : ''}"` // NEW: Add Closure Notes to CSV row
             ];
             csv += row.join(',') + '\n';
         });
