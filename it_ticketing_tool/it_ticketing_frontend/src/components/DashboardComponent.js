@@ -2,7 +2,10 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts'; // Recharts for charting
-import { LayoutDashboard, Ticket, Info, XCircle, Loader2 } from 'lucide-react'; // Icons
+import { LayoutDashboard, Ticket, Info, XCircle, Loader2, User, ClipboardCheck, PauseCircle, ListChecks } from 'lucide-react'; // Icons
+import { collection, query, onSnapshot, where, orderBy, getFirestore, limit } from 'firebase/firestore';
+import { dbClient } from '../config/firebase';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 
 // Import API Base URL and COLORS from constants
 import { API_BASE_URL, COLORS } from '../config/constants';
@@ -21,6 +24,11 @@ const DashboardComponent = ({ user, navigateTo, showFlashMessage }) => {
     const [totalTickets, setTotalTickets] = useState(0); // Total number of tickets
     const [loading, setLoading] = useState(true); // Loading state
     const [error, setError] = useState(null); // Error state
+    const [recentTickets, setRecentTickets] = useState([]);
+    const [kanbanTickets, setKanbanTickets] = useState([]);
+
+    // Card click handler (for now, just filter by status in the table)
+    const [selectedStatus, setSelectedStatus] = useState(null);
 
     /**
      * Fetches ticket status counts from the backend API.
@@ -70,6 +78,61 @@ const DashboardComponent = ({ user, navigateTo, showFlashMessage }) => {
         fetchTicketStatusCounts();
     }, [fetchTicketStatusCounts]); // `fetchTicketStatusCounts` is a dependency because it's memoized
 
+    // Fetch recent tickets (last 10)
+    useEffect(() => {
+        if (!user || !user.firebaseUser) return;
+        let ticketsRef = collection(dbClient, 'tickets');
+        let q;
+        if (user.role === 'support' || user.role === 'admin') {
+            q = query(ticketsRef, orderBy('created_at', 'desc'), limit(10));
+        } else {
+            q = query(ticketsRef, where('reporter_id', '==', user.firebaseUser.uid), orderBy('created_at', 'desc'), limit(10));
+        }
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const fetched = snapshot.docs.map(doc => {
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    display_id: data.display_id,
+                    short_description: data.short_description,
+                    status: data.status,
+                    priority: data.priority,
+                    updated_at: data.updated_at && data.updated_at.toDate ? data.updated_at.toDate().toISOString() : '',
+                };
+            });
+            setRecentTickets(fetched);
+        });
+        return () => unsubscribe();
+    }, [user]);
+
+    // Fetch all tickets for Kanban columns
+    useEffect(() => {
+        if (!user || !user.firebaseUser) return;
+        let ticketsRef = collection(dbClient, 'tickets');
+        let q;
+        if (user.role === 'support' || user.role === 'admin') {
+            q = query(ticketsRef, orderBy('created_at', 'desc'));
+        } else {
+            q = query(ticketsRef, where('reporter_id', '==', user.firebaseUser.uid), orderBy('created_at', 'desc'));
+        }
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const fetched = snapshot.docs.map(doc => {
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    display_id: data.display_id,
+                    short_description: data.short_description,
+                    status: data.status,
+                    priority: data.priority,
+                    assigned_to_email: data.assigned_to_email,
+                    created_at: data.created_at && data.created_at.toDate ? data.created_at.toDate().toISOString() : '',
+                };
+            });
+            setKanbanTickets(fetched);
+        });
+        return () => unsubscribe();
+    }, [user]);
+
     /**
      * Custom Tooltip component for the Pie Chart.
      * Displays the status name, ticket count, and percentage on hover.
@@ -90,6 +153,77 @@ const DashboardComponent = ({ user, navigateTo, showFlashMessage }) => {
         }
         return null;
     };
+
+    // Define the statuses for columns (no Closed/Resolved)
+    const statuses = [
+        'Open',
+        'In Progress',
+        'Hold'
+    ];
+    const statusColors = {
+        'Open': 'border-blue-500',
+        'In Progress': 'border-yellow-500',
+        'Hold': 'border-purple-500',
+    };
+
+    // Recent tickets for the current user (most recent at top)
+    const recentUserTickets = kanbanTickets
+        .filter(t => user && t.assigned_to_email === user.firebaseUser.email)
+        .sort((a, b) => b.id.localeCompare(a.id)) // fallback: sort by id (or use created_at if available)
+        .slice(0, 5);
+
+    // Priority color mapping for tile backgrounds
+    const priorityBg = {
+        'Low': 'bg-blue-50',
+        'Medium': 'bg-yellow-50',
+        'High': 'bg-red-50',
+        'Critical': 'bg-red-100',
+        'default': 'bg-gray-50',
+    };
+
+    // Compute metrics for cards
+    let openCount, inProgressCount, holdCount, assignedToMeCount;
+    if (user && (user.role === 'support' || user.role === 'admin')) {
+        openCount = kanbanTickets.filter(t => t.status === 'Open').length;
+        inProgressCount = kanbanTickets.filter(t => t.status === 'In Progress').length;
+        holdCount = kanbanTickets.filter(t => t.status === 'Hold').length;
+        assignedToMeCount = kanbanTickets.filter(t => t.assigned_to_email === user.firebaseUser.email && ['Open', 'In Progress'].includes(t.status)).length;
+    } else {
+        openCount = kanbanTickets.filter(t => t.status === 'Open' && (t.assigned_to_email === user.firebaseUser.email || t.reporter_id === user.firebaseUser.uid)).length;
+        inProgressCount = kanbanTickets.filter(t => t.status === 'In Progress' && (t.assigned_to_email === user.firebaseUser.email || t.reporter_id === user.firebaseUser.uid)).length;
+        holdCount = kanbanTickets.filter(t => t.status === 'Hold' && (t.assigned_to_email === user.firebaseUser.email || t.reporter_id === user.firebaseUser.uid)).length;
+        assignedToMeCount = kanbanTickets.filter(t => t.assigned_to_email === user.firebaseUser.email && ['Open', 'In Progress'].includes(t.status)).length;
+    }
+
+    // Table data based on selected card
+    let filteredTableTickets;
+    if (!selectedStatus) {
+        filteredTableTickets = kanbanTickets
+            .filter(t => user && (t.assigned_to_email === user.firebaseUser.email || t.reporter_id === user.firebaseUser.uid))
+            .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''))
+            .slice(0, 5);
+    } else if (selectedStatus === 'Assigned') {
+        filteredTableTickets = kanbanTickets.filter(t => t.assigned_to_email === user.firebaseUser.email && ['Open', 'In Progress'].includes(t.status));
+    } else if (user && (user.role === 'support' || user.role === 'admin')) {
+        filteredTableTickets = kanbanTickets.filter(t => t.status === selectedStatus);
+    } else {
+        filteredTableTickets = kanbanTickets.filter(t => t.status === selectedStatus && (t.assigned_to_email === user.firebaseUser.email || t.reporter_id === user.firebaseUser.uid));
+    }
+
+    // Table heading based on selected card
+    let tableHeading = 'Recent Tickets';
+    if (selectedStatus === 'Open') tableHeading = 'Open Tickets';
+    else if (selectedStatus === 'In Progress') tableHeading = 'In Progress Tickets';
+    else if (selectedStatus === 'Hold') tableHeading = 'On Hold Tickets';
+    else if (selectedStatus === 'Assigned') tableHeading = 'Assigned to Me';
+
+    // Card config
+    const metricCards = [
+        { label: 'Open', count: openCount, icon: ClipboardCheck, color: 'bg-blue-200/80 text-blue-900', status: 'Open' },
+        { label: 'In Progress', count: inProgressCount, icon: ListChecks, color: 'bg-yellow-200/80 text-yellow-900', status: 'In Progress' },
+        { label: 'Hold', count: holdCount, icon: PauseCircle, color: 'bg-purple-200/80 text-purple-900', status: 'Hold' },
+        { label: 'Assigned to Me', count: assignedToMeCount, icon: User, color: 'bg-orange-200/80 text-orange-900', status: 'Assigned' },
+    ];
 
     // Conditional rendering for loading state
     if (loading) {
@@ -112,93 +246,64 @@ const DashboardComponent = ({ user, navigateTo, showFlashMessage }) => {
 
     return (
         <div className="p-6 overflow-auto flex-1 bg-gray-100">
-            {/* Dashboard Header */}
             <h1 className="text-3xl font-extrabold text-gray-900 mb-6 flex items-center">
                 <LayoutDashboard size={28} className="mr-3 text-blue-600" />
                 Dashboard Overview
             </h1>
-
-            {/* Key Metrics Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-                {/* Total Tickets Card */}
-                <div className="bg-gradient-to-br from-blue-500 to-blue-700 text-white p-6 rounded-lg shadow-lg flex items-center justify-between">
-                    <div>
-                        <div className="text-sm opacity-90">Total Tickets</div>
-                        <div className="text-4xl font-bold mt-1">{totalTickets}</div>
+            {/* Metric Cards */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+                {metricCards.map(card => (
+                    <div
+                        key={card.label}
+                        className={`flex flex-col items-center justify-center rounded-lg shadow-md p-4 cursor-pointer transition border border-gray-200 hover:shadow-lg ${card.color} ${selectedStatus === card.status ? 'ring-2 ring-blue-400' : ''}`}
+                        onClick={() => setSelectedStatus(card.status === selectedStatus ? null : card.status)}
+                    >
+                        <card.icon size={28} className="mb-2" />
+                        <div className="text-lg font-bold">{card.count}</div>
+                        <div className="text-xs font-medium mt-1">{card.label}</div>
                     </div>
-                    <Ticket size={48} className="opacity-75" />
-                </div>
-
-                {/* Create Ticket Quick Action Card */}
-                <div className="bg-gradient-to-br from-green-500 to-green-700 text-white p-6 rounded-lg shadow-lg flex items-center justify-between cursor-pointer hover:from-green-600 hover:to-green-800 transition duration-300"
-                    onClick={() => navigateTo('create-ticket')}>
-                    <div>
-                        <div className="text-sm opacity-90">Quick Action</div>
-                        <div className="text-4xl font-bold mt-1">Create New Ticket</div>
-                    </div>
-                    <Ticket size={48} className="opacity-75 transform rotate-[-20deg]" />
-                </div>
+                ))}
             </div>
-
-            {/* Ticket Status Chart and Breakdown */}
-            <div className="bg-white p-6 rounded-lg shadow-xl border border-gray-200 flex flex-col lg:flex-row items-center lg:items-start justify-center lg:justify-between gap-8">
-                <div className="lg:w-1/2 w-full flex flex-col items-center">
-                    <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center">
-                        <PieChart size={20} className="mr-2 text-purple-600" />
-                        Tickets by Status
-                    </h2>
-                    <ResponsiveContainer width="100%" height={300}>
-                        <PieChart>
-                            <Pie
-                                data={ticketStatusData}
-                                dataKey="value"
-                                nameKey="name"
-                                cx="50%"
-                                cy="50%"
-                                outerRadius={80} // Consistent outerRadius
-                                fill="#8884d8"
-                                // The `renderCustomizedLabel` function and `labelLine` are intentionally removed from Pie props
-                                // as per the original code to avoid showing labels directly on the pie chart slices.
-                            >
-                                {
-                                    // Map data to Pie Cells, assigning colors cyclically
-                                    ticketStatusData.map((entry, index) => (
-                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                    ))
-                                }
-                            </Pie>
-                            <Tooltip content={<CustomTooltip />} /> {/* Custom tooltip for detailed info on hover */}
-                            <Legend layout="vertical" align="right" verticalAlign="middle" wrapperStyle={{ paddingLeft: '20px' }} />
-                        </PieChart>
-                    </ResponsiveContainer>
-                </div>
-
-                {/* Status Breakdown List */}
-                <div className="lg:w-1/2 w-full bg-gray-50 p-6 rounded-lg border border-gray-100">
-                    <h3 className="text-lg font-semibold text-gray-700 mb-4 flex items-center">
-                        <Info size={18} className="mr-2 text-blue-500" />
-                        Status Breakdown
-                    </h3>
-                    {ticketStatusData.length > 0 ? (
-                        <ul className="space-y-2">
-                            {ticketStatusData.map((item, index) => (
-                                <li
-                                    key={item.name}
-                                    className="flex items-center justify-between py-2 px-3 bg-white rounded-md shadow-sm text-gray-700 text-sm cursor-pointer hover:bg-gray-100 transition duration-150"
-                                    onClick={() => navigateTo('allTickets', { status: item.name })} // Make clickable to navigate to filtered tickets
-                                >
-                                    <span className="flex items-center">
-                                        <span className="inline-block w-3 h-3 rounded-full mr-2" style={{ backgroundColor: COLORS[index % COLORS.length] }}></span>
-                                        {item.name}:
-                                    </span>
-                                    <span className="font-semibold text-gray-900">{item.value} tickets</span>
-                                </li>
-                            ))}
-                        </ul>
-                    ) : (
-                        <p className="text-gray-500 italic">No ticket status data available.</p>
-                    )}
-                </div>
+            {/* Recent Tickets Table */}
+            <div className="bg-white p-4 rounded-lg shadow-md border border-gray-200">
+                <h2 className="text-lg font-bold text-gray-800 mb-3 flex items-center">
+                    <ClipboardCheck size={18} className="mr-2 text-blue-500" />
+                    {tableHeading}
+                </h2>
+                {filteredTableTickets.length === 0 ? (
+                    <p className="text-gray-500 italic">No tickets found.</p>
+                ) : (
+                    <div className="w-full max-w-full overflow-x-auto">
+                        <table className="w-full min-w-0 bg-white text-xs">
+                            <thead className="bg-gray-100 border-b border-gray-200">
+                                <tr>
+                                    <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Ticket ID</th>
+                                    <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Short Description</th>
+                                    <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Status</th>
+                                    <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Priority</th>
+                                    <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Assignee</th>
+                                    <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Created</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-200">
+                                {filteredTableTickets.map(ticket => (
+                                    <tr key={ticket.id} className="hover:bg-gray-50 transition-colors duration-150 text-xs cursor-pointer" onClick={() => navigateTo('/tickets', ticket.id)}>
+                                        <td className="px-2 py-2 text-xs text-blue-700 hover:underline font-medium">{ticket.display_id}</td>
+                                        <td className="px-2 py-2 text-xs text-gray-800 max-w-xs truncate" title={ticket.short_description}>{ticket.short_description}</td>
+                                        <td className="px-2 py-2 text-xs">
+                                            <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">{ticket.status}</span>
+                                        </td>
+                                        <td className="px-2 py-2 text-xs">
+                                            <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">{ticket.priority}</span>
+                                        </td>
+                                        <td className="px-2 py-2 text-xs text-gray-800">{ticket.assigned_to_email || 'Unassigned'}</td>
+                                        <td className="px-2 py-2 text-xs text-gray-800">{ticket.created_at ? new Date(ticket.created_at).toLocaleDateString() : ''}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
             </div>
         </div>
     );

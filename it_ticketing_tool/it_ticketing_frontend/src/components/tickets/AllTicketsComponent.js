@@ -575,61 +575,59 @@ const counts = {
                     {searchKeyword ? `No tickets found matching "${searchKeyword}".` : "No tickets found matching the criteria."}
                 </p>
             ) : (
-                // Replaced table structure with CSS Grid
-                <div className="rounded-lg bg-white border border-gray-200 overflow-x-auto">
-                    {/* Grid Header */}
-                    <div className="grid grid-cols-[auto_120px_minmax(150px,_2fr)_150px_100px_80px_100px_150px_150px_100px] gap-x-2 py-3 px-4 bg-gray-50 border-b border-gray-200 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                        <div className="min-w-[20px]">#</div>
-                        <div className="min-w-[100px]">Ticket ID</div>
-                        <div className="min-w-[150px]">Short Description</div>
-                        <div className="min-w-[120px]">Raised by</div>
-                        <div className="min-w-[80px]">Category</div>
-                        <div className="min-w-[60px]">Priority</div>
-                        <div className="min-w-[80px]">Status</div>
-                        <div className="min-w-[120px]">Assigned To</div>
-                        <div className="min-w-[120px]">Last Updated</div>
-                        <div className="min-w-[80px]">Time Spent</div>
-                    </div>
-
-                    {/* Grid Rows */}
-                    <div className="divide-y divide-gray-200">
-                        {displayedTickets.map((ticket, index) => (
-                            <div key={ticket.id} className="grid grid-cols-[auto_120px_minmax(150px,_2fr)_150px_100px_80px_100px_150px_150px_100px] gap-x-2 py-3 px-4 hover:bg-gray-100 transition-colors duration-150 items-center">
-                                {/* Removed 'whitespace-nowrap' from all cells */}
-                                <div className="text-sm text-gray-800 min-w-[20px]">{index + 1}</div>
-                                    <div className="text-sm text-blue-700 hover:underline font-medium cursor-pointer min-w-[100px]" onClick={() => navigateTo('/tickets', ticket.id)}>
-                                    {ticket.display_id}
-                                </div>
-                                {/* Added 'line-clamp-2' for multi-line truncation with ellipsis */}
-                                <div className="text-sm text-gray-800 max-w-xs line-clamp-2" title={ticket.short_description}>
-                                    {ticket.short_description}
-                                </div>
-                                <div className="text-sm text-gray-800 flex items-center min-w-[120px]"><User size={12} className="mr-1" />{ticket.reporter_email}</div>
-                                <div className="text-sm text-gray-800 min-w-[80px]">
-                                    {ticket.category}
-                                </div>
-                                <div className="text-sm text-gray-800 min-w-[60px]">
-                                    <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getPriorityClasses(ticket.priority)}`}>
-                                        {ticket.priority}
-                                    </span>
-                                </div>
-                                <div className="text-sm text-gray-800 min-w-[80px]">
-                                    <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getStatusClasses(ticket.status)}`}>
-                                        {ticket.status}
-                                    </span>
-                                </div>
-                                <div className="text-sm text-gray-800 min-w-[120px]">
-                                    {ticket.assigned_to_email || 'Unassigned'}
-                                </div>
-                                <div className="text-sm text-gray-800 min-w-[120px]">
-                                    {ticket.updated_at ? new Date(ticket.updated_at).toLocaleString() : 'N/A'}
-                                </div>
-                                <div className="text-sm text-gray-800 min-w-[80px]">
-                                    {ticket.time_spent_minutes !== null ? `${ticket.time_spent_minutes} mins` : 'N/A'}
-                                </div>
-                            </div>
-                        ))}
-                    </div>
+                <div className="w-full max-w-full overflow-x-auto rounded-lg shadow-md border border-gray-200 bg-white">
+                    <table className="w-full min-w-0 bg-white text-xs">
+                        <thead className="hidden sm:table-header-group bg-gray-100 border-b border-gray-200">
+                            <tr>
+                                <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">#</th>
+                                <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">Ticket ID</th>
+                                <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">Short Description</th>
+                                <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">Category</th>
+                                <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">Priority</th>
+                                <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">Status</th>
+                                <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">Assigned To</th>
+                                <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">Last Updated</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200">
+                            {displayedTickets.map((ticket, index) => (
+                                <tr key={ticket.id} className="block sm:table-row bg-white border-b border-gray-200 hover:bg-gray-50 transition-colors duration-150 odd:bg-white even:bg-gray-50 text-xs">
+                                    <td className="block sm:table-cell px-2 py-2 text-xs text-gray-800 whitespace-normal break-words">
+                                        <span className="block sm:hidden font-semibold text-gray-600">#:</span>
+                                        {index + 1}
+                                    </td>
+                                    <td className="block sm:table-cell px-2 py-2 text-xs text-blue-700 hover:underline font-medium cursor-pointer whitespace-normal break-words" onClick={() => navigateTo('/tickets', ticket.id)}>
+                                        <span className="block sm:hidden font-semibold text-gray-600">Ticket ID:</span>
+                                        {ticket.display_id}
+                                    </td>
+                                    <td className="block sm:table-cell px-2 py-2 text-xs text-gray-800 max-w-xs truncate whitespace-normal break-words" title={ticket.short_description}>
+                                        <span className="block sm:hidden font-semibold text-gray-600">Short Description:</span>
+                                        {ticket.short_description}
+                                    </td>
+                                    <td className="block sm:table-cell px-2 py-2 text-xs text-gray-800 whitespace-normal break-words">
+                                        <span className="block sm:hidden font-semibold text-gray-600">Category:</span>
+                                        {ticket.category}
+                                    </td>
+                                    <td className="block sm:table-cell px-2 py-2 text-xs text-gray-800 whitespace-normal break-words">
+                                        <span className="block sm:hidden font-semibold text-gray-600">Priority:</span>
+                                        <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getPriorityClasses(ticket.priority)}`}>{ticket.priority}</span>
+                                    </td>
+                                    <td className="block sm:table-cell px-2 py-2 whitespace-normal break-words text-xs text-gray-800">
+                                        <span className="block sm:hidden font-semibold text-gray-600">Status:</span>
+                                        <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getStatusClasses(ticket.status)}`}>{ticket.status}</span>
+                                    </td>
+                                    <td className="block sm:table-cell px-2 py-2 whitespace-normal break-words text-xs text-gray-800">
+                                        <span className="block sm:hidden font-semibold text-gray-600">Assigned To:</span>
+                                        {ticket.assigned_to_email || 'Unassigned'}
+                                    </td>
+                                    <td className="block sm:table-cell px-2 py-2 whitespace-normal break-words text-xs text-gray-800">
+                                        <span className="block sm:hidden font-semibold text-gray-600">Last Updated:</span>
+                                        {ticket.updated_at ? new Date(ticket.updated_at).toLocaleString() : 'N/A'}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
                 </div>
             )}
         </div>

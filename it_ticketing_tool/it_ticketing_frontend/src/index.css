@@ -122,3 +122,83 @@ textarea.max-w-none.w-full::-webkit-scrollbar-button {
 textarea.max-w-none.w-full::-webkit-scrollbar-corner {
     background: transparent;
 }
+
+/* --- Glassmorphism Sidebar Styles --- */
+.sidebar-glass {
+  background: rgba(20, 20, 20, 0.85); /* semi-transparent black */
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  border-radius: 0;
+  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.15);
+  border: 1px solid rgba(40, 40, 40, 0.28);
+  transition: background 0.3s, box-shadow 0.3s;
+}
+
+.sidebar-glass .menu-item {
+  color: #e0e7ef;
+  background: transparent;
+  border-radius: 12px;
+  transition: background 0.2s, color 0.2s, box-shadow 0.2s;
+  font-weight: 500;
+}
+
+.sidebar-glass .menu-item:hover {
+  background: rgba(244, 76, 35, 0.12); /* #f44c23 tint */
+  color: #f44c23;
+  box-shadow: 0 2px 8px 0 rgba(244, 76, 35, 0.10);
+}
+
+.sidebar-glass .menu-item.active, .sidebar-glass .menu-item[aria-current="page"] {
+  background: rgba(244, 76, 35, 0.18); /* #f44c23 tint */
+  color: #f44c23;
+  box-shadow: 0 4px 16px 0 rgba(244, 76, 35, 0.10);
+  border-left: 4px solid #f44c23;
+}
+
+.sidebar-glass .menu-item.active svg,
+.sidebar-glass .menu-item[aria-current="page"] svg {
+  color: #f44c23;
+  fill: #f44c23;
+}
+
+.sidebar-glass .sidebar-count-badge {
+  background: #f44c23;
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 600;
+  min-width: 1.25rem;
+  min-height: 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  box-shadow: 0 1px 4px 0 rgba(244, 76, 35, 0.10);
+}
+
+.sidebar-glass .profile-section {
+  background: rgba(40,40,40,0.5);
+  border-radius: 12px;
+  margin-top: 1.5rem;
+  padding: 0.75rem 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  box-shadow: 0 2px 8px 0 rgba(96, 165, 250, 0.08);
+}
+
+.sidebar-glass .collapse-btn {
+  background: rgba(37,99,235,0.08);
+  color: #60a5fa;
+  border: none;
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  margin: 1rem auto 0 auto;
+  display: block;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+
+.sidebar-glass .collapse-btn:hover {
+  background: #2563eb;
+  color: #fff;
+}

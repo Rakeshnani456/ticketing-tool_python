@@ -16,7 +16,7 @@ import {
     ClipboardCheck, // Ensure this is imported for use in JSX
     Book,           // Ensure this is imported for use in JSX
 } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { AiOutlineEye } from 'react-icons/ai'; // Or choose another icon library like 'fa' for Font Awesome
 import { X } from 'lucide-react'; // Assuming you have lucide-react for X (for closing flash messages)
 
@@ -110,6 +110,32 @@ const App = () => {
     const navigate = useNavigate(); // For programmatic navigation
     const location = useLocation(); // To get current path for active link highlighting
 
+    // Popup notification state
+    const [popupNotification, setPopupNotification] = useState(null);
+    const popupTimeoutRef = useRef(null);
+    const lastPopupNotificationId = useRef(null);
+
+    // Show popup only for truly new notifications (one-time)
+    useEffect(() => {
+        if (!notifications || notifications.length === 0) return;
+        // Find the most recent unread notification
+        const latestUnread = notifications.find(n => !n.read);
+        if (
+            latestUnread &&
+            latestUnread.id !== lastPopupNotificationId.current
+        ) {
+            setPopupNotification(latestUnread);
+            lastPopupNotificationId.current = latestUnread.id;
+            if (popupTimeoutRef.current) clearTimeout(popupTimeoutRef.current);
+            popupTimeoutRef.current = setTimeout(() => setPopupNotification(null), 3000);
+        }
+    }, [notifications]);
+
+    // Manual close for popup
+    const handleClosePopup = () => {
+        setPopupNotification(null);
+        if (popupTimeoutRef.current) clearTimeout(popupTimeoutRef.current);
+    };
 
     // Define variants for Framer Motion animation for the sidebar
     // w-56 is 224px, w-16 is 64px
@@ -147,6 +173,18 @@ const App = () => {
         collapsed: { marginLeft: 64, transition: { type: "spring", stiffness: 300, damping: 30 } }
     };
 
+    // Helper for relative time
+    const getRelativeTime = (dateString) => {
+        if (!dateString) return '';
+        const now = new Date();
+        const date = new Date(dateString);
+        const diff = Math.floor((now - date) / 1000); // seconds
+        if (diff < 60) return 'just now';
+        if (diff < 3600) return `${Math.floor(diff / 60)} min ago`;
+        if (diff < 86400) return `${Math.floor(diff / 3600)} hr ago`;
+        if (diff < 604800) return `${Math.floor(diff / 86400)}d ago`;
+        return date.toLocaleDateString();
+    };
 
     /**
      * Fetches notifications for the current user.
@@ -190,6 +228,37 @@ const App = () => {
         return message; // Return original message if no specific pattern is matched
     };
 
+    // Add helper function above the render:
+    const getNotificationTitleAndBody = (n) => {
+        if (n.title && n.message && n.title !== n.message) {
+            return { title: n.title, body: n.message };
+        }
+        if (n.message) {
+            const match = n.message.match(/^(.+?)[.:]\s*(.*)$/);
+            if (match) {
+                return { title: match[1], body: match[2] };
+            }
+            return { title: n.message, body: '' };
+        }
+        return { title: 'Notification', body: '' };
+    };
+
+    // Add this helper for generic notification formatting
+    const formatGenericNotificationMessage = (type, message) => {
+        // Highlight ticket number (TTxxxx) and key info for specific types
+        let formatted = message;
+        // Highlight ticket number
+        formatted = formatted.replace(/(TT\d{4})/g, '<strong class="text-blue-600">$1</strong>');
+        // Highlight status (for status update types)
+        if (type.includes('status_update') || type.includes('reopened') || type.includes('cancelled')) {
+            formatted = formatted.replace(/(marked as|re\-opened to|has been|cancelled|assigned to you|unassigned from you|reassigned from you|by [^:]+|on assigned ticket [^ ]+)/gi, '<span class="text-blue-600 font-semibold">$1</span>');
+        }
+        // Highlight commenter for comments
+        if (type.includes('comment')) {
+            formatted = formatted.replace(/by ([^\.]+)\./, 'by <span class="text-blue-600 font-semibold">$1</span>.');
+        }
+        return formatted;
+    };
 
     // Effect hook to listen for Firebase authentication state changes.
     // This is crucial for maintaining user session and fetching user roles from backend.
@@ -465,11 +534,8 @@ const App = () => {
             });
 
             if (response.ok) {
-                //showFlashMessage('Notification marked as read.', 'info'); // Commented out to avoid too many pop-ups
                 fetchNotifications(currentUser); // Refresh notifications after marking read
-                if (ticketId) {
-                    navigateTo(`/tickets/${ticketId}`); // Navigate to ticket detail if provided
-                }
+                // Do NOT navigate to ticket here
             } else {
                 console.error('Failed to mark notification as read:', await response.json());
                 showFlashMessage('Failed to mark notification as read.', 'error');
@@ -477,11 +543,8 @@ const App = () => {
         } catch (error) {
             console.error('Network error marking notification as read:', error);
             showFlashMessage('Network error marking notification as read.', 'error');
-        } finally {
-            // We don't close the menu here anymore, as `viewTicket` will handle navigation which closes it.
-            // If only marking read, it will remain open for user to clear.
         }
-    }, [currentUser, fetchNotifications, showFlashMessage, navigateTo]);
+    }, [currentUser, fetchNotifications, showFlashMessage]);
 
     /**
      * Navigates to the ticket detail page.
@@ -570,39 +633,38 @@ const App = () => {
                     initial={false}
                     animate={isSidebarExpanded ? "expanded" : "collapsed"}
                     variants={sidebarVariants}
-                    className="fixed top-0 left-0 bg-gray-800 text-white flex flex-col p-3 shadow-lg flex-shrink-0 overflow-y-auto h-screen z-50"
-                    onMouseEnter={() => setIsSidebarExpanded(true)} // Expand on hover
-                    onMouseLeave={() => setIsSidebarExpanded(false)} // Retract on mouse leave
+                    className="sidebar-glass fixed top-0 left-0 text-blue-900 flex flex-col p-3 shadow-lg flex-shrink-0 overflow-y-auto h-screen z-50"
+                    onMouseEnter={() => setIsSidebarExpanded(true)}
+                    onMouseLeave={() => setIsSidebarExpanded(false)}
                 >
                     {/* Top Menu Items */}
                     <ul className="space-y-2">
-                        {/* Support User Specific Menu Items - MODIFIED: Now includes admin role */}
                         {(currentUser.role === 'support' || currentUser.role === 'admin') && (
                             <>
                                 <li>
-                                        <Link to="/dashboard" className={`relative flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-300 text-base ${location.pathname === '/dashboard' ? 'font-bold border-b-2 border-blue-500' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
-                                            <LayoutDashboardIcon width={20} height={18} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} fill="currentColor" />
-                                            <motion.span
-                                                variants={textVariants}
-                                                animate={isSidebarExpanded ? "expanded" : "collapsed"}
-                                                className="whitespace-nowrap overflow-hidden"
-                                            >
-                                                Dashboard
-                                            </motion.span>
-                                            {!isSidebarExpanded && (
-                                                <span className="sidebar-count-badge absolute top-0 right-0 text-blue-300 text-xs rounded-full h-4 w-4 flex items-center justify-center -mt-1 -mr-1 font-normal">
-                                                    {ticketCounts.total_tickets}
-                                                </span>
-                                            )}
-                                            {isSidebarExpanded && (
-                                                <span className="ml-2 text-blue-300 text-xs font-normal">
-                                                    ({ticketCounts.total_tickets})
-                                                </span>
-                                            )}
-                                        </Link>
+                                    <Link to="/dashboard" className={`menu-item relative flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-300 text-base ${location.pathname === '/dashboard' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                        <LayoutDashboardIcon width={20} height={18} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} fill="currentColor" />
+                                        <motion.span
+                                            variants={textVariants}
+                                            animate={isSidebarExpanded ? "expanded" : "collapsed"}
+                                            className="whitespace-nowrap overflow-hidden"
+                                        >
+                                            Dashboard
+                                        </motion.span>
+                                        {!isSidebarExpanded && (
+                                            <span className="sidebar-count-badge absolute top-0 right-0 text-xs rounded-full h-4 w-4 flex items-center justify-center -mt-1 -mr-1 font-normal">
+                                                {ticketCounts.total_tickets}
+                                            </span>
+                                        )}
+                                        {isSidebarExpanded && (
+                                            <span className="ml-2 text-xs font-normal">
+                                                ({ticketCounts.total_tickets})
+                                            </span>
+                                        )}
+                                    </Link>
                                 </li>
                                 <li>
-                                    <Link to="/all-tickets" className={`relative flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-300 text-base ${location.pathname === '/all-tickets' ? 'font-bold border-b-2 border-red-500' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                    <Link to="/all-tickets" className={`menu-item relative flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-300 text-base ${location.pathname === '/all-tickets' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                         <MenuIconSvg width={22} height={20} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} fill="currentColor" />
                                         <motion.span
                                             variants={textVariants}
@@ -610,25 +672,20 @@ const App = () => {
                                             className="whitespace-nowrap overflow-hidden">All Tickets
                                         </motion.span>
                                         {!isSidebarExpanded && (
-                                            <span className="sidebar-count-badge absolute top-0 right-0 text-red-300 text-xs rounded-full h-4 w-4 flex items-center justify-center -mt-1 -mr-1">
+                                            <span className="sidebar-count-badge absolute top-0 right-0 text-xs rounded-full h-4 w-4 flex items-center justify-center -mt-1 -mr-1">
                                                 {ticketCounts.active_tickets}
                                             </span>
                                         )}
                                         {isSidebarExpanded && (
-                                            <span className="ml-2 text-red-300 text-xs">
+                                            <span className="ml-2 text-xs">
                                                 ({ticketCounts.active_tickets})
                                             </span>
                                         )}
                                     </Link>
                                 </li>
                                 <li>
-                                    <Link to="/assigned-to-me" className={`relative flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-300 text-base ${location.pathname === '/assigned-to-me' ? 'font-bold border-b-2 border-green-600' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
-                                        <MyTicketsIcon
-                                                width={20}
-                                                height={20}
-                                                className={`flex-shrink-0 transform -translate-x-0 ${isSidebarExpanded ? 'mr-2' : ''}`}
-                                            />
-
+                                    <Link to="/assigned-to-me" className={`menu-item relative flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-300 text-base ${location.pathname === '/assigned-to-me' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                        <MyTicketsIcon width={20} height={20} className={`flex-shrink-0 transform -translate-x-0 ${isSidebarExpanded ? 'mr-2' : ''}`} />
                                         <motion.span
                                             variants={textVariants}
                                             animate={isSidebarExpanded ? "expanded" : "collapsed"}
@@ -637,12 +694,12 @@ const App = () => {
                                             Assigned to Me
                                         </motion.span>
                                         {!isSidebarExpanded && (
-                                            <span className="sidebar-count-badge absolute top-0 right-0 text-green-300 text-xs rounded-full h-4 w-4 flex items-center justify-center -mt-1 -mr-1">
+                                            <span className="sidebar-count-badge absolute top-0 right-0 text-xs rounded-full h-4 w-4 flex items-center justify-center -mt-1 -mr-1">
                                                 {ticketCounts.assigned_to_me}
                                             </span>
                                         )}
                                         {isSidebarExpanded && (
-                                            <span className="ml-2 text-green-300 text-xs">
+                                            <span className="ml-2 text-xs">
                                                 ({ticketCounts.assigned_to_me})
                                             </span>
                                         )}
@@ -650,9 +707,8 @@ const App = () => {
                                 </li>
                             </>
                         )}
-                        {/* Common Menu Item for All Users */}
                         <li>
-                            <Link to="/my-tickets" className={`flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-300 text-base ${location.pathname === '/my-tickets' ? 'font-bold border-b-2 border-white' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                            <Link to="/my-tickets" className={`menu-item flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-300 text-base ${location.pathname === '/my-tickets' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                 <AssignedToMeIcon height={18} width={20} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} />
                                 <motion.span
                                     variants={textVariants}
@@ -663,9 +719,8 @@ const App = () => {
                                 </motion.span>
                             </Link>
                         </li>
-                        {/* Add Create Ticket Here if desired */}
                         <li>
-                            <Link to="/create-ticket" className={`flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-300 text-base ${location.pathname === '/create-ticket' ? 'font-bold border-b-2 border-white' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                            <Link to="/create-ticket" className={`menu-item flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-300 text-base ${location.pathname === '/create-ticket' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                 <CreateTicketIcon height={18} width={20} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} />
                                 <motion.span
                                     variants={textVariants}
@@ -676,10 +731,9 @@ const App = () => {
                                 </motion.span>
                             </Link>
                         </li>
-                        {/* NEW: Admin Specific Menu Item */}
                         {currentUser.role === 'admin' && (
                             <li>
-                                <Link to="/user-management" className={`flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-300 text-base ${location.pathname === '/user-management' ? 'font-bold border-b-2 border-white' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                <Link to="/user-management" className={`menu-item flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-300 text-base ${location.pathname === '/user-management' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                     <UsersIconSvg width={22} height={22} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} fill="currentColor" />
                                     <motion.span
                                         variants={textVariants}
@@ -692,13 +746,11 @@ const App = () => {
                             </li>
                         )}
                     </ul>
-
                     {/* Bottom Menu Items */}
-                    <div className="mt-auto pt-4 border-t border-gray-700">
+                    <div className="mt-auto pt-4 border-t border-gray-200">
                         <ul className="space-y-2">
-                            {/* NEW: Knowledge Base Menu Item */}
                             <li>
-                                <Link to="/knowledge-base" className={`flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-300 text-base ${location.pathname === '/knowledge-base' ? 'font-bold border-t-2 border-white' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                <Link to="/knowledge-base" className={`menu-item flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-300 text-base ${location.pathname === '/knowledge-base' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                     <Book size={20} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} />
                                     <motion.span
                                         variants={textVariants}
@@ -709,10 +761,9 @@ const App = () => {
                                     </motion.span>
                                 </Link>
                             </li>
-                            {/* NEW: Settings Menu Item */}
                             <li>
-                                <Link to="/settings" className={`flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-300 text-base ${location.pathname === '/settings' ? 'font-bold border-t-2 border-white' : 'hover:bg-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
-                                <SettingsIconSvg width={22} height={22} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} fill="currentColor" />
+                                <Link to="/settings" className={`menu-item flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-300 text-base ${location.pathname === '/settings' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                    <SettingsIconSvg width={22} height={22} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} fill="currentColor" />
                                     <motion.span
                                         variants={textVariants}
                                         animate={isSidebarExpanded ? "expanded" : "collapsed"}
@@ -783,215 +834,293 @@ const App = () => {
                                     aria-label="Notifications"
                                 >
                                     <Bell size={20} />
-                                    {hasNewNotifications && (
-                                        <span className="absolute top-0 right-0 block h-2 w-2 rounded-full ring-2 ring-white bg-red-600 animate-pulse"></span>
+                                    {notifications && notifications.some(n => !n.read) && (
+                                        <span className="absolute -top-1 -right-1 bg-red-600 text-white text-xs font-bold rounded-full px-1.5 py-0.5 z-10">
+                                            {notifications.filter(n => !n.read).length}
+                                        </span>
                                     )}
                                 </button>
-                               {isNotificationMenuOpen && (
-    <div ref={notificationMenuRef} className="absolute right-0 mt-2 w-1/2 md:w-96 bg-white rounded-md shadow-lg py-1 z-50 max-h-96 overflow-y-auto notification-scroll-area">
-        <div className="flex justify-between items-center px-4 py-2 border-b border-gray-200">
-            <h3 className="text-sm font-semibold text-gray-700">Notifications</h3>
-            {/* Clear All Notifications Button */}
-            {notifications.length > 0 && (
-                <button
-                    onClick={clearAllNotifications}
-                    className="p-1 rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-600 focus:outline-none focus:ring-1 focus:ring-gray-300"
-                    title="Clear All Notifications"
-                >
-                    <X size={16} />
-                </button>
-            )}
-        </div>
-
-        {notifications.length > 0 ? (
-            notifications.map(notification => (
-                <div
-                    key={notification.id}
-                    className={`relative flex flex-col px-4 py-4 border-b border-gray-300 hover:bg-orange-100 cursor-pointer last:border-b-0 ${!notification.read ? 'bg-blue-50 font-xs' : ''}`}
-                    // Keep onClick for marking as read when clicking the main notification body
-                    onClick={() => markNotificationAsRead(notification.id, notification.ticketId)}
-                >
-                    {/* Notification content */}
-                    <div className="flex items-start">
-                        <div className="flex-shrink-0 mt-1">
-                            {!notification.read ? <Info size={16} className="text-blue-500" /> : <CheckCircle size={16} className="text-gray-400" />}
-                        </div>
-                        <div className="ml-3 text-sm flex-1">
-                            <p className="text-gray-800" dangerouslySetInnerHTML={{ __html: formatNotificationMessage(notification.message) }}></p>
-                            <p className="text-gray-500 text-xs mt-1">
-                                {new Date(notification.timestamp).toLocaleString()}
-                            </p>
-                        </div>
-                        {/* Mark Read Icon Button */}
-                        {!notification.read && (
-                            <button
-                                onClick={(e) => { e.stopPropagation(); markNotificationAsRead(notification.id); }}
-                                className="absolute top-1 right-1 text-blue-500 hover:text-blue-700 p-1 rounded-full text-xs font-medium focus:outline-none focus:ring-1 focus:ring-blue-300 focus:ring-opacity-75"
-                                title="Mark as Read"
-                            >
-                                <AiOutlineEye size={18} />
-                            </button>
-                        )}
-                    </div>
-
-                    {/* Action Buttons */}
-                    <div className="flex justify-end gap-2 mt-3 text-xs">
-                        {notification.ticketId && ( // Only show "View Ticket" if ticketId exists
-                            <button
-                                onClick={(e) => { e.stopPropagation(); viewTicket(notification.ticketId); }} // Prevent parent click
-                                className="px-3 py-1 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 focus:outline-none focus:ring-1 focus:ring-gray-400"
-                            >
-                                View Ticket
-                            </button>
-                        )}
-                        <button
-                            onClick={(e) => { e.stopPropagation(); clearNotification(notification.id); }} // Prevent parent click
-                            className="px-3 py-1 bg-red-100 text-red-700 rounded-md hover:bg-red-200 focus:outline-none focus:ring-1 focus:ring-red-300"
-                        >
-                            Clear
-                        </button>
-                    </div>
-                </div>
-            ))
-        ) : (
-            <p className="px-4 py-3 text-sm text-gray-500">No new notifications.</p>
-        )}
-    </div>
-)}
-                            </div>
-
-                            {/* User Profile Menu */}
-                            <div className="relative">
-                                <button onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)} className="flex items-center text-gray-800 hover:text-blue-600 transition duration-200 text-sm">
-                                    <User size={16} className="mr-1" />
-                                    <span>{currentUser.email}</span>
-                                    <ChevronDown size={16} className="ml-1" />
-                                </button>
-                                {isProfileMenuOpen && (
-                                    <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50">
-                                        <Link // Use Link for navigation
-                                            to="/profile"
-                                            onClick={() => setIsProfileMenuOpen(false)}
-                                            className="flex items-center w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                                {/* Notification Popup */}
+                                <AnimatePresence>
+                                    {popupNotification && (
+                                        <motion.div
+                                            initial={{ opacity: 0, y: -20, scale: 0.95 }}
+                                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                                            exit={{ opacity: 0, y: -20, scale: 0.95 }}
+                                            transition={{ duration: 0.25 }}
+                                            className="absolute right-0 mt-2 w-80 bg-white border border-gray-200 shadow-xl rounded-lg p-4 z-50 flex items-start gap-2"
+                                            style={{ minWidth: '220px' }}
                                         >
-                                            <User size={16} className="mr-2" /> Profile
-                                        </Link>
-                                        <Link // Use Link for navigation
-                                            to="/change-password"
-                                            onClick={() => setIsProfileMenuOpen(false)} // Link to ChangePasswordComponent
-                                            className="flex items-center w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                                        >
-                                            <ClipboardCheck size={16} className="mr-2" /> Change Password
-                                        </Link>
-                                        <button
-                                            onClick={handleLogout}
-                                            className="flex items-center w-full text-left px-4 py-2 text-sm text-red-700 hover:bg-red-50"
-                                        >
-                                            <LogOut size={16} className="mr-2" /> Log Out
-                                        </button>
+                                            <div className="flex-1">
+                                                <div className="text-xs text-gray-700 font-semibold mb-1">New Notification</div>
+                                                <div className="text-sm text-gray-900" dangerouslySetInnerHTML={{ __html: formatNotificationMessage(popupNotification.message) }} />
+                                            </div>
+                                            <button
+                                                onClick={handleClosePopup}
+                                                className="ml-2 p-1 rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-600 focus:outline-none"
+                                                title="Close"
+                                            >
+                                                <X size={16} />
+                                            </button>
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
+                                {/* Notification Dropdown Menu */}
+                                {isNotificationMenuOpen && (
+                                    <div
+                                        ref={notificationMenuRef}
+                                        className="absolute right-0 mt-2 max-w-lg w-full sm:w-[520px] max-h-96 overflow-y-auto bg-white border border-gray-200 shadow-2xl rounded-xl z-50"
+                                        tabIndex={-1}
+                                        aria-label="Notifications"
+                                    >
+                                        {/* Sticky Header */}
+                                        <div className="flex items-center justify-between px-6 py-3 border-b border-gray-100 bg-white sticky top-0 z-10 rounded-t-xl">
+                                            <span className="font-bold text-gray-900 text-base">Notifications</span>
+                                            <div className="flex gap-4">
+                                                {notifications.some(n => !n.read) && (
+                                                    <button
+                                                        onClick={() => notifications.filter(n => !n.read).forEach(n => markNotificationAsRead(n.id))}
+                                                        className="text-xs text-blue-600 hover:underline focus:outline-none font-semibold"
+                                                        aria-label="Mark all as read"
+                                                        title="Mark all as read"
+                                                    >
+                                                        Mark all as read
+                                                    </button>
+                                                )}
+                                                {notifications.length > 0 && (
+                                                    <button
+                                                        onClick={clearAllNotifications}
+                                                        className="text-xs text-red-500 hover:underline focus:outline-none font-semibold"
+                                                        aria-label="Clear all notifications"
+                                                        title="Clear all"
+                                                    >
+                                                        Clear All
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                        {/* Notification List */}
+                                        <div className="p-4 space-y-4">
+                                            {notifications.length === 0 ? (
+                                                <div className="flex flex-col items-center justify-center py-10 text-gray-400 text-sm">
+                                                    <Bell size={40} className="mb-2 text-gray-200" />
+                                                    <span>No notifications yet!</span>
+                                                </div>
+                                            ) : (
+                                                <>
+                                                    {notifications.map((n, idx) => {
+                                                        let notificationContent;
+                                                        if (n.type === 'new_ticket_for_support' || n.type === 'ticket_created') {
+                                                            notificationContent = (
+                                                                <div className="text-sm text-blue-900" dangerouslySetInnerHTML={{ __html: formatNotificationMessage(n.message) }} />
+                                                            );
+                                                        } else if (
+                                                            n.type.includes('status_update') ||
+                                                            n.type.includes('reopened') ||
+                                                            n.type.includes('cancelled') ||
+                                                            n.type.includes('assigned') ||
+                                                            n.type.includes('unassigned') ||
+                                                            n.type.includes('reassigned') ||
+                                                            n.type.includes('comment')
+                                                        ) {
+                                                            notificationContent = (
+                                                                <div className="text-sm text-blue-900" dangerouslySetInnerHTML={{ __html: formatGenericNotificationMessage(n.type, n.message) }} />
+                                                            );
+                                                        } else {
+                                                        const { title, body } = getNotificationTitleAndBody(n);
+                                                            notificationContent = (
+                                                                <>
+                                                                    <span className="font-semibold text-sm text-blue-900">{title}</span>
+                                                                    {body && <div className="text-xs text-gray-700 break-words whitespace-pre-line">{body}</div>}
+                                                                </>
+                                                            );
+                                                        }
+                                                        return (
+                                                            <div
+                                                                key={n.id}
+                                                                className={`relative flex flex-col gap-2 p-4 rounded-lg shadow-sm border transition ${!n.read ? 'bg-blue-100 border-blue-600' : 'bg-white border-gray-200'}`}
+                                                            >
+                                                                {/* Unread badge */}
+                                                                {!n.read && (
+                                                                    <span className="absolute top-2 right-2 bg-blue-600 text-white text-[10px] px-2 py-0.5 rounded-full font-bold">Unread</span>
+                                                                )}
+                                                                {/* Title and time */}
+                                                                <div className="flex items-center justify-between w-full">
+                                                                    {notificationContent}
+                                                                    <span className="text-xs text-gray-400 ml-2 whitespace-nowrap">{getRelativeTime(n.timestamp || n.createdAt)}</span>
+                                                                </div>
+                                                                {/* Actions */}
+                                                                <div className="flex flex-row flex-wrap gap-3 pt-1">
+                                                                    {n.ticketId && (
+                                                                        <button
+                                                                            onClick={() => viewTicket(n.ticketId)}
+                                                                            className="text-xs text-blue-600 hover:underline focus:outline-none font-medium"
+                                                                            aria-label="View ticket"
+                                                                            title="View ticket"
+                                                                        >
+                                                                            View ticket
+                                                                        </button>
+                                                                    )}
+                                                                    {!n.read && (
+                                                                        <button
+                                                                            onClick={() => markNotificationAsRead(n.id, n.ticketId)}
+                                                                            className="text-xs text-green-600 hover:underline focus:outline-none font-medium"
+                                                                            aria-label="Mark as read"
+                                                                            title="Mark as read"
+                                                                        >
+                                                                            Mark as read
+                                                                        </button>
+                                                                    )}
+                                                                    <button
+                                                                        onClick={() => clearNotification(n.id)}
+                                                                        className="text-xs text-red-500 hover:underline focus:outline-none font-medium"
+                                                                        aria-label="Clear notification"
+                                                                        title="Clear"
+                                                                    >
+                                                                        Clear
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </>
+                                            )}
+                                        </div>
                                     </div>
                                 )}
                             </div>
+                        
+                        <div className="relative">
+                            <button onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)} className="flex items-center text-gray-800 hover:text-blue-600 transition duration-200 text-sm">
+                                <User size={16} className="mr-1" />
+                                <span>{currentUser.email}</span>
+                                <ChevronDown size={16} className="ml-1" />
+                            </button>
+                            {isProfileMenuOpen && (
+                                <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50">
+                                    <Link // Use Link for navigation
+                                        to="/profile"
+                                        onClick={() => setIsProfileMenuOpen(false)}
+                                        className="flex items-center w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                                    >
+                                        <User size={16} className="mr-2" /> Profile
+                                    </Link>
+                                    <Link // Use Link for navigation
+                                        to="/change-password"
+                                        onClick={() => setIsProfileMenuOpen(false)} // Link to ChangePasswordComponent
+                                        className="flex items-center w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                                    >
+                                        <ClipboardCheck size={16} className="mr-2" /> Change Password
+                                    </Link>
+                                    <button
+                                        onClick={handleLogout}
+                                        className="flex items-center w-full text-left px-4 py-2 text-sm text-red-700 hover:bg-red-50"
+                                    >
+                                        <LogOut size={16} className="mr-2" /> Log Out
+                                    </button>
+                                </div>
+                            )}
                         </div>
-                    )}
-                </header>
-
-                {/* Flash Message Display */}
-                {flashMessage && (
-                    <div className={`p-3 text-xs rounded-none flex items-center justify-between ${getStatusClasses(flashType)}`} role="alert">
-                        <div className="flex items-center">
-                            {flashType === 'success' && <CheckCircle size={16} className="mr-1" />}
-                            {flashType === 'error' && <XCircle size={16} className="mr-1" />}
-                            {flashType === 'info' && <Info size={16} className="mr-1" />}
-                            {flashType === 'warning' && <AlertTriangle size={16} className="mr-1" />}
-                            <div className="text-sm">{flashMessage}</div>
-                        </div>
-                        <button onClick={() => setFlashMessage(null)} className="text-current hover:opacity-75">
-                            <XCircle size={16} />
-                        </button>
                     </div>
                 )}
+            </header>
 
-                {/* Main Content Canvas Area */}
-                <section className={`flex-1 bg-gray-100 flex flex-col min-w-0`}>
-                    <Routes> {/* Define your routes here */}
-                        {/* Public Routes (Login/Register) */}
-                        <Route path="/login" element={<LoginComponent onLoginSuccess={handleLoginSuccess} navigateTo={navigateTo} showFlashMessage={showFlashMessage} />} />
-                        <Route path="/register" element={<RegisterComponent navigateTo={navigateTo} showFlashMessage={showFlashMessage} />} />
+            {/* Flash Message Display */}
+            {flashMessage && (
+                <div className={`p-3 text-xs rounded-none flex items-center justify-between ${getStatusClasses(flashType)}`} role="alert">
+                    <div className="flex items-center">
+                        {flashType === 'success' && <CheckCircle size={16} className="mr-1" />}
+                        {flashType === 'error' && <XCircle size={16} className="mr-1" />}
+                        {flashType === 'info' && <Info size={16} className="mr-1" />}
+                        {flashType === 'warning' && <AlertTriangle size={16} className="mr-1" />}
+                        <div className="text-sm">{flashMessage}</div>
+                    </div>
+                    <button onClick={() => setFlashMessage(null)} className="text-current hover:opacity-75">
+                        <XCircle size={16} />
+                    </button>
+                </div>
+            )}
 
-                        {/* Protected Routes (require currentUser) */}
-                        {currentUser ? (
-                            <>
-                                {/* Default route for logged-in users, redirect based on role */}
-                                <Route path="/" element={
-                                    currentUser.role === 'support' || currentUser.role === 'admin' ?
+            {/* Main Content Canvas Area */}
+            <section className={`flex-1 bg-gray-100 flex flex-col min-w-0`}>
+                <Routes> {/* Define your routes here */}
+                    {/* Public Routes (Login/Register) */}
+                    <Route path="/login" element={<LoginComponent onLoginSuccess={handleLoginSuccess} navigateTo={navigateTo} showFlashMessage={showFlashMessage} />} />
+                    <Route path="/register" element={<RegisterComponent navigateTo={navigateTo} showFlashMessage={showFlashMessage} />} />
+
+                    {/* Protected Routes (require currentUser) */}
+                    {currentUser ? (
+                        <>
+                            {/* Default route for logged-in users, redirect based on role */}
+                            <Route path="/" element={
+                                currentUser.role === 'support' || currentUser.role === 'admin' ?
+                                <DashboardComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} /> :
+                                <MyTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} isSidebarExpanded={isSidebarExpanded} />
+                            } />
+
+                            <Route path="/dashboard" element={
+                                (currentUser.role === 'support' || currentUser.role === 'admin') ?
                                     <DashboardComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} /> :
-                                    <MyTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} isSidebarExpanded={isSidebarExpanded} />
-                                } />
-
-                                <Route path="/dashboard" element={
-                                    (currentUser.role === 'support' || currentUser.role === 'admin') ?
-                                        <DashboardComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} /> :
-                                        <AccessDeniedComponent />
-                                } />
-                                <Route path="/all-tickets" element={
-                                    (currentUser.role === 'support' || currentUser.role === 'admin') ?
-                                        <AllTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} showFilters={true} isSidebarExpanded={isSidebarExpanded} /> :
-                                        <AccessDeniedComponent />
-                                } />
-                                <Route path="/assigned-to-me" element={
-                                    (currentUser.role === 'support' || currentUser.role === 'admin') ?
-                                        <AllTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} initialFilterAssignment="assigned_to_me" showFilters={false} isSidebarExpanded={isSidebarExpanded} /> :
-                                        <AccessDeniedComponent />
-                                } />
-                                <Route path="/my-tickets" element={<MyTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} isSidebarExpanded={isSidebarExpanded} />} />
-                                <Route path="/create-ticket" element={
-                                    <div className="flex flex-col items-center justify-center p-4">
-                                        <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-3xl relative border border-gray-200">
-                                            <CreateTicketComponent
-                                                user={currentUser}
-                                                showFlashMessage={showFlashMessage}
-                                                onTicketCreated={handleTicketCreated}
-                                                navigateTo={navigateTo}
-                                            />
-                                        </div>
+                                    <AccessDeniedComponent />
+                            } />
+                            <Route path="/all-tickets" element={
+                                (currentUser.role === 'support' || currentUser.role === 'admin') ?
+                                    <AllTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} showFilters={true} isSidebarExpanded={isSidebarExpanded} /> :
+                                    <AccessDeniedComponent />
+                            } />
+                            <Route path="/assigned-to-me" element={
+                                (currentUser.role === 'support' || currentUser.role === 'admin') ?
+                                    <AllTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} initialFilterAssignment="assigned_to_me" showFilters={false} isSidebarExpanded={isSidebarExpanded} /> :
+                                    <AccessDeniedComponent />
+                            } />
+                            <Route path="/my-tickets" element={<MyTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} isSidebarExpanded={isSidebarExpanded} />} />
+                            <Route path="/create-ticket" element={
+                                <div className="flex flex-col items-center justify-center p-4">
+                                    <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-3xl relative border border-gray-200">
+                                        <CreateTicketComponent
+                                            user={currentUser}
+                                            showFlashMessage={showFlashMessage}
+                                            onTicketCreated={handleTicketCreated}
+                                            navigateTo={navigateTo}
+                                        />
                                     </div>
-                                } />
-                                {/* Dynamic route for Ticket Detail */}
-                                <Route path="/tickets/:ticketId" element={<TicketDetailComponent navigateTo={navigateTo} user={currentUser} showFlashMessage={showFlashMessage} />} />
+                                </div>
+                            } />
+                            {/* Dynamic route for Ticket Detail */}
+                            <Route path="/tickets/:ticketId" element={<TicketDetailComponent navigateTo={navigateTo} user={currentUser} showFlashMessage={showFlashMessage} />} />
 
-                                <Route path="/profile" element={<ProfileComponent user={currentUser} showFlashMessage={showFlashMessage} navigateTo={navigateTo} handleLogout={handleLogout} />} />
-                                <Route path="/change-password" element={<ChangePasswordComponent user={currentUser} showFlashMessage={showFlashMessage} navigateTo={navigateTo} />} />
-                                <Route path="/user-management" element={
-                                    currentUser.role === 'admin' ?
-                                        <UserManagementComponent user={currentUser} showFlashMessage={showFlashMessage} navigateTo={navigateTo} /> :
-                                        <AccessDeniedComponent />
-                                } />
-                                <Route path="/settings" element={<SettingsComponent />} />
-                                <Route path="/knowledge-base" element={<KnowledgeBaseComponent />} />
+                            <Route path="/profile" element={<ProfileComponent user={currentUser} showFlashMessage={showFlashMessage} navigateTo={navigateTo} handleLogout={handleLogout} />} />
+                            <Route path="/change-password" element={<ChangePasswordComponent user={currentUser} showFlashMessage={showFlashMessage} navigateTo={navigateTo} />} />
+                            <Route path="/user-management" element={
+                                currentUser.role === 'admin' ?
+                                    <UserManagementComponent user={currentUser} showFlashMessage={showFlashMessage} navigateTo={navigateTo} /> :
+                                    <AccessDeniedComponent />
+                            } />
+                            <Route path="/settings" element={<SettingsComponent />} />
+                            <Route path="/knowledge-base" element={<KnowledgeBaseComponent />} />
 
-                                {/* Catch-all for logged-in users if no other route matches */}
-                                {/* This ensures that if they go to an invalid path, they are redirected to their default view */}
-                                <Route path="*" element={
-                                    currentUser.role === 'support' || currentUser.role === 'admin' ?
-                                    <DashboardComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} /> :
-                                    <MyTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} isSidebarExpanded={isSidebarExpanded} />
-                                } />
-                            </>
-                        ) : (
-                            // If not logged in, redirect any unmatched route to login
-                            <Route path="*" element={<LoginComponent onLoginSuccess={handleLoginSuccess} navigateTo={navigateTo} showFlashMessage={showFlashMessage} />} />
-                        )}
-                    </Routes>
-                </section>
+                            {/* Catch-all for logged-in users if no other route matches */}
+                            {/* This ensures that if they go to an invalid path, they are redirected to their default view */}
+                            <Route path="*" element={
+                                currentUser.role === 'support' || currentUser.role === 'admin' ?
+                                <DashboardComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} /> :
+                                <MyTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} isSidebarExpanded={isSidebarExpanded} />
+                            } />
+                        </>
+                    ) : (
+                        // If not logged in, redirect any unmatched route to login
+                        <Route path="*" element={<LoginComponent onLoginSuccess={handleLoginSuccess} navigateTo={navigateTo} showFlashMessage={showFlashMessage} />} />
+                    )}
+                </Routes>
+            </section>
 
-                {/* Footer */}
-                <footer className={`text-white-500 text-center p-2 w-full shadow-inner text-xs flex-shrink-0`}>
-                    <p>&copy; {new Date().getFullYear()} Kriasol. All rights reserved.</p>
-                </footer>
-            </motion.div>
-        </div>
-    );
+            {/* Footer */}
+            <footer className={`text-white-500 text-center p-2 w-full shadow-inner text-xs flex-shrink-0`}>
+                <p>&copy; {new Date().getFullYear()} Kriasol. All rights reserved.</p>
+            </footer>
+        </motion.div>
+    </div>
+);
 }
 
 export default App;

@@ -146,8 +146,23 @@ function jsonSerializableNotification(docId, notificationData) {
 
     const data = { ...notificationData, id: docId };
 
+    // Always provide a consistent ISO timestamp for frontend
     if (data.timestamp && data.timestamp.toDate) {
         data.timestamp = data.timestamp.toDate().toISOString();
+        data.createdAt = data.timestamp; // Alias for frontend compatibility
+    } else if (data.timestamp && typeof data.timestamp === 'string') {
+        data.createdAt = data.timestamp;
+    } else if (data.createdAt && typeof data.createdAt === 'string') {
+        data.timestamp = data.createdAt;
+    } else {
+        // fallback: set to now if missing
+        const now = new Date().toISOString();
+        data.timestamp = now;
+        data.createdAt = now;
+    }
+    // Always ensure a type field exists
+    if (!data.type) {
+        data.type = 'generic';
     }
     return data;
 }
