@@ -1,6 +1,6 @@
 // src/components/tickets/CreateTicketComponent.js
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Loader2, CheckCircle, XCircle, Send, UploadCloud } from 'lucide-react'; // Icons
 
 // Import common UI components
@@ -30,11 +30,11 @@ const CreateTicketComponent = ({ user, onClose, showFlashMessage, onTicketCreate
     // State for form data
     const [formData, setFormData] = useState({
         request_for_email: user?.email || '', // Pre-fill with user's email
-        category: '',
+        category: 'troubleshoot',
         short_description: '',
         long_description: '',
         contact_number: '',
-        priority: '',
+        priority: 'Low',
         hostname_asset_id: '',
         attachments: [] // Stores URLs of uploaded attachments
     });
@@ -52,17 +52,19 @@ const CreateTicketComponent = ({ user, onClose, showFlashMessage, onTicketCreate
     const [createdTicketDisplayId, setCreatedTicketDisplayId] = useState(null);
     // State for displaying specific error messages related to submission
     const [errorMessage, setErrorMessage] = useState('');
+    // Add a state to control showing the success popup
+    const [showSuccessPopup, setShowSuccessPopup] = useState(false);
+
+    const fileInputRef = useRef();
 
     // Predefined categories for the select input
     const categories = [
-        { value: '', label: 'Select Category' },
         { value: 'software', label: 'Software' },
         { value: 'hardware', label: 'Hardware' },
         { value: 'troubleshoot', label: 'Troubleshoot' },
     ];
     // Predefined priorities for the select input
     const priorities = [
-        { value: '', label: 'Select Priority' },
         { value: 'Low', label: 'Low' },
         { value: 'Medium', label: 'Medium' },
         { value: 'High', label: 'High' },
@@ -193,6 +195,7 @@ const CreateTicketComponent = ({ user, onClose, showFlashMessage, onTicketCreate
             const idToken = await user.firebaseUser.getIdToken(); // Get ID token for authorization
             const payload = {
                 ...formData,
+                reporter_email: user?.email,
                 attachments: uploadedAttachmentData // Include the array of attachment objects
             };
 
@@ -211,14 +214,15 @@ const CreateTicketComponent = ({ user, onClose, showFlashMessage, onTicketCreate
                 setCreatedTicketId(data.id); // Store actual DB ID
                 setCreatedTicketDisplayId(data.display_id); // Store display ID
                 showFlashMessage('Ticket created successfully!', 'success'); // Show success flash message
+                setShowSuccessPopup(true); // Show the success popup
                 // Reset form fields after successful submission
                 setFormData({
                     request_for_email: user?.email || '',
-                    category: '',
+                    category: 'troubleshoot',
                     short_description: '',
                     long_description: '',
                     contact_number: '',
-                    priority: '',
+                    priority: 'Low',
                     hostname_asset_id: '',
                     attachments: []
                 });
@@ -253,6 +257,44 @@ const CreateTicketComponent = ({ user, onClose, showFlashMessage, onTicketCreate
         navigateTo('myTickets');
     };
 
+    const handleContactNumberChange = (e) => {
+        let value = e.target.value;
+        // Allow only numbers and +
+        value = value.replace(/[^\d+]/g, '');
+        // Limit to 15 characters
+        if (value.length > 15) value = value.slice(0, 15);
+        setFormData(prev => ({ ...prev, contact_number: value }));
+        setSubmissionStatus('idle');
+        setErrorMessage('');
+    };
+
+    // Success popup UI
+    if (showSuccessPopup) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[300px] p-6">
+                <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full text-center border border-green-200 animate__animated animate__zoomIn animate__faster">
+                    <CheckCircle className="text-green-600 mb-2 mx-auto" size={48} />
+                    <h2 className="text-xl font-bold text-green-800 mb-2">Ticket Created Successfully!</h2>
+                    <p className="mb-2">Your ticket <span className="font-mono font-semibold text-blue-700">{createdTicketDisplayId}</span> has been created.</p>
+                    <div className="flex flex-col sm:flex-row gap-3 mt-4 justify-center">
+                        <button
+                            className="px-4 py-2 bg-green-600 text-white rounded-md font-semibold hover:bg-green-700 transition"
+                            onClick={() => navigateTo('/tickets', createdTicketId)}
+                        >
+                            View Ticket
+                        </button>
+                        <button
+                            className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md font-semibold hover:bg-gray-300 transition"
+                            onClick={onClose}
+                        >
+                            Close
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="p-2">
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -274,37 +316,57 @@ const CreateTicketComponent = ({ user, onClose, showFlashMessage, onTicketCreate
                     options={categories}
                     required
                     disabled={submissionStatus === 'success' || submissionStatus === 'creating'}
+                    placeholder="Select Category"
                 />
-                <FormInput
+                <FormTextarea
                     id="short_description"
                     label="*Short Description"
-                    type="text"
                     value={formData.short_description}
                     onChange={handleChange}
-                    required
                     maxLength={250}
-                    placeholder="Brief summary of the issue"
-                    disabled={submissionStatus === 'success' || submissionStatus === 'creating'}
+                    required
+                    rows={2}
+                    style={{ resize: 'none' }}
                 />
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '-0.25rem' }}>
+                    <span style={{ fontSize: '0.65rem', opacity: 0.5 }}>Max 250 characters</span>
+                </div>
                 <FormTextarea
                     id="long_description"
                     label="Long Description"
                     value={formData.long_description}
                     onChange={handleChange}
-                    rows={4}
-                    placeholder="Provide detailed information about the issue"
-                    disabled={submissionStatus === 'success' || submissionStatus === 'creating'}
+                    rows={6}
+                    style={{ resize: 'none' }}
+                    maxLength={1000}
                 />
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '-0.25rem' }}>
+                    <span style={{ fontSize: '0.65rem', opacity: 0.5 }}>Max 1000 characters</span>
+                </div>
                 <div>
-                    <label htmlFor="attachments" className="block text-gray-700 text-sm font-semibold mb-1">Attachments (PDF, JPG, PNG, Word - max 10MB per file):</label>
+                    <label htmlFor="attachments" className="block text-gray-700 text-sm font-semibold mb-1">Attachments</label>
                     <input
                         type="file"
                         id="attachments"
-                        multiple // Allow multiple file selection
+                        multiple
                         onChange={handleFileChange}
-                        className="w-full text-gray-700 text-sm bg-white border border-gray-300 rounded-md file:mr-3 file:py-1.5 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                        ref={fileInputRef}
+                        style={{ display: 'none' }}
                         disabled={submissionStatus === 'success' || submissionStatus === 'creating'}
                     />
+                    <button
+                        type="button"
+                        onClick={() => fileInputRef.current && fileInputRef.current.click()}
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-xs font-semibold rounded-md shadow hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2 transition"
+                        disabled={submissionStatus === 'success' || submissionStatus === 'creating'}
+                    >
+                        <UploadCloud size={16} /> Add Attachments
+                    </button>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.15rem' }}>
+                        <span style={{ fontSize: '0.65rem', opacity: 0.5 }}>
+                            Supported files: PDF, Word, JPG, PNG, Excel. Max 10MB*
+                        </span>
+                    </div>
                     {/* Display selected file names */}
                     {attachmentFiles.length > 0 && (
                         <div className="mt-1 text-xs text-gray-600">
@@ -317,9 +379,10 @@ const CreateTicketComponent = ({ user, onClose, showFlashMessage, onTicketCreate
                     label="*Contact Number"
                     type="text"
                     value={formData.contact_number}
-                    onChange={handleChange}
+                    onChange={handleContactNumberChange}
                     required
                     placeholder="e.g., +91-9876543210"
+                    maxLength={15}
                     disabled={submissionStatus === 'success' || submissionStatus === 'creating'}
                 />
                 <FormSelect
@@ -330,10 +393,11 @@ const CreateTicketComponent = ({ user, onClose, showFlashMessage, onTicketCreate
                     options={priorities}
                     required
                     disabled={submissionStatus === 'success' || submissionStatus === 'creating'}
+                    placeholder="Select Priority"
                 />
                 <FormInput
                     id="hostname_asset_id"
-                    label="*Hostname / LaptopID / AssetID"
+                    label="*Hostname or AssetID"
                     type="text"
                     value={formData.hostname_asset_id}
                     onChange={handleChange}

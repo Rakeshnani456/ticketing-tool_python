@@ -32,7 +32,7 @@ import TxtIcon from '../../assets/icons/TxtIcon.svg';
 import GenericFileIcon from '../../assets/icons/FileIcon.svg';
 
 const FieldBox = ({ children, className = "", isDisplayOnly = false }) => (
-    <div className={`border-2 border-gray-300 rounded-md px-2 py-0.5 min-h-[32px] flex items-center flex-shrink-0 ${isDisplayOnly ? 'bg-gray-50 text-gray-700 cursor-text' : 'bg-white'} ${className}`}>
+    <div className={`border border-gray-300 rounded-md px-2 py-0.5 min-h-[32px] flex items-center flex-shrink-0 ${isDisplayOnly ? 'bg-gray-50 text-gray-700 cursor-text' : 'bg-white'} ${className}`}>
         {children}
     </div>
 );
@@ -113,9 +113,13 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
     const [highlightClosureNotes, setHighlightClosureNotes] = useState(false);
     const [closureNotesErrorMessage, setClosureNotesErrorMessage] = useState('');
     const [closeButtonState, setCloseButtonState] = useState('default');
+    const [timeSpent, setTimeSpent] = useState('');
+    const [highlightTimeSpent, setHighlightTimeSpent] = useState(false);
+    const [timeSpentErrorMessage, setTimeSpentErrorMessage] = useState('');
 
     const commentsSectionRef = useRef(null);
     const closureNotesRef = useRef(null);
+    const timeSpentRef = useRef(null);
 
     const [editableFields, setEditableFields] = useState({
         request_for_email: '',
@@ -210,15 +214,20 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                         closed_by_email: fetchedTicket.closed_by_email || ''
                     });
                     setClosureNotes(fetchedTicket.closure_notes || '');
-                } else {
-                    setEditableFields(prev => ({
-                        ...prev,
-                        status: fetchedTicket.status,
-                        priority: fetchedTicket.priority,
-                        assigned_to_email: fetchedTicket.assigned_to_email,
-                        closed_by_email: fetchedTicket.closed_by_email
-                    }));
-                    setClosureNotes(fetchedTicket.closure_notes || '');
+                    setTimeSpent(fetchedTicket.time_spent || '');
+                }
+                else {
+                    if (['Resolved', 'Cancelled'].includes(fetchedTicket.status)) {
+                        setEditableFields(prev => ({
+                            ...prev,
+                            status: fetchedTicket.status,
+                            priority: fetchedTicket.priority,
+                            assigned_to_email: fetchedTicket.assigned_to_email,
+                            closed_by_email: fetchedTicket.closed_by_email
+                        }));
+                        setClosureNotes(fetchedTicket.closure_notes || '');
+                        setTimeSpent(fetchedTicket.time_spent || '');
+                    }
                 }
                 setLoading(false);
                 setError(null);
@@ -241,7 +250,27 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
         });
 
         return () => unsubscribe();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [ticketId, user, db, showFlashMessage, isEditing, isSupportUser]);
+
+    // When entering edit mode, initialize editable fields from ticket
+    useEffect(() => {
+        if (isEditing && ticket) {
+            setEditableFields({
+                request_for_email: ticket.request_for_email || '',
+                short_description: ticket.short_description || '',
+                long_description: ticket.long_description || '',
+                contact_number: ticket.contact_number || '',
+                priority: ticket.priority || '',
+                status: ticket.status || '',
+                assigned_to_email: ticket.assigned_to_email || '',
+                closed_by_email: ticket.closed_by_email || ''
+            });
+            setClosureNotes(ticket.closure_notes || '');
+            setTimeSpent(ticket.time_spent || '');
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isEditing]);
 
     const isTicketClosedOrResolved = ticket && ['Resolved', 'Cancelled'].includes(ticket.status);
     const canEdit = !isTicketClosedOrResolved && (isSupportUser || (ticket && ticket.reporter_id === user?.firebaseUser.uid));
@@ -276,7 +305,15 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
     }, [saveButtonState, highlightAssignedTo, assignedToErrorMessage]);
 
     const handleButtonSelection = useCallback((field, value) => {
-        setEditableFields(prev => ({ ...prev, [field]: value }));
+        setEditableFields(prev => {
+            let updated = { ...prev, [field]: value };
+            // If status is set to Resolved, autopopulate closed_by_email and resolved_at
+            if (field === 'status' && value === 'Resolved') {
+                updated.closed_by_email = user?.email || '';
+                updated.resolved_at = new Date().toISOString();
+            }
+            return updated;
+        });
         if (saveButtonState !== 'save') {
             setSaveButtonState('save');
         }
@@ -284,7 +321,7 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
             setHighlightAssignedTo(false);
             setAssignedToErrorMessage('');
         }
-    }, [saveButtonState, highlightAssignedTo, assignedToErrorMessage]);
+    }, [saveButtonState, highlightAssignedTo, assignedToErrorMessage, user]);
 
 
     const handleClosureNotesChange = useCallback((e) => {
@@ -311,6 +348,11 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
         setHighlightClosureNotes(false);
         setClosureNotesErrorMessage('');
 
+        // Reset red highlights before validation
+        setAssignedToRed(false);
+        setTimeSpentRed(false);
+        setClosureNotesRed(false);
+
         try {
             const idToken = await user.firebaseUser.getIdToken();
             const payload = { ...editableFields };
@@ -321,6 +363,40 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
 
             const newStatusIsTerminalForClosure = ['Resolved'].includes(payload.status);
             const oldStatusWasTerminal = ['Resolved', 'Cancelled'].includes(ticket.status);
+
+            // Validation for required fields in order
+            if (isSupportUser && payload.status === 'Resolved' && !oldStatusWasTerminal) {
+                if (!payload.assigned_to_email) {
+                    setAssignedToRed(true);
+                    setTimeout(() => {
+                        document.getElementById('assigned_to_email')?.focus();
+                    }, 0);
+                    setCloseButtonState('error');
+                    setUpdateLoading(false);
+                    return;
+                }
+                if (!timeSpent.trim() || !/^\d{1,3}$/.test(timeSpent.trim())) {
+                    setTimeSpentRed(true);
+                    setTimeout(() => {
+                        timeSpentRef.current?.focus();
+                    }, 0);
+                    setCloseButtonState('error');
+                    setUpdateLoading(false);
+                    setTimeSpentErrorMessage('Please enter time spent (in hours)');
+                    return;
+                }
+                if (!closureNotes.trim()) {
+                    setClosureNotesRed(true);
+                    setActiveTab('closure');
+                    setTimeout(() => {
+                        closureNotesRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        closureNotesRef.current?.focus();
+                    }, 0);
+                    setUpdateLoading(false);
+                    setClosureNotesErrorMessage('Closure notes are required to resolve this ticket. Please fill in the required Closure Notes before proceeding.');
+                    return;
+                }
+            }
 
             if (payload.status === 'Resolved' && !payload.assigned_to_email && isSupportUser) {
                 setHighlightAssignedTo(true);
@@ -334,6 +410,10 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                     if (actionType === 'close') setCloseButtonState('default');
                     else setSaveButtonState('save');
                 }, 3000);
+                setTimeout(() => {
+                    document.getElementById('assigned_to_email')?.focus();
+                    document.getElementById('assigned_to_email')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }, 0);
                 return;
             }
 
@@ -359,8 +439,31 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                 return;
             }
 
+            if (
+                isSupportUser &&
+                ((payload.status === 'Resolved' && !oldStatusWasTerminal) || actionType === 'close') &&
+                (!timeSpent.trim() || !/^\d{1,3}$/.test(timeSpent.trim()))
+            ) {
+                setHighlightTimeSpent(true);
+                setTimeSpentErrorMessage('Please enter time spent (in hours)');
+                if (actionType === 'close') setCloseButtonState('error');
+                else setSaveButtonState('error');
+                setUpdateLoading(false);
+                setTimeout(() => {
+                    setHighlightTimeSpent(false);
+                    setTimeSpentErrorMessage('');
+                    if (actionType === 'close') setCloseButtonState('default');
+                    else setSaveButtonState('save');
+                }, 3000);
+                setTimeout(() => {
+                    timeSpentRef.current?.focus();
+                    timeSpentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }, 0);
+                return;
+            }
 
             payload.closure_notes = closureNotes.trim() || null;
+            payload.time_spent = timeSpent.trim();
 
             if (payload.status === 'Resolved' && !['Resolved', 'Cancelled'].includes(ticket.status)) {
                 payload.closed_by_email = user.email;
@@ -665,6 +768,10 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
         }
     };
 
+    // Remove previous highlight color states and use only for red on close attempt
+    const [assignedToRed, setAssignedToRed] = useState(false);
+    const [timeSpentRed, setTimeSpentRed] = useState(false);
+    const [closureNotesRed, setClosureNotesRed] = useState(false);
 
     if (loading) return <div className="text-center text-gray-600 mt-8 text-base flex items-center justify-center space-x-2"><Loader2 className="animate-spin" size={20} /> <span>Loading ticket details...</span></div>;
     if (error) return <div className="text-center text-red-600 mt-8 text-base flex items-center justify-center space-x-2"><XCircle size={20} /> <span>Error: {error}</span></div>;
@@ -809,7 +916,7 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                                     </label>
                                     <FieldBox className="w-[30ch]" isDisplayOnly={true}>
                                         <User className="w-4 h-4 text-gray-400 mr-2" />
-                                        <span className="text-gray-900 font-mono">{ticket.request_for_email || ticket.reporter_email}</span>
+                                        <span className="text-gray-900 font-mono">{ticket.reporter_email || 'N/A'}</span>
                                     </FieldBox>
                                 </div>
                                 {/* Status - Replaced with buttons in edit mode */}
@@ -847,15 +954,16 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                                 </div>
                             </div>
 
-                            {/* Row 3: Request Item and Assigned to */}
+                            {/* Row 3: Requested for and Assigned to */}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                {/* Request Item - Display Only */}
+                                {/* Requested for - Display Only */}
                                 <div className="flex items-center">
                                     <label className="text-sm font-medium text-gray-700 w-32 shrink-0">
                                         Requested for:
                                     </label>
                                     <FieldBox className="w-[30ch]" isDisplayOnly={true}>
-                                        <span className="text-gray-900 font-mono">{ticket.request_item_id || 'N/A'}</span>
+                                        <User className="w-4 h-4 text-gray-400 mr-2" />
+                                        <span className="text-gray-900 font-mono">{ticket.request_for_email || 'N/A'}</span>
                                     </FieldBox>
                                 </div>
                                 {/* Assigned to - Modified for error message */}
@@ -863,28 +971,28 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                                     <label className="text-sm font-medium text-gray-700 w-32 shrink-0">
                                         Assigned to:
                                     </label>
-                                    <div className="flex flex-col flex-1 max-w-[18rem]">
-                                        {isEditing && isSupportUser && !isTicketClosedOrResolved ? (
-                                            <EditableInput
+                                    {isEditing && isSupportUser && !isTicketClosedOrResolved ? (
+                                        <FieldBox className={`w-[30ch]${(isEditing && editableFields.status === 'Resolved' && !isTicketClosedOrResolved) ? ' border-blue-500 ring-blue-500 ring-2' : ''} ${assignedToRed ? 'border-red-500 ring-red-500' : ''}`} isDisplayOnly={false}>
+                                            <User className="w-4 h-4 text-gray-400 mr-2" />
+                                            <input
                                                 id="assigned_to_email"
                                                 type="email"
                                                 value={editableFields.assigned_to_email || ''}
-                                                onChange={handleEditChange}
-                                                className={`${highlightAssignedTo ? 'border-red-500 ring-red-500 ring-2' : ''}`}
+                                                onChange={e => {
+                                                    handleEditChange(e);
+                                                    if (assignedToRed) setAssignedToRed(false);
+                                                }}
+                                                className={`flex-1 bg-transparent border-none outline-none focus:ring-0 p-0 m-0`}
                                                 disabled={!isSupportUser || isTicketClosedOrResolved}
+                                                style={{ minWidth: 0 }}
                                             />
-                                        ) : (
-                                            <FieldBox className={`${highlightAssignedTo ? 'border-red-500 bg-red-50 ring-red-500 ring-2' : ''}`} isDisplayOnly={true}>
-                                                <User className="w-4 h-4 text-gray-400 mr-2" />
-                                                <span className="text-gray-900 font-mono">{ticket.assigned_to_email || 'Unassigned'}</span>
-                                            </FieldBox>
-                                        )}
-                                        {assignedToErrorMessage && (
-                                            <p className="text-xs text-red-600 mt-1">
-                                                {assignedToErrorMessage}
-                                            </p>
-                                        )}
-                                    </div>
+                                        </FieldBox>
+                                    ) : (
+                                        <FieldBox className={`w-[30ch]`} isDisplayOnly={true}>
+                                            <User className="w-4 h-4 text-gray-400 mr-2" />
+                                            <span className="text-gray-900 font-mono">{ticket.assigned_to_email || 'Unassigned'}</span>
+                                        </FieldBox>
+                                    )}
                                 </div>
                             </div>
 
@@ -910,13 +1018,19 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                                     <FieldBox className="w-[30ch]" isDisplayOnly={true}>
                                         <Calendar className="w-4 h-4 text-gray-400 mr-2" />
                                         <span className="text-gray-900 font-mono">
-                                            {ticket.resolved_at ? new Date(ticket.resolved_at).toLocaleString() : 'N/A'}
+                                            {(isEditing ? editableFields.status : ticket.status) === 'Resolved' ?
+                                                (isEditing && editableFields.resolved_at
+                                                    ? new Date(editableFields.resolved_at).toLocaleString()
+                                                    : ticket.resolved_at
+                                                        ? new Date(ticket.resolved_at).toLocaleString()
+                                                        : 'N/A')
+                                                : 'N/A'}
                                         </span>
                                     </FieldBox>
                                 </div>
                             </div>
 
-                            {/* Row 5: Category and Closed By (Always present) */}
+                            {/* Row 5: Category and Closed By */}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 {/* Category - Display Only */}
                                 <div className="flex items-center">
@@ -935,10 +1049,76 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                                     <FieldBox className="w-[30ch]" isDisplayOnly={true}>
                                         <User className="w-4 h-4 text-gray-400 mr-2" />
                                         <span className="text-gray-900 font-mono">
-                                            {ticket.closed_by_email || 'N/A'}
+                                            {(isEditing ? editableFields.status : ticket.status) === 'Resolved' ?
+                                                (isEditing && editableFields.closed_by_email
+                                                    ? editableFields.closed_by_email
+                                                    : ticket.closed_by_email || 'N/A')
+                                                : 'N/A'}
                                         </span>
                                     </FieldBox>
                                 </div>
+                            </div>
+                            {/* Row 6: Asset ID and Time Spent (for support/admin) */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                {/* Asset ID - Display Only */}
+                                <div className="flex items-center">
+                                    <label className="text-sm font-medium text-gray-700 w-32 shrink-0">
+                                        Asset ID:
+                                    </label>
+                                    <FieldBox className="w-[30ch]" isDisplayOnly={true}>
+                                        <span className="text-gray-900 font-mono">{ticket.hostname_asset_id || 'N/A'}</span>
+                                    </FieldBox>
+                                </div>
+                                {/* Time Spent - Only for support/admin and when status is Resolved or closing */}
+                                {isSupportUser && (
+                                    isEditing && (editableFields.status === 'Resolved' || closeButtonState === 'closing') && !isTicketClosedOrResolved ? (
+                                        <div className="flex items-center">
+                                            <label className="text-sm font-medium text-gray-700 w-32 shrink-0">
+                                                Time Spent:
+                                            </label>
+                                            <FieldBox className={`w-[30ch]${(isEditing && editableFields.status === 'Resolved' && !isTicketClosedOrResolved) ? ' border-blue-500 ring-blue-500 ring-2' : ''} ${timeSpentRed ? 'border-red-500 ring-red-500' : ''}`} isDisplayOnly={false}>
+                                                <input
+                                                    id="time_spent"
+                                                    ref={timeSpentRef}
+                                                    type="text"
+                                                    value={timeSpent}
+                                                    onChange={e => {
+                                                        let val = e.target.value.replace(/[^\d]/g, '').slice(0, 3);
+                                                        setTimeSpent(val);
+                                                        if (timeSpentRed) setTimeSpentRed(false);
+                                                        if (highlightTimeSpent || timeSpentErrorMessage) {
+                                                            setHighlightTimeSpent(false);
+                                                            setTimeSpentErrorMessage('');
+                                                        }
+                                                        if (saveButtonState !== 'save') setSaveButtonState('save');
+                                                    }}
+                                                    className={`flex-1 bg-transparent border-none outline-none focus:ring-0 p-0 m-0`}
+                                                    disabled={!isSupportUser || isTicketClosedOrResolved}
+                                                    placeholder="in hours..."
+                                                    style={{ minWidth: 0 }}
+                                                />
+                                            </FieldBox>
+                                            {timeSpentErrorMessage && (
+                                                <p className="text-xs text-red-600 ml-2">{timeSpentErrorMessage}</p>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        // Show in view mode for support/admin if ticket is resolved/closed
+                                        (['Resolved', 'Cancelled'].includes(ticket.status)) ? (
+                                            <div className="flex items-center">
+                                                <label className="text-sm font-medium text-gray-700 w-32 shrink-0">
+                                                    Time Spent:
+                                                </label>
+                                                <FieldBox className="w-[30ch]" isDisplayOnly={true}>
+                                                    <span className="text-gray-900 font-mono">{ticket.time_spent || 'N/A'}</span>
+                                                </FieldBox>
+                                            </div>
+                                        ) : (
+                                            <div></div>
+                                        )
+                                    )
+                                )}
+                                {/* For non-support users, do not render Time Spent at all */}
                             </div>
                             {ticket.due_date && (
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1194,11 +1374,12 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                                     <textarea
                                         ref={closureNotesRef}
                                         value={closureNotes}
-                                        onChange={handleClosureNotesChange}
+                                        onChange={e => {
+                                            handleClosureNotesChange(e);
+                                            if (closureNotesRed) setClosureNotesRed(false);
+                                        }}
                                         rows={6}
-                                        className={`w-full border-2 rounded-sm px-2 py-1 focus:outline-none focus:ring-2 focus:ring-gray-700 focus:border-transparent // Focus ring changed
-                                                    ${highlightClosureNotes ? 'border-red-500 ring-red-500 ring-2' : 'border-gray-300'}
-                                                  `}
+                                        className={`w-full border-2 rounded-sm px-2 py-1 focus:outline-none focus:ring-2 focus:ring-gray-700 focus:border-transparent${(isEditing && editableFields.status === 'Resolved' && !isTicketClosedOrResolved) ? ' border-blue-500 ring-blue-500 ring-2' : ' border-gray-300'}${closureNotesRed ? ' border-red-500 ring-red-500' : ''}`}
                                         placeholder="Enter closure notes here..."
                                         disabled={!isSupportUser || isTicketClosedOrResolved}
                                     />
@@ -1211,29 +1392,30 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                                         <div className="flex justify-end mt-3">
                                             <button
                                                 onClick={() => handleUpdateTicket('close')}
-                                                disabled={!isSupportUser || isTicketClosedOrResolved || closeButtonState === 'closing'}
+                                                disabled={
+                                                    !isSupportUser ||
+                                                    isTicketClosedOrResolved ||
+                                                    closeButtonState === 'closing' ||
+                                                    (isEditing && editableFields.status === 'Resolved' && !closureNotes.trim())
+                                                }
                                                 className={`px-3 py-1 text-sm font-medium rounded-md transition-colors flex items-center justify-center
-                                                    ${closeButtonState === 'closing'
+                                                    ${closeButtonState === 'closing' || (isEditing && editableFields.status === 'Resolved' && !closureNotes.trim())
                                                         ? 'bg-gray-400 text-gray-700 cursor-not-allowed'
                                                         : closeButtonState === 'success'
                                                             ? 'bg-green-600 text-white'
-                                                            : closeButtonState === 'error'
-                                                                ? 'bg-red-600 text-white'
-                                                                : 'bg-gray-700 text-yellow-300 hover:bg-gray-800' // Themed button
-                                                    }`}
+                                                            : 'bg-gray-700 text-yellow-300 hover:bg-gray-800'
+                                                    }
+                                                `}
                                             >
                                                 {closeButtonState === 'closing' && <Loader2 className="animate-spin mr-2" size={16} />}
                                                 {closeButtonState === 'success' && <CheckCircle className="mr-2" size={16} />}
-                                                {closeButtonState === 'error' && <XCircle className="mr-2" size={16} />}
-                                                {closeButtonState === 'closing' && 'Closing...'}
-                                                {closeButtonState === 'success' && 'Closed!'}
-                                                {closeButtonState === 'error' && 'Error!'}
                                                 {closeButtonState === 'default' && (
                                                     <>
-                                                        <CheckCircle2 className="w-4 h-4" />
                                                         <span>Close Ticket</span>
                                                     </>
                                                 )}
+                                                {closeButtonState === 'success' && 'Closed!'}
+                                                {closeButtonState === 'closing' && 'Closing...'}
                                             </button>
                                         </div>
                                     )}

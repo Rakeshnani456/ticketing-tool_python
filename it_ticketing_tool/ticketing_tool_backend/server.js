@@ -675,7 +675,8 @@ app.patch('/ticket/:ticket_id', verifyFirebaseToken, async (req, res) => {
         long_description,
         contact_number,
         attachments, // Now expecting an array of objects: [{ url: '...', fileName: '...' }]
-        closure_notes // NEW: Add closure_notes here
+        closure_notes, // NEW: Add closure_notes here
+        time_spent // NEW: Accept time_spent (in hours) from frontend
     } = req.body;
 
     const authenticatedUid = req.user.uid;
@@ -721,24 +722,13 @@ app.patch('/ticket/:ticket_id', verifyFirebaseToken, async (req, res) => {
         if (long_description !== undefined) updateData.long_description = long_description;
         if (contact_number !== undefined) updateData.contact_number = contact_number;
         if (closure_notes !== undefined) updateData.closure_notes = closure_notes; // NEW: Add closure_notes to updateData
-
-
-        // --- MODIFICATION START ---
-        // If the frontend sends an 'attachments' array (now expected to be objects),
-        // we use arrayUnion to add new ones.
-        // This is safer than direct assignment which would overwrite previous attachments.
-        if (attachments && Array.isArray(attachments) && attachments.length > 0) {
-            // Validate that each attachment object has 'url' and 'fileName'
-            const validNewAttachments = attachments.filter(att => att && typeof att.url === 'string' && typeof att.fileName === 'string');
-            if (validNewAttachments.length > 0) {
-                updateData.attachments = admin.firestore.FieldValue.arrayUnion(...validNewAttachments);
-            } else if (attachments.length > 0) { // If attachments array was provided but no valid attachments found
-                console.warn('Received attachments array but no valid {url, fileName} objects found.');
-                // Optionally return an error or just ignore invalid entries
+        if (time_spent !== undefined && time_spent !== null && time_spent !== '') {
+            // Store as a number (hours)
+            const parsedTimeSpent = parseInt(time_spent, 10);
+            if (!isNaN(parsedTimeSpent)) {
+                updateData.time_spent = parsedTimeSpent;
             }
         }
-        // --- MODIFICATION END ---
-
 
         // Handle status change and time_spent calculation
         if (status && status !== ticketData.status) {
@@ -748,7 +738,8 @@ app.patch('/ticket/:ticket_id', verifyFirebaseToken, async (req, res) => {
             if (['Resolved', 'Cancelled'].includes(status)) { // Include 'Cancelled' here for closure logic
                 updateData.resolved_at = admin.firestore.FieldValue.serverTimestamp();
                 updateData.closed_by_email = req.user.email; // Set the email of the user who performed the action
-                if (ticketData.created_at && ticketData.created_at.toDate) {
+                // Only fallback to calculated time_spent_minutes if not provided by frontend
+                if ((time_spent === undefined || time_spent === null || time_spent === '') && ticketData.created_at && ticketData.created_at.toDate) {
                     const createdAt = ticketData.created_at.toDate();
                     const resolvedAt = new Date(); // Use current server time for resolution
                     const timeDiffMillis = resolvedAt.getTime() - createdAt.getTime();
@@ -1208,51 +1199,44 @@ app.get('/tickets/export', verifyFirebaseToken, checkRole(['support', 'admin']),
         // CSV Generation Logic
         const headers = [
             "Ticket ID",
-            "Short Description",
+            "Short description",
             "Category",
             "Priority",
             "Status",
-            "Reporter Email",
-            "Requested For Email", // Added
-            "Contact Number", // Added
-            "Hostname/Asset ID", // Added
-            "Assigned To Email",
-            "Created At", // Added
-            "Updated At", // Added
-            "Resolved At", // Added
-            "Time Spent (Minutes)", // Added
-            "Closure Notes", // Added
-            "Closed By Email" // Added
+            "Requested by",
+            "Requested for",
+            "Contact",
+            "Asset ID",
+            "Assigned to",
+            "Created",
+            "Updated",
+            "Resolved Date",
+            "Time Spent",
+            "Closure Notes",
+            "Closed by"
         ];
         let csv = headers.join(',') + '\n';
 
         allTickets.forEach(ticket => {
-            // Remove commentsCsv and attachmentsCsv as requested
-            // const commentsCsv = ticket.comments && Array.isArray(ticket.comments)
-            //     ? ticket.comments.map(c => `[${c.commenter} @ ${c.timestamp}]: ${c.text}`).join('; ').replace(/"/g, '""')
-            //     : '';
-
-            // const attachmentsCsv = ticket.attachments && Array.isArray(ticket.attachments)
-            //     ? ticket.attachments.map(att => att.fileName || att.url).join('; ').replace(/"/g, '""')
-            //     : '';
+            let timeSpent = ticket.time_spent !== undefined && ticket.time_spent !== null ? ticket.time_spent : '';
 
             const row = [
                 ticket.display_id || '',
-                `"${ticket.short_description ? ticket.short_description.replace(/"/g, '""') : ''}"`, // Enclose with quotes and escape double quotes
+                `"${ticket.short_description ? ticket.short_description.replace(/"/g, '""') : ''}"`,
                 ticket.category || '',
                 ticket.priority || '',
                 ticket.status || '',
                 ticket.reporter_email || '',
-                ticket.request_for_email || '', // Added
-                ticket.contact_number || '', // Added
-                ticket.hostname_asset_id || '', // Added
+                ticket.request_for_email || '',
+                ticket.contact_number || '',
+                ticket.hostname_asset_id || '',
                 ticket.assigned_to_email || '',
-                ticket.created_at || '', // Added
-                ticket.updated_at || '', // Added
-                ticket.resolved_at || '', // Added
-                ticket.time_spent_minutes !== null ? ticket.time_spent_minutes : '', // Added
-                `"${ticket.closure_notes ? ticket.closure_notes.replace(/"/g, '""') : ''}"`, // Added
-                ticket.closed_by_email || '' // Added
+                ticket.created_at || '',
+                ticket.updated_at || '',
+                ticket.resolved_at || '',
+                timeSpent,
+                `"${ticket.closure_notes ? ticket.closure_notes.replace(/"/g, '""') : ''}"`,
+                ticket.closed_by_email || ''
             ];
             csv += row.join(',') + '\n';
         });

@@ -54,6 +54,7 @@ import ProfileComponent from './components/ProfileComponent';
 import AccessDeniedComponent from './components/AccessDeniedComponent';
 import ChangePasswordComponent from './components/ChangePasswordComponent';
 import UserManagementComponent from './components/admin/UserManagementComponent';
+import Modal from './components/common/Modal';
 
 
 // Placeholder components for new pages mentioned in sidebar
@@ -336,7 +337,6 @@ const App = () => {
                                  navigate('/my-tickets');
                              }
                         }
-                        setIsSidebarExpanded(false); // Start with sidebar collapsed (icons only)
                         return () => { // Cleanup for tickets listener if auth state changes again
                            unsubscribeTickets();
                         };
@@ -347,7 +347,6 @@ const App = () => {
                         authClient.signOut();
                         setCurrentUser(null);
                         navigate('/login'); // Redirect to login
-                        setIsSidebarExpanded(false); // Ensure sidebar is collapsed on auth failure
                     }
                 } catch (error) {
                     // Handle network or other errors during auth state change processing
@@ -356,7 +355,6 @@ const App = () => {
                     authClient.signOut();
                     setCurrentUser(null);
                     navigate('/login'); // Redirect to login
-                    setIsSidebarExpanded(false); // Ensure sidebar is collapsed on error
                 }
             } else {
                 // If no Firebase user is logged in, clear currentUser state and go to login page
@@ -371,7 +369,6 @@ const App = () => {
                 if (notificationPollingIntervalRef.current) {
                     clearInterval(notificationPollingIntervalRef.current); // Stop polling
                 }
-                setIsSidebarExpanded(false); // Collapse sidebar on logout
             }
         });
         return () => {
@@ -415,7 +412,6 @@ const App = () => {
         } else {
             navigate('/my-tickets'); // Use navigate hook
         }
-        setIsSidebarExpanded(false); // Start with sidebar collapsed (icons only)
     };
 
     /**
@@ -441,7 +437,6 @@ const App = () => {
             if (notificationPollingIntervalRef.current) {
                 clearInterval(notificationPollingIntervalRef.current); // Stop polling
             }
-            setIsSidebarExpanded(false); // Collapse sidebar on logout
         }
     };
 
@@ -1075,16 +1070,19 @@ const App = () => {
                             } />
                             <Route path="/my-tickets" element={<MyTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} isSidebarExpanded={isSidebarExpanded} />} />
                             <Route path="/create-ticket" element={
-                                <div className="flex flex-col items-center justify-center p-4">
-                                    <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-3xl relative border border-gray-200">
-                                        <CreateTicketComponent
-                                            user={currentUser}
-                                            showFlashMessage={showFlashMessage}
-                                            onTicketCreated={handleTicketCreated}
-                                            navigateTo={navigateTo}
-                                        />
-                                    </div>
-                                </div>
+                                <Modal
+                                    isOpen={true}
+                                    onClose={() => navigate(-1)}
+                                    title="Create Ticket"
+                                >
+                                    <CreateTicketComponent
+                                        user={currentUser}
+                                        showFlashMessage={showFlashMessage}
+                                        onTicketCreated={handleTicketCreated}
+                                        navigateTo={navigateTo}
+                                        onClose={() => navigate(-1)}
+                                    />
+                                </Modal>
                             } />
                             {/* Dynamic route for Ticket Detail */}
                             <Route path="/tickets/:ticketId" element={<TicketDetailComponent navigateTo={navigateTo} user={currentUser} showFlashMessage={showFlashMessage} />} />
