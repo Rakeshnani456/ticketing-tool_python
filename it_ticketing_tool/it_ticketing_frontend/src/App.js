@@ -19,6 +19,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { AiOutlineEye } from 'react-icons/ai'; // Or choose another icon library like 'fa' for Font Awesome
 import { X } from 'lucide-react'; // Assuming you have lucide-react for X (for closing flash messages)
+import 'animate.css'; // Make sure Animate.css is imported for animation classes
 
 
 // Import Firebase auth client and dbClient
@@ -554,26 +555,10 @@ const App = () => {
      * Clears a single notification from the list and from the backend.
      * @param {string} notificationId - The ID of the notification to clear.
      */
-    const clearNotification = useCallback(async (notificationId) => {
-        try {
-            const idToken = await currentUser.firebaseUser.getIdToken();
-            const response = await fetch(`${API_BASE_URL}/notifications/${notificationId}`, {
-                method: 'DELETE',
-                headers: { 'Authorization': `Bearer ${idToken}` }
-            });
-
-            if (response.ok) {
-                showFlashMessage('Notification cleared.', 'success');
-                fetchNotifications(currentUser); // Refresh notifications after clearing
-            } else {
-                console.error('Failed to clear notification:', await response.json());
-                showFlashMessage('Failed to clear notification.', 'error');
-            }
-        } catch (error) {
-            console.error('Network error clearing notification:', error);
-            showFlashMessage('Network error clearing notification.', 'error');
-        }
-    }, [currentUser, fetchNotifications, showFlashMessage]);
+    const [removingNotificationIds, setRemovingNotificationIds] = useState([]);
+    const clearNotification = useCallback((notificationId) => {
+        setRemovingNotificationIds(prev => [...prev, notificationId]);
+    }, []);
 
     /**
      * Clears all notifications for the current user from the backend.
@@ -616,6 +601,23 @@ const App = () => {
             default: return 'bg-gray-100 text-gray-800';
         }
     };
+
+    // Add this style at the top of the file (or in your global CSS):
+    // <style>
+    // .notification-highlight { color: #111827 !important; font-weight: 600 !important; }
+    // </style>
+    //
+    // In the notificationContent rendering, after using dangerouslySetInnerHTML, add a useEffect to replace any <strong> or <span style="color:..."></span> with class="notification-highlight".
+    //
+    // Example:
+    // useEffect(() => {
+    //   document.querySelectorAll('.notification-content strong, .notification-content span[style*="color"]').forEach(el => {
+    //     el.classList.add('notification-highlight');
+    //     el.removeAttribute('style');
+    //   });
+    // }, [notifications]);
+    //
+    // Also, in the backend, if possible, use <span class="notification-highlight">...</span> for highlights instead of blue.
 
     return (
         // No BrowserRouter here, it's in index.js now.
@@ -864,18 +866,18 @@ const App = () => {
                                 {isNotificationMenuOpen && (
                                     <div
                                         ref={notificationMenuRef}
-                                        className="absolute right-0 mt-2 max-w-lg w-full sm:w-[520px] max-h-96 overflow-y-auto bg-white border border-gray-200 shadow-2xl rounded-xl z-50"
+                                        className="absolute right-0 mt-2 max-w-lg w-full sm:w-[420px] max-h-96 overflow-y-auto bg-white border border-gray-200 rounded-md z-50 shadow-none"
                                         tabIndex={-1}
                                         aria-label="Notifications"
                                     >
                                         {/* Sticky Header */}
-                                        <div className="flex items-center justify-between px-6 py-3 border-b border-gray-100 bg-white sticky top-0 z-10 rounded-t-xl">
-                                            <span className="font-bold text-gray-900 text-base">Notifications</span>
-                                            <div className="flex gap-4">
+                                        <div className="flex items-center justify-between px-4 py-2 border-b border-gray-100 bg-white sticky top-0 z-10 rounded-t-md">
+                                            <span className="font-medium text-gray-800 text-base">Notifications</span>
+                                            <div className="flex gap-3">
                                                 {notifications.some(n => !n.read) && (
                                                     <button
                                                         onClick={() => notifications.filter(n => !n.read).forEach(n => markNotificationAsRead(n.id))}
-                                                        className="text-xs text-blue-600 hover:underline focus:outline-none font-semibold"
+                                                        className="text-xs text-gray-700 hover:underline focus:outline-none font-medium"
                                                         aria-label="Mark all as read"
                                                         title="Mark all as read"
                                                     >
@@ -885,7 +887,7 @@ const App = () => {
                                                 {notifications.length > 0 && (
                                                     <button
                                                         onClick={clearAllNotifications}
-                                                        className="text-xs text-red-500 hover:underline focus:outline-none font-semibold"
+                                                        className="text-xs text-gray-700 hover:underline focus:outline-none font-medium"
                                                         aria-label="Clear all notifications"
                                                         title="Clear all"
                                                     >
@@ -895,10 +897,10 @@ const App = () => {
                                             </div>
                                         </div>
                                         {/* Notification List */}
-                                        <div className="p-4 space-y-4">
+                                        <div className="p-2 space-y-2 overflow-hidden">
                                             {notifications.length === 0 ? (
-                                                <div className="flex flex-col items-center justify-center py-10 text-gray-400 text-sm">
-                                                    <Bell size={40} className="mb-2 text-gray-200" />
+                                                <div className="flex flex-col items-center justify-center py-8 text-gray-400 text-sm">
+                                                    <Bell size={32} className="mb-2 text-gray-200" />
                                                     <span>No notifications yet!</span>
                                                 </div>
                                             ) : (
@@ -907,7 +909,7 @@ const App = () => {
                                                         let notificationContent;
                                                         if (n.type === 'new_ticket_for_support' || n.type === 'ticket_created') {
                                                             notificationContent = (
-                                                                <div className="text-sm text-blue-900" dangerouslySetInnerHTML={{ __html: formatNotificationMessage(n.message) }} />
+                                                                <div className="text-sm text-gray-800" dangerouslySetInnerHTML={{ __html: formatNotificationMessage(n.message) }} />
                                                             );
                                                         } else if (
                                                             n.type.includes('status_update') ||
@@ -919,63 +921,81 @@ const App = () => {
                                                             n.type.includes('comment')
                                                         ) {
                                                             notificationContent = (
-                                                                <div className="text-sm text-blue-900" dangerouslySetInnerHTML={{ __html: formatGenericNotificationMessage(n.type, n.message) }} />
+                                                                <div className="text-sm text-gray-800" dangerouslySetInnerHTML={{ __html: formatGenericNotificationMessage(n.type, n.message) }} />
                                                             );
                                                         } else {
-                                                        const { title, body } = getNotificationTitleAndBody(n);
+                                                            const { title, body } = getNotificationTitleAndBody(n);
                                                             notificationContent = (
                                                                 <>
-                                                                    <span className="font-semibold text-sm text-blue-900">{title}</span>
+                                                                    <span className="font-semibold text-gray-900 text-sm">{title}</span>
                                                                     {body && <div className="text-xs text-gray-700 break-words whitespace-pre-line">{body}</div>}
                                                                 </>
                                                             );
                                                         }
                                                         return (
-                                                            <div
-                                                                key={n.id}
-                                                                className={`relative flex flex-col gap-2 p-4 rounded-lg shadow-sm border transition ${!n.read ? 'bg-blue-100 border-blue-600' : 'bg-white border-gray-200'}`}
-                                                            >
-                                                                {/* Unread badge */}
-                                                                {!n.read && (
-                                                                    <span className="absolute top-2 right-2 bg-blue-600 text-white text-[10px] px-2 py-0.5 rounded-full font-bold">Unread</span>
+                                                            <React.Fragment key={n.id}>
+                                                                <div
+                                                                    className={`relative flex items-start gap-2 p-3 transition shadow-none overflow-hidden ${removingNotificationIds.includes(n.id) ? 'animate__animated animate__bounceOutRight notification-dismiss-fast absolute w-full' : ''}`}
+                                                                    style={removingNotificationIds.includes(n.id) ? { right: 0, left: 0, zIndex: 10 } : {}}
+                                                                    onAnimationEnd={async () => {
+                                                                        if (removingNotificationIds.includes(n.id)) {
+                                                                            try {
+                                                                                const idToken = await currentUser.firebaseUser.getIdToken();
+                                                                                await fetch(`${API_BASE_URL}/notifications/${n.id}`, {
+                                                                                    method: 'DELETE',
+                                                                                    headers: { 'Authorization': `Bearer ${idToken}` }
+                                                                                });
+                                                                                fetchNotifications(currentUser); // Refresh notifications after clearing
+                                                                            } catch (error) {
+                                                                                console.error('Network error clearing notification:', error);
+                                                                                showFlashMessage('Network error clearing notification.', 'error');
+                                                                            } finally {
+                                                                                setRemovingNotificationIds(prev => prev.filter(id => id !== n.id));
+                                                                            }
+                                                                        }
+                                                                    }}
+                                                                >
+                                                                    {/* Unread indicator */}
+                                                                    {!n.read && <span className="notification-dot" />}
+                                                                    <div className="flex-1 min-w-0">
+                                                                        {notificationContent}
+                                                                        <div className="flex flex-row flex-wrap gap-3 pt-1 mt-1">
+                                                                            {n.ticketId && (
+                                                                                <button
+                                                                                    onClick={() => viewTicket(n.ticketId)}
+                                                                                    className="rounded-full px-3 py-0.5 text-xs font-medium text-gray-700 bg-gray-100 border border-gray-300 hover:bg-gray-200 focus:outline-none transition"
+                                                                                    aria-label="View ticket"
+                                                                                    title="View ticket"
+                                                                                >
+                                                                                    View ticket
+                                                                                </button>
+                                                                            )}
+                                                                            {!n.read && (
+                                                                                <button
+                                                                                    onClick={() => markNotificationAsRead(n.id, n.ticketId)}
+                                                                                    className="rounded-full px-3 py-0.5 text-xs font-medium text-gray-700 bg-gray-100 border border-gray-300 hover:bg-gray-200 focus:outline-none transition"
+                                                                                    aria-label="Mark as read"
+                                                                                    title="Mark as read"
+                                                                                >
+                                                                                    Mark as read
+                                                                                </button>
+                                                                            )}
+                                                                            <button
+                                                                                onClick={() => clearNotification(n.id)}
+                                                                                className="rounded-full px-3 py-0.5 text-xs font-medium text-gray-700 bg-gray-100 border border-gray-300 hover:bg-gray-200 focus:outline-none transition"
+                                                                                aria-label="Clear notification"
+                                                                                title="Clear"
+                                                                            >
+                                                                                Clear
+                                                                            </button>
+                                                                        </div>
+                                                                    </div>
+                                                                    <span className="text-xs text-gray-400 ml-2 whitespace-nowrap self-start pt-0.5">{getRelativeTime(n.timestamp || n.createdAt)}</span>
+                                                                </div>
+                                                                {idx < notifications.length - 1 && (
+                                                                    <div className="border-b-2 border-gray-300 mx-0" />
                                                                 )}
-                                                                {/* Title and time */}
-                                                                <div className="flex items-center justify-between w-full">
-                                                                    {notificationContent}
-                                                                    <span className="text-xs text-gray-400 ml-2 whitespace-nowrap">{getRelativeTime(n.timestamp || n.createdAt)}</span>
-                                                                </div>
-                                                                {/* Actions */}
-                                                                <div className="flex flex-row flex-wrap gap-3 pt-1">
-                                                                    {n.ticketId && (
-                                                                        <button
-                                                                            onClick={() => viewTicket(n.ticketId)}
-                                                                            className="text-xs text-blue-600 hover:underline focus:outline-none font-medium"
-                                                                            aria-label="View ticket"
-                                                                            title="View ticket"
-                                                                        >
-                                                                            View ticket
-                                                                        </button>
-                                                                    )}
-                                                                    {!n.read && (
-                                                                        <button
-                                                                            onClick={() => markNotificationAsRead(n.id, n.ticketId)}
-                                                                            className="text-xs text-green-600 hover:underline focus:outline-none font-medium"
-                                                                            aria-label="Mark as read"
-                                                                            title="Mark as read"
-                                                                        >
-                                                                            Mark as read
-                                                                        </button>
-                                                                    )}
-                                                                    <button
-                                                                        onClick={() => clearNotification(n.id)}
-                                                                        className="text-xs text-red-500 hover:underline focus:outline-none font-medium"
-                                                                        aria-label="Clear notification"
-                                                                        title="Clear"
-                                                                    >
-                                                                        Clear
-                                                                    </button>
-                                                                </div>
-                                                            </div>
+                                                            </React.Fragment>
                                                         );
                                                     })}
                                                 </>
