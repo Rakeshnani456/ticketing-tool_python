@@ -21,11 +21,30 @@ import { API_BASE_URL } from '../../config/constants';
  * @param {function} props.showFlashMessage - Function to display a temporary message to the user.
  * @returns {JSX.Element} The registration form.
  */
-const RegisterComponent = ({ navigateTo, showFlashMessage }) => {
+const RegisterComponent = ({ currentUser, navigateTo, showFlashMessage }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [role, setRole] = useState('user'); // Default role for new registrations
     const [loading, setLoading] = useState(false); // Loading state for button feedback
+
+    // Determine role options based on currentUser
+    let roleOptions = [{ value: 'user', label: 'User' }];
+    if (currentUser) {
+        if (currentUser.role === 'super_admin') {
+            roleOptions = [
+                { value: 'user', label: 'User' },
+                { value: 'support', label: 'Support Associate' },
+                { value: 'admin', label: 'Admin' },
+                { value: 'site_admin', label: 'Site Admin' },
+                { value: 'super_admin', label: 'Super Admin' },
+            ];
+        } else if (currentUser.role === 'site_admin') {
+            roleOptions = [
+                { value: 'user', label: 'User' },
+                { value: 'support', label: 'Support Associate' },
+            ];
+        }
+    }
 
     /**
      * Handles the form submission for registration.
@@ -84,17 +103,16 @@ const RegisterComponent = ({ navigateTo, showFlashMessage }) => {
                         required
                         showPasswordToggle={true} // Enable password visibility toggle
                     />
-                    <FormSelect
-                        id="role"
-                        label="Role"
-                        value={role}
-                        onChange={(e) => setRole(e.target.value)}
-                        options={[
-                            { value: 'user', label: 'User' },
-                            { value: 'support', label: 'Support Associate' },
-                            { value: 'admin', label: 'Admin' }
-                        ]}
-                    />
+                    {/* Only show role dropdown if currentUser is super_admin or site_admin */}
+                    {currentUser && (currentUser.role === 'super_admin' || currentUser.role === 'site_admin') && (
+                        <FormSelect
+                            id="role"
+                            label="Role"
+                            value={role}
+                            onChange={(e) => setRole(e.target.value)}
+                            options={roleOptions}
+                        />
+                    )}
                     <PrimaryButton type="submit" loading={loading ? "Registering..." : null} Icon={User} className="bg-green-600 hover:bg-green-700 focus:ring-green-300">
                         Register
                     </PrimaryButton>

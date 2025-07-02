@@ -27,6 +27,9 @@ const DashboardComponent = ({ user, navigateTo, showFlashMessage }) => {
     const [recentTickets, setRecentTickets] = useState([]);
     const [kanbanTickets, setKanbanTickets] = useState([]);
     const [selectedStatus, setSelectedStatus] = useState(null);
+    const [superAdminStats, setSuperAdminStats] = useState({ totalClients: 0, activeUsers: 0, topClients: [] });
+    const [superAdminLoading, setSuperAdminLoading] = useState(false);
+    const [superAdminError, setSuperAdminError] = useState(null);
 
     // Compute ticketStatusData and totalTickets from kanbanTickets in real time
     useEffect(() => {
@@ -104,6 +107,36 @@ const DashboardComponent = ({ user, navigateTo, showFlashMessage }) => {
             setKanbanTickets(fetched);
         });
         return () => unsubscribe();
+    }, [user]);
+
+    // Fetch Super Admin stats if user is super_admin
+    useEffect(() => {
+        if (!user || user.role !== 'super_admin') return;
+        const fetchStats = async () => {
+            setSuperAdminLoading(true);
+            setSuperAdminError(null);
+            try {
+                const idToken = await user.firebaseUser.getIdToken();
+                const [clientsRes, usersRes, topClientsRes] = await Promise.all([
+                    fetch(`${API_BASE_URL}/dashboard/clients-count`, { headers: { Authorization: `Bearer ${idToken}` } }),
+                    fetch(`${API_BASE_URL}/dashboard/active-users-count`, { headers: { Authorization: `Bearer ${idToken}` } }),
+                    fetch(`${API_BASE_URL}/dashboard/top-clients`, { headers: { Authorization: `Bearer ${idToken}` } })
+                ]);
+                const clientsData = await clientsRes.json();
+                const usersData = await usersRes.json();
+                const topClientsData = await topClientsRes.json();
+                setSuperAdminStats({
+                    totalClients: clientsData.total_clients || 0,
+                    activeUsers: usersData.active_users || 0,
+                    topClients: topClientsData.top_clients || []
+                });
+            } catch (err) {
+                setSuperAdminError('Failed to load Super Admin stats.');
+            } finally {
+                setSuperAdminLoading(false);
+            }
+        };
+        fetchStats();
     }, [user]);
 
     /**
@@ -191,12 +224,15 @@ const DashboardComponent = ({ user, navigateTo, showFlashMessage }) => {
     else if (selectedStatus === 'Assigned') tableHeading = 'Assigned to Me';
 
     // Card config
-    const metricCards = [
+    let metricCards = [
         { label: 'Open', count: openCount, icon: ClipboardCheck, color: 'bg-blue-200/80 text-blue-900', status: 'Open' },
         { label: 'In Progress', count: inProgressCount, icon: ListChecks, color: 'bg-yellow-200/80 text-yellow-900', status: 'In Progress' },
         { label: 'Hold', count: holdCount, icon: PauseCircle, color: 'bg-purple-200/80 text-purple-900', status: 'Hold' },
-        { label: 'Assigned to Me', count: assignedToMeCount, icon: User, color: 'bg-orange-200/80 text-orange-900', status: 'Assigned' },
     ];
+    // Only show 'Assigned to Me' for non-admin, non-super_admin roles
+    if (user && user.role !== 'admin' && user.role !== 'super_admin') {
+        metricCards.push({ label: 'Assigned to Me', count: assignedToMeCount, icon: User, color: 'bg-orange-200/80 text-orange-900', status: 'Assigned' });
+    }
 
     // Conditional rendering for loading state
     if (loading) {
@@ -223,8 +259,39 @@ const DashboardComponent = ({ user, navigateTo, showFlashMessage }) => {
                 <LayoutDashboard size={28} className="mr-3 text-blue-600" />
                 Dashboard Overview
             </h1>
+            {/* Super Admin Widgets */}
+            {user && (user.role === 'super_admin' || user.role === 'admin') && (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+                    <div className="flex flex-col items-center justify-center rounded-lg shadow-md p-4 bg-green-100 border border-green-200">
+                        <div className="text-2xl font-bold text-green-800">{superAdminStats.totalClients}</div>
+                        <div className="text-sm font-medium text-green-700 mt-1">Total Clients</div>
+                    </div>
+                    <div className="flex flex-col items-center justify-center rounded-lg shadow-md p-4 bg-blue-100 border border-blue-200">
+                        <div className="text-2xl font-bold text-blue-800">{superAdminStats.activeUsers}</div>
+                        <div className="text-sm font-medium text-blue-700 mt-1">Active Users</div>
+                    </div>
+                    <div className="flex flex-col items-center justify-center rounded-lg shadow-md p-4 bg-yellow-100 border border-yellow-200">
+                        <div className="text-lg font-bold text-yellow-800 mb-2">Top 5 Clients by Ticket Load</div>
+                        <ul className="w-full">
+                            {superAdminStats.topClients.length === 0 ? (
+                                <li className="text-gray-500 italic">No data</li>
+                            ) : (
+                                superAdminStats.topClients.map((c, idx) => (
+                                    <li key={c.clientId} className="flex justify-between text-sm py-1 border-b last:border-b-0">
+                                        <span>Client {c.clientId}</span>
+                                        <span className="font-bold text-yellow-900">{c.ticketCount}</span>
+                                    </li>
+                                ))
+                            )}
+                        </ul>
+                    </div>
+                </div>
+            )}
             {/* Metric Cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+            <div
+                className={`grid grid-cols-1 sm:grid-cols-${metricCards.length} gap-4 mb-8`}
+                style={{ gridTemplateColumns: `repeat(${metricCards.length}, minmax(0, 1fr))` }}
+            >
                 {metricCards.map(card => (
                     <div
                         key={card.label}

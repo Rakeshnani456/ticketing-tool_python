@@ -33,6 +33,7 @@ let db;
 let usersCollection;
 let ticketsCollection;
 let notificationsCollection; // NEW: Notifications collection
+let clientsCollection; // NEW: Reference to clients collection
 let dbConnected = false; // Flag to track database connection status
 
 try {
@@ -76,6 +77,7 @@ try {
     usersCollection = db.collection('users'); // Collection for user roles
     ticketsCollection = db.collection('tickets'); // Reference to your 'tickets' collection
     notificationsCollection = db.collection('notifications'); // NEW: Reference to notifications collection
+    clientsCollection = db.collection('clients'); // NEW: Reference to clients collection
     console.log("Connected to Firebase Firestore successfully!");
     dbConnected = true;
 } catch (error) {
@@ -106,7 +108,7 @@ const validTicketPriorities = ['Low', 'Medium', 'High', 'Critical'];
 const validTicketStatuses = ['Open', 'In Progress', 'Hold', 'Resolved', 'Cancelled']; // Changed 'Closed' to 'Cancelled' as per the client's request.
 
 // NEW: Valid User Roles
-const validUserRoles = ['user', 'support', 'admin'];
+const validUserRoles = ['user', 'support', 'admin', 'super_admin', 'site_admin'];
 
 // --- Helper function: JSON Serializable Ticket ---
 // Converts Firestore Timestamp objects and adds document ID
@@ -283,6 +285,22 @@ const requireAdmin = (req, res, next) => {
     next();
 };
 
+// Middleware to check if the user has a super admin role
+const requireSuperAdmin = (req, res, next) => {
+    if (!req.user || req.user.role !== 'super_admin') {
+        return res.status(403).json({ error: 'Forbidden: Super Admin access required.' });
+    }
+    next();
+};
+
+// Middleware to check if the user has a site admin role
+const requireSiteAdmin = (req, res, next) => {
+    if (!req.user || req.user.role !== 'site_admin') {
+        return res.status(403).json({ error: 'Forbidden: Site Admin access required.' });
+    }
+    next();
+};
+
 // ... then apply these middlewares to your routes
 // Example:
 // app.get('/admin/users', verifyFirebaseToken, requireAdmin, async (req, res) => {
@@ -406,7 +424,7 @@ app.get('/tickets/status-summary', verifyFirebaseToken, async (req, res) => {
 
 // @route   POST /register
 // @desc    Register a new user with Firebase Auth and store role in Firestore
-// @access  Public
+// @access  Public or Protected (RBAC enforced)
 app.post('/register', async (req, res) => {
     const { email, password, role = 'user' } = req.body; // Default role is 'user'
 
@@ -416,6 +434,42 @@ app.post('/register', async (req, res) => {
 
     if (!validUserRoles.includes(role)) { // Use new validUserRoles
         return res.status(400).json({ error: 'Invalid role specified.' });
+    }
+
+    // RBAC enforcement
+    let requesterRole = null;
+    let requesterUid = null;
+    // If Authorization header is present, verify token and get requester role
+    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
+        try {
+            const idToken = req.headers.authorization.split(' ')[1];
+            const decodedToken = await admin.auth().verifyIdToken(idToken);
+            requesterUid = decodedToken.uid;
+            // Fetch role from Firestore
+            const userDoc = await usersCollection.doc(requesterUid).get();
+            if (userDoc.exists) {
+                requesterRole = userDoc.data().role;
+            }
+        } catch (err) {
+            return res.status(401).json({ error: 'Invalid or expired authentication token.' });
+        }
+    }
+
+    // RBAC logic
+    if (requesterRole === 'super_admin') {
+        // Super Admin can create any role
+    } else if (requesterRole === 'site_admin') {
+        if (!(role === 'user' || role === 'support')) {
+            return res.status(403).json({ error: 'Site Admins can only create users with user or support roles.' });
+        }
+    } else if (requesterRole) {
+        // Authenticated but not super_admin or site_admin
+        return res.status(403).json({ error: 'You do not have permission to create users.' });
+    } else {
+        // Public registration (no token)
+        if (role !== 'user') {
+            return res.status(403).json({ error: 'Public registration only allowed for user role.' });
+        }
     }
 
     try {
@@ -460,7 +514,8 @@ app.post('/login', async (req, res) => {
         console.log(`ID Token verified for UID: ${uid}, Email: ${emailFromToken}`);
 
         // Retrieve user role from Firestore based on the verified UID
-        const userDoc = await usersCollection.doc(uid).get();
+        const userDocRef = usersCollection.doc(uid);
+        const userDoc = await userDocRef.get();
 
         if (!userDoc.exists) {
             console.log(`User profile for UID ${uid} not found in Firestore.`);
@@ -473,6 +528,13 @@ app.post('/login', async (req, res) => {
             email: emailFromToken,
             role: userProfile.role || 'user'
         };
+
+        // --- Update lastLogin and loginActivity ---
+        await userDocRef.update({
+            lastLogin: admin.firestore.FieldValue.serverTimestamp(),
+            loginActivity: admin.firestore.FieldValue.arrayUnion(new Date().toISOString())
+        });
+
         console.log(`Login successful for user: ${loggedInUser}`);
         return res.status(200).json({ message: 'Login successful', user: loggedInUser });
     } catch (error) {
@@ -1077,9 +1139,9 @@ app.get('/tickets/my', verifyFirebaseToken, async (req, res) => {
 // --- Get All Tickets (for support and admin users) ---
 // @route   GET /tickets/all
 // @desc    Get all tickets in the system.
-// @access  Private (requires support or admin role)
+// @access  Private (requires support, admin, or super_admin role)
 // MODIFIED: Use checkRole middleware
-app.get('/tickets/all', verifyFirebaseToken, checkRole(['support', 'admin']), async (req, res) => {
+app.get('/tickets/all', verifyFirebaseToken, checkRole(['support', 'admin', 'super_admin']), async (req, res) => {
     const filterStatus = req.query.status;
     const filterAssignment = req.query.assignment;
     const searchKeyword = req.query.keyword ? req.query.keyword.toLowerCase() : '';
@@ -1145,8 +1207,8 @@ app.get('/ticket/:ticket_id', verifyFirebaseToken, async (req, res) => {
 
         const ticketData = ticketDoc.data();
 
-        // Authorization check: Only reporter, support associate, or admin can view
-        if (ticketData.reporter_id !== authenticatedUid && !['support', 'admin'].includes(authenticatedUserRole)) {
+        // Authorization check: Only reporter, support associate, admin, or super_admin can view
+        if (ticketData.reporter_id !== authenticatedUid && !['support', 'admin', 'super_admin'].includes(authenticatedUserRole)) {
             return res.status(403).json({ error: 'Forbidden: You do not have permission to view this ticket.' });
         }
 
@@ -1162,9 +1224,9 @@ app.get('/ticket/:ticket_id', verifyFirebaseToken, async (req, res) => {
 // --- New Route: Export all tickets to CSV ---
 // @route   GET /tickets/export
 // // @desc    Export all tickets (including cancelled/resolved) to CSV based on duration.
-// @access  Private (requires support or admin role)
+// @access  Private (requires support, admin, or super_admin role)
 // MODIFIED: Use checkRole middleware
-app.get('/tickets/export', verifyFirebaseToken, checkRole(['support', 'admin']), async (req, res) => {
+app.get('/tickets/export', verifyFirebaseToken, checkRole(['support', 'admin', 'super_admin']), async (req, res) => {
     const { start_date, end_date } = req.query; // Optional date range
 
     try {
@@ -1652,7 +1714,174 @@ app.delete('/tickets/all', verifyFirebaseToken, checkRole(['support', 'admin']),
     }
 });
 
+// --- Super Admin Dashboard Endpoints ---
+// @route   GET /dashboard/clients-count
+// @desc    Get total number of clients
+// @access  Super Admin only
+app.get('/dashboard/clients-count', verifyFirebaseToken, requireSuperAdmin, async (req, res) => {
+    try {
+        const clientsSnapshot = await db.collection('clients').get();
+        return res.status(200).json({ total_clients: clientsSnapshot.size });
+    } catch (error) {
+        console.error('Error fetching clients count:', error);
+        return res.status(500).json({ error: 'Failed to fetch clients count.' });
+    }
+});
+
+// @route   GET /dashboard/active-users-count
+// @desc    Get total number of active users
+// @access  Super Admin only
+app.get('/dashboard/active-users-count', verifyFirebaseToken, requireSuperAdmin, async (req, res) => {
+    try {
+        // Assuming 'active' field on user profile, default to all users if not present
+        const usersSnapshot = await db.collection('users').where('active', '==', true).get();
+        return res.status(200).json({ active_users: usersSnapshot.size });
+    } catch (error) {
+        console.error('Error fetching active users count:', error);
+        return res.status(500).json({ error: 'Failed to fetch active users count.' });
+    }
+});
+
+// @route   GET /dashboard/top-clients
+// @desc    Get top 5 clients by ticket load
+// @access  Super Admin only
+app.get('/dashboard/top-clients', verifyFirebaseToken, requireSuperAdmin, async (req, res) => {
+    try {
+        // Aggregate tickets by client_id (assuming each ticket has a client_id field)
+        const ticketsSnapshot = await db.collection('tickets').get();
+        const clientTicketCounts = {};
+        ticketsSnapshot.forEach(doc => {
+            const data = doc.data();
+            const clientId = data.client_id;
+            if (clientId) {
+                clientTicketCounts[clientId] = (clientTicketCounts[clientId] || 0) + 1;
+            }
+        });
+        // Convert to array and sort
+        const sortedClients = Object.entries(clientTicketCounts)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 5)
+            .map(([clientId, count]) => ({ clientId, ticketCount: count }));
+        return res.status(200).json({ top_clients: sortedClients });
+    } catch (error) {
+        console.error('Error fetching top clients:', error);
+        return res.status(500).json({ error: 'Failed to fetch top clients.' });
+    }
+});
+
 // Start the server (Moved to the end of the file)
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
+});
+
+const adminManagementRouter = require('./routes/adminManagement');
+// After initializing db, usersCollection, etc.
+app.locals.admin = admin; // So the router can access admin.auth()
+app.use('/admin-management', adminManagementRouter(db, usersCollection, verifyFirebaseToken, requireSuperAdmin));
+
+// --- Admin Management Route (inline for Render deployment) ---
+app.get('/admin-management', verifyFirebaseToken, requireSuperAdmin, async (req, res) => {
+    try {
+        const snapshot = await usersCollection.where('role', '==', 'admin').get();
+        const admins = snapshot.docs.map(doc => {
+            const data = doc.data();
+            let lastLogin = data.lastLogin;
+            // Convert Firestore Timestamp to ISO string if needed
+            if (lastLogin && lastLogin.toDate) {
+                lastLogin = lastLogin.toDate().toISOString();
+            } else if (lastLogin && lastLogin._seconds) {
+                lastLogin = new Date(lastLogin._seconds * 1000).toISOString();
+            }
+            return { uid: doc.id, ...data, lastLogin };
+        });
+        res.json({ admins });
+    } catch (error) {
+        console.error('Error fetching admins:', error);
+        res.status(500).json({ error: 'Failed to fetch admins.' });
+    }
+});
+
+// --- CLIENTS API ---
+// Add a dummy client if none exist (for testing)
+(async () => {
+    if (dbConnected) {
+        const snapshot = await clientsCollection.limit(1).get();
+        if (snapshot.empty) {
+            await clientsCollection.add({
+                client_name: 'Acme Corp',
+                client_type: 'Enterprise',
+                location: 'New York, USA',
+                domain: 'acme.com',
+                joined_date: '2022-01-15',
+                no_of_users: 120,
+                contract_end: '2025-12-31',
+                site_admin: 'john.doe@acme.com'
+            });
+            console.log('Dummy client added to clients collection.');
+        }
+    }
+})();
+
+// GET /api/clients - Get all clients
+app.get('/api/clients', async (req, res) => {
+    try {
+        const snapshot = await clientsCollection.get();
+        const clients = snapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+                id: doc.id,
+                'Client name': data.client_name,
+                'Client type': data.client_type,
+                'Location': data.location,
+                'Domain': data.domain,
+                'Joined date': data.joined_date,
+                'No of users': data.no_of_users,
+                'Contract end': data.contract_end,
+                'Site admin': data.site_admin
+            };
+        });
+        res.json(clients);
+    } catch (err) {
+        console.error('Error fetching clients:', err);
+        res.status(500).json({ error: 'Failed to fetch clients' });
+    }
+});
+
+// POST /api/clients - Add a new client
+app.post('/api/clients', async (req, res) => {
+    try {
+        const { client_name, client_type, location, domain, joined_date, no_of_users, contract_end, site_admin } = req.body;
+        const newClient = { client_name, client_type, location, domain, joined_date, no_of_users, contract_end, site_admin };
+        const docRef = await clientsCollection.add(newClient);
+        res.status(201).json({ id: docRef.id, ...newClient });
+    } catch (err) {
+        console.error('Error adding client:', err);
+        res.status(500).json({ error: 'Failed to add client' });
+    }
+});
+
+// PUT /api/clients/:id - Edit a client by ID
+app.put('/api/clients/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { client_name, client_type, location, domain, joined_date, no_of_users, contract_end, site_admin } = req.body;
+        const updateData = { client_name, client_type, location, domain, joined_date, no_of_users, contract_end, site_admin };
+        await clientsCollection.doc(id).update(updateData);
+        res.status(200).json({ id, ...updateData });
+    } catch (err) {
+        console.error('Error updating client:', err);
+        res.status(500).json({ error: 'Failed to update client' });
+    }
+});
+
+// DELETE /api/clients/:id - Delete a client by ID
+app.delete('/api/clients/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        await clientsCollection.doc(id).delete();
+        res.status(200).json({ message: 'Client deleted successfully.' });
+    } catch (err) {
+        console.error('Error deleting client:', err);
+        res.status(500).json({ error: 'Failed to delete client' });
+    }
 });
