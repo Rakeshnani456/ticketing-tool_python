@@ -1628,6 +1628,29 @@ app.delete('/admin/users/:uid', verifyFirebaseToken, requireAdmin, async (req, r
     }
 });
 
+// --- Danger: Delete All Tickets Endpoint ---
+// @route   DELETE /tickets/all
+// @desc    Delete all tickets in the system (admin/support only, use with caution)
+// @access  Private (requires support or admin role)
+app.delete('/tickets/all', verifyFirebaseToken, checkRole(['support', 'admin']), async (req, res) => {
+    try {
+        const snapshot = await ticketsCollection.get();
+        const batch = admin.firestore().batch();
+        let count = 0;
+        snapshot.forEach(doc => {
+            batch.delete(doc.ref);
+            count++;
+        });
+        if (count === 0) {
+            return res.status(200).json({ message: 'No tickets to delete.' });
+        }
+        await batch.commit();
+        return res.status(200).json({ message: `Deleted ${count} tickets.` });
+    } catch (error) {
+        console.error('Error deleting all tickets:', error);
+        return res.status(500).json({ error: 'Failed to delete all tickets.' });
+    }
+});
 
 // Start the server (Moved to the end of the file)
 app.listen(PORT, () => {

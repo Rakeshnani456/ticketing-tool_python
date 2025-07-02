@@ -26,57 +26,30 @@ const DashboardComponent = ({ user, navigateTo, showFlashMessage }) => {
     const [error, setError] = useState(null); // Error state
     const [recentTickets, setRecentTickets] = useState([]);
     const [kanbanTickets, setKanbanTickets] = useState([]);
-
-    // Card click handler (for now, just filter by status in the table)
     const [selectedStatus, setSelectedStatus] = useState(null);
 
-    /**
-     * Fetches ticket status counts from the backend API.
-     * This function is memoized using useCallback to prevent unnecessary re-renders.
-     */
-    const fetchTicketStatusCounts = useCallback(async () => {
-        if (!user || !user.firebaseUser) {
+    // Compute ticketStatusData and totalTickets from kanbanTickets in real time
+    useEffect(() => {
+        if (!kanbanTickets || kanbanTickets.length === 0) {
+            setTicketStatusData([]);
+            setTotalTickets(0);
             setLoading(false);
             return;
         }
-
-        setLoading(true);
-        setError(null);
-        try {
-            const idToken = await user.firebaseUser.getIdToken(); // Get Firebase ID token for authorization
-            const response = await fetch(`${API_BASE_URL}/tickets/status-summary`, {
-                headers: { 'Authorization': `Bearer ${idToken}` }
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-                // Transform backend data into the format required by Recharts: [{ name: 'Status', value: count }]
-                const formattedData = Object.keys(data).map(status => ({
-                    name: status,
-                    value: data[status]
-                }));
-                setTicketStatusData(formattedData);
-                // Calculate total tickets from the formatted data
-                const total = formattedData.reduce((sum, item) => sum + item.value, 0);
-                setTotalTickets(total);
-            } else {
-                const errorData = await response.json();
-                setError(errorData.message || 'Failed to fetch ticket status counts.');
-                showFlashMessage(errorData.message || 'Failed to fetch ticket status counts.', 'error');
-            }
-        } catch (err) {
-            console.error("Network error fetching ticket status counts:", err);
-            setError('Network error: Could not connect to the server.');
-            showFlashMessage('Network error: Could not connect to the server.', 'error');
-        } finally {
-            setLoading(false);
-        }
-    }, [user, showFlashMessage]); // Dependencies for useCallback
-
-    // Effect hook to trigger data fetching when component mounts or user changes.
-    useEffect(() => {
-        fetchTicketStatusCounts();
-    }, [fetchTicketStatusCounts]); // `fetchTicketStatusCounts` is a dependency because it's memoized
+        // Count tickets by status
+        const statusCounts = kanbanTickets.reduce((acc, ticket) => {
+            acc[ticket.status] = (acc[ticket.status] || 0) + 1;
+            return acc;
+        }, {});
+        // Format for recharts
+        const formattedData = Object.keys(statusCounts).map(status => ({
+            name: status,
+            value: statusCounts[status]
+        }));
+        setTicketStatusData(formattedData);
+        setTotalTickets(kanbanTickets.length);
+        setLoading(false);
+    }, [kanbanTickets]);
 
     // Fetch recent tickets (last 10)
     useEffect(() => {

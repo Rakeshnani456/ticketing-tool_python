@@ -125,17 +125,17 @@ textarea.max-w-none.w-full::-webkit-scrollbar-corner {
 
 /* --- Glassmorphism Sidebar Styles --- */
 .sidebar-glass {
-  background: rgba(20, 20, 20, 0.85); /* semi-transparent black */
-  backdrop-filter: blur(16px) saturate(180%);
-  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  background: #f8fafc; /* Offwhite (Tailwind's slate-50) */
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   border-radius: 0;
-  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.15);
-  border: 1px solid rgba(40, 40, 40, 0.28);
+  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.08);
+  border: 1px solid #e5e7eb;
   transition: background 0.3s, box-shadow 0.3s;
 }
 
 .sidebar-glass .menu-item {
-  color: #e0e7ef;
+  color: #758CA3; /* Default grey-blue text */
   background: transparent;
   border-radius: 12px;
   transition: background 0.2s, color 0.2s, box-shadow 0.2s;
@@ -149,30 +149,38 @@ textarea.max-w-none.w-full::-webkit-scrollbar-corner {
 }
 
 .sidebar-glass .menu-item.active, .sidebar-glass .menu-item[aria-current="page"] {
-  background: rgba(244, 76, 35, 0.18); /* #f44c23 tint */
-  color: #f44c23;
-  box-shadow: 0 4px 16px 0 rgba(244, 76, 35, 0.10);
-  border-left: 4px solid #f44c23;
+  background: linear-gradient(90deg, rgba(51,65,85,0.10) 0%, rgba(51,65,85,0.06) 100%);
+  color: #334155;
+  box-shadow: 0 8px 24px 0 rgba(51,65,85,0.10), 0 1.5px 8px 0 rgba(51,65,85,0.08);
+  border-left: none;
+  filter: drop-shadow(0 2px 8px rgba(51,65,85,0.08));
 }
 
 .sidebar-glass .menu-item.active svg,
 .sidebar-glass .menu-item[aria-current="page"] svg {
-  color: #f44c23;
-  fill: #f44c23;
+  color: #334155;
+  fill: #334155;
+}
+
+.sidebar-glass .menu-item.active .sidebar-count-badge {
+  background: #334155;
+  color: #fff;
+  box-shadow: 0 1px 4px 0 rgba(51,65,85,0.12);
 }
 
 .sidebar-glass .sidebar-count-badge {
-  background: #f44c23;
-  color: #fff;
-  font-size: 0.75rem;
-  font-weight: 600;
-  min-width: 1.25rem;
-  min-height: 1.25rem;
+  background: #e5eaf1; /* Muted blue-grey background */
+  color: #758CA3;      /* Default badge text color */
+  font-size: 0.65rem;
+  font-weight: 500;
+  min-width: 1rem;
+  min-height: 1rem;
+  padding: 0 0.25rem;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 9999px;
-  box-shadow: 0 1px 4px 0 rgba(244, 76, 35, 0.10);
+  box-shadow: 0 1px 4px 0 rgba(117, 140, 163, 0.08);
 }
 
 .sidebar-glass .profile-section {
@@ -201,4 +209,15 @@ textarea.max-w-none.w-full::-webkit-scrollbar-corner {
 .sidebar-glass .collapse-btn:hover {
   background: #2563eb;
   color: #fff;
+}
+
+.sidebar-glass .menu-item svg {
+  color: #758CA3; /* Default icon color matches text */
+  transition: color 0.2s, fill 0.2s, stroke 0.2s;
+}
+
+header {
+  background: #f8fafc !important; /* Match sidebar and content */
+  box-shadow: none !important;
+  border-bottom: none !important;
 }

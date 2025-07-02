@@ -640,7 +640,7 @@ const App = () => {
                             <>
                                 <li>
                                     <Link to="/dashboard" className={`menu-item relative flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-300 text-base ${location.pathname === '/dashboard' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
-                                        <LayoutDashboardIcon width={20} height={18} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} fill="currentColor" />
+                                        <LayoutDashboardIcon width={25} height={25} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} fill="currentColor" />
                                         <motion.span
                                             variants={textVariants}
                                             animate={isSidebarExpanded ? "expanded" : "collapsed"}
@@ -662,7 +662,7 @@ const App = () => {
                                 </li>
                                 <li>
                                     <Link to="/all-tickets" className={`menu-item relative flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-300 text-base ${location.pathname === '/all-tickets' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
-                                        <MenuIconSvg width={22} height={20} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} fill="currentColor" />
+                                        <MenuIconSvg width={25} height={25} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} fill="currentColor" />
                                         <motion.span
                                             variants={textVariants}
                                             animate={isSidebarExpanded ? "expanded" : "collapsed"}
@@ -682,7 +682,7 @@ const App = () => {
                                 </li>
                                 <li>
                                     <Link to="/assigned-to-me" className={`menu-item relative flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-300 text-base ${location.pathname === '/assigned-to-me' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
-                                        <MyTicketsIcon width={20} height={20} className={`flex-shrink-0 transform -translate-x-0 ${isSidebarExpanded ? 'mr-2' : ''}`} />
+                                        <MyTicketsIcon width={25} height={25} className={`flex-shrink-0 transform -translate-x-0 ${isSidebarExpanded ? 'mr-2' : ''}`} />
                                         <motion.span
                                             variants={textVariants}
                                             animate={isSidebarExpanded ? "expanded" : "collapsed"}
@@ -706,7 +706,7 @@ const App = () => {
                         )}
                         <li>
                             <Link to="/my-tickets" className={`menu-item flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-300 text-base ${location.pathname === '/my-tickets' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
-                                <AssignedToMeIcon height={18} width={20} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} />
+                                <AssignedToMeIcon height={25} width={25} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} />
                                 <motion.span
                                     variants={textVariants}
                                     animate={isSidebarExpanded ? "expanded" : "collapsed"}
@@ -718,7 +718,7 @@ const App = () => {
                         </li>
                         <li>
                             <Link to="/create-ticket" className={`menu-item flex items-center w-full px-3 py-2 rounded-lg text-left transition-colors duration-300 text-base ${location.pathname === '/create-ticket' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
-                                <CreateTicketIcon height={18} width={20} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} />
+                                <CreateTicketIcon height={25} width={25} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-2' : ''}`} />
                                 <motion.span
                                     variants={textVariants}
                                     animate={isSidebarExpanded ? "expanded" : "collapsed"}
