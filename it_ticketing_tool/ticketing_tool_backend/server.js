@@ -278,9 +278,8 @@ const verifyFirebaseToken = async (req, res, next) => {
 };
 // Middleware to check if the user has an admin role
 const requireAdmin = (req, res, next) => {
-    // This assumes req.user.role has been set by verifyFirebaseToken
-    if (!req.user || req.user.role !== 'admin') {
-        return res.status(403).json({ error: 'Forbidden: Admin access required.' });
+    if (!req.user || (req.user.role !== 'admin' && req.user.role !== 'super_admin')) {
+        return res.status(403).json({ error: 'Forbidden: Admin or Super Admin access required.' });
     }
     next();
 };
@@ -1587,24 +1586,34 @@ app.delete('/notifications/clear-all', verifyFirebaseToken, async (req, res) => 
 // --- NEW ADMIN ROUTES (User Management) ---
 
 // @route   GET /admin/users
-// @desc    Get a list of all users.
+// @desc    Get all users (admin only)
 // @access  Private (requires admin role)
-// server.js
-// ...
-app.get('/admin/users', verifyFirebaseToken, requireAdmin, async (req, res) => {
+app.get('/admin/users', verifyFirebaseToken, checkRole(['admin', 'super_admin']), async (req, res) => {
     try {
         const usersSnapshot = await usersCollection.get();
-        // Add this line to see how many documents are fetched
-        console.log(`DEBUG: Found ${usersSnapshot.size} documents in 'users' collection.`);
         const usersList = [];
         for (const doc of usersSnapshot.docs) {
             const userData = doc.data();
-            const authUser = await admin.auth().getUser(doc.id);
-            usersList.push({
-                uid: doc.id,
-                email: authUser.email,
-                role: userData.role || 'user'
-            });
+            let email = userData.email;
+            let role = userData.role || 'user';
+            let uid = doc.id;
+            let domain = userData.domain || '';
+            let client_name = userData.client_name || '';
+            let asset_id = userData.asset_id || '';
+            try {
+                // If doc.id is an email, get Auth user by email
+                let authUser;
+                if (doc.id.includes('@')) {
+                    authUser = (await admin.auth().getUserByEmail(doc.id));
+                } else {
+                    authUser = (await admin.auth().getUser(doc.id));
+                }
+                email = authUser.email;
+                uid = authUser.uid;
+            } catch (e) {
+                // If not found in Auth, fallback to Firestore data
+            }
+            usersList.push({ uid, email, role, domain, client_name, clientname: client_name, asset_id });
         }
         return res.status(200).json(usersList);
     } catch (error) {
@@ -1612,12 +1621,11 @@ app.get('/admin/users', verifyFirebaseToken, requireAdmin, async (req, res) => {
         return res.status(500).json({ error: 'Failed to retrieve users.' });
     }
 });
-// ...
 
 // @route   GET /admin/users/:uid
 // @desc    Get details of a specific user.
 // @access  Private (requires admin role)
-app.get('/admin/users/:uid', verifyFirebaseToken, checkRole(['admin']), async (req, res) => {
+app.get('/admin/users/:uid', verifyFirebaseToken, checkRole(['admin', 'super_admin']), async (req, res) => {
     const userId = req.params.uid;
     try {
         const userDoc = await usersCollection.doc(userId).get();
@@ -1625,8 +1633,6 @@ app.get('/admin/users/:uid', verifyFirebaseToken, checkRole(['admin']), async (r
             return res.status(404).json({ error: 'User not found in Firestore.' });
         }
         const userData = userDoc.data();
-        // You might want to fetch additional data from Firebase Auth here if needed
-        // const authUser = await admin.auth().getUser(userId);
         return res.status(200).json({ uid: userId, email: userData.email, role: userData.role });
     } catch (error) {
         console.error(`Error fetching user ${userId}: ${error.message}`);
@@ -1638,27 +1644,21 @@ app.get('/admin/users/:uid', verifyFirebaseToken, checkRole(['admin']), async (r
 // @desc    Update a user's role.
 // @access  Private (requires admin role)
 // Admin route to update user role
-app.patch('/admin/users/:uid', verifyFirebaseToken, requireAdmin, async (req, res) => {
+app.patch('/admin/users/:uid', verifyFirebaseToken, checkRole(['admin', 'super_admin']), async (req, res) => {
     const { uid } = req.params;
     const { role } = req.body;
 
-    if (!role || !['user', 'support', 'admin'].includes(role)) {
+    if (!role || !['user', 'support', 'admin', 'super_admin'].includes(role)) {
         return res.status(400).json({ error: 'Invalid role provided.' });
     }
 
-    // Prevent an admin from changing their own role via this endpoint
     if (uid === req.user.uid) {
         return res.status(403).json({ error: 'Forbidden: You cannot change your own role through this interface.' });
     }
 
     try {
-        // Update role in Firestore
         await usersCollection.doc(uid).update({ role });
-
-        // Optionally, update custom claims for the user in Firebase Auth
-        // This makes the role available directly in the ID token on subsequent logins
         await admin.auth().setCustomUserClaims(uid, { role });
-
         return res.status(200).json({ message: 'User role updated successfully.' });
     } catch (error) {
         console.error(`Error updating user role for ${uid}:`, error);
@@ -1668,7 +1668,7 @@ app.patch('/admin/users/:uid', verifyFirebaseToken, requireAdmin, async (req, re
 // @route   DELETE /admin/users/:uid
 // @desc    Delete a user (from Firebase Auth and Firestore).
 // @access  Private (requires admin role)
-app.delete('/admin/users/:uid', verifyFirebaseToken, requireAdmin, async (req, res) => {
+app.delete('/admin/users/:uid', verifyFirebaseToken, checkRole(['admin', 'super_admin']), async (req, res) => {
     const { uid } = req.params;
 
     if (uid === req.user.uid) {
@@ -1676,13 +1676,8 @@ app.delete('/admin/users/:uid', verifyFirebaseToken, requireAdmin, async (req, r
     }
 
     try {
-        // Delete user from Firebase Authentication
         await admin.auth().deleteUser(uid);
-        // Delete user's document from Firestore
         await usersCollection.doc(uid).delete();
-        // Optionally, delete their tickets or reassign them if applicable
-        // ... (add logic to handle associated data like tickets)
-
         return res.status(200).json({ message: 'User deleted successfully.' });
     } catch (error) {
         console.error(`Error deleting user ${uid}:`, error);
@@ -1822,12 +1817,24 @@ app.get('/admin-management', verifyFirebaseToken, requireSuperAdmin, async (req,
     }
 })();
 
-// GET /api/clients - Get all clients
+// GET /api/clients - Get all clients with dynamic user count
 app.get('/api/clients', async (req, res) => {
     try {
-        const snapshot = await clientsCollection.get();
-        const clients = snapshot.docs.map(doc => {
+        const [clientsSnapshot, usersSnapshot] = await Promise.all([
+            clientsCollection.get(),
+            usersCollection.get()
+        ]);
+        // Build a map: domain -> user count
+        const domainUserCount = {};
+        usersSnapshot.docs.forEach(doc => {
+            const user = doc.data();
+            if (user.domain) {
+                domainUserCount[user.domain] = (domainUserCount[user.domain] || 0) + 1;
+            }
+        });
+        const clients = clientsSnapshot.docs.map(doc => {
             const data = doc.data();
+            const userCount = domainUserCount[data.domain] || 0;
             return {
                 id: doc.id,
                 'Client name': data.client_name,
@@ -1835,7 +1842,7 @@ app.get('/api/clients', async (req, res) => {
                 'Location': data.location,
                 'Domain': data.domain,
                 'Joined date': data.joined_date,
-                'No of users': data.no_of_users,
+                'No of users': userCount,
                 'Contract end': data.contract_end,
                 'Site admin': data.site_admin
             };
@@ -1883,5 +1890,201 @@ app.delete('/api/clients/:id', async (req, res) => {
     } catch (err) {
         console.error('Error deleting client:', err);
         res.status(500).json({ error: 'Failed to delete client' });
+    }
+});
+
+// --- USER MANAGEMENT API ---
+
+// PUT /api/users/:uid - Update password and/or asset_id
+app.put('/api/users/:uid', async (req, res) => {
+    const { uid } = req.params;
+    const { password, asset_id } = req.body;
+    if (!password && asset_id === undefined) {
+        return res.status(400).json({ error: 'No fields to update.' });
+    }
+    try {
+        // Update password in Firebase Auth if provided
+        if (password) {
+            await admin.auth().updateUser(uid, { password });
+        }
+        // Update asset_id in Firestore if provided
+        if (asset_id !== undefined) {
+            await usersCollection.doc(uid).update({ asset_id });
+        }
+        return res.status(200).json({ message: 'User updated successfully.' });
+    } catch (err) {
+        console.error('Error updating user:', err);
+        return res.status(500).json({ error: err.message || 'Failed to update user.' });
+    }
+});
+
+// POST /api/users - Create a new user (with Auth UID as Firestore doc ID)
+app.post('/api/users', async (req, res) => {
+    const { email, password, role, client_name, asset_id } = req.body;
+    if (!email || !password || !role || !client_name) {
+        return res.status(400).json({ error: 'Missing required fields: email, password, role, client_name' });
+    }
+    try {
+        // Step 1: Query for client doc ref outside transaction
+        const clientSnapshot = await clientsCollection.where('client_name', '==', client_name).limit(1).get();
+        if (clientSnapshot.empty) {
+            return res.status(400).json({ error: 'Client does not exist.' });
+        }
+        const clientDocRef = clientSnapshot.docs[0].ref;
+        const clientData = clientSnapshot.docs[0].data();
+        const domain = clientData.domain;
+        // Validate user email domain matches client domain
+        const userDomain = email.split('@')[1];
+        if (userDomain !== domain) {
+            return res.status(400).json({ error: `User email domain (${userDomain}) does not match client domain (${domain}).` });
+        }
+        // Step 2: Create user in Firebase Auth
+        let userRecord;
+        try {
+            userRecord = await admin.auth().createUser({
+                email,
+                password,
+            });
+        } catch (err) {
+            // If email already exists or other Auth error
+            return res.status(400).json({ error: err.message || 'Failed to create user in Auth.' });
+        }
+        const uid = userRecord.uid;
+        const userRef = usersCollection.doc(uid);
+        await db.runTransaction(async (t) => {
+            // --- ALL READS FIRST ---
+            const [clientSnap, userSnap] = await Promise.all([
+                t.get(clientDocRef),
+                t.get(userRef)
+            ]);
+            if (userSnap.exists) throw new Error('User already exists in Firestore.');
+            const prevCount = clientSnap.data().no_of_users || 0;
+            // --- ALL WRITES AFTER ---
+            t.set(userRef, { email, role, domain, client_name, asset_id });
+            t.update(clientDocRef, { no_of_users: prevCount + 1 });
+        });
+        return res.status(201).json({ message: 'User created in Auth and Firestore, client user count updated.' });
+    } catch (err) {
+        console.error('Error creating user:', err);
+        return res.status(500).json({ error: err.message || 'Failed to create user.' });
+    }
+});
+
+// PUT /api/users/:email - Update a user
+app.put('/api/users/:email', async (req, res) => {
+    const { email } = req.params;
+    const { role, client_name, asset_id } = req.body;
+    if (!role || !client_name) {
+        return res.status(400).json({ error: 'Missing required fields: role, client_name' });
+    }
+    try {
+        // Step 1: Get user doc ref and old client name outside transaction
+        const userRef = usersCollection.doc(email);
+        const userSnap = await userRef.get();
+        if (!userSnap.exists) {
+            return res.status(404).json({ error: 'User not found.' });
+        }
+        const oldUserData = userSnap.data();
+        const oldClientName = oldUserData.client_name;
+        // Step 1: Get new client doc ref
+        const newClientSnapshot = await clientsCollection.where('client_name', '==', client_name).limit(1).get();
+        if (newClientSnapshot.empty) {
+            return res.status(400).json({ error: 'New client does not exist.' });
+        }
+        const newClientDocRef = newClientSnapshot.docs[0].ref;
+        const newClientData = newClientSnapshot.docs[0].data();
+        const newDomain = newClientData.domain;
+        // Validate user email domain matches new client domain
+        const userDomain = email.split('@')[1];
+        if (userDomain !== newDomain) {
+            return res.status(400).json({ error: `User email domain (${userDomain}) does not match new client domain (${newDomain}).` });
+        }
+        // Step 1: Get old client doc ref (if client changed)
+        let oldClientDocRef = null;
+        if (oldClientName !== client_name) {
+            const oldClientSnapshot = await clientsCollection.where('client_name', '==', oldClientName).limit(1).get();
+            if (!oldClientSnapshot.empty) {
+                oldClientDocRef = oldClientSnapshot.docs[0].ref;
+            }
+        }
+        await db.runTransaction(async (t) => {
+            // --- ALL READS FIRST ---
+            const reads = [t.get(userRef), t.get(newClientDocRef)];
+            if (oldClientDocRef) reads.push(t.get(oldClientDocRef));
+            const [userSnapTx, newClientSnap, oldClientSnap] = await Promise.all(reads);
+            // --- ALL WRITES AFTER ---
+            t.update(userRef, { role, client_name, domain: newDomain, asset_id });
+            if (oldClientName !== client_name && oldClientDocRef && oldClientSnap) {
+                const oldCount = oldClientSnap.data().no_of_users || 1;
+                t.update(oldClientDocRef, { no_of_users: Math.max(0, oldCount - 1) });
+            }
+            if (oldClientName !== client_name) {
+                const newCount = newClientSnap.data().no_of_users || 0;
+                t.update(newClientDocRef, { no_of_users: newCount + 1 });
+            }
+        });
+        return res.status(200).json({ message: 'User updated and client user counts adjusted.' });
+    } catch (err) {
+        console.error('Error updating user:', err);
+        return res.status(500).json({ error: err.message || 'Failed to update user.' });
+    }
+});
+
+
+app.delete('/api/users/:uid', async (req, res) => {
+    const { uid } = req.params; // Now expecting UID in the URL parameter
+
+    try {
+        // Step 1: Get user doc from Firestore using UID to get their email and client_name
+        const userRef = usersCollection.doc(uid); // Correctly look up by UID
+        const userSnap = await userRef.get();
+
+        if (!userSnap.exists) {
+            return res.status(404).json({ error: 'User not found in Firestore.' });
+        }
+        const userData = userSnap.data();
+        const clientName = userData.client_name;
+        const userEmail = userData.email; // Get email from Firestore document to delete from Auth
+
+        // Step 2: Get client doc ref
+        const clientSnapshot = await clientsCollection.where('client_name', '==', clientName).limit(1).get();
+        if (clientSnapshot.empty) {
+            // This might happen if client was deleted or data is inconsistent.
+            // Decide how to handle: proceed with user deletion or return error.
+            // For now, we'll proceed but log a warning.
+            console.warn(`Associated client "${clientName}" not found for user ${uid}. Proceeding with user deletion without client count adjustment.`);
+        }
+        const clientDocRef = clientSnapshot.empty ? null : clientSnapshot.docs[0].ref;
+
+        // Use a transaction for atomicity: delete from Auth, delete Firestore doc, update client count
+        await db.runTransaction(async (t) => {
+            // All reads first (for the transaction)
+            let clientSnap = null;
+            if (clientDocRef) {
+                clientSnap = await t.get(clientDocRef);
+            }
+
+            // All writes after
+            // Delete user from Firebase Authentication
+            await admin.auth().deleteUser(uid); // Delete by UID in Auth
+
+            // Delete user document from Firestore
+            t.delete(userRef);
+
+            // Decrement user count in client if client found
+            if (clientSnap && clientSnap.exists) {
+                const prevCount = clientSnap.data().no_of_users || 1;
+                t.update(clientDocRef, { no_of_users: Math.max(0, prevCount - 1) });
+            }
+        });
+
+        return res.status(200).json({ message: 'User deleted and client user count updated (if applicable).' });
+    } catch (err) {
+        console.error(`Error deleting user ${uid}:`, err);
+        // Provide more specific error if it's an Auth error
+        if (err.code && err.code.startsWith('auth/')) {
+            return res.status(500).json({ error: `Firebase Auth error: ${err.message}` });
+        }
+        return res.status(500).json({ error: err.message || 'Failed to delete user.' });
     }
 });

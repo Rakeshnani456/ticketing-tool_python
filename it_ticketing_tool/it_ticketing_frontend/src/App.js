@@ -20,6 +20,7 @@ import {
     Shield,
     Pin,
     BarChart2,
+    ChevronUp,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AiOutlineEye } from 'react-icons/ai'; // Or choose another icon library like 'fa' for Font Awesome
@@ -37,6 +38,9 @@ import PeopleIcon from '@mui/icons-material/People';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import PersonIcon from '@mui/icons-material/Person';
 import SecurityIcon from '@mui/icons-material/Security';
+import Menu from '@mui/material/Menu'; // Import Material-UI Menu
+import MenuItem from '@mui/material/MenuItem'; // Import Material-UI MenuItem
+
 
 // Import Firebase auth client and dbClient
 import { authClient, dbClient } from './config/firebase';
@@ -164,6 +168,25 @@ const App = () => {
     const popupTimeoutRef = useRef(null);
     const lastPopupNotificationId = useRef(null);
 
+    // State for Material-UI "Manage" dropdown menu
+    const [anchorEl, setAnchorEl] = useState(null);
+    const managementOpen = Boolean(anchorEl); // Material-UI's Menu uses a boolean for its 'open' prop
+
+    // Handlers for Material-UI "Manage" dropdown
+    const handleClick = (event) => {
+        setAnchorEl(event.currentTarget);
+    };
+
+    const handleClose = () => {
+        setAnchorEl(null);
+    };
+
+    const handleMenuItemClick = (path) => {
+        navigate(path); // Use navigate to go to the path
+        handleClose(); // Close the menu after clicking a menu item
+    };
+
+
     // Show popup only for truly new notifications (one-time)
     useEffect(() => {
         if (!notifications || notifications.length === 0) return;
@@ -287,7 +310,7 @@ const App = () => {
             if (match) {
                 return { title: match[1], body: match[2] };
             }
-            return { title: n.message, body: '' };
+            return { title: 'Notification', body: '' };
         }
         return { title: 'Notification', body: '' };
     };
@@ -666,22 +689,24 @@ const App = () => {
     //
     // Also, in the backend, if possible, use <span class="notification-highlight">...</span> for highlights instead of blue.
 
-    const [managementOpen, setManagementOpen] = useState(false);
-    // Add refs for management and profile dropdowns
-    const managementMenuRef = useRef(null);
+    // Removed managementOpen state and managementMenuRef as Material-UI Menu handles this.
+    // const [managementOpen, setManagementOpen] = useState(false);
+    // const managementMenuRef = useRef(null);
+
+    // Add refs for profile dropdowns
     const profileMenuRef = useRef(null);
 
-    // Add useEffect for closing Management dropdown on outside click
-    useEffect(() => {
-        if (!managementOpen) return;
-        function handleClickOutside(event) {
-            if (managementMenuRef.current && !managementMenuRef.current.contains(event.target)) {
-                setManagementOpen(false);
-            }
-        }
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, [managementOpen]);
+    // Add useEffect for closing Management dropdown on outside click - No longer needed for MUI Menu
+    // useEffect(() => {
+    //     if (!managementOpen) return;
+    //     function handleClickOutside(event) {
+    //         if (managementMenuRef.current && !managementMenuRef.current.contains(event.target)) {
+    //             setManagementOpen(false);
+    //         }
+    //     }
+    //     document.addEventListener('mousedown', handleClickOutside);
+    //     return () => document.removeEventListener('mousedown', handleClickOutside);
+    // }, [managementOpen]);
 
     // Add useEffect for closing Profile dropdown on outside click
     useEffect(() => {
@@ -694,6 +719,21 @@ const App = () => {
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, [isProfileMenuOpen]);
+
+    // Suppress ResizeObserver loop error in development
+    if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+        const suppressedErrors = [
+            'ResizeObserver loop completed with undelivered notifications.',
+            'ResizeObserver loop limit exceeded'
+        ];
+        const realConsoleError = console.error;
+        console.error = (...args) => {
+            if (typeof args[0] === 'string' && suppressedErrors.some(e => args[0].includes(e))) {
+                return;
+            }
+            realConsoleError(...args);
+        };
+    }
 
     return (
         // No BrowserRouter here, it's in index.js now.
@@ -709,52 +749,86 @@ const App = () => {
                             Dashboard
                         </Link>
                     )}
-                    {/* Management Dropdown (right of Dashboard) */}
+                    {/* Management Dropdown (right of Dashboard) - Now using Material-UI Menu */}
                     {currentUser && (currentUser.role === 'super_admin' || currentUser.role === 'admin') && (
-                        <div className="relative ml-2" ref={managementMenuRef}>
+                        <div className="relative ml-2">
                             <button
-                                onClick={() => setManagementOpen(open => !open)}
-                                className="flex items-center px-2 py-1 rounded-lg text-sm font-medium transition-colors duration-200 hover:bg-blue-100 text-gray-700"
+                                onClick={handleClick} // Use handleClick to open the MUI Menu
+                                className="flex items-center px-2 py-1 rounded-lg text-sm font-medium transition-colors duration-200 hover:bg-blue-100 text-gray-700 cursor-pointer"
+                                aria-controls={managementOpen ? 'management-menu' : undefined} // ARIA attributes
+                                aria-haspopup="true"
+                                aria-expanded={managementOpen ? 'true' : undefined}
                             >
-                                Management
-                                <ChevronDown className="ml-1 w-4 h-4" />
+                                Manage
+                                {managementOpen ? (
+                                    <ChevronUp className="ml-1 w-4 h-4" />
+                                ) : (
+                                    <ChevronDown className="ml-1 w-4 h-4" />
+                                )}
                             </button>
-                            {managementOpen && (
-                                <ul className="absolute right-0 mt-2 w-56 bg-white border border-gray-200 rounded-lg shadow-lg z-50 text-sm">
-                                    {currentUser.role === 'super_admin' && (
-                                        <>
-                                            <li>
-                                                <Link to="/admin-management" className={`flex items-center px-4 py-2 hover:bg-gray-100 ${location.pathname === '/admin-management' ? 'bg-blue-100 font-semibold' : ''}`}> <Users className="w-4 h-4 mr-2" /> Admin Management </Link>
-                                            </li>
-                                            <li>
-                                                <Link to="/engineer-management" className={`flex items-center px-4 py-2 hover:bg-gray-100 ${location.pathname === '/engineer-management' ? 'bg-blue-100 font-semibold' : ''}`}> <PeopleIcon className="w-4 h-4 mr-2" /> Engineer Management </Link>
-                                            </li>
-                                            <li>
-                                                <Link to="/user-management" className={`flex items-center px-4 py-2 hover:bg-gray-100 ${location.pathname === '/user-management' ? 'bg-blue-100 font-semibold' : ''}`}> <User className="w-4 h-4 mr-2" /> User Management </Link>
-                                            </li>
-                                            <li>
-                                                <Link to="/siteadmin-management" className={`flex items-center px-4 py-2 hover:bg-gray-100 ${location.pathname === '/siteadmin-management' ? 'bg-blue-100 font-semibold' : ''}`}> <Shield className="w-4 h-4 mr-2" /> Siteadmin Management </Link>
-                                            </li>
-                                        </>
-                                    )}
-                                    {currentUser.role === 'admin' && (
-                                        <>
-                                            <li>
-                                                <Link to="/engineer-management" className={`flex items-center px-4 py-2 hover:bg-gray-100 ${location.pathname === '/engineer-management' ? 'bg-blue-100 font-semibold' : ''}`}> <PeopleIcon className="w-4 h-4 mr-2" /> Engineer Management </Link>
-                                            </li>
-                                            <li>
-                                                <Link to="/client-management" className={`flex items-center px-4 py-2 hover:bg-gray-100 ${location.pathname === '/client-management' ? 'bg-blue-100 font-semibold' : ''}`}> <Users className="w-4 h-4 mr-2" /> Client Management </Link>
-                                            </li>
-                                            <li>
-                                                <Link to="/user-management" className={`flex items-center px-4 py-2 hover:bg-gray-100 ${location.pathname === '/user-management' ? 'bg-blue-100 font-semibold' : ''}`}> <User className="w-4 h-4 mr-2" /> User Management </Link>
-                                            </li>
-                                            <li>
-                                                <Link to="/siteadmin-management" className={`flex items-center px-4 py-2 hover:bg-gray-100 ${location.pathname === '/siteadmin-management' ? 'bg-blue-100 font-semibold' : ''}`}> <Shield className="w-4 h-4 mr-2" /> Siteadmin Management </Link>
-                                            </li>
-                                        </>
-                                    )}
-                                </ul>
-                            )}
+                            <Menu
+                                id="management-menu"
+                                anchorEl={anchorEl}
+                                open={managementOpen}
+                                onClose={handleClose}
+                                MenuListProps={{
+                                    'aria-labelledby': 'manage-button',
+                                }}
+                                anchorOrigin={{
+                                    vertical: 'bottom',
+                                    horizontal: 'center', // Center horizontally with respect to button
+                                }}
+                                transformOrigin={{
+                                    vertical: 'top',
+                                    horizontal: 'center', // Center horizontally with respect to button
+                                }}
+                                disablePortal
+                                PaperProps={{
+                                    elevation: 8, // Adds shadow
+                                    sx: {
+                                        borderRadius: '8px', // Rounded corners
+                                        minWidth: 120,
+                                        width: 'auto',
+                                        fontSize: '0.75rem',
+                                        padding: 0,
+                                        overflow: 'hidden', // Ensures rounded corners are applied to content
+                                        marginTop: 0.5, // Slightly offset menu so it doesn't cover the button
+                                    },
+                                }}
+                            >
+                                {currentUser.role === 'super_admin' && (
+                                    <>
+                                        <MenuItem onClick={() => handleMenuItemClick('/admin-management')} sx={{ fontSize: '0.75rem', minHeight: 22 }}>
+                                            <Users width={16} height={16} className="mr-2" /> Admins
+                                        </MenuItem>
+                                        <MenuItem onClick={() => handleMenuItemClick('/engineer-management')} sx={{ fontSize: '0.75rem', minHeight: 22 }}>
+                                            <PeopleIcon fontSize="small" sx={{ fontSize: 16, marginRight: '8px' }} /> Engineers
+                                        </MenuItem>
+                                        <MenuItem onClick={() => handleMenuItemClick('/user-management')} sx={{ fontSize: '0.75rem', minHeight: 22 }}>
+                                            <User width={16} height={16} className="mr-2" /> Users
+                                        </MenuItem>
+                                        <MenuItem onClick={() => handleMenuItemClick('/siteadmin-management')} sx={{ fontSize: '0.75rem', minHeight: 22 }}>
+                                            <Shield width={16} height={16} className="mr-2" /> Site Admins
+                                        </MenuItem>
+                                    </>
+                                )}
+                                {currentUser.role === 'admin' && (
+                                    <>
+                                        <MenuItem onClick={() => handleMenuItemClick('/engineer-management')} sx={{ fontSize: '0.75rem', minHeight: 22 }}>
+                                            <PeopleIcon fontSize="small" sx={{ fontSize: 16, marginRight: '8px' }} /> Engineers
+                                        </MenuItem>
+                                        <MenuItem onClick={() => handleMenuItemClick('/client-management')} sx={{ fontSize: '0.75rem', minHeight: 22 }}>
+                                            <Users width={16} height={16} className="mr-2" /> Clients
+                                        </MenuItem>
+                                        <MenuItem onClick={() => handleMenuItemClick('/user-management')} sx={{ fontSize: '0.75rem', minHeight: 22 }}>
+                                            <User width={16} height={16} className="mr-2" /> Users
+                                        </MenuItem>
+                                        <MenuItem onClick={() => handleMenuItemClick('/siteadmin-management')} sx={{ fontSize: '0.75rem', minHeight: 22 }}>
+                                            <Shield width={16} height={16} className="mr-2" /> Site Admins
+                                        </MenuItem>
+                                    </>
+                                )}
+                            </Menu>
                         </div>
                     )}
                 </div>

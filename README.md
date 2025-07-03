@@ -22,3 +22,11 @@ Deploy the latest commit in render.
 
 
 
+Run Local :
+
+
+cd .\it_ticketing_tool\it_ticketing_frontend 
+npm start
+
+cd .\it_ticketing_tool\ticketing_tool_backend
+node server.js

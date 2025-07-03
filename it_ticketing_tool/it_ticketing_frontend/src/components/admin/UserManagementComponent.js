@@ -1,395 +1,614 @@
 // src/components/admin/UserManagementComponent.js
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import PrimaryButton from '../common/PrimaryButton';
-import FormInput from '../common/FormInput';
-import { Edit, Trash2, XCircle, CheckCircle, Save, UserPlus, Search } from 'lucide-react';
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import {
+    Button, Chip, TextField, Box, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
+    IconButton, Snackbar, Alert, Typography, Popover,
+    Collapse // Import Collapse component
+} from '@mui/material';
+import { Edit as EditIcon, Delete as DeleteIcon, Add as AddIcon, Clear as ClearIcon, VpnKey as VpnKeyIcon } from '@mui/icons-material';
 import { API_BASE_URL } from '../../config/constants';
+import './UserManagementComponent.css';
+import { useNavigate } from 'react-router-dom';
+import { getFirestore, collection, onSnapshot } from 'firebase/firestore';
+import { app } from '../../config/firebase';
+import Autocomplete from '@mui/material/Autocomplete';
+import InputAdornment from '@mui/material/InputAdornment';
+
+// Helper for deep comparison (simple for this case, but can be replaced with a library like lodash.isequal)
+const areUsersEqual = (arr1, arr2) => {
+    if (arr1.length !== arr2.length) return false;
+    for (let i = 0; i < arr1.length; i++) {
+        const user1 = arr1[i];
+        const user2 = arr2[i];
+        if (JSON.stringify(user1) !== JSON.stringify(user2)) {
+            return false;
+        }
+    }
+    return true;
+};
+
+const initialUserState = {
+  email: '',
+  password: '',
+  role: 'user',
+  domain: '',
+  clientname: '',
+  asset_id: '',
+  emailPrefix: '',
+};
 
 const UserManagementComponent = ({ user, showFlashMessage }) => {
     const [users, setUsers] = useState([]);
+    const [clients, setClients] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-    const [editingUser, setEditingUser] = useState(null);
-    const [newRole, setNewRole] = useState('');
-    const [searchTerm, setSearchTerm] = useState('');
-    const [showCreateUserForm, setShowCreateUserForm] = useState(false);
-    const [newUserData, setNewUserData] = useState({
-        email: '',
-        password: '',
-        role: 'user' // Default role for new users
-    });
+    const [search, setSearch] = useState('');
+    const [addMode, setAddMode] = useState(false);
+    const [addRowData, setAddRowData] = useState(initialUserState);
+    const [editRowId, setEditRowId] = useState(null);
+    const [editRowData, setEditRowData] = useState({ password: '', asset_id: '', showPasswordField: false });
+    const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+    const navigate = useNavigate();
+    const db = getFirestore(app);
 
-    const validUserRoles = ['user', 'support', 'admin'];
+    // State for the custom confirmation Popover
+    const [openConfirmPopover, setOpenConfirmPopover] = useState(false);
+    const [currentUserEmailToDelete, setCurrentUserEmailToDelete] = useState('');
+    const userToDeleteUidRef = useRef(null);
+    const anchorEl = useRef(null);
 
-    const fetchUsers = useCallback(async () => {
+    // Fetch clients
+    const fetchClients = useCallback(async () => {
+        try {
+            const res = await fetch(`${API_BASE_URL}/api/clients`);
+            if (!res.ok) throw new Error('Failed to fetch clients');
+            const data = await res.json();
+            if (JSON.stringify(clients) !== JSON.stringify(data)) {
+                setClients(data);
+            }
+        } catch (err) {
+            console.error("Error fetching clients:", err);
+        }
+    }, [clients]);
+
+    // Fetch users (live snapshot)
+    useEffect(() => {
         setLoading(true);
         setError(null);
-        try {
-            const idToken = await user.firebaseUser.getIdToken();
-            const response = await fetch(`${API_BASE_URL}/admin/users`, {
-                headers: {
-                    'Authorization': `Bearer ${idToken}`,
-                    'Content-Type': 'application/json'
-                }
+
+        fetchClients();
+
+        const unsub = onSnapshot(collection(db, 'users'), (snapshot) => {
+            const fetchedUsers = snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() }));
+
+            const usersWithClientDetails = fetchedUsers.map(u => {
+                const clientMatch = clients.find(c => c['Client name'] === u.client_name);
+                return {
+                    ...u,
+                    domain: clientMatch ? clientMatch.Domain : (u.domain || ''),
+                    clientname: clientMatch ? clientMatch['Client name'] : (u.client_name || 'Unknown Client'),
+                };
             });
 
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || 'Failed to fetch users.');
+            if (!areUsersEqual(users, usersWithClientDetails)) {
+                setUsers(usersWithClientDetails);
+            }
+            setLoading(false);
+        }, (err) => {
+            setError('Could not load users.');
+            setUsers([]);
+            setLoading(false);
+        });
+
+        return () => unsub();
+    }, [db, clients, fetchClients, users]);
+
+    const handleAdd = () => {
+        setAddMode(true);
+        setAddRowData(initialUserState);
+        setEditRowId(null);
+    };
+
+    const handleAddClientChange = (event, value) => {
+        const selectedClient = clients.find(c => c['Client name'] === value);
+        setAddRowData(prev => ({
+            ...prev,
+            clientname: value || '',
+            domain: selectedClient ? selectedClient.Domain : '',
+        }));
+    };
+
+    const handleAddChange = (e) => {
+        const { name, value } = e.target;
+        setAddRowData(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleAddSave = async (e) => {
+        e.preventDefault();
+        if (!addRowData.password) {
+            setSnackbar({ open: true, message: 'Password is required.', severity: 'error' });
+            return;
+        }
+        if (!addRowData.emailPrefix || !addRowData.domain) {
+            setSnackbar({ open: true, message: 'Email prefix and client name are required (which derives domain).', severity: 'error' });
+            return;
+        }
+        const email = `${addRowData.emailPrefix}@${addRowData.domain}`;
+        if (!addRowData.clientname) {
+             setSnackbar({ open: true, message: 'Client Name is required.', severity: 'error' });
+            return;
+        }
+
+        try {
+            const payload = {
+                email,
+                password: addRowData.password,
+                role: addRowData.role,
+                client_name: addRowData.clientname,
+                asset_id: addRowData.asset_id,
+            };
+            const res = await fetch(`${API_BASE_URL}/api/users`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            if (!res.ok) {
+                const errData = await res.json();
+                throw new Error(errData.error || 'Failed to add user');
+            }
+            setAddMode(false);
+            setSnackbar({ open: true, message: 'User added successfully.', severity: 'success' });
+        } catch (err) {
+            setSnackbar({ open: true, message: err.message, severity: 'error' });
+        }
+    };
+
+    const handleAddCancel = () => {
+        setAddMode(false);
+        setAddRowData(initialUserState);
+    };
+
+    const handleEditClick = (userToEdit) => {
+        setEditRowId(userToEdit.uid);
+        setEditRowData({ password: '', asset_id: userToEdit.asset_id || '', showPasswordField: false });
+    };
+
+    const handleEditChange = (e) => {
+        const { name, value } = e.target;
+        setEditRowData(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleTogglePasswordField = () => {
+        setEditRowData(prev => ({ ...prev, showPasswordField: !prev.showPasswordField, password: '' }));
+    };
+
+    const handleEditSave = async (uid) => {
+        try {
+            const payload = {};
+            if (editRowData.showPasswordField && editRowData.password) payload.password = editRowData.password;
+            if (editRowData.asset_id !== undefined) payload.asset_id = editRowData.asset_id;
+
+            if (Object.keys(payload).length === 0) {
+                setEditRowId(null);
+                setSnackbar({ open: true, message: 'No changes to save.', severity: 'info' });
+                return;
             }
 
-            const data = await response.json();
-            setUsers(data);
-            console.log("FETCHED USERS (from backend - unfiltered):", data);
+            const res = await fetch(`${API_BASE_URL}/api/users/${uid}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            if (!res.ok) {
+                const errData = await res.json();
+                throw new Error(errData.error || 'Failed to update user');
+            }
+            setEditRowId(null);
+            setEditRowData({ password: '', asset_id: '', showPasswordField: false });
+            setSnackbar({ open: true, message: 'User updated successfully.', severity: 'success' });
         } catch (err) {
-            console.error('Error fetching users:', err);
-            setError(err.message || 'An unexpected error occurred.');
-            showFlashMessage('error', err.message || 'Failed to load users.');
-        } finally {
-            setLoading(false);
+            setSnackbar({ open: true, message: err.message, severity: 'error' });
         }
-    }, [user.firebaseUser, showFlashMessage]);
+    };
 
-    useEffect(() => {
-        if (user && user.firebaseUser) {
-            fetchUsers();
+    const handleEditCancel = () => {
+        setEditRowId(null);
+        setEditRowData({ password: '', asset_id: '', showPasswordField: false });
+    };
+
+    const handleDeleteClick = (event, uid, email) => {
+        userToDeleteUidRef.current = uid;
+        setCurrentUserEmailToDelete(email);
+        anchorEl.current = event.currentTarget;
+        setOpenConfirmPopover(true);
+    };
+
+    const handleConfirmDelete = async () => {
+        setOpenConfirmPopover(false);
+        const uid = userToDeleteUidRef.current;
+        if (!uid) return;
+
+        try {
+            const res = await fetch(`${API_BASE_URL}/api/users/${uid}`, {
+                method: 'DELETE'
+            });
+
+            if (!res.ok) {
+                const errData = await res.json();
+                throw new Error(errData.error || 'Failed to delete user');
+            }
+            setSnackbar({ open: true, message: 'User deleted successfully.', severity: 'success' });
+            userToDeleteUidRef.current = null;
+            setCurrentUserEmailToDelete('');
+        } catch (err) {
+            setSnackbar({ open: true, message: err.message, severity: 'error' });
         }
-    }, [user, fetchUsers]);
+    };
+
+    const handleCancelDelete = () => {
+        setOpenConfirmPopover(false);
+        userToDeleteUidRef.current = null;
+        setCurrentUserEmailToDelete('');
+    };
+
+    const handleGoToClientPage = (type, value) => {
+        if (type === 'domain') {
+            navigate(`/admin/clients?domain=${encodeURIComponent(value)}`);
+        } else if (type === 'client') {
+            navigate(`/admin/clients?client=${encodeURIComponent(value)}`);
+        }
+    };
 
     const filteredUsers = useMemo(() => {
         return users.filter(u =>
-            u.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (u.role && u.role.toLowerCase().includes(searchTerm.toLowerCase())) ||
-            u.uid.toLowerCase().includes(searchTerm.toLowerCase())
+            u.role === 'user' &&
+            (u.email.toLowerCase().includes(search.toLowerCase()) ||
+             u.clientname.toLowerCase().includes(search.toLowerCase()) ||
+             (u.asset_id && u.asset_id.toLowerCase().includes(search.toLowerCase())))
         );
-    }, [users, searchTerm]);
+    }, [users, search]);
 
+    const groupedUsers = useMemo(() => {
+        return filteredUsers.reduce((acc, user) => {
+            const client = user.clientname || 'Unknown Client';
+            if (!acc[client]) acc[client] = [];
+            acc[client].push(user);
+            return acc;
+        }, {});
+    }, [filteredUsers]);
 
-    const handleEditClick = (userToEdit) => {
-        setEditingUser(userToEdit);
-        setNewRole(userToEdit.role);
-    };
-
-    const handleCancelEdit = () => {
-        setEditingUser(null);
-        setNewRole('');
-    };
-
-    const handleSaveRole = async () => {
-        if (!editingUser) return;
-
-        if (!validUserRoles.includes(newRole)) {
-            showFlashMessage('error', 'Invalid role selected.');
-            return;
-        }
-
-        if (editingUser.uid === user.uid) {
-            showFlashMessage('error', 'You cannot change your own role.');
-            return;
-        }
-
-        setLoading(true);
-        try {
-            const idToken = await user.firebaseUser.getIdToken();
-            const response = await fetch(`${API_BASE_URL}/admin/users/${editingUser.uid}`, {
-                method: 'PATCH',
-                headers: {
-                    'Authorization': `Bearer ${idToken}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ role: newRole })
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || 'Failed to update user role.');
-            }
-
-            showFlashMessage('success', `Role for ${editingUser.email} updated to ${newRole}.`);
-            setEditingUser(null);
-            setNewRole('');
-            fetchUsers();
-        } catch (err) {
-            console.error('Error updating user role:', err);
-            setError(err.message || 'Failed to update user role.');
-            showFlashMessage('error', err.message || 'Failed to update user role.');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleDeleteUser = async (userToDelete) => {
-        if (!window.confirm(`Are you sure you want to delete user ${userToDelete.email}? This action cannot be undone.`)) {
-            return;
-        }
-
-        if (userToDelete.uid === user.uid) {
-            showFlashMessage('error', 'You cannot delete your own account.');
-            return;
-        }
-
-        setLoading(true);
-        try {
-            const idToken = await user.firebaseUser.getIdToken();
-            const response = await fetch(`${API_BASE_URL}/admin/users/${userToDelete.uid}`, {
-                method: 'DELETE',
-                headers: {
-                    'Authorization': `Bearer ${idToken}`
-                }
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || 'Failed to delete user.');
-            }
-
-            showFlashMessage('success', `User ${userToDelete.email} deleted successfully.`);
-            fetchUsers();
-        } catch (err) {
-            console.error('Error deleting user:', err);
-            setError(err.message || 'Failed to delete user.');
-            showFlashMessage('error', err.message || 'Failed to delete user.');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleCreateUserChange = (e) => {
-        const { name, value } = e.target;
-        setNewUserData(prev => ({ ...prev, [name]: value }));
-    };
-
-    const handleCreateUserSubmit = async (e) => {
-        e.preventDefault();
-        setLoading(true);
-        setError(null);
-
-        if (!newUserData.email || !newUserData.password || !newUserData.role) {
-            showFlashMessage('error', 'All fields are required.');
-            setLoading(false);
-            return;
-        }
-
-        try {
-            const response = await fetch(`${API_BASE_URL}/register`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(newUserData)
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || 'Failed to create user.');
-            }
-
-            showFlashMessage('success', `User ${newUserData.email} created successfully!`);
-            setShowCreateUserForm(false);
-            setNewUserData({ email: '', password: '', role: 'user' });
-            fetchUsers();
-        } catch (err) {
-            console.error('Error creating user:', err);
-            setError(err.message || 'An unexpected error occurred.');
-            showFlashMessage('error', err.message || 'Failed to create user.');
-        } finally {
-            setLoading(false);
-        }
-    };
+    const clientOrder = useMemo(() => Object.keys(groupedUsers).sort(), [groupedUsers]);
 
     return (
         <div className="container mx-auto p-4 sm:p-6 lg:p-8 bg-white shadow-sm rounded-lg animate-fade-in">
-            <h2 className="text-2xl font-bold text-gray-800 mb-5 border-b border-gray-200 pb-3">User Management</h2>
+            <h2 className="user-mgmt-title compact-ui">User Management</h2>
+            <Box display="flex" alignItems="center" gap={1} mb={1} className="compact-ui" justifyContent="space-between">
+                <TextField
+                    className="compact-ui"
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                    placeholder="Search by email, client, or asset ID..."
+                    size="small"
+                    InputProps={{
+                        endAdornment: (
+                            search ? (
+                                <IconButton size="small" onClick={() => setSearch('')} sx={{ fontSize: 16, p: 0.25 }}>
+                                    <ClearIcon fontSize="inherit" />
+                                </IconButton>
+                            ) : null
+                        ),
+                    }}
+                />
+                {!addMode && (
+                    <Button
+                        className="compact-ui"
+                        variant="contained"
+                        color="primary"
+                        startIcon={<AddIcon sx={{ fontSize: 14 }} />}
+                        onClick={handleAdd}
+                        size="small"
+                        sx={{ fontSize: '0.6rem', minHeight: 20, height: 20, px: 1, py: 0, borderRadius: 1, lineHeight: 1, ml: 1 }}
+                    >
+                        Add User
+                    </Button>
+                )}
+            </Box>
 
-            {/* User Search and Create */}
-            <div className="mb-5 flex flex-col sm:flex-row items-center justify-between space-y-3 sm:space-y-0 sm:space-x-3">
-                <div className="relative w-full sm:w-1/2">
-                    <FormInput
-                        type="text"
-                        placeholder="Search by email, role, or UID..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="pl-9 pr-3 py-1.5 rounded-md w-full text-sm border border-gray-300 focus:ring-gray-400 focus:border-gray-400"
-                    />
-                    <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
-                </div>
-                <PrimaryButton
-                    onClick={() => setShowCreateUserForm(!showCreateUserForm)}
-                    type="button"
-                    className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] bg-gray-700 hover:bg-gray-800 text-white rounded transition w-auto"
-                >
-                    <UserPlus size={12} />
-                    <span>{showCreateUserForm ? 'Hide' : 'Add'}</span>
-                </PrimaryButton>
-            </div>
+            {/* Collapse component wraps the add user form */}
+            <Collapse in={addMode} timeout={400} unmountOnExit> {/* cite: 1, 4 */}
+                <Box mb={1} p={1} borderRadius={2} border={1} borderColor="grey.200" bgcolor="grey.50" className="compact-ui">
+                    <form onSubmit={handleAddSave}>
+                        <Box display="flex" gap={1} alignItems="center" flexWrap="nowrap" justifyContent="space-between">
+                            <Autocomplete
+                                options={clients.map(c => c['Client name'])}
+                                value={addRowData.clientname || null}
+                                onChange={handleAddClientChange}
+                                renderInput={(params) => (
+                                    <TextField
+                                        {...params}
+                                        label="Client Name"
+                                        size="small"
+                                        required
+                                        sx={{ minWidth: 80, maxWidth: 140, height: 28, flex: 1, '.MuiInputBase-root': { height: 28, minHeight: 28, maxHeight: 28, p: 0 }, '.MuiInputBase-input': { fontSize: '0.65rem', height: 28, minHeight: 28, maxHeight: 28, padding: '2px 6px' } }}
+                                        InputLabelProps={{ style: { fontSize: '0.65rem' } }}
+                                        inputProps={{ ...params.inputProps, style: { fontSize: '0.65rem', height: 28, minHeight: 28, maxHeight: 28, padding: '2px 6px' } }}
+                                        placeholder="Client Name"
+                                    />
+                                )}
+                                sx={{ minWidth: 80, maxWidth: 140, height: 28, flex: 1, p: 0, m: 0, alignItems: 'center', display: 'flex' }}
+                                slotProps={{
+                                    popper: { sx: { '& .MuiAutocomplete-option': { fontSize: '0.65rem', minHeight: 28, height: 28 } } }
+                                }}
+                            />
+                            <TextField
+                                className="compact-ui"
+                                label="Email"
+                                name="emailPrefix"
+                                value={addRowData.emailPrefix || ''}
+                                onChange={e => setAddRowData(prev => ({ ...prev, emailPrefix: e.target.value }))}
+                                required
+                                size="small"
+                                InputLabelProps={{ style: { fontSize: '0.65rem' } }}
+                                inputProps={{ style: { fontSize: '0.65rem', height: 28, minHeight: 28, maxHeight: 28, padding: '2px 6px' } }}
+                                placeholder="Email Prefix"
+                                sx={{ minWidth: 120, maxWidth: 180, height: 28, flex: 1, '.MuiInputBase-root': { height: 28 } }}
+                                InputProps={{
+                                    endAdornment: (
+                                        <InputAdornment position="end" sx={{ fontSize: '0.65rem', color: '#888', ml: 0 }}>
+                                            <span style={{ fontSize: '0.65rem' }}>{addRowData.domain ? `@${addRowData.domain}` : '@example.com'}</span>
+                                        </InputAdornment>
+                                    )
+                                }}
+                            />
+                            <TextField
+                                className="compact-ui"
+                                label="Password"
+                                name="password"
+                                type="password"
+                                value={addRowData.password}
+                                onChange={handleAddChange}
+                                required
+                                size="small"
+                                InputLabelProps={{ style: { fontSize: '0.65rem' } }}
+                                inputProps={{ style: { fontSize: '0.65rem', height: 28, minHeight: 28, maxHeight: 28, padding: '2px 6px' } }}
+                                placeholder="Password"
+                                sx={{ minWidth: 80, maxWidth: 140, height: 28, flex: 1, '.MuiInputBase-root': { height: 28 } }}
+                            />
+                            <TextField
+                                className="compact-ui"
+                                label="Asset ID"
+                                name="asset_id"
+                                value={addRowData.asset_id}
+                                onChange={handleAddChange}
+                                size="small"
+                                InputLabelProps={{ style: { fontSize: '0.65rem' } }}
+                                inputProps={{ style: { fontSize: '0.65rem', height: 28, minHeight: 28, maxHeight: 28, padding: '2px 6px' } }}
+                                placeholder="Asset ID"
+                                sx={{ minWidth: 80, maxWidth: 140, height: 28, flex: 1, '.MuiInputBase-root': { height: 28 } }}
+                            />
 
-            {/* Create New User Form */}
-            {/* Conditional rendering with transition for smooth slide down */}
-            <div
-                className="mb-5 p-4 border border-gray-200 rounded-md bg-gray-50 transition-all duration-300 ease-out overflow-hidden"
-                style={{
-                    maxHeight: showCreateUserForm ? '350px' : '0', // Adjusted maxHeight
-                    opacity: showCreateUserForm ? '1' : '0',
-                    paddingTop: showCreateUserForm ? '1rem' : '0',
-                    paddingBottom: showCreateUserForm ? '1rem' : '0',
-                    borderWidth: showCreateUserForm ? '1px' : '0',
+                            <Button
+                                className="compact-ui"
+                                onClick={handleAddCancel}
+                                color="inherit"
+                                size="small"
+                                sx={{
+                                    height: 24,
+                                    minWidth: 32,
+                                    px: 0.5,
+                                    py: 0,
+                                    fontSize: '0.6rem',
+                                    lineHeight: 1,
+                                    boxShadow: 'none',
+                                    flexShrink: 0,
+                                    ml: 'auto'
+                                }}
+                            >
+                                CANCEL
+                            </Button>
+                            <Button
+                                className="compact-ui"
+                                type="submit"
+                                variant="contained"
+                                color="primary"
+                                size="small"
+                                sx={{
+                                    height: 24,
+                                    minWidth: 32,
+                                    px: 0.5,
+                                    py: 0,
+                                    fontSize: '0.6rem',
+                                    lineHeight: 1,
+                                    boxShadow: 2,
+                                    flexShrink: 0
+                                }}
+                            >
+                                SAVE
+                            </Button>
+                        </Box>
+                    </form>
+                </Box>
+            </Collapse> {/* End Collapse component */}
+
+            {clientOrder.length === 0 && !loading && !error && (
+                <Typography variant="body1" color="textSecondary" sx={{ mt: 2 }}>
+                    No user profiles found.
+                </Typography>
+            )}
+            {clientOrder.map((client) => (
+                <Box key={client} mb={3}>
+                    <Typography variant="subtitle2" sx={{ color: '#174ea6', fontStyle: 'italic', fontWeight: 300, fontSize: '0.9rem', letterSpacing: 0.5, mb: 0.5 }}>
+                        {client} ({groupedUsers[client].length} user{groupedUsers[client].length !== 1 ? 's' : ''})
+                    </Typography>
+                    <TableContainer component={Paper} sx={{ border: '1px solid #e0e0e0', borderRadius: 2, boxShadow: 'none' }}>
+                        <Table
+                            size="small"
+                            sx={{
+                                '& .MuiTableCell-root': { fontSize: '0.68rem', padding: '2px 6px', height: 28 },
+                                '& .MuiTableRow-root': { height: 28 },
+                                borderCollapse: 'separate',
+                                borderSpacing: 0,
+                            }}
+                        >
+                            <TableHead>
+                                <TableRow sx={{ backgroundColor: '#f5f5f5' }}>
+                                    <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: '1px solid #e0e0e0', width: 36, minWidth: 36, maxWidth: 36, textAlign: 'center' }}>#</TableCell>
+                                    <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: '1px solid #e0e0e0', width: 180, minWidth: 140, maxWidth: 220 }}>Email</TableCell>
+                                    <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: '1px solid #e0e0e0', width: 70, minWidth: 60, maxWidth: 90 }}>Role</TableCell>
+                                    <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: '1px solid #e0e0e0', width: 120, minWidth: 100, maxWidth: 160 }}>Domain</TableCell>
+                                    <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: '1px solid #e0e0e0', width: 140, minWidth: 100, maxWidth: 180 }}>Client Name</TableCell>
+                                    <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: '1px solid #e0e0e0', width: 100, minWidth: 80, maxWidth: 140 }}>Password</TableCell>
+                                    <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: '1px solid #e0e0e0', width: 100, minWidth: 80, maxWidth: 140 }}>Asset ID</TableCell>
+                                    <TableCell align="right" sx={{ borderBottom: '1px solid #e0e0e0', width: 90, minWidth: 70, maxWidth: 120 }}>Actions</TableCell>
+                                </TableRow>
+                            </TableHead>
+                            <TableBody>
+                                {groupedUsers[client].sort((a, b) => a.email.localeCompare(b.email)).map((u, i) => (
+                                    <TableRow key={u.uid} sx={{ '&:last-child td, &:last-child th': { borderBottom: 0 } }}>
+                                        <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: i === groupedUsers[client].length - 1 ? '0' : '1px solid #e0e0e0', textAlign: 'center', fontWeight: 500, color: '#888', width: 36, minWidth: 36, maxWidth: 36 }}>
+                                            {i + 1}
+                                        </TableCell>
+                                        <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: i === groupedUsers[client].length - 1 ? '0' : '1px solid #e0e0e0', width: 180, minWidth: 140, maxWidth: 220 }}>{u.email}</TableCell>
+                                        <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: i === groupedUsers[client].length - 1 ? '0' : '1px solid #e0e0e0', width: 70, minWidth: 60, maxWidth: 90 }}>
+                                            <Chip label={u.role} size="small" color={u.role === 'admin' ? 'primary' : u.role === 'support' ? 'secondary' : 'default'} sx={{ fontSize: '0.68rem', height: 20 }} />
+                                        </TableCell>
+                                        <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: i === groupedUsers[client].length - 1 ? '0' : '1px solid #e0e0e0', width: 120, minWidth: 100, maxWidth: 160 }}>
+                                            <span style={{ color: '#1976d2', textDecoration: 'underline', cursor: 'pointer' }} onClick={() => handleGoToClientPage('domain', u.domain)} title={`Go to client management filtered by domain: ${u.domain}`}>{u.domain}</span>
+                                        </TableCell>
+                                        <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: i === groupedUsers[client].length - 1 ? '0' : '1px solid #e0e0e0', width: 140, minWidth: 100, maxWidth: 180 }}>
+                                            <span style={{ color: '#1976d2', textDecoration: 'underline', cursor: 'pointer' }} onClick={() => handleGoToClientPage('client', u.clientname)} title={`Go to client management filtered by client: ${u.clientname}`}>{u.clientname}</span>
+                                        </TableCell>
+                                        {editRowId === u.uid ? (
+                                            <>
+                                                <TableCell
+                                                    sx={{
+                                                        borderRight: '1px solid #e0e0e0',
+                                                        borderBottom: i === groupedUsers[client].length - 1 ? '0' : '1px solid #e0e0e0',
+                                                        width: 100,
+                                                        minWidth: 80,
+                                                        maxWidth: 140,
+                                                        backgroundColor: editRowData.showPasswordField ? '#f0faff' : 'inherit',
+                                                    }}
+                                                >
+                                                    {!editRowData.showPasswordField ? (
+                                                        <Button
+                                                            variant="outlined"
+                                                            size="small"
+                                                            onClick={handleTogglePasswordField}
+                                                            startIcon={<VpnKeyIcon sx={{ fontSize: '0.8rem' }} />}
+                                                            sx={{ fontSize: '0.6rem', height: 20, minWidth: 'auto', padding: '2px 4px' }}
+                                                        >
+                                                            Change
+                                                        </Button>
+                                                    ) : (
+                                                        <TextField
+                                                            name="password"
+                                                            label="New Password"
+                                                            type="password"
+                                                            value={editRowData.password}
+                                                            onChange={handleEditChange}
+                                                            size="small"
+                                                            sx={{ width: '100%' }}
+                                                            placeholder="Enter new password"
+                                                            InputLabelProps={{ style: { fontSize: '0.65rem' } }}
+                                                            inputProps={{ style: { fontSize: '0.65rem', height: 28, minHeight: 28, maxHeight: 28, padding: '2px 6px' } }}
+                                                        />
+                                                    )}
+                                                </TableCell>
+                                                <TableCell
+                                                    sx={{
+                                                        borderRight: '1px solid #e0e0e0',
+                                                        borderBottom: i === groupedUsers[client].length - 1 ? '0' : '1px solid #e0e0e0',
+                                                        width: 100,
+                                                        minWidth: 80,
+                                                        maxWidth: 140,
+                                                        backgroundColor: editRowId === u.uid ? '#f0faff' : 'inherit',
+                                                    }}
+                                                >
+                                                    <TextField
+                                                        name="asset_id"
+                                                        label="Asset ID"
+                                                        value={editRowData.asset_id}
+                                                        onChange={handleEditChange}
+                                                        size="small"
+                                                        sx={{ width: '100%' }}
+                                                        InputLabelProps={{ style: { fontSize: '0.65rem' } }}
+                                                        inputProps={{ style: { fontSize: '0.65rem', height: 28, minHeight: 28, maxHeight: 28, padding: '2px 6px' } }}
+                                                    />
+                                                </TableCell>
+                                                <TableCell align="right" sx={{ borderBottom: i === groupedUsers[client].length - 1 ? '0' : '1px solid #e0e0e0', width: 90, minWidth: 70, maxWidth: 120 }}>
+                                                    <IconButton onClick={() => handleEditSave(u.uid)} size="small"><EditIcon sx={{ fontSize: '1rem' }} /></IconButton>
+                                                    <IconButton onClick={handleEditCancel} size="small"><ClearIcon sx={{ fontSize: '1rem' }} /></IconButton>
+                                                </TableCell>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: i === groupedUsers[client].length - 1 ? '0' : '1px solid #e0e0e0', width: 100, minWidth: 80, maxWidth: 140 }}>••••••</TableCell>
+                                                <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: i === groupedUsers[client].length - 1 ? '0' : '1px solid #e0e0e0', width: 100, minWidth: 80, maxWidth: 140 }}>{u.asset_id}</TableCell>
+                                                <TableCell align="right" sx={{ borderBottom: i === groupedUsers[client].length - 1 ? '0' : '1px solid #e0e0e0', width: 90, minWidth: 70, maxWidth: 120 }}>
+                                                    <IconButton onClick={() => handleEditClick(u)} size="small"><EditIcon sx={{ fontSize: '1rem' }} /></IconButton>
+                                                    <IconButton
+                                                        onClick={(event) => handleDeleteClick(event, u.uid, u.email)}
+                                                        size="small"
+                                                    >
+                                                        <DeleteIcon sx={{ fontSize: '1rem' }} />
+                                                    </IconButton>
+                                                </TableCell>
+                                            </>
+                                        )}
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </TableContainer>
+                </Box>
+            ))}
+            <Snackbar open={snackbar.open} autoHideDuration={3000} onClose={() => setSnackbar({ ...snackbar, open: false })}>
+                <Alert onClose={() => setSnackbar({ ...snackbar, open: false })} severity={snackbar.severity} sx={{ width: '100%' }}>
+                    {snackbar.message}
+                </Alert>
+            </Snackbar>
+
+            <Popover
+                open={openConfirmPopover}
+                anchorEl={anchorEl.current}
+                onClose={handleCancelDelete}
+                anchorOrigin={{
+                    vertical: 'bottom',
+                    horizontal: 'left',
+                }}
+                transformOrigin={{
+                    vertical: 'top',
+                    horizontal: 'left',
+                }}
+                PaperProps={{
+                    sx: {
+                        p: 0.5,
+                        minWidth: 160,
+                        maxWidth: 220,
+                        boxShadow: 3,
+                        borderRadius: 1,
+                        fontSize: '0.7rem',
+                    }
                 }}
             >
-                {showCreateUserForm && (
-                    <>
-                        <h3 className="text-lg font-semibold text-gray-700 mb-3">Add New User</h3>
-                        <form onSubmit={handleCreateUserSubmit} className="space-y-3">
-                            <div>
-                                <label htmlFor="newUserEmail" className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                                <input
-                                    id="newUserEmail"
-                                    type="email"
-                                    name="email"
-                                    value={newUserData.email}
-                                    onChange={handleCreateUserChange}
-                                    placeholder="user@example.com"
-                                    required
-                                    className="mt-0.5 block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm focus:outline-none focus:ring-gray-400 focus:border-gray-400"
-                                />
-                            </div>
-
-                            <div>
-                                <label htmlFor="newUserPassword" className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-                                <input
-                                    id="newUserPassword"
-                                    type="password"
-                                    name="password"
-                                    value={newUserData.password}
-                                    onChange={handleCreateUserChange}
-                                    placeholder="Choose a strong password"
-                                    required
-                                    className="mt-0.5 block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm focus:outline-none focus:ring-gray-400 focus:border-gray-400"
-                                />
-                            </div>
-                            <div>
-                                <label htmlFor="newUserRole" className="block text-sm font-medium text-gray-700 mb-1">Role</label>
-                                <select
-                                    id="newUserRole"
-                                    name="role"
-                                    value={newUserData.role}
-                                    onChange={handleCreateUserChange}
-                                    className="mt-0.5 block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm focus:outline-none focus:ring-gray-400 focus:border-gray-400"
-                                >
-                                    {validUserRoles
-                                        .filter(role => !(user.role === 'admin' && role === 'admin'))
-                                        .map(role => (
-                                            <option key={role} value={role}>{role.charAt(0).toUpperCase() + role.slice(1)}</option>
-                                        ))}
-                                </select>
-                            </div>
-                            <div className="flex justify-end space-x-2">
-                                <PrimaryButton type="button" onClick={() => setShowCreateUserForm(false)}
-                                    className="px-3 py-1.5 text-sm bg-gray-200 hover:bg-gray-300 text-gray-800 focus:ring-gray-300 focus:ring-offset-2 transition ease-in-out duration-150 border border-gray-300">
-                                    <XCircle size={16} className="inline mr-1" /> Cancel
-                                </PrimaryButton>
-                                <PrimaryButton type="submit" disabled={loading}
-                                    className="px-3 py-1.5 text-sm bg-gray-700 hover:bg-gray-800 text-white focus:ring-gray-500 focus:ring-offset-2 transition ease-in-out duration-150">
-                                    <CheckCircle size={16} className="inline mr-1" /> {loading ? 'Creating...' : 'Create User'}
-                                </PrimaryButton>
-                            </div>
-                        </form>
-                    </>
-                )}
-            </div>
-
-            {loading && (
-                <div className="flex items-center justify-center h-32">
-                    <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-gray-500"></div>
-                    <p className="ml-3 text-gray-600">Loading users...</p>
-                </div>
-            )}
-
-            {error && (
-                <div className="bg-red-100 border border-red-400 text-red-700 px-3 py-2 rounded relative mb-5 text-sm" role="alert">
-                    <strong className="font-bold">Error!</strong>
-                    <span className="block sm:inline"> {error}</span>
-                </div>
-            )}
-
-            {!loading && !error && filteredUsers.length === 0 && (
-                <div className="text-center py-8 text-gray-500">
-                    <p className="text-lg">No users found.</p>
-                    <p className="text-sm mt-1">Try adjusting your search or add a new user.</p>
-                </div>
-            )}
-
-            {!loading && !error && filteredUsers.length > 0 && (
-                <div className="overflow-x-auto bg-white rounded-md shadow-sm border border-gray-200">
-                    <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
-                            <tr>
-                                <th scope="col" className="px-5 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    Email
-                                </th>
-                                <th scope="col" className="px-5 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    Role
-                                </th>
-                                <th scope="col" className="px-5 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    Actions
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-gray-100">
-                            {filteredUsers.map((u) => (
-                                <tr key={u.uid} className="hover:bg-gray-50">
-                                    <td className="px-5 py-3 whitespace-nowrap text-sm text-gray-800">
-                                        {u.email}
-                                    </td>
-                                    <td className="px-5 py-3 whitespace-nowrap text-sm text-gray-800">
-                                        {editingUser && editingUser.uid === u.uid ? (
-                                            <select
-                                                value={newRole}
-                                                onChange={(e) => setNewRole(e.target.value)}
-                                                className="block w-full p-1.5 border border-gray-300 rounded-md shadow-sm text-sm focus:outline-none focus:ring-gray-400 focus:border-gray-400"
-                                            >
-                                                {validUserRoles.map(role => (
-                                                    <option key={role} value={role}>{role.charAt(0).toUpperCase() + role.slice(1)}</option>
-                                                ))}
-                                            </select>
-                                        ) : (
-                                            <span className={`px-2 py-0.5 inline-flex text-xs leading-4 font-medium rounded-full
-                                                ${u.role === 'admin' ? 'bg-gray-200 text-gray-800' :
-                                                  u.role === 'support' ? 'bg-gray-100 text-gray-700' :
-                                                  'bg-gray-50 text-gray-600'}`}>
-                                                {u.role}
-                                            </span>
-                                        )}
-                                    </td>
-                                    <td className="px-5 py-3 whitespace-nowrap text-sm font-medium">
-                                        {editingUser && editingUser.uid === u.uid ? (
-                                            <div className="flex space-x-1">
-                                                <button onClick={handleSaveRole} className="p-1.5 text-gray-700 hover:text-black focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-1 rounded">
-                                                    <Save size={16} />
-                                                </button>
-                                                <button onClick={handleCancelEdit} className="p-1.5 text-gray-500 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-1 rounded">
-                                                    <XCircle size={16} />
-                                                </button>
-                                            </div>
-                                        ) : (
-                                            <div className="flex space-x-1">
-                                                <button onClick={() => handleEditClick(u)} className="p-1.5 text-gray-600 hover:text-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-1 rounded">
-                                                    <Edit size={16} />
-                                                </button>
-                                                {u.uid !== user.uid && (
-                                                    <button onClick={() => handleDeleteUser(u)} className="p-1.5 text-red-500 hover:text-red-700 focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-1 rounded">
-                                                        <Trash2 size={16} />
-                                                    </button>
-                                                )}
-                                            </div>
-                                        )}
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            )}
+                <Box sx={{ p: 0.5 }}>
+                    <Typography variant="body2" sx={{ mb: 0.5, fontSize: '0.7rem', lineHeight: 1.2 }}>
+                        Delete "<strong>{currentUserEmailToDelete}</strong>"? This cannot be undone.
+                    </Typography>
+                    <Box display="flex" justifyContent="flex-end" gap={0.5}>
+                        <Button onClick={handleCancelDelete} size="small" variant="outlined" color="primary"
+                            sx={{ fontSize: '0.6rem', padding: '2px 5px', minWidth: 'auto' }}>
+                            No
+                        </Button>
+                        <Button onClick={handleConfirmDelete} size="small" variant="contained" color="primary" autoFocus
+                            sx={{ fontSize: '0.6rem', padding: '2px 5px', minWidth: 'auto' }}>
+                            Yes
+                        </Button>
+                    </Box>
+                </Box>
+            </Popover>
         </div>
     );
 };

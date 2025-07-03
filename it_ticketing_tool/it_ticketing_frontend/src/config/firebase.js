@@ -2,7 +2,7 @@
 
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore'; // NEW: Import getFirestore
+import { getFirestore, enableIndexedDbPersistence } from 'firebase/firestore'; // NEW: Import getFirestore and enableIndexedDbPersistence
 
 // --- Firebase Client-Side Configuration ---
 // Replace these with your actual Firebase project configuration
@@ -23,6 +23,19 @@ const app = initializeApp(firebaseConfig);
 const authClient = getAuth(app);
 // Get Firestore instance
 const dbClient = getFirestore(app); // NEW: Export the Firestore client
+
+// Enable offline persistence (handle multi-tab error gracefully)
+enableIndexedDbPersistence(dbClient).catch((err) => {
+  if (err.code === 'failed-precondition') {
+    // Multiple tabs open, persistence can only be enabled in one tab at a a time.
+    console.warn('Firestore persistence failed-precondition: Multiple tabs open. Persistence can only be enabled in one tab at a time.');
+  } else if (err.code === 'unimplemented') {
+    // The current browser does not support all of the features required to enable persistence
+    console.warn('Firestore persistence unimplemented: The current browser does not support all features required.');
+  } else {
+    console.error('Firestore persistence error:', err);
+  }
+});
 
 // Export the auth and db clients for use in other components
 export { app, authClient, dbClient }; // NEW: Export 'app' and 'dbClient'

@@ -1,0 +1,74 @@
+.compact-ui {
+  font-size: 70% !important;
+}
+
+.compact-ui .MuiInputBase-root,
+.compact-ui .MuiInputBase-input,
+.compact-ui input,
+.compact-ui .MuiSelect-root,
+.compact-ui .MuiButton-root,
+.compact-ui .MuiFormControl-root,
+.compact-ui .MuiOutlinedInput-root,
+.compact-ui .MuiTableCell-root,
+.compact-ui .MuiTableRow-root {
+  font-size: 0.7rem !important;
+  min-height: 22px !important;
+  height: 22px !important;
+  padding-top: 2px !important;
+  padding-bottom: 2px !important;
+  padding-left: 6px !important;
+  padding-right: 6px !important;
+}
+
+.compact-ui .MuiButton-root,
+.compact-ui button {
+  font-size: 0.7rem !important;
+  min-height: 22px !important;
+  height: 22px !important;
+  padding: 2px 8px !important;
+  border-radius: 4px !important;
+}
+
+.compact-ui .MuiSvgIcon-root,
+.compact-ui svg,
+.compact-ui .MuiButton-startIcon,
+.compact-ui .MuiButton-endIcon {
+  font-size: 1rem !important;
+  width: 1rem !important;
+  height: 1rem !important;
+}
+
+.compact-ui .react-select__control {
+  min-height: 22px !important;
+  height: 22px !important;
+  font-size: 0.7rem !important;
+}
+
+.compact-ui .react-select__single-value,
+.compact-ui .react-select__input,
+.compact-ui .react-select__placeholder {
+  font-size: 0.7rem !important;
+}
+
+.compact-ui .MuiTableCell-root,
+.compact-ui .MuiTableHead-root,
+.compact-ui .MuiTableBody-root {
+  font-size: 0.7rem !important;
+  padding: 4px 6px !important;
+}
+
+.compact-ui .MuiIconButton-root {
+  padding: 2px !important;
+  font-size: 1rem !important;
+}
+
+.user-mgmt-title.compact-ui {
+  font-size: 1.1rem !important;
+  margin-bottom: 8px !important;
+  padding-bottom: 4px !important;
+}
+
+.compact-ui-placeholder::placeholder {
+  font-size: 0.65rem !important;
+  opacity: 0.7;
+} 
