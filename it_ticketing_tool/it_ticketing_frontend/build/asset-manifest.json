@@ -1,26 +1,26 @@
 {
   "files": {
-    "main.css": "/static/css/main.e1dcaebc.css",
-    "main.js": "/static/js/main.41d78864.js",
+    "main.css": "/static/css/main.d6a73af9.css",
+    "main.js": "/static/js/main.871b9e37.js",
+    "static/media/LayoutDashboardIcon.svg": "/static/media/LayoutDashboardIcon.887c45802865f904b9ec73beac43728e.svg",
+    "static/media/CreateTicketIcon.svg": "/static/media/CreateTicketIcon.8541d46c69bef2ae6d50b4c81971125b.svg",
+    "static/media/SettingsIconSvg.svg": "/static/media/SettingsIconSvg.f4e960e08de07f333f66f2ce69f1914d.svg",
+    "static/media/MyTicketsIcon.svg": "/static/media/MyTicketsIcon.869aa2e3a37bdfe2780a89ac24de135a.svg",
     "index.html": "/index.html",
     "static/media/UsersIcon.svg": "/static/media/UsersIcon.f260005fe20dc25caf04b45f01e0258c.svg",
-    "static/media/SettingsIconSvg.svg": "/static/media/SettingsIconSvg.dac1fb6cf30c0d6f9cc03917576987b0.svg",
+    "static/media/AssignedToMeIcon.svg": "/static/media/AssignedToMeIcon.c8bc154832e47600e99cf2f6282226e9.svg",
+    "static/media/MenuIcon.svg": "/static/media/MenuIcon.81ddd31de7a9e6565a777186c0d33372.svg",
     "static/media/DocIcon.svg": "/static/media/DocIcon.d75ba303d91ea482a176f60dbe459ba1.svg",
     "static/media/PdfIcon.svg": "/static/media/PdfIcon.49ed2770cd4637f1dabf4d087fab6941.svg",
     "static/media/TxtIcon.svg": "/static/media/TxtIcon.f58aa8d1f491f9d823a2833b475b8fd2.svg",
     "static/media/FileIcon.svg": "/static/media/FileIcon.1ea0084a9017b36ca9dd2437ee3a9853.svg",
     "static/media/JpgIcon.svg": "/static/media/JpgIcon.3b0a99884ec1bb78aab6d82e54c14cc5.svg",
     "static/media/PngIcon.svg": "/static/media/PngIcon.e4c19c070b68b25d550cf062d1c8e0d5.svg",
-    "static/media/MenuIcon.svg": "/static/media/MenuIcon.62afced8b4f9e7b9b28e04a44fb7c5f3.svg",
-    "static/media/AssignedToMeIcon.svg": "/static/media/AssignedToMeIcon.56e9fee5b431bb28b3a3895c008aff3d.svg",
-    "static/media/CreateTicketIcon.svg": "/static/media/CreateTicketIcon.4d96591dbd550c22d10d6b26e874d031.svg",
-    "static/media/MyTicketsIcon.svg": "/static/media/MyTicketsIcon.61762b99b83767deaba67e540d558ea1.svg",
-    "static/media/LayoutDashboardIcon.svg": "/static/media/LayoutDashboardIcon.3ceec30d39e26613ab6599a211da27a8.svg",
-    "main.e1dcaebc.css.map": "/static/css/main.e1dcaebc.css.map",
-    "main.41d78864.js.map": "/static/js/main.41d78864.js.map"
+    "main.d6a73af9.css.map": "/static/css/main.d6a73af9.css.map",
+    "main.871b9e37.js.map": "/static/js/main.871b9e37.js.map"
   },
   "entrypoints": [
-    "static/css/main.e1dcaebc.css",
-    "static/js/main.41d78864.js"
+    "static/css/main.d6a73af9.css",
+    "static/js/main.871b9e37.js"
   ]
 }
