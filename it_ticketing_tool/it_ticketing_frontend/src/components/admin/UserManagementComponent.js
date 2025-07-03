@@ -7,6 +7,7 @@ import {
     Collapse // Import Collapse component
 } from '@mui/material';
 import { Edit as EditIcon, Delete as DeleteIcon, Add as AddIcon, Clear as ClearIcon, VpnKey as VpnKeyIcon } from '@mui/icons-material';
+import SearchIcon from '@mui/icons-material/Search';
 import { API_BASE_URL } from '../../config/constants';
 import './UserManagementComponent.css';
 import { useNavigate } from 'react-router-dom';
@@ -282,37 +283,59 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
 
     return (
         <div className="container mx-auto p-4 sm:p-6 lg:p-8 bg-white shadow-sm rounded-lg animate-fade-in">
-            <h2 className="user-mgmt-title compact-ui">User Management</h2>
-            <Box display="flex" alignItems="center" gap={1} mb={1} className="compact-ui" justifyContent="space-between">
-                <TextField
-                    className="compact-ui"
-                    value={search}
-                    onChange={e => setSearch(e.target.value)}
-                    placeholder="Search by email, client, or asset ID..."
-                    size="small"
-                    InputProps={{
-                        endAdornment: (
-                            search ? (
-                                <IconButton size="small" onClick={() => setSearch('')} sx={{ fontSize: 16, p: 0.25 }}>
-                                    <ClearIcon fontSize="inherit" />
-                                </IconButton>
-                            ) : null
-                        ),
-                    }}
-                />
+            <h2 className="user-mgmt-title compact-ui" style={{ marginBottom: 0 }}>User Management</h2>
+            <Box display="flex" alignItems="center" gap={1} mb={0} className="compact-ui" justifyContent="flex-end">
                 {!addMode && (
-                    <Button
+                    <TextField
                         className="compact-ui"
-                        variant="contained"
-                        color="primary"
-                        startIcon={<AddIcon sx={{ fontSize: 14 }} />}
-                        onClick={handleAdd}
+                        value={search}
+                        onChange={e => setSearch(e.target.value)}
+                        placeholder="Search by email, client, or asset ID..."
                         size="small"
-                        sx={{ fontSize: '0.6rem', minHeight: 20, height: 20, px: 1, py: 0, borderRadius: 1, lineHeight: 1, ml: 1 }}
-                    >
-                        Add User
-                    </Button>
+                        sx={{ minWidth: 220, height: 32, mt: '-4px', '.MuiInputBase-root': { height: 32 }, '.MuiInputBase-input': { height: 20, padding: '0 8px', display: 'flex', alignItems: 'center' } }}
+                        InputProps={{
+                            endAdornment: (
+                                <>
+                                    <IconButton size="small" onClick={() => {/* Optionally trigger search logic here */}} sx={{ fontSize: 16, p: 0.25 }}>
+                                        <SearchIcon fontSize="inherit" />
+                                    </IconButton>
+                                    {search ? (
+                                        <IconButton size="small" onClick={() => setSearch('')} sx={{ fontSize: 16, p: 0.25 }}>
+                                            <ClearIcon fontSize="inherit" />
+                                        </IconButton>
+                                    ) : null}
+                                </>
+                            ),
+                            style: { height: 32, display: 'flex', alignItems: 'center' },
+                            inputProps: { style: { height: 20, padding: '0 8px', display: 'flex', alignItems: 'center' } }
+                        }}
+                    />
                 )}
+                <Box sx={{ width: 110, display: 'flex', justifyContent: 'flex-end' }}>
+                    {!addMode ? (
+                        <Button
+                            className="compact-ui"
+                            variant="contained"
+                            color="primary"
+                            startIcon={<AddIcon sx={{ fontSize: 14 }} />}
+                            onClick={handleAdd}
+                            size="small"
+                            sx={{ fontSize: '0.6rem', minHeight: 20, height: 20, px: 1, py: 0, borderRadius: 1, lineHeight: 1, width: '100%' }}
+                        >
+                            Add User
+                        </Button>
+                    ) : (
+                        <Button
+                            className="compact-ui"
+                            variant="contained"
+                            size="small"
+                            sx={{ fontSize: '0.6rem', minHeight: 20, height: 20, px: 1, py: 0, borderRadius: 1, lineHeight: 1, width: '100%', visibility: 'hidden' }}
+                            disabled
+                        >
+                            Add User
+                        </Button>
+                    )}
+                </Box>
             </Box>
 
             {/* Collapse component wraps the add user form */}
@@ -356,7 +379,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                                 InputProps={{
                                     endAdornment: (
                                         <InputAdornment position="end" sx={{ fontSize: '0.65rem', color: '#888', ml: 0 }}>
-                                            <span style={{ fontSize: '0.65rem' }}>{addRowData.domain ? `@${addRowData.domain}` : '@example.com'}</span>
+                                            <span style={{ fontSize: '0.65rem' }}>{addRowData.domain ? `@${addRowData.domain}` : '@xyz.com'}</span>
                                         </InputAdornment>
                                     )
                                 }}
@@ -441,7 +464,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                     <Typography variant="subtitle2" sx={{ color: '#174ea6', fontStyle: 'italic', fontWeight: 300, fontSize: '0.9rem', letterSpacing: 0.5, mb: 0.5 }}>
                         {client} ({groupedUsers[client].length} user{groupedUsers[client].length !== 1 ? 's' : ''})
                     </Typography>
-                    <TableContainer component={Paper} sx={{ border: '1px solid #e0e0e0', borderRadius: 2, boxShadow: 'none' }}>
+                    <TableContainer component={Paper} sx={{ border: '1px solid #e0e0e0', borderRadius: 2, boxShadow: 'none', marginTop: 0 }}>
                         <Table
                             size="small"
                             sx={{

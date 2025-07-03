@@ -64,8 +64,14 @@
 
 .user-mgmt-title.compact-ui {
   font-size: 1.1rem !important;
-  margin-bottom: 8px !important;
-  padding-bottom: 4px !important;
+  margin-bottom: 0 !important;
+  padding-bottom: 0 !important;
+}
+
+.MuiTableContainer-root,
+.MuiPaper-root {
+  margin-top: 0 !important;
+  padding-top: 0 !important;
 }
 
 .compact-ui-placeholder::placeholder {
