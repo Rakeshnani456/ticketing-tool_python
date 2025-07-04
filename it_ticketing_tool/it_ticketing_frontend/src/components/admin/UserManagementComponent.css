@@ -77,4 +77,27 @@
 .compact-ui-placeholder::placeholder {
   font-size: 0.65rem !important;
   opacity: 0.7;
+}
+
+.email-suffix-adornment {
+  font-size: 0.65rem !important;
+  color: #888 !important;
+  line-height: 1.2 !important;
+  height: 28px !important;
+  display: flex !important;
+  align-items: center !important;
+  margin-left: 0 !important;
+  -webkit-font-size: 0.65rem !important;
+}
+
+/* Compact style for MUI Autocomplete dropdown in User Management */
+.MuiAutocomplete-listbox {
+  font-size: 0.65rem !important;
+  max-height: 150px !important;
+}
+.MuiAutocomplete-option {
+  font-size: 0.65rem !important;
+  min-height: auto !important;
+  padding: 4px 8px !important;
 } 
+

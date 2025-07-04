@@ -467,34 +467,7 @@ const counts = {
                 {getPageHeading()}
             </h2>
 
-            {/* Informational message for filter behavior (only if filters are shown and showMessage is true) */}
-            {showFilters && showMessage && (
-                <div
-                    ref={messageBoxRef} // Attach ref here
-                    className={`relative text-sm text-gray-600 p-2 bg-blue-50 rounded-md border border-blue-200 flex items-start justify-between transition-all duration-500 ease-in-out`}
-                    style={{
-                        opacity: messageOpacity,
-                        transform: messageTransform,
-                        marginBottom: messageMarginBottom, // Use style for dynamic margin-bottom
-                        // Transition applies to opacity, transform, and margin-bottom
-                        transition: 'opacity 1s ease-in-out, transform 1 ease-in-out, margin-bottom 1 ease-in-out',
-                        pointerEvents: messageOpacity === 0 ? 'none' : 'auto' // Disable pointer events when fully faded
-                    }}
-                >
-
-                    <span>
-                        {/* Shorter message content */}
-                        Showing {getPageHeading().toLowerCase()}. Use filters to refine.
-                    </span>
-                    <button
-                        onClick={handleCloseMessage} // Use the new handler
-                        className="ml-4 p-1 rounded-full hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-300 transition-colors duration-200"
-                        aria-label="Close message"
-                    >
-                        <XCircle size={16} className="text-blue-600" />
-                    </button>
-                </div>
-            )}
+         
 
             {/* Filter and Export Section (Conditional Rendering based on `showFilters` prop) */}
             {showFilters && (

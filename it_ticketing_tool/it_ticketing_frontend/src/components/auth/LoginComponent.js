@@ -153,7 +153,7 @@ const LoginComponent = ({ onLoginSuccess, navigateTo, showFlashMessage }) => {
                 </form>
                 <p className="text-center mt-4 text-gray-600 text-xs">
                     Don't have an account?{' '}
-                    <LinkButton onClick={() => navigateTo('register')}>
+                    <LinkButton disabled sx={{ pointerEvents: 'none', opacity: 0.5, cursor: 'not-allowed' }}>
                         Register here
                     </LinkButton>
                 </p>

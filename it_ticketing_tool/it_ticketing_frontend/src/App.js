@@ -78,6 +78,7 @@ import UserManagementComponent from './components/admin/UserManagementComponent'
 import Modal from './components/common/Modal';
 import AdminManagementComponent from './components/admin/AdminManagementComponent';
 import ClientManagementComponent from './components/admin/ClientManagementComponent';
+import EngineerManagementComponent from './components/admin/EngineerManagementComponent';
 
 
 // Placeholder components for new pages mentioned in sidebar
@@ -102,12 +103,7 @@ const SiteAdminManagementComponent = () => (
         <p>Manage site admins here.</p>
     </div>
 );
-const EngineerManagementComponent = () => (
-    <div className="p-6">
-        <h2 className="text-2xl font-bold mb-4">Engineer Management (Placeholder)</h2>
-        <p>Manage engineers here.</p>
-    </div>
-);
+
 const ReportsComponent = () => (
     <div className="p-6">
         <h2 className="text-2xl font-bold mb-4">Reports (Placeholder)</h2>
@@ -1182,7 +1178,7 @@ const App = () => {
                             {/* Admin-only routes */}
                             <Route path="/client-management" element={currentUser.role === 'admin' ? <ClientManagementComponent /> : <AccessDeniedComponent />} />
                             <Route path="/siteadmin-management" element={currentUser.role === 'admin' ? <SiteAdminManagementComponent /> : <AccessDeniedComponent />} />
-                            <Route path="/engineer-management" element={currentUser.role === 'admin' ? <EngineerManagementComponent /> : <AccessDeniedComponent />} />
+                            <Route path="/engineer-management" element={(currentUser.role === 'admin' || currentUser.role === 'super_admin') ? <EngineerManagementComponent /> : <AccessDeniedComponent />} />
                             <Route path="/reports" element={currentUser.role === 'admin' ? <ReportsComponent /> : <AccessDeniedComponent />} />
                             <Route path="/insights" element={currentUser.role === 'admin' ? <InsightsComponent /> : <AccessDeniedComponent />} />
                             <Route path="/clients" element={currentUser.role === 'super_admin' ? <ClientManagementComponent /> : <AccessDeniedComponent />} />

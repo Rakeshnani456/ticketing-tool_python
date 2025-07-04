@@ -22,21 +22,29 @@ const areUsersEqual = (arr1, arr2) => {
     for (let i = 0; i < arr1.length; i++) {
         const user1 = arr1[i];
         const user2 = arr2[i];
-        if (JSON.stringify(user1) !== JSON.stringify(user2)) {
+        // Compare relevant properties instead of stringifying the whole object for robustness
+        if (user1.uid !== user2.uid ||
+            user1.clientname !== user2.clientname ||
+            user1.name !== user2.name ||
+            user1.email !== user2.email ||
+            user1.asset_id !== user2.asset_id ||
+            user1.domain !== user2.domain) {
             return false;
         }
     }
     return true;
 };
 
+// 1. Update initialUserState to include domain and emailPrefix
 const initialUserState = {
-  email: '',
-  password: '',
-  role: 'user',
+  clientname: '', // Added clientname to initial state for the Autocomplete
+  name: '',
   domain: '',
-  clientname: '',
-  asset_id: '',
   emailPrefix: '',
+  password: '',
+  asset_id: '',
+  role: 'user',
+  joined_date: '',
 };
 
 const UserManagementComponent = ({ user, showFlashMessage }) => {
@@ -48,7 +56,8 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
     const [addMode, setAddMode] = useState(false);
     const [addRowData, setAddRowData] = useState(initialUserState);
     const [editRowId, setEditRowId] = useState(null);
-    const [editRowData, setEditRowData] = useState({ password: '', asset_id: '', showPasswordField: false });
+    // Update editRowData to include all editable fields
+    const [editRowData, setEditRowData] = useState({ clientname: '', name: '', domain: '', emailPrefix: '', password: '', asset_id: '', showPasswordField: false });
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
     const navigate = useNavigate();
     const db = getFirestore(app);
@@ -65,13 +74,14 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
             const res = await fetch(`${API_BASE_URL}/api/clients`);
             if (!res.ok) throw new Error('Failed to fetch clients');
             const data = await res.json();
+            // Deep comparison for clients to prevent unnecessary re-renders if content is same
             if (JSON.stringify(clients) !== JSON.stringify(data)) {
                 setClients(data);
             }
         } catch (err) {
             console.error("Error fetching clients:", err);
         }
-    }, [clients]);
+    }, [clients]); // Dependency on 'clients' state for comparison
 
     // Fetch users (live snapshot)
     useEffect(() => {
@@ -87,11 +97,13 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                 const clientMatch = clients.find(c => c['Client name'] === u.client_name);
                 return {
                     ...u,
+                    asset_id: u.asset_id || u.assetid || '',
                     domain: clientMatch ? clientMatch.Domain : (u.domain || ''),
                     clientname: clientMatch ? clientMatch['Client name'] : (u.client_name || 'Unknown Client'),
                 };
             });
 
+            // Use the improved areUsersEqual for more robust comparison
             if (!areUsersEqual(users, usersWithClientDetails)) {
                 setUsers(usersWithClientDetails);
             }
@@ -103,7 +115,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
         });
 
         return () => unsub();
-    }, [db, clients, fetchClients, users]);
+    }, [db, clients, fetchClients, users]); // Added 'users' to dependencies for areUsersEqual check
 
     const handleAdd = () => {
         setAddMode(true);
@@ -111,6 +123,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
         setEditRowId(null);
     };
 
+    // 3. Update handleAddClientChange to auto-fill domain if possible
     const handleAddClientChange = (event, value) => {
         const selectedClient = clients.find(c => c['Client name'] === value);
         setAddRowData(prev => ({
@@ -125,29 +138,45 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
         setAddRowData(prev => ({ ...prev, [name]: value }));
     };
 
+    // 4. Update handleAddSave to construct email from prefix and domain
     const handleAddSave = async (e) => {
         e.preventDefault();
         if (!addRowData.password) {
             setSnackbar({ open: true, message: 'Password is required.', severity: 'error' });
             return;
         }
-        if (!addRowData.emailPrefix || !addRowData.domain) {
-            setSnackbar({ open: true, message: 'Email prefix and client name are required (which derives domain).', severity: 'error' });
+        if (!addRowData.emailPrefix) {
+            setSnackbar({ open: true, message: 'Email prefix is required.', severity: 'error' });
             return;
         }
-        const email = `${addRowData.emailPrefix}@${addRowData.domain}`;
-        if (!addRowData.clientname) {
+        if (!addRowData.domain) {
+            setSnackbar({ open: true, message: 'Domain name is required.', severity: 'error' });
+            return;
+        }
+        if (!addRowData.name) {
+             setSnackbar({ open: true, message: 'User Name is required.', severity: 'error' });
+            return;
+        }
+        if (!addRowData.asset_id) {
+             setSnackbar({ open: true, message: 'Asset ID is required.', severity: 'error' });
+            return;
+        }
+        if (!addRowData.clientname) { // Ensure clientname is also validated
              setSnackbar({ open: true, message: 'Client Name is required.', severity: 'error' });
             return;
         }
 
         try {
+            const email = `${addRowData.emailPrefix.trim()}@${addRowData.domain.trim()}`;
             const payload = {
-                email,
-                password: addRowData.password,
-                role: addRowData.role,
-                client_name: addRowData.clientname,
-                asset_id: addRowData.asset_id,
+              name: addRowData.name,
+              email,
+              password: addRowData.password,
+              role: 'user',
+              asset_id: addRowData.asset_id,
+              joined_date: new Date().toISOString(),
+              client_name: addRowData.clientname,
+              domain: addRowData.domain, // <-- Add this line
             };
             const res = await fetch(`${API_BASE_URL}/api/users`, {
                 method: 'POST',
@@ -171,8 +200,22 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
     };
 
     const handleEditClick = (userToEdit) => {
+        // Split email into prefix and domain
+        let emailPrefix = '';
+        let domain = '';
+        if (userToEdit.email && userToEdit.email.includes('@')) {
+            [emailPrefix, domain] = userToEdit.email.split('@');
+        }
         setEditRowId(userToEdit.uid);
-        setEditRowData({ password: '', asset_id: userToEdit.asset_id || '', showPasswordField: false });
+        setEditRowData({
+            clientname: userToEdit.clientname || '',
+            name: userToEdit.name || '',
+            domain: domain || userToEdit.domain || '',
+            emailPrefix: emailPrefix || '',
+            password: '',
+            asset_id: userToEdit.asset_id || userToEdit.assetid || '',
+            showPasswordField: false,
+        });
     };
 
     const handleEditChange = (e) => {
@@ -186,27 +229,27 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
 
     const handleEditSave = async (uid) => {
         try {
-            const payload = {};
-            if (editRowData.showPasswordField && editRowData.password) payload.password = editRowData.password;
-            if (editRowData.asset_id !== undefined) payload.asset_id = editRowData.asset_id;
-
-            if (Object.keys(payload).length === 0) {
-                setEditRowId(null);
-                setSnackbar({ open: true, message: 'No changes to save.', severity: 'info' });
+            const currentUser = users.find(u => u.uid === uid);
+            const updatePayload = {};
+            if (editRowData.name && editRowData.name !== currentUser.name) updatePayload.name = editRowData.name;
+            if (editRowData.asset_id && editRowData.asset_id !== currentUser.asset_id) updatePayload.asset_id = editRowData.asset_id;
+            if (editRowData.showPasswordField && editRowData.password) updatePayload.password = editRowData.password;
+            // Optionally allow updating joined_date or role if needed
+            if (Object.keys(updatePayload).length === 0) {
+                setSnackbar({ open: true, message: 'No changes to update.', severity: 'info' });
                 return;
             }
-
             const res = await fetch(`${API_BASE_URL}/api/users/${uid}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
+                body: JSON.stringify(updatePayload),
             });
             if (!res.ok) {
                 const errData = await res.json();
                 throw new Error(errData.error || 'Failed to update user');
             }
             setEditRowId(null);
-            setEditRowData({ password: '', asset_id: '', showPasswordField: false });
+            setEditRowData({ clientname: '', name: '', domain: '', emailPrefix: '', password: '', asset_id: '', showPasswordField: false });
             setSnackbar({ open: true, message: 'User updated successfully.', severity: 'success' });
         } catch (err) {
             setSnackbar({ open: true, message: err.message, severity: 'error' });
@@ -215,7 +258,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
 
     const handleEditCancel = () => {
         setEditRowId(null);
-        setEditRowData({ password: '', asset_id: '', showPasswordField: false });
+        setEditRowData({ clientname: '', name: '', domain: '', emailPrefix: '', password: '', asset_id: '', showPasswordField: false });
     };
 
     const handleDeleteClick = (event, uid, email) => {
@@ -282,9 +325,11 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
     const clientOrder = useMemo(() => Object.keys(groupedUsers).sort(), [groupedUsers]);
 
     return (
-        <div className="container mx-auto p-4 sm:p-6 lg:p-8 bg-white shadow-sm rounded-lg animate-fade-in">
-            <h2 className="user-mgmt-title compact-ui" style={{ marginBottom: 0 }}>User Management</h2>
-            <Box display="flex" alignItems="center" gap={1} mb={0} className="compact-ui" justifyContent="flex-end">
+        // Removed 'container', 'mx-auto', and all 'p-*' classes to eliminate external gaps
+        // Added 'w-full' to ensure it takes full width
+        <div className="w-full bg-white shadow-sm rounded-lg animate-fade-in">
+            <h2 className="user-mgmt-title compact-ui" style={{ marginBottom: 0, padding: '16px 24px 0' }}>User Management</h2> {/* Added padding here */}
+            <Box display="flex" alignItems="center" gap={1} mb={0} className="compact-ui" justifyContent="flex-end" sx={{ padding: '0 24px 16px' }}> {/* Added padding here */}
                 {!addMode && (
                     <TextField
                         className="compact-ui"
@@ -325,92 +370,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                             Add User
                         </Button>
                     ) : (
-                        <Button
-                            className="compact-ui"
-                            variant="contained"
-                            size="small"
-                            sx={{ fontSize: '0.6rem', minHeight: 20, height: 20, px: 1, py: 0, borderRadius: 1, lineHeight: 1, width: '100%', visibility: 'hidden' }}
-                            disabled
-                        >
-                            Add User
-                        </Button>
-                    )}
-                </Box>
-            </Box>
-
-            {/* Collapse component wraps the add user form */}
-            <Collapse in={addMode} timeout={400} unmountOnExit> {/* cite: 1, 4 */}
-                <Box mb={1} p={1} borderRadius={2} border={1} borderColor="grey.200" bgcolor="grey.50" className="compact-ui">
-                    <form onSubmit={handleAddSave}>
-                        <Box display="flex" gap={1} alignItems="center" flexWrap="nowrap" justifyContent="space-between">
-                            <Autocomplete
-                                options={clients.map(c => c['Client name'])}
-                                value={addRowData.clientname || null}
-                                onChange={handleAddClientChange}
-                                renderInput={(params) => (
-                                    <TextField
-                                        {...params}
-                                        label="Client Name"
-                                        size="small"
-                                        required
-                                        sx={{ minWidth: 80, maxWidth: 140, height: 28, flex: 1, '.MuiInputBase-root': { height: 28, minHeight: 28, maxHeight: 28, p: 0 }, '.MuiInputBase-input': { fontSize: '0.65rem', height: 28, minHeight: 28, maxHeight: 28, padding: '2px 6px' } }}
-                                        InputLabelProps={{ style: { fontSize: '0.65rem' } }}
-                                        inputProps={{ ...params.inputProps, style: { fontSize: '0.65rem', height: 28, minHeight: 28, maxHeight: 28, padding: '2px 6px' } }}
-                                        placeholder="Client Name"
-                                    />
-                                )}
-                                sx={{ minWidth: 80, maxWidth: 140, height: 28, flex: 1, p: 0, m: 0, alignItems: 'center', display: 'flex' }}
-                                slotProps={{
-                                    popper: { sx: { '& .MuiAutocomplete-option': { fontSize: '0.65rem', minHeight: 28, height: 28 } } }
-                                }}
-                            />
-                            <TextField
-                                className="compact-ui"
-                                label="Email"
-                                name="emailPrefix"
-                                value={addRowData.emailPrefix || ''}
-                                onChange={e => setAddRowData(prev => ({ ...prev, emailPrefix: e.target.value }))}
-                                required
-                                size="small"
-                                InputLabelProps={{ style: { fontSize: '0.65rem' } }}
-                                inputProps={{ style: { fontSize: '0.65rem', height: 28, minHeight: 28, maxHeight: 28, padding: '2px 6px' } }}
-                                placeholder="Email Prefix"
-                                sx={{ minWidth: 120, maxWidth: 180, height: 28, flex: 1, '.MuiInputBase-root': { height: 28 } }}
-                                InputProps={{
-                                    endAdornment: (
-                                        <InputAdornment position="end" sx={{ fontSize: '0.65rem', color: '#888', ml: 0 }}>
-                                            <span style={{ fontSize: '0.65rem' }}>{addRowData.domain ? `@${addRowData.domain}` : '@xyz.com'}</span>
-                                        </InputAdornment>
-                                    )
-                                }}
-                            />
-                            <TextField
-                                className="compact-ui"
-                                label="Password"
-                                name="password"
-                                type="password"
-                                value={addRowData.password}
-                                onChange={handleAddChange}
-                                required
-                                size="small"
-                                InputLabelProps={{ style: { fontSize: '0.65rem' } }}
-                                inputProps={{ style: { fontSize: '0.65rem', height: 28, minHeight: 28, maxHeight: 28, padding: '2px 6px' } }}
-                                placeholder="Password"
-                                sx={{ minWidth: 80, maxWidth: 140, height: 28, flex: 1, '.MuiInputBase-root': { height: 28 } }}
-                            />
-                            <TextField
-                                className="compact-ui"
-                                label="Asset ID"
-                                name="asset_id"
-                                value={addRowData.asset_id}
-                                onChange={handleAddChange}
-                                size="small"
-                                InputLabelProps={{ style: { fontSize: '0.65rem' } }}
-                                inputProps={{ style: { fontSize: '0.65rem', height: 28, minHeight: 28, maxHeight: 28, padding: '2px 6px' } }}
-                                placeholder="Asset ID"
-                                sx={{ minWidth: 80, maxWidth: 140, height: 28, flex: 1, '.MuiInputBase-root': { height: 28 } }}
-                            />
-
+                        <>
                             <Button
                                 className="compact-ui"
                                 onClick={handleAddCancel}
@@ -425,17 +385,18 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                                     lineHeight: 1,
                                     boxShadow: 'none',
                                     flexShrink: 0,
-                                    ml: 'auto'
+                                    // Removed ml: 'auto' as it's now alongside SAVE
                                 }}
                             >
                                 CANCEL
                             </Button>
                             <Button
                                 className="compact-ui"
-                                type="submit"
+                                type="submit" // Keep type submit if form is wrapped around it
                                 variant="contained"
                                 color="primary"
                                 size="small"
+                                onClick={handleAddSave} // Manually trigger save
                                 sx={{
                                     height: 24,
                                     minWidth: 32,
@@ -449,18 +410,122 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                             >
                                 SAVE
                             </Button>
-                        </Box>
-                    </form>
+                        </>
+                    )}
+                </Box>
+            </Box>
+
+            {/* Collapse component wraps the add user form */}
+            <Collapse in={addMode} timeout={400} unmountOnExit>
+                <Box mb={1} p={1} className="compact-ui" sx={{ margin: '0 24px' }}> {/* Added horizontal margin here */}
+                    {/* Removed form tag from here as SAVE button is moved out */}
+                    {/* Changed flexWrap to 'wrap' for better responsiveness to prevent overflow if content is too long */}
+                    <Box display="flex" gap={0.5} alignItems="center" flexWrap="wrap" width="100%">
+                            <Autocomplete
+                                className="compact-ui"
+                                options={clients.map(c => c['Client name'])}
+                                value={addRowData.clientname || ''}
+                                onChange={handleAddClientChange}
+                                renderInput={(params) => (
+                                    <TextField {...params} label="Client Name" required size="small"
+                                        InputLabelProps={{ style: { fontSize: '0.65rem' } }}
+                                        inputProps={{ ...params.inputProps, style: { fontSize: '0.65rem', height: 48, minHeight: 48, maxHeight: 48, padding: '12px 6px' } }} /* Modified */
+                                        placeholder="Client Name"
+                                        sx={{ minWidth: 125, maxWidth: 150, height: 48, flexShrink: 0 }} /* Modified */
+                                    />
+                                )}
+                            />
+                            <TextField
+                                className="compact-ui"
+                                label="User Name"
+                                name="name"
+                                value={addRowData.name}
+                                onChange={handleAddChange}
+                                required
+                                size="small"
+                                InputLabelProps={{ style: { fontSize: '0.65rem' } }}
+                                inputProps={{ style: { fontSize: '0.65rem', height: 48, minHeight: 48, maxHeight: 48, padding: '12px 6px' }}} /* Modified */
+                                placeholder="User Name"
+                                sx={{ flex: 1, height: 48, '.MuiInputBase-root': { height: 48 } }} /* Modified */
+                            />
+                            <TextField
+                                className="compact-ui"
+                                label="Domain Name"
+                                name="domain"
+                                value={addRowData.domain}
+                                onChange={handleAddChange}
+                                required
+                                size="small"
+                                InputLabelProps={{ style: { fontSize: '0.65rem' } }}
+                                inputProps={{ style: { fontSize: '0.65rem', height: 48, minHeight: 48, maxHeight: 48, padding: '12px 6px' } }} /* Modified */
+                                placeholder="Domain Name"
+                                sx={{ minWidth: 60, maxWidth: 90, height: 48, '.MuiInputBase-root': { height: 48 }, flexShrink: 0 }} /* Modified */
+                                disabled={!!addRowData.domain} // Disable if domain is autofilled
+                            />
+                            <TextField
+                                className="compact-ui"
+                                label="Email"
+                                name="emailPrefix"
+                                value={addRowData.emailPrefix || ''}
+                                onChange={e => {
+                                    let value = e.target.value;
+                                    if (value.includes('@')) {
+                                        value = value.split('@')[0];
+                                    }
+                                    setAddRowData(prev => ({ ...prev, emailPrefix: value }));
+                                }}
+                                required
+                                size="small"
+                                InputLabelProps={{ style: { fontSize: '0.65rem' } }}
+                                inputProps={{ style: { fontSize: '0.65rem', height: 48, minHeight: 48, maxHeight: 48, padding: '12px 6px' } }} /* Modified */
+                                placeholder="Email Prefix"
+                                sx={{ flex: 1, height: 48, '.MuiInputBase-root': { height: 48 } }} /* Modified */
+                                InputProps={{
+                                    endAdornment: (
+                                        <InputAdornment position="end" className="email-suffix-adornment">
+                                            <span style={{ fontSize: '0.65rem' }}>@{addRowData.domain || 'domain.com'}</span>
+                                        </InputAdornment>
+                                    )
+                                }}
+                            />
+                            <TextField
+                                className="compact-ui"
+                                label="Password"
+                                name="password"
+                                type="password"
+                                value={addRowData.password}
+                                onChange={handleAddChange}
+                                required
+                                size="small"
+                                InputLabelProps={{ style: { fontSize: '0.65rem' } }}
+                                inputProps={{ style: { fontSize: '0.65rem', height: 48, minHeight: 48, maxHeight: 48, padding: '12px 6px' } }} /* Modified */
+                                placeholder="Password"
+                                sx={{ flex: 1, height: 48, '.MuiInputBase-root': { height: 48 } }} /* Modified */
+                            />
+                            <TextField
+                                className="compact-ui"
+                                label="Asset ID"
+                                name="asset_id"
+                                value={addRowData.asset_id}
+                                onChange={handleAddChange}
+                                required
+                                size="small"
+                                InputLabelProps={{ style: { fontSize: '0.65rem' } }}
+                                inputProps={{ style: { fontSize: '0.65rem', height: 48, minHeight: 48, maxHeight: 48, padding: '12px 6px' } }} /* Modified */
+                                placeholder="Asset ID"
+                                sx={{ minWidth: 80, maxWidth: 120, height: 48, '.MuiInputBase-root': { height: 48 }, flexShrink: 0 }} /* Modified */
+                            />
+                    </Box>
                 </Box>
             </Collapse> {/* End Collapse component */}
 
             {clientOrder.length === 0 && !loading && !error && (
-                <Typography variant="body1" color="textSecondary" sx={{ mt: 2 }}>
+                <Typography variant="body1" color="textSecondary" sx={{ mt: 2, px: 3 }}> {/* Added horizontal padding here */}
                     No user profiles found.
                 </Typography>
             )}
             {clientOrder.map((client) => (
-                <Box key={client} mb={3}>
+                <Box key={client} mb={3} sx={{ px: 3 }}> {/* Added horizontal padding here */}
                     <Typography variant="subtitle2" sx={{ color: '#174ea6', fontStyle: 'italic', fontWeight: 300, fontSize: '0.9rem', letterSpacing: 0.5, mb: 0.5 }}>
                         {client} ({groupedUsers[client].length} user{groupedUsers[client].length !== 1 ? 's' : ''})
                     </Typography>
@@ -468,59 +533,93 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                         <Table
                             size="small"
                             sx={{
-                                '& .MuiTableCell-root': { fontSize: '0.68rem', padding: '2px 6px', height: 28 },
-                                '& .MuiTableRow-root': { height: 28 },
-                                borderCollapse: 'separate',
-                                borderSpacing: 0,
+                                // Changed to border-collapse: collapse for better border alignment
+                                borderCollapse: 'collapse',
+                                '& .MuiTableCell-root': {
+                                    fontSize: '0.68rem',
+                                    padding: '6px 8px', // Slightly increased padding for better readability
+                                    border: '1px solid #e0e0e0', // Apply border to all cells
+                                    // Remove individual borderRight, borderBottom to rely on collapse
+                                    height: 'auto', // Let height be determined by content and padding
+                                    verticalAlign: 'middle', // Align content vertically in the middle
+                                },
+                                '& .MuiTableRow-root': {
+                                    height: 'auto', // Let row height adjust
+                                },
                             }}
                         >
                             <TableHead>
                                 <TableRow sx={{ backgroundColor: '#f5f5f5' }}>
-                                    <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: '1px solid #e0e0e0', width: 36, minWidth: 36, maxWidth: 36, textAlign: 'center' }}>#</TableCell>
-                                    <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: '1px solid #e0e0e0', width: 180, minWidth: 140, maxWidth: 220 }}>Email</TableCell>
-                                    <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: '1px solid #e0e0e0', width: 70, minWidth: 60, maxWidth: 90 }}>Role</TableCell>
-                                    <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: '1px solid #e0e0e0', width: 120, minWidth: 100, maxWidth: 160 }}>Domain</TableCell>
-                                    <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: '1px solid #e0e0e0', width: 140, minWidth: 100, maxWidth: 180 }}>Client Name</TableCell>
-                                    <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: '1px solid #e0e0e0', width: 100, minWidth: 80, maxWidth: 140 }}>Password</TableCell>
-                                    <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: '1px solid #e0e0e0', width: 100, minWidth: 80, maxWidth: 140 }}>Asset ID</TableCell>
-                                    <TableCell align="right" sx={{ borderBottom: '1px solid #e0e0e0', width: 90, minWidth: 70, maxWidth: 120 }}>Actions</TableCell>
+                                    <TableCell sx={{ width: 36, minWidth: 36, maxWidth: 36, textAlign: 'center' }}>#</TableCell>
+                                    <TableCell sx={{ width: 140, minWidth: 100, maxWidth: 180 }}>Client Name</TableCell>
+                                    <TableCell sx={{ width: 140, minWidth: 100, maxWidth: 180 }}>User Name</TableCell>
+                                    <TableCell sx={{ width: 180, minWidth: 140, maxWidth: 220 }}>Email</TableCell>
+                                    <TableCell sx={{ width: 100, minWidth: 80, maxWidth: 140 }}>Password</TableCell>
+                                    <TableCell sx={{ width: 100, minWidth: 80, maxWidth: 140 }}>Asset ID</TableCell>
+                                    <TableCell align="right" sx={{ width: 90, minWidth: 70, maxWidth: 120 }}>Actions</TableCell>
                                 </TableRow>
                             </TableHead>
                             <TableBody>
                                 {groupedUsers[client].sort((a, b) => a.email.localeCompare(b.email)).map((u, i) => (
-                                    <TableRow key={u.uid} sx={{ '&:last-child td, &:last-child th': { borderBottom: 0 } }}>
-                                        <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: i === groupedUsers[client].length - 1 ? '0' : '1px solid #e0e0e0', textAlign: 'center', fontWeight: 500, color: '#888', width: 36, minWidth: 36, maxWidth: 36 }}>
+                                    <TableRow key={u.uid}>
+                                        <TableCell sx={{ textAlign: 'center', fontWeight: 500, color: '#888', width: 36, minWidth: 36, maxWidth: 36 }}>
                                             {i + 1}
-                                        </TableCell>
-                                        <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: i === groupedUsers[client].length - 1 ? '0' : '1px solid #e0e0e0', width: 180, minWidth: 140, maxWidth: 220 }}>{u.email}</TableCell>
-                                        <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: i === groupedUsers[client].length - 1 ? '0' : '1px solid #e0e0e0', width: 70, minWidth: 60, maxWidth: 90 }}>
-                                            <Chip label={u.role} size="small" color={u.role === 'admin' ? 'primary' : u.role === 'support' ? 'secondary' : 'default'} sx={{ fontSize: '0.68rem', height: 20 }} />
-                                        </TableCell>
-                                        <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: i === groupedUsers[client].length - 1 ? '0' : '1px solid #e0e0e0', width: 120, minWidth: 100, maxWidth: 160 }}>
-                                            <span style={{ color: '#1976d2', textDecoration: 'underline', cursor: 'pointer' }} onClick={() => handleGoToClientPage('domain', u.domain)} title={`Go to client management filtered by domain: ${u.domain}`}>{u.domain}</span>
-                                        </TableCell>
-                                        <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: i === groupedUsers[client].length - 1 ? '0' : '1px solid #e0e0e0', width: 140, minWidth: 100, maxWidth: 180 }}>
-                                            <span style={{ color: '#1976d2', textDecoration: 'underline', cursor: 'pointer' }} onClick={() => handleGoToClientPage('client', u.clientname)} title={`Go to client management filtered by client: ${u.clientname}`}>{u.clientname}</span>
                                         </TableCell>
                                         {editRowId === u.uid ? (
                                             <>
-                                                <TableCell
-                                                    sx={{
-                                                        borderRight: '1px solid #e0e0e0',
-                                                        borderBottom: i === groupedUsers[client].length - 1 ? '0' : '1px solid #e0e0e0',
-                                                        width: 100,
-                                                        minWidth: 80,
-                                                        maxWidth: 140,
-                                                        backgroundColor: editRowData.showPasswordField ? '#f0faff' : 'inherit',
-                                                    }}
-                                                >
+                                                {/* Client Name - Disabled/Read-only */}
+                                                <TableCell sx={{ width: 140, minWidth: 100, maxWidth: 180 }}>
+                                                    <TextField
+                                                        className="compact-ui"
+                                                        value={editRowData.clientname || u.clientname}
+                                                        disabled // Disable editing
+                                                        variant="standard"
+                                                        size="small"
+                                                        InputLabelProps={{ style: { fontSize: '0.65rem' } }}
+                                                        InputProps={{ disableUnderline: true, style: { fontSize: '0.65rem', padding: '0' } }} // Adjusted padding
+                                                        sx={{ width: '100%', '.MuiInputBase-input': { padding: '0' } }} // Ensure no extra padding from MUI defaults
+                                                    />
+                                                </TableCell>
+                                                {/* User Name - Editable */}
+                                                <TableCell sx={{ width: 140, minWidth: 100, maxWidth: 180 }}>
+                                                    <TextField
+                                                        className="compact-ui"
+                                                        name="name"
+                                                        value={editRowData.name || u.name}
+                                                        disabled={false} // Make editable
+                                                        variant="standard"
+                                                        size="small"
+                                                        InputLabelProps={{ style: { fontSize: '0.65rem' } }}
+                                                        InputProps={{ disableUnderline: true, style: { fontSize: '0.65rem', padding: '0' } }} // Adjusted padding
+                                                        sx={{ width: '100%', '.MuiInputBase-input': { padding: '0' } }}
+                                                    />
+                                                </TableCell>
+                                                {/* Email - Disabled/Read-only */}
+                                                <TableCell sx={{ width: 180, minWidth: 140, maxWidth: 220 }}>
+                                                    <Box display="flex" alignItems="center">
+                                                        <TextField
+                                                            className="compact-ui"
+                                                            name="emailPrefix"
+                                                            value={editRowData.emailPrefix || u.email.split('@')[0]}
+                                                            disabled // Disable editing
+                                                            variant="standard"
+                                                            size="small"
+                                                            InputLabelProps={{ style: { fontSize: '0.65rem' } }}
+                                                            InputProps={{ disableUnderline: true, style: { fontSize: '0.65rem', padding: '0' } }} // Adjusted padding
+                                                            sx={{ flexGrow: 1, '.MuiInputBase-input': { padding: '0' } }}
+                                                        />
+                                                        <span style={{ fontSize: '0.65rem', marginLeft: 2, flexShrink: 0 }}>@{editRowData.domain || u.email.split('@')[1] || 'domain.com'}</span>
+                                                    </Box>
+                                                </TableCell>
+                                                {/* Password column in EDIT mode */}
+                                                <TableCell sx={{ width: 100, minWidth: 80, maxWidth: 140, backgroundColor: editRowData.showPasswordField ? '#f0faff' : 'inherit', textAlign: 'center' }}>
                                                     {!editRowData.showPasswordField ? (
                                                         <Button
-                                                            variant="outlined"
+                                                            variant="text"
                                                             size="small"
                                                             onClick={handleTogglePasswordField}
-                                                            startIcon={<VpnKeyIcon sx={{ fontSize: '0.8rem' }} />}
-                                                            sx={{ fontSize: '0.6rem', height: 20, minWidth: 'auto', padding: '2px 4px' }}
+                                                            startIcon={<VpnKeyIcon sx={{ fontSize: '1rem', color: '#1976d2' }} />}
+                                                            sx={{ fontSize: '0.6rem', height: 20, minWidth: 'auto', padding: '2px 4px', color: '#1976d2' }}
                                                         >
                                                             Change
                                                         </Button>
@@ -532,44 +631,53 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                                                             value={editRowData.password}
                                                             onChange={handleEditChange}
                                                             size="small"
-                                                            sx={{ width: '100%' }}
-                                                            placeholder="Enter new password"
+                                                            variant="standard"
                                                             InputLabelProps={{ style: { fontSize: '0.65rem' } }}
-                                                            inputProps={{ style: { fontSize: '0.65rem', height: 28, minHeight: 28, maxHeight: 28, padding: '2px 6px' } }}
+                                                            InputProps={{ disableUnderline: true, style: { fontSize: '0.65rem', padding: '0' } }} // Adjusted padding
+                                                            sx={{ width: '100%', '.MuiInputBase-input': { padding: '0' } }}
+                                                            placeholder="Enter new password"
                                                         />
                                                     )}
                                                 </TableCell>
-                                                <TableCell
-                                                    sx={{
-                                                        borderRight: '1px solid #e0e0e0',
-                                                        borderBottom: i === groupedUsers[client].length - 1 ? '0' : '1px solid #e0e0e0',
-                                                        width: 100,
-                                                        minWidth: 80,
-                                                        maxWidth: 140,
-                                                        backgroundColor: editRowId === u.uid ? '#f0faff' : 'inherit',
-                                                    }}
-                                                >
+                                                {/* Asset ID - Editable */}
+                                                <TableCell sx={{ width: 100, minWidth: 80, maxWidth: 140 }}>
                                                     <TextField
+                                                        className="compact-ui"
                                                         name="asset_id"
-                                                        label="Asset ID"
                                                         value={editRowData.asset_id}
                                                         onChange={handleEditChange}
+                                                        required
                                                         size="small"
-                                                        sx={{ width: '100%' }}
+                                                        variant="standard"
                                                         InputLabelProps={{ style: { fontSize: '0.65rem' } }}
-                                                        inputProps={{ style: { fontSize: '0.65rem', height: 28, minHeight: 28, maxHeight: 28, padding: '2px 6px' } }}
+                                                        InputProps={{ disableUnderline: true, style: { fontSize: '0.65rem', padding: '0' } }} // Adjusted padding
+                                                        placeholder="Asset ID"
+                                                        sx={{ width: '100%', '.MuiInputBase-input': { padding: '0' } }}
                                                     />
                                                 </TableCell>
-                                                <TableCell align="right" sx={{ borderBottom: i === groupedUsers[client].length - 1 ? '0' : '1px solid #e0e0e0', width: 90, minWidth: 70, maxWidth: 120 }}>
+                                                <TableCell sx={{ width: 90, minWidth: 70, maxWidth: 120 }} align="right">
                                                     <IconButton onClick={() => handleEditSave(u.uid)} size="small"><EditIcon sx={{ fontSize: '1rem' }} /></IconButton>
                                                     <IconButton onClick={handleEditCancel} size="small"><ClearIcon sx={{ fontSize: '1rem' }} /></IconButton>
                                                 </TableCell>
                                             </>
                                         ) : (
                                             <>
-                                                <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: i === groupedUsers[client].length - 1 ? '0' : '1px solid #e0e0e0', width: 100, minWidth: 80, maxWidth: 140 }}>••••••</TableCell>
-                                                <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: i === groupedUsers[client].length - 1 ? '0' : '1px solid #e0e0e0', width: 100, minWidth: 80, maxWidth: 140 }}>{u.asset_id}</TableCell>
-                                                <TableCell align="right" sx={{ borderBottom: i === groupedUsers[client].length - 1 ? '0' : '1px solid #e0e0e0', width: 90, minWidth: 70, maxWidth: 120 }}>
+                                                <TableCell sx={{ width: 140, minWidth: 100, maxWidth: 180 }}>{u.clientname}</TableCell>
+                                                <TableCell sx={{ width: 140, minWidth: 100, maxWidth: 180 }}>{u.name}</TableCell>
+                                                <TableCell sx={{ width: 180, minWidth: 140, maxWidth: 220 }}>{u.email}</TableCell>
+                                                {/* Password column in VIEW mode */}
+                                                <TableCell sx={{ width: 100, minWidth: 80, maxWidth: 140, textAlign: 'center' }}>
+                                                    <IconButton
+                                                        onClick={() => handleEditClick(u)}
+                                                        size="small"
+                                                        sx={{ color: '#9e9e9e' }} // Ash color
+                                                        disabled={true} // Disable click in normal mode
+                                                    >
+                                                        <VpnKeyIcon sx={{ fontSize: '1rem' }} />
+                                                    </IconButton>
+                                                </TableCell>
+                                                <TableCell sx={{ width: 100, minWidth: 80, maxWidth: 140 }}>{u.asset_id || u.assetid}</TableCell>
+                                                <TableCell align="right" sx={{ width: 90, minWidth: 70, maxWidth: 120 }}>
                                                     <IconButton onClick={() => handleEditClick(u)} size="small"><EditIcon sx={{ fontSize: '1rem' }} /></IconButton>
                                                     <IconButton
                                                         onClick={(event) => handleDeleteClick(event, u.uid, u.email)}

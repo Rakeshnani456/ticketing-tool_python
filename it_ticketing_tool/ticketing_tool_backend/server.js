@@ -534,7 +534,7 @@ app.post('/login', async (req, res) => {
             loginActivity: admin.firestore.FieldValue.arrayUnion(new Date().toISOString())
         });
 
-        console.log(`Login successful for user: ${loggedInUser}`);
+        // console.log(`Login successful for user: ${loggedInUser}`); // Removed for production
         return res.status(200).json({ message: 'Login successful', user: loggedInUser });
     } catch (error) {
         if (error.code === 'auth/invalid-id-token' || error.code === 'auth/id-token-expired') {
@@ -1895,78 +1895,91 @@ app.delete('/api/clients/:id', async (req, res) => {
 
 // --- USER MANAGEMENT API ---
 
+// GET /api/users - Get all engineers (users with role 'support')
+app.get('/api/users', async (req, res) => {
+    try {
+        const snapshot = await usersCollection.where('role', '==', 'support').get();
+        const users = snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() }));
+        return res.status(200).json(users);
+    } catch (err) {
+        console.error('Error fetching engineers:', err);
+        return res.status(500).json({ error: err.message || 'Failed to fetch engineers.' });
+    }
+});
+
 // PUT /api/users/:uid - Update password and/or asset_id
 app.put('/api/users/:uid', async (req, res) => {
     const { uid } = req.params;
-    const { password, asset_id } = req.body;
-    if (!password && asset_id === undefined) {
+    const { name, asset_id, joined_date, role } = req.body;
+    if (!name && asset_id === undefined && !joined_date && !role) {
         return res.status(400).json({ error: 'No fields to update.' });
     }
     try {
-        // Update password in Firebase Auth if provided
-        if (password) {
-            await admin.auth().updateUser(uid, { password });
-        }
-        // Update asset_id in Firestore if provided
-        if (asset_id !== undefined) {
-            await usersCollection.doc(uid).update({ asset_id });
-        }
-        return res.status(200).json({ message: 'User updated successfully.' });
+        const updateData = {};
+        if (name) updateData.name = name;
+        if (asset_id !== undefined) updateData.asset_id = asset_id;
+        if (joined_date) updateData.joined_date = joined_date;
+        if (role) updateData.role = role;
+        await usersCollection.doc(uid).update(updateData);
+        return res.status(200).json({ message: 'Engineer updated successfully.' });
     } catch (err) {
-        console.error('Error updating user:', err);
-        return res.status(500).json({ error: err.message || 'Failed to update user.' });
+        console.error('Error updating engineer:', err);
+        return res.status(500).json({ error: err.message || 'Failed to update engineer.' });
     }
 });
 
 // POST /api/users - Create a new user (with Auth UID as Firestore doc ID)
 app.post('/api/users', async (req, res) => {
-    const { email, password, role, client_name, asset_id } = req.body;
-    if (!email || !password || !role || !client_name) {
-        return res.status(400).json({ error: 'Missing required fields: email, password, role, client_name' });
+    const { role } = req.body;
+    if (!role) {
+        return res.status(400).json({ error: 'Missing required field: role' });
     }
-    try {
-        // Step 1: Query for client doc ref outside transaction
-        const clientSnapshot = await clientsCollection.where('client_name', '==', client_name).limit(1).get();
-        if (clientSnapshot.empty) {
-            return res.status(400).json({ error: 'Client does not exist.' });
+    if (role === 'support') {
+        // Engineer creation
+        const { name, email, password, asset_id, joined_date, employeeid, designation } = req.body;
+        if (!name || !email || !password || !asset_id || !joined_date || !employeeid || !designation) {
+            return res.status(400).json({ error: 'Missing required fields for engineer: name, email, password, asset_id, joined_date, employeeid, designation' });
         }
-        const clientDocRef = clientSnapshot.docs[0].ref;
-        const clientData = clientSnapshot.docs[0].data();
-        const domain = clientData.domain;
-        // Validate user email domain matches client domain
-        const userDomain = email.split('@')[1];
-        if (userDomain !== domain) {
-            return res.status(400).json({ error: `User email domain (${userDomain}) does not match client domain (${domain}).` });
-        }
-        // Step 2: Create user in Firebase Auth
-        let userRecord;
         try {
-            userRecord = await admin.auth().createUser({
-                email,
-                password,
-            });
+            let userRecord;
+            try {
+                userRecord = await admin.auth().createUser({ email, password });
+            } catch (err) {
+                return res.status(400).json({ error: err.message || 'Failed to create user in Auth.' });
+            }
+            const uid = userRecord.uid;
+            const userRef = usersCollection.doc(uid);
+            const userData = { name, email, role, asset_id, joined_date, employeeid, designation };
+            await userRef.set(userData);
+            return res.status(201).json({ message: 'Engineer created in Auth and Firestore.' });
         } catch (err) {
-            // If email already exists or other Auth error
-            return res.status(400).json({ error: err.message || 'Failed to create user in Auth.' });
+            console.error('Error creating engineer:', err);
+            return res.status(500).json({ error: err.message || 'Failed to create engineer.' });
         }
-        const uid = userRecord.uid;
-        const userRef = usersCollection.doc(uid);
-        await db.runTransaction(async (t) => {
-            // --- ALL READS FIRST ---
-            const [clientSnap, userSnap] = await Promise.all([
-                t.get(clientDocRef),
-                t.get(userRef)
-            ]);
-            if (userSnap.exists) throw new Error('User already exists in Firestore.');
-            const prevCount = clientSnap.data().no_of_users || 0;
-            // --- ALL WRITES AFTER ---
-            t.set(userRef, { email, role, domain, client_name, asset_id });
-            t.update(clientDocRef, { no_of_users: prevCount + 1 });
-        });
-        return res.status(201).json({ message: 'User created in Auth and Firestore, client user count updated.' });
-    } catch (err) {
-        console.error('Error creating user:', err);
-        return res.status(500).json({ error: err.message || 'Failed to create user.' });
+    } else if (role === 'user') {
+        // End user creation
+        const { client_name, name, domain, email, password, asset_id } = req.body;
+        if (!client_name || !name || !domain || !email || !password || !asset_id) {
+            return res.status(400).json({ error: 'Missing required fields for user: client_name, name, domain, email, password, asset_id' });
+        }
+        try {
+            let userRecord;
+            try {
+                userRecord = await admin.auth().createUser({ email, password });
+            } catch (err) {
+                return res.status(400).json({ error: err.message || 'Failed to create user in Auth.' });
+            }
+            const uid = userRecord.uid;
+            const userRef = usersCollection.doc(uid);
+            const userData = { client_name, name, domain, email, role, asset_id };
+            await userRef.set(userData);
+            return res.status(201).json({ message: 'User created in Auth and Firestore.' });
+        } catch (err) {
+            console.error('Error creating user:', err);
+            return res.status(500).json({ error: err.message || 'Failed to create user.' });
+        }
+    } else {
+        return res.status(400).json({ error: 'Invalid role. Only "support" and "user" are supported.' });
     }
 });
 
@@ -2046,6 +2059,14 @@ app.delete('/api/users/:uid', async (req, res) => {
         const clientName = userData.client_name;
         const userEmail = userData.email; // Get email from Firestore document to delete from Auth
 
+        // If clientName is undefined, skip client update logic
+        if (!clientName) {
+            // Just delete from Auth and Firestore
+            await admin.auth().deleteUser(uid);
+            await userRef.delete();
+            return res.status(200).json({ message: 'User deleted (no client update needed).' });
+        }
+
         // Step 2: Get client doc ref
         const clientSnapshot = await clientsCollection.where('client_name', '==', clientName).limit(1).get();
         if (clientSnapshot.empty) {
@@ -2088,3 +2109,13 @@ app.delete('/api/users/:uid', async (req, res) => {
         return res.status(500).json({ error: err.message || 'Failed to delete user.' });
     }
 });
+
+// const engineersRouter = require('./routes/engineers');
+// const adminsRouter = require('./routes/admins');
+// const superadminsRouter = require('./routes/superadmins');
+// ... after db is initialized ...
+// REMOVE or comment out this line to disable the usersRouter for /api/users
+// app.use('/api/users', usersRouter(db));
+// app.use('/api/engineers', engineersRouter(db, admin, usersCollection));
+// app.use('/api/admins', adminsRouter(db));
+// app.use('/api/superadmins', superadminsRouter(db));
