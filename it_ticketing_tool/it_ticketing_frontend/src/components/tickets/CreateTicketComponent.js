@@ -140,7 +140,7 @@ const CreateTicketComponent = ({ user, onClose, showFlashMessage, onTicketCreate
             formData.append('attachment', file); // Append file to FormData
 
             try {
-                const idToken = await user.firebaseUser.getIdToken(); // Get Firebase ID token for authorization
+                const idToken = localStorage.getItem('idToken'); // Get Firebase ID token for authorization
                 const response = await fetch(`${API_BASE_URL}/upload-attachment`, {
                     method: 'POST',
                     headers: {
@@ -192,7 +192,7 @@ const CreateTicketComponent = ({ user, onClose, showFlashMessage, onTicketCreate
             }
 
             // 2. Create ticket with the form data and uploaded attachment data
-            const idToken = await user.firebaseUser.getIdToken(); // Get ID token for authorization
+            const idToken = localStorage.getItem('idToken'); // Get ID token for authorization
             const payload = {
                 ...formData,
                 reporter_email: user?.email,

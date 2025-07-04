@@ -1,9 +1,10 @@
 const express = require('express');
 const router = express.Router();
+const User = require('../models/User');
 
-module.exports = (db, usersCollection, verifyFirebaseToken, requireSuperAdmin) => {
+module.exports = (db, usersCollection, verifyJWT, requireSuperAdmin) => {
     // List all admins
-    router.get('/', verifyFirebaseToken, requireSuperAdmin, async (req, res) => {
+    router.get('/', verifyJWT, requireSuperAdmin, async (req, res) => {
         try {
             const snapshot = await usersCollection.where('role', '==', 'admin').get();
             const admins = snapshot.docs.map(doc => {
@@ -23,7 +24,7 @@ module.exports = (db, usersCollection, verifyFirebaseToken, requireSuperAdmin) =
     });
 
     // Create admin
-    router.post('/', verifyFirebaseToken, requireSuperAdmin, async (req, res) => {
+    router.post('/', verifyJWT, requireSuperAdmin, async (req, res) => {
         const { email, password, role = 'admin' } = req.body;
         if (!email || !password || !['admin', 'read_only_admin', 'super_admin'].includes(role)) {
             return res.status(400).json({ error: 'Invalid input.' });
@@ -31,13 +32,15 @@ module.exports = (db, usersCollection, verifyFirebaseToken, requireSuperAdmin) =
         try {
             // Create user in Firebase Auth
             const userRecord = await req.app.locals.admin.auth().createUser({ email, password });
-            // Add to Firestore
-            await usersCollection.doc(userRecord.uid).set({
+            // Add to MongoDB (Mongoose)
+            const newUser = new User({
+                _id: userRecord.uid, // Use Firebase UID as MongoDB _id for compatibility
                 email,
                 role,
                 active: true,
                 loginActivity: [],
             });
+            await newUser.save();
             res.status(201).json({ message: 'Admin created.', uid: userRecord.uid });
         } catch (error) {
             res.status(500).json({ error: 'Failed to create admin.' });
@@ -45,7 +48,7 @@ module.exports = (db, usersCollection, verifyFirebaseToken, requireSuperAdmin) =
     });
 
     // Edit admin (role, enable/disable)
-    router.put('/:uid', verifyFirebaseToken, requireSuperAdmin, async (req, res) => {
+    router.put('/:uid', verifyJWT, requireSuperAdmin, async (req, res) => {
         const { uid } = req.params;
         const { role, active } = req.body;
         if (!role && typeof active === 'undefined') {
@@ -63,7 +66,7 @@ module.exports = (db, usersCollection, verifyFirebaseToken, requireSuperAdmin) =
     });
 
     // Delete admin
-    router.delete('/:uid', verifyFirebaseToken, requireSuperAdmin, async (req, res) => {
+    router.delete('/:uid', verifyJWT, requireSuperAdmin, async (req, res) => {
         const { uid } = req.params;
         try {
             await usersCollection.doc(uid).delete();
@@ -75,7 +78,7 @@ module.exports = (db, usersCollection, verifyFirebaseToken, requireSuperAdmin) =
     });
 
     // Get login activity for all admins
-    router.get('/login-activity', verifyFirebaseToken, requireSuperAdmin, async (req, res) => {
+    router.get('/login-activity', verifyJWT, requireSuperAdmin, async (req, res) => {
         try {
             const snapshot = await usersCollection.where('role', 'in', ['admin', 'read_only_admin', 'super_admin']).get();
             const activity = snapshot.docs.map(doc => ({ uid: doc.id, email: doc.data().email, loginActivity: doc.data().loginActivity || [] }));

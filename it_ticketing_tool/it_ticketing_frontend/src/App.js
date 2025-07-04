@@ -42,11 +42,6 @@ import Menu from '@mui/material/Menu'; // Import Material-UI Menu
 import MenuItem from '@mui/material/MenuItem'; // Import Material-UI MenuItem
 
 
-// Import Firebase auth client and dbClient
-import { authClient, dbClient } from './config/firebase';
-import { onAuthStateChanged, signOut } from 'firebase/auth'; // Firebase authentication methods
-import { collection, query, onSnapshot, where } from 'firebase/firestore'; // Firestore imports and 'where'
-
 // Import API Base URL from constants
 import { API_BASE_URL } from './config/constants';
 
@@ -264,15 +259,14 @@ const App = () => {
      * @returns {void}
      */
     const fetchNotifications = useCallback(async (user) => {
-        if (!user || !user.firebaseUser) {
+        if (!user || !user.token) {
             setNotifications([]);
             setHasNewNotifications(false);
             return;
         }
         try {
-            const idToken = await user.firebaseUser.getIdToken();
             const response = await fetch(`${API_BASE_URL}/notifications/my`, {
-                headers: { 'Authorization': `Bearer ${idToken}` }
+                headers: { 'Authorization': `Bearer ${user.token}` }
             });
             if (response.ok) {
                 const data = await response.json();
@@ -332,124 +326,32 @@ const App = () => {
         return formatted;
     };
 
-    // Effect hook to listen for Firebase authentication state changes.
-    // This is crucial for maintaining user session and fetching user roles from backend.
+    // Effect hook to check for existing JWT token on app startup
     useEffect(() => {
-        const unsubscribeAuth = onAuthStateChanged(authClient, async (firebaseUser) => {
-            if (firebaseUser) {
+        const checkToken = async () => {
+            const token = localStorage.getItem('token');
+            if (token) {
                 try {
-                    const idToken = await firebaseUser.getIdToken(); // Get Firebase ID token
-                    // Verify ID token with backend to get user's custom role
-                    const response = await fetch(`${API_BASE_URL}/login`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${idToken}`
-                        },
-                        body: JSON.stringify({ email: firebaseUser.email }),
+                    const res = await fetch(`${API_BASE_URL}/verify-token`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
                     });
-                    const data = await response.json();
-                    if (response.ok) {
-                        // On successful verification, set currentUser state with Firebase user and role
-                        const userProfile = { firebaseUser, role: data.user.role, email: firebaseUser.email, uid: firebaseUser.uid };
-                        setCurrentUser(userProfile);
-                        fetchNotifications(userProfile); // Fetch notifications for logged-in user
-
-                        // Start polling for notifications
-                        if (notificationPollingIntervalRef.current) {
-                            clearInterval(notificationPollingIntervalRef.current);
-                        }
-                        notificationPollingIntervalRef.current = setInterval(() => {
-                            fetchNotifications(userProfile);
-                        }, 30000); // Poll every 30 seconds
-
-                        // NEW: Set up Firestore listener for ticket counts
-                        const ticketsCollectionRef = collection(dbClient, 'tickets');
-                        let ticketsQuery;
-
-                        // Adjust the Firestore query based on user role to match security rules
-                        if (userProfile.role === 'support' || userProfile.role === 'admin') {
-                            // Admins and Support can read all tickets (as per your rules)
-                            ticketsQuery = query(ticketsCollectionRef);
-                        } else {
-                            // Regular users can only read their own tickets
-                            ticketsQuery = query(ticketsCollectionRef, where('reporter_id', '==', userProfile.uid));
-                        }
-
-
-                        const unsubscribeTickets = onSnapshot(ticketsQuery, (snapshot) => {
-                            const fetchedTickets = snapshot.docs.map(doc => ({
-                                id: doc.id,
-                                ...doc.data() // Get raw data; no need to format timestamps for counts
-                            }));
-
-                            // These counts are now based on the tickets the *current user is allowed to see*
-                            const totalTickets = fetchedTickets.length;
-                            const activeTickets = fetchedTickets.filter(t => ['Open', 'In Progress', 'Hold'].includes(t.status)).length;
-                            const assignedToMeTickets = fetchedTickets.filter(t => t.assigned_to_id === userProfile.uid && !['Closed', 'Resolved'].includes(t.status)).length;
-
-                            setTicketCounts({
-                                total_tickets: totalTickets,
-                                active_tickets: activeTickets,
-                                assigned_to_me: assignedToMeTickets
-                            });
-                        }, (err) => {
-                            console.error("Firestore onSnapshot error for ticket counts:", err);
-                            // Optionally show a flash message for count errors
-                        });
-
-                        // Navigate based on user role
-                        // Note: React Router handles the initial page load based on URL.
-                        // This `Maps` call ensures a default route upon successful login if the current path isn't ideal.
-                        if (location.pathname === '/login' || location.pathname === '/register' || location.pathname === '/') {
-                             if (data.user.role === 'support' || data.user.role === 'admin') {
-                                 navigate('/dashboard');
-                             } else {
-                                 navigate('/my-tickets');
-                             }
-                        }
-                        return () => { // Cleanup for tickets listener if auth state changes again
-                           unsubscribeTickets();
-                        };
+                    if (res.ok) {
+                        const user = await res.json();
+                        setCurrentUser(user);
                     } else {
-                        // If backend verification fails, show error and log out from Firebase
-                        console.error("Backend login verification failed:", data.error);
-                        showFlashMessage(data.error || "Authentication failed during login.", 'error');
-                        authClient.signOut();
                         setCurrentUser(null);
-                        navigate('/login'); // Redirect to login
+                        localStorage.removeItem('token');
                     }
-                } catch (error) {
-                    // Handle network or other errors during auth state change processing
-                    console.error("Error during authentication state change:", error);
-                    showFlashMessage("Network error during re-authentication. Please log in again.", 'error');
-                    authClient.signOut();
+                } catch (err) {
                     setCurrentUser(null);
-                    navigate('/login'); // Redirect to login
+                    localStorage.removeItem('token');
                 }
             } else {
-                // If no Firebase user is logged in, clear currentUser state and go to login page
                 setCurrentUser(null);
-                // Ensure we are on a public route if no user is logged in
-                if (location.pathname !== '/login' && location.pathname !== '/register') {
-                    navigate('/login');
-                }
-                setTicketCounts({ active_tickets: 0, assigned_to_me: 0, total_tickets: 0 }); // Reset counts
-                setNotifications([]); // Clear notifications
-                setHasNewNotifications(false); // Clear new notification flag
-                if (notificationPollingIntervalRef.current) {
-                    clearInterval(notificationPollingIntervalRef.current); // Stop polling
-                }
             }
-        });
-        return () => {
-            unsubscribeAuth(); // Cleanup the auth state listener on component unmount
-            if (notificationPollingIntervalRef.current) {
-                clearInterval(notificationPollingIntervalRef.current); // Clear polling on unmount
-            }
-            // No need to clean up ticket listener here, it's handled within the if (firebaseUser) block
         };
-    }, [fetchNotifications, navigate, location.pathname]); // Added navigate and location.pathname to dependency array
+        checkToken();
+    }, []);
 
     // Effect hook to handle clicks outside the notification menu
     useEffect(() => {
@@ -477,6 +379,7 @@ const App = () => {
      */
     const handleLoginSuccess = (user) => {
         setCurrentUser(user);
+        localStorage.setItem('token', user.token); // Store the token
         fetchNotifications(user); // Fetch notifications on login
         if (user.role === 'support' || user.role === 'admin') {
             navigate('/dashboard'); // Use navigate hook
@@ -487,12 +390,13 @@ const App = () => {
 
     /**
      * Handles user logout.
-     * Signs out from Firebase, clears user state, and navigates to the login page.
+     * Clears JWT token, user state, and navigates to the login page.
      * @returns {void}
      */
     const handleLogout = async () => {
         try {
-            await signOut(authClient); // Sign out from Firebase
+            // Clear JWT token from localStorage
+            localStorage.removeItem('token');
             setCurrentUser(null); // Clear current user state
             showFlashMessage('Logged out successfully.', 'success');
             navigate('/login'); // Navigate to login page
@@ -593,10 +497,10 @@ const App = () => {
      */
     const markNotificationAsRead = useCallback(async (notificationId, ticketId = null) => {
         try {
-            const idToken = await currentUser.firebaseUser.getIdToken();
+            const token = localStorage.getItem('token');
             const response = await fetch(`${API_BASE_URL}/notifications/${notificationId}/read`, {
                 method: 'PATCH',
-                headers: { 'Authorization': `Bearer ${idToken}` }
+                headers: { 'Authorization': `Bearer ${token}` }
             });
 
             if (response.ok) {
@@ -635,10 +539,10 @@ const App = () => {
      */
     const clearAllNotifications = useCallback(async () => {
         try {
-            const idToken = await currentUser.firebaseUser.getIdToken();
+            const token = localStorage.getItem('token');
             const response = await fetch(`${API_BASE_URL}/notifications/clear-all`, {
                 method: 'DELETE',
-                headers: { 'Authorization': `Bearer ${idToken}` }
+                headers: { 'Authorization': `Bearer ${token}` }
             });
 
             if (response.ok) {
@@ -654,7 +558,7 @@ const App = () => {
             console.error('Network error clearing all notifications:', error);
             showFlashMessage('Network error clearing all notifications.', 'error');
         }
-    }, [currentUser, showFlashMessage]);
+    }, [showFlashMessage]);
 
 
     /**

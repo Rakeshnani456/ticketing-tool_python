@@ -61,8 +61,8 @@ const MyTicketsComponent = ({ user, navigateTo, showFlashMessage, searchKeyword,
      * This replaces the traditional HTTP fetch for continuous updates.
      */
     useEffect(() => {
-        const firebaseUser = user?.firebaseUser;
-        if (!firebaseUser || !db) {
+        const jwtToken = localStorage.getItem('jwtToken');
+        if (!jwtToken) {
             setLoading(false);
             showFlashMessage('Please log in to view your tickets.', 'info');
             return () => {}; // Return empty cleanup function
@@ -74,7 +74,7 @@ const MyTicketsComponent = ({ user, navigateTo, showFlashMessage, searchKeyword,
         let ticketsRef = collection(db, 'tickets');
         let q = query(
             ticketsRef,
-            where('reporter_id', '==', firebaseUser.uid), // Filter by current user's ID
+            where('reporter_id', '==', user?.firebaseUser?.uid), // Filter by current user's ID
             where('status', 'in', ['Open', 'In Progress', 'Hold', 'Closed', 'Resolved']), // Default filter: show ALL active and inactive tickets
             orderBy('created_at', 'desc') // Order by creation date
         );
@@ -86,7 +86,7 @@ const MyTicketsComponent = ({ user, navigateTo, showFlashMessage, searchKeyword,
             const exactId = searchKeyword.toUpperCase();
             q = query(
                 ticketsRef,
-                where('reporter_id', '==', firebaseUser.uid),
+                where('reporter_id', '==', user?.firebaseUser?.uid),
                 where('display_id', '==', exactId),
                 orderBy('created_at', 'desc')
             );

@@ -294,7 +294,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
 
         setLoading(true); // Indicate loading for export
         try {
-            const idToken = await user.firebaseUser.getIdToken();
+            const idToken = user.firebaseUser.getIdToken();
             const queryParams = new URLSearchParams();
             if (startDate) queryParams.append('start_date', startDate);
             if (endDate) queryParams.append('end_date', endDate);

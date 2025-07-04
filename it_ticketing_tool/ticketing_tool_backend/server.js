@@ -5,6 +5,8 @@ const express = require('express');
 const cors = require('cors');
 const admin = require('firebase-admin');
 const nodemailer = require('nodemailer'); // NEW: Import Nodemailer
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
 
 // Required for file uploads
 const Busboy = require('busboy');
@@ -12,6 +14,7 @@ const path = require('path');
 const os = require('os');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
+const User = require('./models/User');
 
 const app = express();
 //const PORT = process.env.REACT_APP_API_URL
@@ -22,6 +25,21 @@ const PORT =  process.env.PORT || 5000; // Use process.env.PORT for Render
 //   console.log(`Server running on port ${PORT}`);
 // });
 
+const mongoose = require('mongoose');
+
+// --- MongoDB (Mongoose) Connection ---
+const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/ticketing-tool';
+
+mongoose.connect(mongoURI, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+})
+.then(() => {
+    console.log('Connected to MongoDB successfully!');
+})
+.catch((err) => {
+    console.error('Error connecting to MongoDB:', err.message);
+});
 
 // --- Firebase Firestore & Auth Configuration ---
 // IMPORTANT: Adjust the path to your serviceAccountKey.json if necessary.
@@ -226,56 +244,44 @@ async function generateDisplayId() {
     return newDisplayId;
 }
 
-// --- Middleware to verify Firebase ID token for protected routes ---
-// MODIFIED: Fetch user role and attach to req.user
-// server.js (excerpt)
-
-// Middleware to verify Firebase ID token
-// server.js (Modified verifyFirebaseToken middleware)
-
-// Middleware to verify Firebase ID token and fetch user role
-const verifyFirebaseToken = async (req, res, next) => {
+// --- JWT Middleware to replace Firebase token verification ---
+const verifyJWT = async (req, res, next) => {
     const authHeader = req.headers.authorization;
-
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        console.warn('Authorization header missing or not Bearer token.');
-        return res.status(401).json({ error: 'Unauthorized: No token provided or token format is invalid.' });
+        return res.status(401).json({ error: 'Authorization header with Bearer token is required!' });
     }
 
-    const idToken = authHeader.split(' ')[1];
+    const token = authHeader.split(' ')[1];
 
     try {
-        const decodedToken = await admin.auth().verifyIdToken(idToken);
-        req.user = decodedToken;
-
-        // Fetch user's role from Firestore
-        console.log(`Attempting to fetch user document for UID: ${decodedToken.uid}`);
-        const userDoc = await db.collection('users').doc(decodedToken.uid).get();
-
-        if (!userDoc.exists) {
-            console.error(`ERROR: User document NOT found for UID: ${decodedToken.uid}`);
-            return res.status(403).json({ error: 'Forbidden: User profile not found.' });
+        const jwtSecret = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+        const decoded = jwt.verify(token, jwtSecret);
+        
+        // Find user in MongoDB to ensure they still exist and are active
+        const user = await User.findById(decoded.userId);
+        if (!user || !user.active) {
+            return res.status(401).json({ error: 'User not found or account deactivated.' });
         }
 
-        const userData = userDoc.data();
-        console.log(`User data retrieved for ${decodedToken.uid}:`, userData); // Log the full user data
-
-        if (!userData || !userData.role) {
-            console.error(`ERROR: Role not found or is empty for user: ${decodedToken.uid}. User data:`, userData);
-            return res.status(403).json({ error: 'Forbidden: User role not found.' });
-        }
-
-        req.user.role = userData.role;
-        console.log(`Successfully set role for ${decodedToken.uid} to: ${req.user.role}`);
+        // Add user info to request object
+        req.user = {
+            uid: user._id,
+            email: user.email,
+            role: user.role
+        };
+        
         next();
     } catch (error) {
-        console.error('Error verifying Firebase ID token or fetching user role:', error);
-        if (error.code === 'auth/argument-error' || error.code === 'auth/invalid-credential' || error.code === 'auth/id-token-expired') {
-             return res.status(401).json({ error: 'Unauthorized: Invalid or expired token. Please log in again.' });
+        if (error.name === 'JsonWebTokenError') {
+            return res.status(401).json({ error: 'Invalid token.' });
+        } else if (error.name === 'TokenExpiredError') {
+            return res.status(401).json({ error: 'Token expired.' });
         }
-        return res.status(500).json({ error: 'Failed to authenticate token or retrieve user data.' });
+        console.error(`JWT verification error: ${error.message}`);
+        return res.status(500).json({ error: 'Token verification failed.' });
     }
 };
+
 // Middleware to check if the user has an admin role
 const requireAdmin = (req, res, next) => {
     if (!req.user || (req.user.role !== 'admin' && req.user.role !== 'super_admin')) {
@@ -350,7 +356,7 @@ const checkRole = (roles) => {
 // @route   GET /tickets/summary-counts
 // @desc    Get counts of active, assigned-to-me, and total tickets.
 // @access  Private (requires token)
-app.get('/tickets/summary-counts', verifyFirebaseToken, async (req, res) => {
+app.get('/tickets/summary-counts', verifyJWT, async (req, res) => {
     const authenticatedUid = req.user.uid;
     const authenticatedUserRole = req.user.role; // Now available directly from req.user
 
@@ -388,7 +394,7 @@ app.get('/tickets/summary-counts', verifyFirebaseToken, async (req, res) => {
 // @route   GET /tickets/status-summary
 // @desc    Get counts of tickets by each status (e.g., Open: 5, In Progress: 3).
 // @access  Private (requires token)
-app.get('/tickets/status-summary', verifyFirebaseToken, async (req, res) => {
+app.get('/tickets/status-summary', verifyJWT, async (req, res) => {
     try {
         const snapshot = await ticketsCollection.get();
         const statusCounts = {};
@@ -422,7 +428,7 @@ app.get('/tickets/status-summary', verifyFirebaseToken, async (req, res) => {
 // --- Routes ---
 
 // @route   POST /register
-// @desc    Register a new user with Firebase Auth and store role in Firestore
+// @desc    Register a new user with MongoDB authentication
 // @access  Public or Protected (RBAC enforced)
 app.post('/register', async (req, res) => {
     const { email, password, role = 'user' } = req.body; // Default role is 'user'
@@ -431,117 +437,122 @@ app.post('/register', async (req, res) => {
         return res.status(400).json({ error: 'Email and password are required!' });
     }
 
-    if (!validUserRoles.includes(role)) { // Use new validUserRoles
+    if (!validUserRoles.includes(role)) {
         return res.status(400).json({ error: 'Invalid role specified.' });
     }
 
-    // RBAC enforcement
-    let requesterRole = null;
-    let requesterUid = null;
-    // If Authorization header is present, verify token and get requester role
-    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
-        try {
-            const idToken = req.headers.authorization.split(' ')[1];
-            const decodedToken = await admin.auth().verifyIdToken(idToken);
-            requesterUid = decodedToken.uid;
-            // Fetch role from Firestore
-            const userDoc = await usersCollection.doc(requesterUid).get();
-            if (userDoc.exists) {
-                requesterRole = userDoc.data().role;
-            }
-        } catch (err) {
-            return res.status(401).json({ error: 'Invalid or expired authentication token.' });
-        }
-    }
-
-    // RBAC logic
-    if (requesterRole === 'super_admin') {
-        // Super Admin can create any role
-    } else if (requesterRole === 'site_admin') {
-        if (!(role === 'user' || role === 'support')) {
-            return res.status(403).json({ error: 'Site Admins can only create users with user or support roles.' });
-        }
-    } else if (requesterRole) {
-        // Authenticated but not super_admin or site_admin
-        return res.status(403).json({ error: 'You do not have permission to create users.' });
-    } else {
-        // Public registration (no token)
-        if (role !== 'user') {
-            return res.status(403).json({ error: 'Public registration only allowed for user role.' });
-        }
+    // RBAC enforcement (optional, can be expanded later)
+    // For now, allow public registration for 'user' role only
+    if (role !== 'user') {
+        return res.status(403).json({ error: 'Only user role can be registered publicly.' });
     }
 
     try {
-        // Create user in Firebase Authentication
-        const userRecord = await admin.auth().createUser({
-            email: email,
-            password: password,
-        });
-        console.log(`Firebase Auth user created: ${userRecord.uid}`);
-
-        // Store user role in Firestore 'users' collection using UID as document ID
-        await usersCollection.doc(userRecord.uid).set({ email: email, role: role });
-        console.log(`Firestore user profile created for ${userRecord.uid} with role ${role}`);
-
-        return res.status(201).json({ message: `User ${email} registered successfully!`, user_id: userRecord.uid });
-    } catch (error) {
-        if (error.code === 'auth/email-already-exists') {
+        // Check if user already exists
+        const existingUser = await User.findOne({ email });
+        if (existingUser) {
             return res.status(409).json({ error: 'Email already registered.' });
         }
+
+        // Hash the password
+        const saltRounds = 10;
+        const passwordHash = await bcrypt.hash(password, saltRounds);
+
+        // Create new user in MongoDB
+        const newUser = new User({
+            _id: email, // Use email as _id for simplicity (or use mongoose default _id)
+            email,
+            passwordHash,
+            role,
+            active: true,
+            loginActivity: [],
+        });
+        await newUser.save();
+
+        return res.status(201).json({ message: `User ${email} registered successfully!` });
+    } catch (error) {
         console.error(`Registration error: ${error.message}`);
         return res.status(500).json({ error: `Error registering user: ${error.message}` });
     }
 });
 
 // @route   POST /login
-// @desc    Verify Firebase ID Token and retrieve user's role from Firestore
+// @desc    Authenticate user with MongoDB and return JWT token
 // @access  Public
 app.post('/login', async (req, res) => {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return res.status(401).json({ error: 'Authorization header with Bearer token is required!' });
+    const { email, password } = req.body;
+
+    console.log('Login attempt for email:', email);
+    console.log('Password provided:', password ? 'Yes' : 'No');
+
+    if (!email || !password) {
+        return res.status(400).json({ error: 'Email and password are required!' });
     }
 
-    const idToken = authHeader.split(' ')[1];
-
     try {
-        // Verify the ID token using Firebase Admin SDK
-        const decodedToken = await admin.auth().verifyIdToken(idToken);
-        const uid = decodedToken.uid;
-        const emailFromToken = decodedToken.email || '';
-
-        console.log(`ID Token verified for UID: ${uid}, Email: ${emailFromToken}`);
-
-        // Retrieve user role from Firestore based on the verified UID
-        const userDocRef = usersCollection.doc(uid);
-        const userDoc = await userDocRef.get();
-
-        if (!userDoc.exists) {
-            console.log(`User profile for UID ${uid} not found in Firestore.`);
-            return res.status(404).json({ error: 'User profile not found in database. Please contact support.' });
+        // Find user in MongoDB
+        const user = await User.findOne({ email });
+        console.log('User found:', user ? 'Yes' : 'No');
+        
+        if (!user) {
+            return res.status(401).json({ error: 'Invalid email or password.' });
         }
 
-        const userProfile = userDoc.data();
-        const loggedInUser = {
-            id: uid,
-            email: emailFromToken,
-            role: userProfile.role || 'user'
-        };
-
-        // --- Update lastLogin and loginActivity ---
-        await userDocRef.update({
-            lastLogin: admin.firestore.FieldValue.serverTimestamp(),
-            loginActivity: admin.firestore.FieldValue.arrayUnion(new Date().toISOString())
+        console.log('User data:', {
+            _id: user._id,
+            email: user.email,
+            role: user.role,
+            hasPasswordHash: !!user.passwordHash,
+            passwordHashLength: user.passwordHash ? user.passwordHash.length : 0
         });
 
-        console.log(`Login successful for user: ${loggedInUser}`);
-        return res.status(200).json({ message: 'Login successful', user: loggedInUser });
-    } catch (error) {
-        if (error.code === 'auth/invalid-id-token' || error.code === 'auth/id-token-expired') {
-            console.error(`Invalid ID Token error: ${error.message}`);
-            return res.status(401).json({ error: 'Invalid or expired authentication token. Please log in again.' });
+        // Check if user is active
+        if (!user.active) {
+            return res.status(401).json({ error: 'Account is deactivated. Please contact support.' });
         }
-        console.error(`Unexpected login error: ${error.message}`);
+
+        // Check if passwordHash exists
+        if (!user.passwordHash) {
+            console.error('User has no passwordHash field');
+            return res.status(500).json({ error: 'User account not properly configured. Please contact support.' });
+        }
+
+        // Verify password
+        const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
+        if (!isPasswordValid) {
+            return res.status(401).json({ error: 'Invalid email or password.' });
+        }
+
+        // Generate JWT token
+        const jwtSecret = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+        const token = jwt.sign(
+            { 
+                userId: user._id, 
+                email: user.email, 
+                role: user.role 
+            },
+            jwtSecret,
+            { expiresIn: '24h' }
+        );
+
+        // Update login activity
+        user.loginActivity.push(new Date().toISOString());
+        await user.save();
+
+        const loggedInUser = {
+            id: user._id,
+            email: user.email,
+            role: user.role
+        };
+
+        console.log(`Login successful for user: ${loggedInUser.email}`);
+        return res.status(200).json({ 
+            message: 'Login successful', 
+            user: loggedInUser,
+            token: token
+        });
+    } catch (error) {
+        console.error(`Login error: ${error.message}`);
         return res.status(500).json({ error: `An unexpected error occurred during login: ${error.message}` });
     }
 });
@@ -552,7 +563,7 @@ app.post('/login', async (req, res) => {
 // @desc Get user profile details (email, role).
 // @access Private (requires token, self-access or admin role)
 // MODIFIED: Allow admin to view any profile
-app.get('/profile/:userId', verifyFirebaseToken, async (req, res) => {
+app.get('/profile/:userId', verifyJWT, async (req, res) => {
     const requestedUid = req.params.userId;
     const authenticatedUid = req.user.uid; // UID from the verified token
     const authenticatedUserRole = req.user.role; // Role from the verified token
@@ -597,7 +608,7 @@ async function sendEmailAlert(toEmail, subject, text, html) {
 // @route   POST /tickets
 // @desc    Create a new ticket.
 // @access  Private (requires token)
-app.post('/tickets', verifyFirebaseToken, async (req, res) => {
+app.post('/tickets', verifyJWT, async (req, res) => {
     const {
         request_for_email, // Email of the person the ticket is for
         category,
@@ -726,7 +737,7 @@ app.post('/tickets', verifyFirebaseToken, async (req, res) => {
 // @desc    Update a ticket.
 // @access  Private (requires token, support/admin role, or reporter if not resolved/cancelled)
 // MODIFIED: Use req.user.role directly for authorization
-app.patch('/ticket/:ticket_id', verifyFirebaseToken, async (req, res) => {
+app.patch('/ticket/:ticket_id', verifyJWT, async (req, res) => {
     const ticketId = req.params.ticket_id;
     const {
         status,
@@ -942,7 +953,7 @@ app.patch('/ticket/:ticket_id', verifyFirebaseToken, async (req, res) => {
 // @route   PATCH /ticket/:ticket_id/cancel
 // @desc    Cancels a ticket, setting its status to 'Cancelled'
 // @access  Private (requires token, support/admin role, or reporter)
-app.patch('/ticket/:ticket_id/cancel', verifyFirebaseToken, async (req, res) => {
+app.patch('/ticket/:ticket_id/cancel', verifyJWT, async (req, res) => {
     const ticketId = req.params.ticket_id;
     const authenticatedUid = req.user.uid;
     const authenticatedUserRole = req.user.role;
@@ -1027,7 +1038,7 @@ app.patch('/ticket/:ticket_id/cancel', verifyFirebaseToken, async (req, res) => 
 // @route   POST /ticket/:ticket_id/add_comment
 // @desc    Add a comment to a ticket.
 // @access  Private (requires token)
-app.post('/ticket/:ticket_id/add_comment', verifyFirebaseToken, async (req, res) => {
+app.post('/ticket/:ticket_id/add_comment', verifyJWT, async (req, res) => {
     const ticketId = req.params.ticket_id;
     const { comment_text, commenter_name = req.user.email } = req.body; // Default commenter to user's email
 
@@ -1096,7 +1107,7 @@ app.post('/ticket/:ticket_id/add_comment', verifyFirebaseToken, async (req, res)
 // @route   GET /tickets/my
 // @desc    Get tickets created by the authenticated user.
 // @access  Private (requires token)
-app.get('/tickets/my', verifyFirebaseToken, async (req, res) => {
+app.get('/tickets/my', verifyJWT, async (req, res) => {
     const userId = req.query.userId; // User whose tickets are being requested
     const authenticatedUid = req.user.uid; // User from the token
     const searchKeyword = req.query.keyword ? req.query.keyword.toLowerCase() : '';
@@ -1140,7 +1151,7 @@ app.get('/tickets/my', verifyFirebaseToken, async (req, res) => {
 // @desc    Get all tickets in the system.
 // @access  Private (requires support, admin, or super_admin role)
 // MODIFIED: Use checkRole middleware
-app.get('/tickets/all', verifyFirebaseToken, checkRole(['support', 'admin', 'super_admin']), async (req, res) => {
+app.get('/tickets/all', verifyJWT, checkRole(['support', 'admin', 'super_admin']), async (req, res) => {
     const filterStatus = req.query.status;
     const filterAssignment = req.query.assignment;
     const searchKeyword = req.query.keyword ? req.query.keyword.toLowerCase() : '';
@@ -1192,7 +1203,7 @@ app.get('/tickets/all', verifyFirebaseToken, checkRole(['support', 'admin', 'sup
 // @desc    Get details of a specific ticket.
 // @access  Private (requires token and proper authorization)
 // MODIFIED: Use req.user.role directly for authorization
-app.get('/ticket/:ticket_id', verifyFirebaseToken, async (req, res) => {
+app.get('/ticket/:ticket_id', verifyJWT, async (req, res) => {
     const ticketId = req.params.ticket_id;
     const authenticatedUid = req.user.uid;
     const authenticatedUserRole = req.user.role; // Get role directly from req.user
@@ -1225,7 +1236,7 @@ app.get('/ticket/:ticket_id', verifyFirebaseToken, async (req, res) => {
 // // @desc    Export all tickets (including cancelled/resolved) to CSV based on duration.
 // @access  Private (requires support, admin, or super_admin role)
 // MODIFIED: Use checkRole middleware
-app.get('/tickets/export', verifyFirebaseToken, checkRole(['support', 'admin', 'super_admin']), async (req, res) => {
+app.get('/tickets/export', verifyJWT, checkRole(['support', 'admin', 'super_admin']), async (req, res) => {
     const { start_date, end_date } = req.query; // Optional date range
 
     try {
@@ -1318,7 +1329,7 @@ app.get('/tickets/export', verifyFirebaseToken, checkRole(['support', 'admin', '
 // @desc    Uploads a file to Firebase Storage and returns its URL.
 // @access  Private (requires token)
 // Max 10MB file size, allowed types: PDF, JPG, PNG, Word
-app.post('/upload-attachment', verifyFirebaseToken, async (req, res) => {
+app.post('/upload-attachment', verifyJWT, async (req, res) => {
     if (!admin.storage()) {
         console.error("Firebase Storage not initialized.");
         if (!res.headersSent) {
@@ -1480,7 +1491,7 @@ app.post('/upload-attachment', verifyFirebaseToken, async (req, res) => {
 // @route   GET /notifications/my
 // @desc    Get notifications for the authenticated user.
 // @access  Private (requires token)
-app.get('/notifications/my', verifyFirebaseToken, async (req, res) => {
+app.get('/notifications/my', verifyJWT, async (req, res) => {
     const authenticatedUid = req.user.uid;
     try {
         const snapshot = await notificationsCollection
@@ -1501,7 +1512,7 @@ app.get('/notifications/my', verifyFirebaseToken, async (req, res) => {
 // @route   PATCH /notifications/:notificationId/read
 // @desc    Mark a specific notification as read.
 // @access  Private (requires token and ownership of notification)
-app.patch('/notifications/:notificationId/read', verifyFirebaseToken, async (req, res) => {
+app.patch('/notifications/:notificationId/read', verifyJWT, async (req, res) => {
     const notificationId = req.params.notificationId;
     const authenticatedUid = req.user.uid;
 
@@ -1527,7 +1538,7 @@ app.patch('/notifications/:notificationId/read', verifyFirebaseToken, async (req
     }
 });
 
-app.delete('/notifications/:id', verifyFirebaseToken, async (req, res) => {
+app.delete('/notifications/:id', verifyJWT, async (req, res) => {
     const { id } = req.params;
     const userId = req.user.uid; // Get authenticated user's UID from req.user
 
@@ -1555,7 +1566,7 @@ app.delete('/notifications/:id', verifyFirebaseToken, async (req, res) => {
 // @route   DELETE /notifications/clear-all
 // @desc    Clear all notifications for the authenticated user.
 // @access  Private (requires authentication)
-app.delete('/notifications/clear-all', verifyFirebaseToken, async (req, res) => {
+app.delete('/notifications/clear-all', verifyJWT, async (req, res) => {
     const userId = req.user.uid; // Get authenticated user's UID
 
     try {
@@ -1588,7 +1599,7 @@ app.delete('/notifications/clear-all', verifyFirebaseToken, async (req, res) => 
 // @route   GET /admin/users
 // @desc    Get all users (admin only)
 // @access  Private (requires admin role)
-app.get('/admin/users', verifyFirebaseToken, checkRole(['admin', 'super_admin']), async (req, res) => {
+app.get('/admin/users', verifyJWT, checkRole(['admin', 'super_admin']), async (req, res) => {
     try {
         const usersSnapshot = await usersCollection.get();
         const usersList = [];
@@ -1625,7 +1636,7 @@ app.get('/admin/users', verifyFirebaseToken, checkRole(['admin', 'super_admin'])
 // @route   GET /admin/users/:uid
 // @desc    Get details of a specific user.
 // @access  Private (requires admin role)
-app.get('/admin/users/:uid', verifyFirebaseToken, checkRole(['admin', 'super_admin']), async (req, res) => {
+app.get('/admin/users/:uid', verifyJWT, checkRole(['admin', 'super_admin']), async (req, res) => {
     const userId = req.params.uid;
     try {
         const userDoc = await usersCollection.doc(userId).get();
@@ -1644,7 +1655,7 @@ app.get('/admin/users/:uid', verifyFirebaseToken, checkRole(['admin', 'super_adm
 // @desc    Update a user's role.
 // @access  Private (requires admin role)
 // Admin route to update user role
-app.patch('/admin/users/:uid', verifyFirebaseToken, checkRole(['admin', 'super_admin']), async (req, res) => {
+app.patch('/admin/users/:uid', verifyJWT, checkRole(['admin', 'super_admin']), async (req, res) => {
     const { uid } = req.params;
     const { role } = req.body;
 
@@ -1668,7 +1679,7 @@ app.patch('/admin/users/:uid', verifyFirebaseToken, checkRole(['admin', 'super_a
 // @route   DELETE /admin/users/:uid
 // @desc    Delete a user (from Firebase Auth and Firestore).
 // @access  Private (requires admin role)
-app.delete('/admin/users/:uid', verifyFirebaseToken, checkRole(['admin', 'super_admin']), async (req, res) => {
+app.delete('/admin/users/:uid', verifyJWT, checkRole(['admin', 'super_admin']), async (req, res) => {
     const { uid } = req.params;
 
     if (uid === req.user.uid) {
@@ -1689,7 +1700,7 @@ app.delete('/admin/users/:uid', verifyFirebaseToken, checkRole(['admin', 'super_
 // @route   DELETE /tickets/all
 // @desc    Delete all tickets in the system (admin/support only, use with caution)
 // @access  Private (requires support or admin role)
-app.delete('/tickets/all', verifyFirebaseToken, checkRole(['support', 'admin']), async (req, res) => {
+app.delete('/tickets/all', verifyJWT, checkRole(['support', 'admin']), async (req, res) => {
     try {
         const snapshot = await ticketsCollection.get();
         const batch = admin.firestore().batch();
@@ -1713,7 +1724,7 @@ app.delete('/tickets/all', verifyFirebaseToken, checkRole(['support', 'admin']),
 // @route   GET /dashboard/clients-count
 // @desc    Get total number of clients
 // @access  Super Admin only
-app.get('/dashboard/clients-count', verifyFirebaseToken, requireSuperAdmin, async (req, res) => {
+app.get('/dashboard/clients-count', verifyJWT, requireSuperAdmin, async (req, res) => {
     try {
         const clientsSnapshot = await db.collection('clients').get();
         return res.status(200).json({ total_clients: clientsSnapshot.size });
@@ -1726,7 +1737,7 @@ app.get('/dashboard/clients-count', verifyFirebaseToken, requireSuperAdmin, asyn
 // @route   GET /dashboard/active-users-count
 // @desc    Get total number of active users
 // @access  Super Admin only
-app.get('/dashboard/active-users-count', verifyFirebaseToken, requireSuperAdmin, async (req, res) => {
+app.get('/dashboard/active-users-count', verifyJWT, requireSuperAdmin, async (req, res) => {
     try {
         // Assuming 'active' field on user profile, default to all users if not present
         const usersSnapshot = await db.collection('users').where('active', '==', true).get();
@@ -1740,7 +1751,7 @@ app.get('/dashboard/active-users-count', verifyFirebaseToken, requireSuperAdmin,
 // @route   GET /dashboard/top-clients
 // @desc    Get top 5 clients by ticket load
 // @access  Super Admin only
-app.get('/dashboard/top-clients', verifyFirebaseToken, requireSuperAdmin, async (req, res) => {
+app.get('/dashboard/top-clients', verifyJWT, requireSuperAdmin, async (req, res) => {
     try {
         // Aggregate tickets by client_id (assuming each ticket has a client_id field)
         const ticketsSnapshot = await db.collection('tickets').get();
@@ -1772,10 +1783,10 @@ app.listen(PORT, () => {
 const adminManagementRouter = require('./routes/adminManagement');
 // After initializing db, usersCollection, etc.
 app.locals.admin = admin; // So the router can access admin.auth()
-app.use('/admin-management', adminManagementRouter(db, usersCollection, verifyFirebaseToken, requireSuperAdmin));
+app.use('/admin-management', adminManagementRouter(db, usersCollection, verifyJWT, requireSuperAdmin));
 
 // --- Admin Management Route (inline for Render deployment) ---
-app.get('/admin-management', verifyFirebaseToken, requireSuperAdmin, async (req, res) => {
+app.get('/admin-management', verifyJWT, requireSuperAdmin, async (req, res) => {
     try {
         const snapshot = await usersCollection.where('role', '==', 'admin').get();
         const admins = snapshot.docs.map(doc => {
@@ -2086,5 +2097,81 @@ app.delete('/api/users/:uid', async (req, res) => {
             return res.status(500).json({ error: `Firebase Auth error: ${err.message}` });
         }
         return res.status(500).json({ error: err.message || 'Failed to delete user.' });
+    }
+});
+
+// --- TEMPORARY: Migration endpoint to add password hash to existing users ---
+// @route   POST /migrate-user-password
+// @desc    Add password hash to existing user (temporary migration endpoint)
+// @access  Public (remove in production)
+app.post('/migrate-user-password', async (req, res) => {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+        return res.status(400).json({ error: 'Email and password are required!' });
+    }
+
+    try {
+        const user = await User.findOne({ email });
+        if (!user) {
+            return res.status(404).json({ error: 'User not found.' });
+        }
+
+        if (user.passwordHash) {
+            return res.status(400).json({ error: 'User already has a password hash.' });
+        }
+
+        // Hash the password
+        const saltRounds = 10;
+        const passwordHash = await bcrypt.hash(password, saltRounds);
+
+        // Update user with password hash
+        user.passwordHash = passwordHash;
+        await user.save();
+
+        return res.status(200).json({ message: 'User password migrated successfully!' });
+    } catch (error) {
+        console.error(`Migration error: ${error.message}`);
+        return res.status(500).json({ error: `Migration failed: ${error.message}` });
+    }
+});
+
+// --- Verify JWT Token Endpoint ---
+// @route   POST /verify-token
+// @desc    Verify JWT token and return user data
+// @access  Public
+app.post('/verify-token', async (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ valid: false, error: 'No token provided' });
+    }
+
+    const token = authHeader.split(' ')[1];
+
+    try {
+        const jwtSecret = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+        const decoded = jwt.verify(token, jwtSecret);
+        
+        // Find user in MongoDB to ensure they still exist and are active
+        const user = await User.findById(decoded.userId);
+        if (!user || !user.active) {
+            return res.status(401).json({ valid: false, error: 'User not found or deactivated' });
+        }
+
+        const userData = {
+            id: user._id,
+            email: user.email,
+            role: user.role
+        };
+
+        return res.status(200).json({ valid: true, user: userData });
+    } catch (error) {
+        if (error.name === 'JsonWebTokenError') {
+            return res.status(401).json({ valid: false, error: 'Invalid token' });
+        } else if (error.name === 'TokenExpiredError') {
+            return res.status(401).json({ valid: false, error: 'Token expired' });
+        }
+        console.error(`Token verification error: ${error.message}`);
+        return res.status(500).json({ valid: false, error: 'Token verification failed' });
     }
 });
