@@ -4,10 +4,12 @@
 Deployment Instructions:
 
 🚀 Frontend Deployment (Firebase Hosting)
-Build the React app:
+#####Build the React app:#####
+
 npm run build
 
-Deploy to Firebase Hosting:
+#####Deploy to Firebase Hosting:#####
+
 firebase deploy --only hosting
 
 

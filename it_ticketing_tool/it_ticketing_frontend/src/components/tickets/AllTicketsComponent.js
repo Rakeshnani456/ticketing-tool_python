@@ -105,7 +105,6 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
             return () => {};
         }
 
-        setLoading(true);
         setError(null);
 
         let ticketsRef = collection(db, 'tickets');
@@ -140,7 +139,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
 
         // Cleanup function: unsubscribe from the listener when the component unmounts
         return () => unsubscribe();
-    }, [user, db, searchKeyword]); // Re-run effect if these dependencies change
+    }, [db, searchKeyword]); // Re-run effect if these dependencies change
 
 
     /**
@@ -189,7 +188,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
         }
 
         setDisplayedTickets(currentFilteredTickets); // Update displayed tickets
-    }, [allTickets, filterStatus, filterAssignment, searchKeyword, user]); // Dependencies include all filtering states and user
+    }, [allTickets, filterStatus, filterAssignment, searchKeyword]); // Dependencies include all filtering states and user
 
 
     // Effect hook to measure message box height and set up auto-hide timer
@@ -456,8 +455,7 @@ const counts = {
         }
     }, []); // No dependencies for handleCloseMessage itself, uses refs
 
-    // Conditional rendering for loading or error states
-    if (loading && !showExportPopup) return <div className="text-center text-gray-600 mt-8 text-base flex items-center justify-center space-x-2"><Loader2 className="animate-spin" size={20} /> <span>Loading tickets...</span></div>;
+    // Conditional rendering for error states only
     if (error && !showExportPopup) return <div className="text-center text-red-600 mt-8 text-base flex items-center justify-center space-x-2"><XCircle size={20} /> <span>Error: {error}</span></div>;
 
     return (

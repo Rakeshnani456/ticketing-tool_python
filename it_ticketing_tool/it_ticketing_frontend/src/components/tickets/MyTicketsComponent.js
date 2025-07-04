@@ -68,7 +68,6 @@ const MyTicketsComponent = ({ user, navigateTo, showFlashMessage, searchKeyword,
             return () => {}; // Return empty cleanup function
         }
 
-        setLoading(true);
         setError(null);
 
         let ticketsRef = collection(db, 'tickets');
@@ -129,7 +128,7 @@ const MyTicketsComponent = ({ user, navigateTo, showFlashMessage, searchKeyword,
 
         // Cleanup function
         return () => unsubscribe();
-    }, [user, db, searchKeyword, showFlashMessage]); // Dependencies for the effect
+    }, [db, searchKeyword, showFlashMessage]); // Dependencies for the effect
 
     /**
      * Determines CSS classes for a ticket's status badge.
@@ -161,8 +160,7 @@ const MyTicketsComponent = ({ user, navigateTo, showFlashMessage, searchKeyword,
         }
     };
 
-    // Conditional rendering for loading, error, or no tickets state
-    if (loading) return <div className="text-center text-gray-600 mt-8 text-base flex items-center justify-center space-x-2"><Loader2 className="animate-spin" size={20} /> <span>Loading your tickets...</span></div>;
+    // Conditional rendering for error states only
     if (error) return <div className="text-center text-red-600 mt-8 text-base flex items-center justify-center space-x-2"><XCircle size={20} /> <span>Error: {error}</span></div>;
 
     return (

@@ -1016,30 +1016,43 @@ const App = () => {
                             {/* Only show Dashboard in sidebar for support and other non-admin roles */}
                             {(currentUser.role === 'support') && (
                                 <>
+                                    
                                     <li>
                                         <Link to="/dashboard" className={`menu-item relative flex items-center w-full px-2 py-1 rounded-lg text-left transition-colors duration-300 text-sm ${location.pathname === '/dashboard' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                             <LayoutDashboardIcon width={18} height={18} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-1.5' : ''}`} fill="currentColor" />
-                                        <motion.span
-                                            variants={textVariants}
-                                            animate={isSidebarExpanded ? "expanded" : "collapsed"}
-                                            className="whitespace-nowrap overflow-hidden"
-                                        >
+                                            <motion.span
+                                                variants={textVariants}
+                                                animate={isSidebarExpanded ? "expanded" : "collapsed"}
+                                                className="whitespace-nowrap overflow-hidden"
+                                            >
                                                 Dashboard
-                                        </motion.span>
-                                        {!isSidebarExpanded && (
-                                            <span className="sidebar-count-badge absolute top-0 right-0 text-xs rounded-full h-4 w-4 flex items-center justify-center -mt-1 -mr-1">
-                                                            {ticketCounts.active_tickets}
-                                            </span>
-                                        )}
-                                        {isSidebarExpanded && (
-                                            <span className="ml-2 text-xs">
-                                                            ({ticketCounts.active_tickets})
-                                            </span>
-                                        )}
-                                    </Link>
-                                </li>
-                            </>
-                        )}
+                                            </motion.span>
+                                            {!isSidebarExpanded && (
+                                                <span className="sidebar-count-badge absolute top-0 right-0 text-xs rounded-full h-4 w-4 flex items-center justify-center -mt-1 -mr-1">
+                                                    {ticketCounts.active_tickets}
+                                                </span>
+                                            )}
+                                            {isSidebarExpanded && (
+                                                <span className="ml-2 text-xs">
+                                                    ({ticketCounts.active_tickets})
+                                                </span>
+                                            )}
+                                        </Link>
+                                    </li>
+                                    <li>
+                                        <Link to="/all-tickets" className={`menu-item flex items-center w-full px-2 py-1 rounded-lg text-left transition-colors duration-300 text-sm ${location.pathname === '/all-tickets' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                            <MenuIconSvg width={18} height={18} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-1.5' : ''}`} fill="currentColor" />
+                                            <motion.span
+                                                variants={textVariants}
+                                                animate={isSidebarExpanded ? "expanded" : "collapsed"}
+                                                className="whitespace-nowrap overflow-hidden"
+                                            >
+                                                All Tickets
+                                            </motion.span>
+                                        </Link>
+                                    </li>
+                                </>
+                            )}
                         <li>
                             <Link to="/my-tickets" className={`menu-item flex items-center w-full px-2 py-1 rounded-lg text-left transition-colors duration-300 text-sm ${location.pathname === '/my-tickets' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                 <AssignedToMeIcon height={18} width={18} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-1.5' : ''}`} />

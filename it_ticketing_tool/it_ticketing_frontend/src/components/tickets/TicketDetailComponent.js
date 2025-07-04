@@ -180,7 +180,6 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
             return () => { };
         }
 
-        setLoading(true);
         setError(null);
 
         const ticketDocRef = doc(db, 'tickets', ticketId);
@@ -251,7 +250,7 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
 
         return () => unsubscribe();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [ticketId, user, db, showFlashMessage, isEditing, isSupportUser]);
+    }, [ticketId, db]);
 
     // When entering edit mode, initialize editable fields from ticket
     useEffect(() => {
@@ -773,9 +772,9 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
     const [timeSpentRed, setTimeSpentRed] = useState(false);
     const [closureNotesRed, setClosureNotesRed] = useState(false);
 
-    if (loading) return <div className="text-center text-gray-600 mt-8 text-base flex items-center justify-center space-x-2"><Loader2 className="animate-spin" size={20} /> <span>Loading ticket details...</span></div>;
+    // Conditional rendering for error states only
     if (error) return <div className="text-center text-red-600 mt-8 text-base flex items-center justify-center space-x-2"><XCircle size={20} /> <span>Error: {error}</span></div>;
-    if (!ticket) return <div className="text-center text-gray-600 mt-8 text-base">Ticket not found.</div>;
+    if (!ticket) return null; // Don't show anything while loading, just wait for data
 
     return (
         <div className="min-h-screen bg-gray-50">
