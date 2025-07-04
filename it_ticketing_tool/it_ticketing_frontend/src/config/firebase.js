@@ -3,6 +3,7 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore, enableIndexedDbPersistence } from 'firebase/firestore'; // NEW: Import getFirestore and enableIndexedDbPersistence
+import { getStorage } from 'firebase/storage';
 
 // --- Firebase Client-Side Configuration ---
 // Replace these with your actual Firebase project configuration
@@ -23,6 +24,8 @@ const app = initializeApp(firebaseConfig);
 const authClient = getAuth(app);
 // Get Firestore instance
 const dbClient = getFirestore(app); // NEW: Export the Firestore client
+// Get Firebase Storage instance
+const storage = getStorage(app);
 
 // Enable offline persistence (handle multi-tab error gracefully)
 enableIndexedDbPersistence(dbClient).catch((err) => {
@@ -38,7 +41,7 @@ enableIndexedDbPersistence(dbClient).catch((err) => {
 });
 
 // Export the auth and db clients for use in other components
-export { app, authClient, dbClient }; // NEW: Export 'app' and 'dbClient'
+export { app, authClient, dbClient, storage }; // NEW: Export 'app', 'dbClient', and 'storage'
 
 // This file sets up and initializes Firebase for your application.
 // It exports the `authClient` instance, allowing other components to

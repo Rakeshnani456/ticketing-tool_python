@@ -139,6 +139,27 @@ function jsonSerializableTicket(docId, ticketData) {
             return comment;
         });
     }
+    
+    // Ensure status_history is correctly serialized, especially timestamps
+    if (data.status_history && Array.isArray(data.status_history)) {
+        data.status_history = data.status_history.map(history => {
+            if (history.timestamp && history.timestamp.toDate) {
+                return { ...history, timestamp: history.timestamp.toDate().toISOString() };
+            }
+            return history;
+        });
+    }
+    
+    // Ensure assigned_to_history is correctly serialized, especially timestamps
+    if (data.assigned_to_history && Array.isArray(data.assigned_to_history)) {
+        data.assigned_to_history = data.assigned_to_history.map(history => {
+            if (history.timestamp && history.timestamp.toDate) {
+                return { ...history, timestamp: history.timestamp.toDate().toISOString() };
+            }
+            return history;
+        });
+    }
+    
     return data;
 }
 
@@ -661,6 +682,8 @@ app.post('/tickets', verifyFirebaseToken, async (req, res) => {
             resolved_at: null, // New field for time spent calculation
             time_spent_minutes: null, // New field for time spent calculation
             closure_notes: null, // NEW: Add closure_notes field
+            status_history: [], // Initialize status history array
+            assigned_to_history: [], // Initialize assignment history array
         };
 
         const docRef = await ticketsCollection.add(newTicket);
@@ -790,10 +813,29 @@ app.patch('/ticket/:ticket_id', verifyFirebaseToken, async (req, res) => {
                 updateData.time_spent = parsedTimeSpent;
             }
         }
+        
+        // Handle attachments - append new attachments to existing ones
+        if (attachments !== undefined && Array.isArray(attachments) && attachments.length > 0) {
+            const existingAttachments = ticketData.attachments || [];
+            updateData.attachments = [...existingAttachments, ...attachments];
+            console.log(`Adding ${attachments.length} new attachments to ticket ${ticketId}. Total attachments: ${updateData.attachments.length}`);
+        }
 
         // Handle status change and time_spent calculation
         if (status && status !== ticketData.status) {
             updateData.status = status;
+
+            // Add status change to history
+            const statusHistoryEntry = {
+                old_status: ticketData.status,
+                new_status: status,
+                user_email: req.user.email,
+                timestamp: new Date() // Use regular Date object instead of serverTimestamp
+            };
+            
+            // Initialize status_history array if it doesn't exist, or add to existing one
+            const currentStatusHistory = ticketData.status_history || [];
+            updateData.status_history = admin.firestore.FieldValue.arrayUnion(statusHistoryEntry);
 
             // If status changes to Resolved or Cancelled, record resolved_at and calculate time_spent
             if (['Resolved', 'Cancelled'].includes(status)) { // Include 'Cancelled' here for closure logic
@@ -879,6 +921,16 @@ app.patch('/ticket/:ticket_id', verifyFirebaseToken, async (req, res) => {
             if (assigned_to_email === null || assigned_to_email === '') { // Unassign
                 updateData.assigned_to_id = null;
                 updateData.assigned_to_email = null;
+                
+                // Add assignment change to history
+                const assignmentHistoryEntry = {
+                    old_assigned_to: ticketData.assigned_to_email,
+                    new_assigned_to: null,
+                    user_email: req.user.email,
+                    timestamp: new Date() // Use regular Date object instead of serverTimestamp
+                };
+                updateData.assigned_to_history = admin.firestore.FieldValue.arrayUnion(assignmentHistoryEntry);
+                
                 // NEW: Notify previous assignee if unassigned
                 if (ticketData.assigned_to_id) {
                     await notificationsCollection.add({
@@ -903,6 +955,15 @@ app.patch('/ticket/:ticket_id', verifyFirebaseToken, async (req, res) => {
                 }
                 updateData.assigned_to_id = assignedUserDoc.id;
                 updateData.assigned_to_email = assigned_to_email;
+
+                // Add assignment change to history
+                const assignmentHistoryEntry = {
+                    old_assigned_to: ticketData.assigned_to_email,
+                    new_assigned_to: assigned_to_email,
+                    user_email: req.user.email,
+                    timestamp: new Date() // Use regular Date object instead of serverTimestamp
+                };
+                updateData.assigned_to_history = admin.firestore.FieldValue.arrayUnion(assignmentHistoryEntry);
 
                 // NEW: Notify new assignee
                 if (assignedUserDoc.id !== authenticatedUid) { // Don't notify if assigning to self
@@ -977,6 +1038,26 @@ app.patch('/ticket/:ticket_id/cancel', verifyFirebaseToken, async (req, res) => 
             assigned_to_email: null,
             closure_notes: closure_notes || null, // Optional closure notes for cancellation
         };
+
+        // Add status change to history
+        const statusHistoryEntry = {
+            old_status: ticketData.status,
+            new_status: 'Cancelled',
+            user_email: req.user.email,
+            timestamp: new Date() // Use regular Date object instead of serverTimestamp
+        };
+        updateData.status_history = admin.firestore.FieldValue.arrayUnion(statusHistoryEntry);
+
+        // Add assignment change to history if there was a previous assignee
+        if (ticketData.assigned_to_email) {
+            const assignmentHistoryEntry = {
+                old_assigned_to: ticketData.assigned_to_email,
+                new_assigned_to: null,
+                user_email: req.user.email,
+                timestamp: new Date() // Use regular Date object instead of serverTimestamp
+            };
+            updateData.assigned_to_history = admin.firestore.FieldValue.arrayUnion(assignmentHistoryEntry);
+        }
 
         // Calculate time spent from creation to cancellation
         if (ticketData.created_at && ticketData.created_at.toDate) {
