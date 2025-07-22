@@ -1630,254 +1630,492 @@ const TicketDetailComponent = ({ ticketId, navigateTo, user, showFlashMessage })
 
     const getStatusClasses = (status) => {
         switch (status) {
-            case 'Open': return 'bg-green-100 text-green-800';
-            case 'In Progress': return 'bg-yellow-100 text-yellow-800';
-            case 'Hold': return 'bg-purple-100 text-purple-800';
-            case 'Closed':
-            case 'Resolved': return 'bg-gray-100 text-gray-800';
-            default: return 'bg-blue-100 text-blue-800';
+            case 'Open': return 'bg-emerald-50 text-emerald-700 ring-emerald-600/20';
+            case 'In Progress': return 'bg-amber-50 text-amber-700 ring-amber-600/20';
+            case 'Hold': return 'bg-purple-50 text-purple-700 ring-purple-600/20';
+            case 'Closed': return 'bg-slate-50 text-slate-700 ring-slate-600/20';
+            case 'Resolved': return 'bg-blue-50 text-blue-700 ring-blue-600/20';
+            default: return 'bg-indigo-50 text-indigo-700 ring-indigo-600/20';
         }
     };
 
     const getPriorityClasses = (priority) => {
         switch (priority) {
-            case 'Low': return 'bg-blue-100 text-blue-800';
-            case 'Medium': return 'bg-orange-100 text-orange-800';
-            case 'High': return 'bg-red-100 text-red-800';
-            case 'Critical': return 'bg-red-200 text-red-900 border border-red-500';
-            default: return 'bg-purple-100 text-purple-800';
+            case 'Low': return 'bg-sky-50 text-sky-700 ring-sky-600/20';
+            case 'Medium': return 'bg-orange-50 text-orange-700 ring-orange-600/20';
+            case 'High': return 'bg-red-50 text-red-700 ring-red-600/20';
+            case 'Critical': return 'bg-red-100 text-red-800 ring-red-600/30 shadow-sm';
+            default: return 'bg-violet-50 text-violet-700 ring-violet-600/20';
         }
     };
 
 
-    if (loading) return <div className="text-center text-gray-600 mt-8 text-base flex items-center justify-center space-x-2"><Loader2 className="animate-spin" size={20} /> <span>Loading ticket details...</span></div>;
-    if (error) return <div className="text-center text-red-600 mt-8 text-base flex items-center justify-center space-x-2"><XCircle size={20} /> <span>Error: {error}</span></div>;
-    if (!ticket) return <div className="text-center text-gray-600 mt-8 text-base">Ticket not found.</div>;
+    if (loading) return (
+        <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
+            <div className="bg-white p-8 rounded-xl shadow-lg border border-slate-200 flex items-center space-x-4">
+                <Loader2 className="animate-spin text-blue-600" size={24} />
+                <span className="text-slate-700 font-medium">Loading ticket details...</span>
+            </div>
+        </div>
+    );
+    
+    if (error) return (
+        <div className="min-h-screen bg-gradient-to-br from-slate-50 to-red-50 flex items-center justify-center p-4">
+            <div className="bg-white p-8 rounded-xl shadow-lg border border-red-200 max-w-md text-center">
+                <XCircle className="mx-auto text-red-500 mb-4" size={48} />
+                <h3 className="text-lg font-semibold text-slate-800 mb-2">Error Loading Ticket</h3>
+                <p className="text-red-600">{error}</p>
+            </div>
+        </div>
+    );
+    
+    if (!ticket) return (
+        <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-50 flex items-center justify-center">
+            <div className="bg-white p-8 rounded-xl shadow-lg border border-slate-200 text-center">
+                <div className="w-16 h-16 mx-auto mb-4 bg-slate-100 rounded-full flex items-center justify-center">
+                    <svg className="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                </div>
+                <h3 className="text-lg font-semibold text-slate-800">Ticket not found</h3>
+            </div>
+        </div>
+    );
 
     return (
-        <div className="p-4 bg-gray-100 min-h-screen flex-1 overflow-auto font-sans">
-            <div className="flex items-center bg-white border-b border-gray-200 px-4 py-3 shadow-sm sticky top-0 z-10">
-                <button onClick={() => navigateTo(user?.role === 'support' ? 'allTickets' : 'myTickets')} className="text-gray-500 hover:text-gray-700 mr-4">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-chevron-left"><path d="m15 18-6-6 6-6" /></svg>
-                </button>
-                <h1 className="text-lg font-semibold text-gray-800 flex-grow">TASK{ticket.display_id} (Portal view)</h1>
+        <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex-1 overflow-auto">
+            {/* Enhanced Header */}
+            <div className="sticky top-0 z-20 bg-white/95 backdrop-blur-sm border-b border-slate-200 shadow-sm">
+                <div className="flex items-center px-6 py-4">
+                    <button 
+                        onClick={() => navigateTo(user?.role === 'support' ? 'allTickets' : 'myTickets')} 
+                        className="group flex items-center justify-center w-10 h-10 rounded-xl bg-slate-100 hover:bg-slate-200 transition-all duration-200 mr-4 hover:shadow-md"
+                    >
+                        <svg className="w-5 h-5 text-slate-600 group-hover:text-slate-800 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                        </svg>
+                    </button>
+                    
+                    <div className="flex-grow">
+                        <h1 className="text-xl font-bold text-slate-800 flex items-center">
+                            <span className="bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+                                TASK{ticket.display_id}
+                            </span>
+                            <span className="ml-3 px-3 py-1 text-sm font-medium bg-slate-100 text-slate-600 rounded-full">
+                                Portal View
+                            </span>
+                        </h1>
+                    </div>
 
-                <div className="flex space-x-2">
-                    {canEdit && !isEditing && !isTicketClosedOrResolved && (
-                        <button
-                            onClick={() => setIsEditing(true)}
-                            className="px-3 py-1.5 text-sm font-medium text-blue-700 bg-blue-50 rounded-md hover:bg-blue-100 transition-colors duration-200"
-                        >
-                            Edit Ticket
-                        </button>
-                    )}
-                    {isEditing && (
-                        <>
+                    <div className="flex items-center space-x-3">
+                        {canEdit && !isEditing && !isTicketClosedOrResolved && (
                             <button
-                                onClick={handleCancelEdit}
-                                disabled={updateLoading}
-                                className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors duration-200"
+                                onClick={() => setIsEditing(true)}
+                                className="group flex items-center px-4 py-2.5 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-xl transition-all duration-200 hover:shadow-md border border-blue-200"
                             >
-                                Cancel
+                                <svg className="w-4 h-4 mr-2 group-hover:rotate-12 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                </svg>
+                                Edit Ticket
                             </button>
-                            <button
-                                onClick={handleUpdateTicket}
-                                disabled={updateLoading || !hasChanges()}
-                                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all duration-300 ease-in-out flex items-center justify-center
-                                ${saveButtonState === 'saving'
-                                        ? 'bg-blue-200 text-blue-500 cursor-not-allowed'
-                                        : saveButtonState === 'success'
-                                            ? 'bg-green-500 text-white'
-                                            : saveButtonState === 'error'
-                                                ? 'bg-red-500 text-white'
-                                                : hasChanges()
-                                                    ? 'bg-blue-600 text-white hover:bg-blue-700'
-                                                    : 'bg-blue-200 text-blue-500 cursor-not-allowed'
-                                    }`}
-                            >
-                                {saveButtonState === 'saving' && <Loader2 className="animate-spin mr-2" size={16} />}
-                                {saveButtonState === 'success' && <CheckCircle className="mr-2" size={16} />}
-                                {saveButtonState === 'error' && <XCircle className="mr-2" size={16} />}
-                                {saveButtonState === 'saving' && 'Saving...'}
-                                {saveButtonState === 'success' && 'Success!'}
-                                {saveButtonState === 'error' && 'Error!'}
-                                {saveButtonState === 'save' && 'Save'}
-                            </button>
-                        </>
-                    )}
+                        )}
+                        {isEditing && (
+                            <>
+                                <button
+                                    onClick={handleCancelEdit}
+                                    disabled={updateLoading}
+                                    className="flex items-center px-4 py-2.5 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all duration-200 disabled:opacity-50 border border-slate-200"
+                                >
+                                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleUpdateTicket}
+                                    disabled={updateLoading || !hasChanges()}
+                                    className={`flex items-center px-4 py-2.5 text-sm font-medium rounded-xl transition-all duration-300 ease-in-out shadow-sm
+                                    ${saveButtonState === 'saving'
+                                            ? 'bg-blue-100 text-blue-600 cursor-not-allowed'
+                                            : saveButtonState === 'success'
+                                                ? 'bg-emerald-500 text-white shadow-emerald-200'
+                                                : saveButtonState === 'error'
+                                                    ? 'bg-red-500 text-white shadow-red-200'
+                                                    : hasChanges()
+                                                        ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700 shadow-blue-200'
+                                                        : 'bg-slate-200 text-slate-500 cursor-not-allowed'
+                                        }`}
+                                >
+                                    {saveButtonState === 'saving' && <Loader2 className="animate-spin mr-2" size={16} />}
+                                    {saveButtonState === 'success' && <CheckCircle className="mr-2" size={16} />}
+                                    {saveButtonState === 'error' && <XCircle className="mr-2" size={16} />}
+                                    {saveButtonState === 'save' && (
+                                        <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                        </svg>
+                                    )}
+                                    {saveButtonState === 'saving' && 'Saving...'}
+                                    {saveButtonState === 'success' && 'Saved!'}
+                                    {saveButtonState === 'error' && 'Error!'}
+                                    {saveButtonState === 'save' && 'Save Changes'}
+                                </button>
+                            </>
+                        )}
+                    </div>
                 </div>
             </div>
 
-            <div className="bg-white p-6 rounded-lg shadow-md w-full max-w-4xl mx-auto mt-4 border border-gray-200">
-                <div className="grid grid-cols-2 gap-x-8 gap-y-4 mb-6">
-                    <div className="space-y-3">
-                        <div className="flex items-center">
-                            <label className="text-gray-700 text-sm font-semibold w-28 shrink-0">Number:</label>
-                            <span className="text-gray-900 text-sm font-medium flex-1">{ticket.display_id}</span>
-                        </div>
-                        <div className="flex items-center">
-                            <label className="text-gray-700 text-sm font-semibold w-28 shrink-0">Customer:</label>
-                            <span className="text-gray-900 text-sm font-medium flex-1">{ticket.request_for_email}</span>
-                        </div>
-                        <div className="flex items-center">
-                            <label className="text-gray-700 text-sm font-semibold w-28 shrink-0">Request:</label>
-                            <span className="text-gray-900 text-sm font-medium flex-1">{ticket.request_item_id || 'N/A'}</span>
-                        </div>
-                        <div className="flex items-center">
-                            <label className="text-gray-700 text-sm font-semibold w-28 shrink-0">Request Item:</label>
-                            <span className="text-gray-900 text-sm font-medium flex-1">{ticket.request_item_id || 'RITM000000'}</span>
-                        </div>
-                        <div className="flex items-center">
-                            <label className="text-gray-700 text-sm font-semibold w-28 shrink-0">Due date:</label>
-                            <span className="text-gray-900 text-sm font-medium flex-1">{ticket.due_date ? new Date(ticket.due_date).toLocaleDateString() : 'N/A'}</span>
-                        </div>
-                    </div>
-
-                    <div className="space-y-3">
-                        <div className="flex items-center">
-                            <label className="text-gray-700 text-sm font-semibold w-28 shrink-0">Priority:</label>
-                            {isEditing && canEdit ? (
-                                <FormSelect
-                                    id="priority"
-                                    value={editableFields.priority}
-                                    onChange={handleEditChange}
-                                    options={priorities}
-                                    disabled={!canEdit || isTicketClosedOrResolved}
-                                    className="flex-1 max-w-xs"
-                                    label=""
-                                />
-                            ) : (
-                                <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getPriorityClasses(ticket.priority)} flex-1 max-w-fit`}>
-                                    {ticket.priority}
-                                </span>
-                            )}
-                        </div>
-                        <div className="flex items-center">
-                            <label className="text-gray-700 text-sm font-semibold w-28 shrink-0">Status:</label>
-                            {isEditing && isSupportUser ? (
-                                <FormSelect
-                                    id="status"
-                                    value={editableFields.status}
-                                    onChange={handleEditChange}
-                                    options={statuses}
-                                    disabled={!isSupportUser}
-                                    className="flex-1 max-w-xs"
-                                    label=""
-                                />
-                            ) : (
-                                <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getStatusClasses(ticket.status)} flex-1 max-w-fit`}>
+            {/* Main Content Card */}
+            <div className="max-w-5xl mx-auto p-6">
+                <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
+                    {/* Ticket Information Section */}
+                    <div className="p-8">
+                        <div className="flex items-center justify-between mb-8">
+                            <h2 className="text-2xl font-bold text-slate-800 flex items-center">
+                                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center mr-3">
+                                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                    </svg>
+                                </div>
+                                Ticket Information
+                            </h2>
+                            <div className="flex items-center space-x-3">
+                                <span className={`inline-flex items-center px-3 py-1.5 rounded-xl text-sm font-semibold ${getStatusClasses(ticket.status)} ring-1 ring-inset`}>
+                                    <div className="w-2 h-2 rounded-full bg-current mr-2"></div>
                                     {ticket.status}
                                 </span>
-                            )}
-                        </div>
-                        {isSupportUser && (
-                            <div className="flex items-center">
-                                <label className="text-gray-700 text-sm font-semibold w-28 shrink-0">Assignment group:</label>
-                                <span className="text-gray-900 text-sm font-medium flex-1">{ticket.assignment_group || 'ITS-FieldSupport.CentralCampus'}</span>
+                                <span className={`inline-flex items-center px-3 py-1.5 rounded-xl text-sm font-semibold ${getPriorityClasses(ticket.priority)} ring-1 ring-inset`}>
+                                    {ticket.priority === 'Critical' && (
+                                        <svg className="w-4 h-4 mr-1.5" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                        </svg>
+                                    )}
+                                    {ticket.priority === 'High' && (
+                                        <svg className="w-4 h-4 mr-1.5" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fillRule="evenodd" d="M5.293 9.707a1 1 0 010-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414L11 7.414V15a1 1 0 11-2 0V7.414L6.707 9.707a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                                        </svg>
+                                    )}
+                                    {ticket.priority}
+                                </span>
                             </div>
-                        )}
-                        {isSupportUser && (
-                            <div className="flex items-center">
-                                <label className="text-gray-700 text-sm font-semibold w-28 shrink-0">Assigned to:</label>
-                                {isEditing && isSupportUser ? (
-                                    <FormInput
-                                        id="assigned_to_email"
-                                        type="email"
-                                        value={editableFields.assigned_to_email || ''}
-                                        onChange={handleEditChange}
-                                        placeholder="Enter email to assign"
-                                        disabled={!isSupportUser || isTicketClosedOrResolved}
-                                        className="flex-1 max-w-xs"
-                                        label=""
-                                    />
-                                ) : (
-                                    <span className="text-gray-900 text-sm font-medium flex-1">{ticket.assigned_to_email || 'Unassigned'}</span>
+                        </div>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                            <div className="space-y-6">
+                                <div className="bg-slate-50 rounded-xl p-5 border border-slate-200">
+                                    <h3 className="text-sm font-semibold text-slate-600 uppercase tracking-wider mb-4">Basic Information</h3>
+                                    <div className="space-y-4">
+                                        <div className="flex items-center">
+                                            <div className="w-6 h-6 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
+                                                <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
+                                                </svg>
+                                            </div>
+                                            <div className="flex-1">
+                                                <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Number</span>
+                                                <p className="text-slate-900 font-semibold">{ticket.display_id}</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center">
+                                            <div className="w-6 h-6 bg-emerald-100 rounded-lg flex items-center justify-center mr-3">
+                                                <svg className="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                                </svg>
+                                            </div>
+                                            <div className="flex-1">
+                                                <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Customer</span>
+                                                <p className="text-slate-900 font-semibold">{ticket.request_for_email}</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center">
+                                            <div className="w-6 h-6 bg-purple-100 rounded-lg flex items-center justify-center mr-3">
+                                                <svg className="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V9a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                                                </svg>
+                                            </div>
+                                            <div className="flex-1">
+                                                <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Request Item</span>
+                                                <p className="text-slate-900 font-semibold">{ticket.request_item_id || 'RITM000000'}</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center">
+                                            <div className="w-6 h-6 bg-amber-100 rounded-lg flex items-center justify-center mr-3">
+                                                <svg className="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                                </svg>
+                                            </div>
+                                            <div className="flex-1">
+                                                <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Due Date</span>
+                                                <p className="text-slate-900 font-semibold">{ticket.due_date ? new Date(ticket.due_date).toLocaleDateString() : 'Not set'}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="space-y-6">
+                                <div className="bg-slate-50 rounded-xl p-5 border border-slate-200">
+                                    <h3 className="text-sm font-semibold text-slate-600 uppercase tracking-wider mb-4">Assignment & Status</h3>
+                                    <div className="space-y-4">
+                                        <div className="flex items-center">
+                                            <div className="w-6 h-6 bg-red-100 rounded-lg flex items-center justify-center mr-3">
+                                                <svg className="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                                                </svg>
+                                            </div>
+                                            <div className="flex-1">
+                                                <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Priority</span>
+                                                {isEditing && canEdit ? (
+                                                    <FormSelect
+                                                        id="priority"
+                                                        value={editableFields.priority}
+                                                        onChange={handleEditChange}
+                                                        options={priorities}
+                                                        disabled={!canEdit || isTicketClosedOrResolved}
+                                                        className="mt-1"
+                                                        label=""
+                                                    />
+                                                ) : (
+                                                    <p className="text-slate-900 font-semibold">{ticket.priority}</p>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center">
+                                            <div className="w-6 h-6 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
+                                                <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+                                                </svg>
+                                            </div>
+                                            <div className="flex-1">
+                                                <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Status</span>
+                                                {isEditing && isSupportUser ? (
+                                                    <FormSelect
+                                                        id="status"
+                                                        value={editableFields.status}
+                                                        onChange={handleEditChange}
+                                                        options={statuses}
+                                                        disabled={!isSupportUser}
+                                                        className="mt-1"
+                                                        label=""
+                                                    />
+                                                ) : (
+                                                    <p className="text-slate-900 font-semibold">{ticket.status}</p>
+                                                )}
+                                            </div>
+                                        </div>
+                                        {isSupportUser && (
+                                            <>
+                                                <div className="flex items-center">
+                                                    <div className="w-6 h-6 bg-indigo-100 rounded-lg flex items-center justify-center mr-3">
+                                                        <svg className="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                                                        </svg>
+                                                    </div>
+                                                    <div className="flex-1">
+                                                        <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Assignment Group</span>
+                                                        <p className="text-slate-900 font-semibold">{ticket.assignment_group || 'ITS-FieldSupport.CentralCampus'}</p>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center">
+                                                    <div className="w-6 h-6 bg-emerald-100 rounded-lg flex items-center justify-center mr-3">
+                                                        <svg className="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                        </svg>
+                                                    </div>
+                                                    <div className="flex-1">
+                                                        <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Assigned To</span>
+                                                        {isEditing && isSupportUser ? (
+                                                            <FormInput
+                                                                id="assigned_to_email"
+                                                                type="email"
+                                                                value={editableFields.assigned_to_email || ''}
+                                                                onChange={handleEditChange}
+                                                                placeholder="Enter email to assign"
+                                                                disabled={!isSupportUser || isTicketClosedOrResolved}
+                                                                className="mt-1"
+                                                                label=""
+                                                            />
+                                                        ) : (
+                                                            <p className="text-slate-900 font-semibold">{ticket.assigned_to_email || 'Unassigned'}</p>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Description Section */}
+                        <div className="border-t border-slate-200 pt-8">
+                            <h3 className="text-xl font-bold text-slate-800 mb-6 flex items-center">
+                                <div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center mr-3">
+                                    <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h7" />
+                                    </svg>
+                                </div>
+                                Description
+                            </h3>
+                            
+                            <div className="space-y-6">
+                                <div className="bg-slate-50 rounded-xl p-6 border border-slate-200">
+                                    <div className="flex items-center justify-between mb-4">
+                                        <h4 className="text-sm font-semibold text-slate-600 uppercase tracking-wider flex items-center">
+                                            <svg className="w-4 h-4 mr-2 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+                                            </svg>
+                                            Short Description
+                                        </h4>
+                                        <span className="text-xs text-slate-500 bg-white px-2 py-1 rounded-full">
+                                            {isEditing && canEdit ? 250 - editableFields.short_description.length : ticket.short_description?.length ? 250 - ticket.short_description.length : 250} chars left
+                                        </span>
+                                    </div>
+                                    {isEditing && canEdit ? (
+                                        <FormTextarea
+                                            id="short_description"
+                                            value={editableFields.short_description}
+                                            onChange={handleEditChange}
+                                            rows={3}
+                                            maxLength={250}
+                                            disabled={!canEdit || isTicketClosedOrResolved}
+                                            className="w-full"
+                                            label=""
+                                        />
+                                    ) : (
+                                        <p className="text-slate-800 bg-white p-4 rounded-lg border border-slate-200 leading-relaxed">
+                                            {ticket.short_description || 'No short description provided.'}
+                                        </p>
+                                    )}
+                                </div>
+
+                                <div className="bg-slate-50 rounded-xl p-6 border border-slate-200">
+                                    <div className="flex items-center justify-between mb-4">
+                                        <h4 className="text-sm font-semibold text-slate-600 uppercase tracking-wider flex items-center">
+                                            <svg className="w-4 h-4 mr-2 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                            </svg>
+                                            Detailed Description
+                                        </h4>
+                                        <span className="text-xs text-slate-500 bg-white px-2 py-1 rounded-full">
+                                            {isEditing && canEdit ? 4000 - editableFields.long_description.length : ticket.long_description?.length ? 4000 - ticket.long_description.length : 4000} chars left
+                                        </span>
+                                    </div>
+                                    {isEditing && canEdit ? (
+                                        <FormTextarea
+                                            id="long_description"
+                                            value={editableFields.long_description}
+                                            onChange={handleEditChange}
+                                            rows={6}
+                                            disabled={!canEdit || isTicketClosedOrResolved}
+                                            className="w-full"
+                                            label=""
+                                        />
+                                    ) : (
+                                        <div className="text-slate-800 bg-white p-4 rounded-lg border border-slate-200 leading-relaxed whitespace-pre-wrap min-h-[120px]">
+                                            {ticket.long_description || (
+                                                <span className="text-slate-500 italic">No detailed description provided.</span>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Additional Info Section */}
+                        <div className="border-t border-slate-200 pt-8">
+                            <h3 className="text-xl font-bold text-slate-800 mb-6 flex items-center">
+                                <div className="w-8 h-8 bg-gradient-to-br from-violet-500 to-purple-600 rounded-lg flex items-center justify-center mr-3">
+                                    <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                </div>
+                                Additional Information
+                            </h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="bg-slate-50 rounded-xl p-5 border border-slate-200">
+                                    <div className="flex items-center">
+                                        <div className="w-6 h-6 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
+                                            <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                            </svg>
+                                        </div>
+                                        <div className="flex-1">
+                                            <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Reporter Email</span>
+                                            <p className="text-slate-900 font-semibold">{ticket.reporter_email}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="bg-slate-50 rounded-xl p-5 border border-slate-200">
+                                    <div className="flex items-center">
+                                        <div className="w-6 h-6 bg-green-100 rounded-lg flex items-center justify-center mr-3">
+                                            <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                                            </svg>
+                                        </div>
+                                        <div className="flex-1">
+                                            <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Category</span>
+                                            <p className="text-slate-900 font-semibold">{ticket.category}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* --- Attachments Section --- */}
+                        <div className="border-t border-slate-200 pt-8">
+                            <h3 className="text-xl font-bold text-slate-800 mb-6 flex items-center">
+                                <div className="w-8 h-8 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-lg flex items-center justify-center mr-3">
+                                    <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                                    </svg>
+                                </div>
+                                Attachments
+                                {ticket.attachments && ticket.attachments.length > 0 && (
+                                    <span className="ml-3 bg-slate-100 text-slate-600 text-sm font-medium px-2.5 py-1 rounded-full">
+                                        {ticket.attachments.length}
+                                    </span>
                                 )}
-
+                            </h3>
+                            <div className="mb-6">
+                                {ticket.attachments && ticket.attachments.length > 0 ? (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        {ticket.attachments.map((attachment, index) => (
+                                            <a
+                                                key={index}
+                                                href={attachment}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="group flex items-center p-4 bg-white border border-slate-200 rounded-xl hover:border-blue-300 hover:shadow-md transition-all duration-200 text-sm"
+                                            >
+                                                <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center mr-3 group-hover:bg-blue-100 transition-colors">
+                                                    <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                                    </svg>
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="font-medium text-slate-800 truncate group-hover:text-blue-600 transition-colors">
+                                                        {getFileNameFromUrl(attachment)}
+                                                    </p>
+                                                    <p className="text-xs text-slate-500">Click to download</p>
+                                                </div>
+                                                <svg className="w-4 h-4 text-slate-400 group-hover:text-blue-600 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                                </svg>
+                                            </a>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="text-center py-8 bg-slate-50 rounded-xl border border-slate-200">
+                                        <div className="w-12 h-12 bg-slate-200 rounded-full flex items-center justify-center mx-auto mb-3">
+                                            <svg className="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                                            </svg>
+                                        </div>
+                                        <p className="text-slate-500 text-sm">No attachments uploaded yet</p>
+                                    </div>
+                                )}
                             </div>
-                        )}
-                    </div>
-                </div>
-
-                <div className="mb-6 border-t border-gray-200 pt-6">
-                    <div className="flex items-center mb-2">
-                        <label className="text-gray-700 text-sm font-semibold w-36 shrink-0">Short description:</label>
-                        {isEditing && canEdit ? (
-                            <FormTextarea
-                                id="short_description"
-                                value={editableFields.short_description}
-                                onChange={handleEditChange}
-                                rows={2}
-                                maxLength={250}
-                                disabled={!canEdit || isTicketClosedOrResolved}
-                                className="flex-1"
-                                label=""
-                            />
-                        ) : (
-                            <span className="text-gray-900 text-sm bg-gray-50 p-2 rounded-sm border border-gray-200 flex-1">{ticket.short_description}</span>
-                        )}
-                    </div>
-                    <div className="flex justify-end text-xs text-gray-500 mt-1">
-                        Characters left: {isEditing && canEdit ? 250 - editableFields.short_description.length : ticket.short_description.length ? 250 - ticket.short_description.length : 250}
-                    </div>
-                </div>
-
-                <div className="mb-6">
-                    <div className="flex items-start mb-2">
-                        <label className="text-gray-700 text-sm font-semibold w-36 shrink-0 pt-2">Description:</label>
-                        {isEditing && canEdit ? (
-                            <FormTextarea
-                                id="long_description"
-                                value={editableFields.long_description}
-                                onChange={handleEditChange}
-                                rows={6}
-                                disabled={!canEdit || isTicketClosedOrResolved}
-                                className="flex-1"
-                                label=""
-                            />
-                        ) : (
-                            <span className="text-gray-900 text-sm bg-gray-50 p-2 rounded-sm border border-gray-200 whitespace-pre-wrap flex-1">{ticket.long_description || 'No long description provided.'}</span>
-                        )}
-                    </div>
-                    <div className="flex justify-end text-xs text-gray-500 mt-1">
-                        Characters left: {isEditing && canEdit ? 4000 - editableFields.long_description.length : ticket.long_description.length ? 4000 - ticket.long_description.length : 4000}
-                    </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-x-8 gap-y-4 mb-6 border-t border-gray-200 pt-6">
-                    <div className="flex items-center">
-                        <label className="text-gray-700 text-sm font-semibold w-28 shrink-0">Reporter Email:</label>
-                        <span className="text-gray-900 text-sm font-medium flex-1">{ticket.reporter_email}</span>
-                    </div>
-                    <div className="flex items-center">
-                        <label className="text-gray-700 text-sm font-semibold w-28 shrink-0">Category:</label>
-                        <span className="text-gray-900 text-sm font-medium flex-1">{ticket.category}</span>
-                    </div>
-                </div>
-
-                {/* --- Attachments Section --- */}
-                <hr className="my-6 border-gray-200" />
-                <h2 className="text-lg font-semibold text-gray-800 mb-4">Attachments</h2>
-                <div className="mb-4">
-                    {ticket.attachments && ticket.attachments.length > 0 ? (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            {ticket.attachments.map((attachment, index) => (
-                                <a
-                                    key={index}
-                                    href={attachment}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="flex items-center p-2 border border-gray-300 rounded-md text-blue-600 hover:bg-blue-50 transition-colors text-sm truncate"
-                                >
-                                    <UploadCloud size={16} className="mr-2 shrink-0" />
-                                    <span className="truncate">{getFileNameFromUrl(attachment)}</span>
-                                </a>
-                            ))}
-                        </div>
-                    ) : (
-                        <p className="text-gray-500 text-sm">No attachments yet.</p>
-                    )}
-                </div>
 
                 {canAddAttachments && (
                     <div className="border border-gray-300 p-3 rounded-md mt-4 bg-gray-50">
