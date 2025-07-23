@@ -164,7 +164,7 @@ const MyTicketsComponent = ({ user, navigateTo, showFlashMessage, searchKeyword,
     if (error) return <div className="text-center text-red-600 mt-8 text-base flex items-center justify-center space-x-2"><XCircle size={20} /> <span>Error: {error}</span></div>;
 
     return (
-        <div className="p-4 bg-offwhite flex-1 overflow-auto">
+        <div className="p-4 bg-white flex-1 overflow-auto">
             <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
                 <h2 className="text-xl font-extrabold text-gray-800">My Tickets</h2> {/* Changed label to be more general */}
                 <LinkButton onClick={() => navigateTo('create-ticket')} className="text-sm flex items-center space-x-1">

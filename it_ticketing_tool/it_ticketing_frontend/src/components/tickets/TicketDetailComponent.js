@@ -8,6 +8,7 @@ import {
     UploadCloud,
     Download,
     ChevronLeft,
+    ArrowLeft,
     Edit3,
     Save,
     X,
@@ -22,6 +23,10 @@ import {
     Hourglass,
     Tag,
     ArrowRight, // Import ArrowRight icon
+    FileText,
+    Info,
+    List,
+    AlertTriangle,
 } from 'lucide-react';
 import { doc, onSnapshot, getFirestore } from 'firebase/firestore';
 import { useParams } from 'react-router-dom';
@@ -35,17 +40,22 @@ import JpgIcon from '../../assets/icons/JpgIcon.svg';
 import PngIcon from '../../assets/icons/PngIcon.svg';
 import TxtIcon from '../../assets/icons/TxtIcon.svg';
 import GenericFileIcon from '../../assets/icons/FileIcon.svg';
+import Timeline from './Timeline';
+import UserProfilePopup from '../common/UserProfilePopup';
+import Button from '@mui/material/Button';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
 
 const FieldBox = ({ children, className = "", isDisplayOnly = false, hasError = false }) => (
-    <div className={`border rounded-md px-2 py-0.5 min-h-[32px] flex items-center
-        ${isDisplayOnly ? 'bg-gray-50 text-gray-700 cursor-text border-gray-300 overflow-hidden text-wrap' : 'bg-white border-gray-300'}
+    <div className={`FieldBox border px-2 py-0.5 min-h-[32px] flex items-center
+        ${isDisplayOnly ? 'bg-white text-gray-700 cursor-text border-gray-300 overflow-hidden text-wrap' : 'bg-white border-gray-300'}
         ${hasError ? 'border-red-500 ring-red-500 ring-2' : ''}
         ${className}`}>
         {children}
     </div>
 );
 
-const EditableTextarea = ({ id, value, onChange, rows = 3, className = "", disabled, hasError = false, inputRef }) => (
+const EditableTextarea = ({ id, value, onChange, rows = 3, className = "", disabled, hasError = false, inputRef, maxLength }) => (
     <textarea
         id={id}
         value={value}
@@ -57,6 +67,7 @@ const EditableTextarea = ({ id, value, onChange, rows = 3, className = "", disab
             ${hasError ? 'border-red-500 ring-red-500' : ''}
             ${className}`}
         disabled={disabled}
+        maxLength={maxLength}
     />
 );
 
@@ -101,26 +112,74 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
     const [timeSpentErrorMessage, setTimeSpentErrorMessage] = useState('');
     const [assignedToErrorMessage, setAssignedToErrorMessage] = useState('');
     const [timelineEvents, setTimelineEvents] = useState([]);
+    const [supportUsers, setSupportUsers] = useState([]);
+    const [supportUsersLoading, setSupportUsersLoading] = useState(false);
 
     const commentsSectionRef = useRef(null);
     const closureNotesRef = useRef(null);
     const timeSpentRef = useRef(null);
     const assignedToRef = useRef(null);
 
+    // Add refs for each field
+    const requestedForRef = useRef(null);
+    const assignedToRefProfile = useRef(null);
+    const closedByRef = useRef(null);
+
     const [editableFields, setEditableFields] = useState({
-        request_for_email: '',
         short_description: '',
         long_description: '',
-        contact_number: '',
         priority: '',
         status: '',
         assigned_to_email: '',
-        closed_by_email: ''
+        closed_by_email: '',
+        category: '',
     });
 
     const [assignedToHasError, setAssignedToHasError] = useState(false);
     const [timeSpentHasError, setTimeSpentHasError] = useState(false);
     const [closureNotesHasError, setClosureNotesHasError] = useState(false);
+
+    const [subjectExpanded, setSubjectExpanded] = useState(false);
+    const [isSubjectTruncated, setIsSubjectTruncated] = useState(false);
+    const subjectRef = useRef(null);
+
+    // Add state and ref for the popup at the top of the component
+    const [profilePopup, setProfilePopup] = useState({ visible: false, user: null, anchorRef: null });
+    const [popupHovered, setPopupHovered] = useState(false);
+    const requestedByRef = useRef(null);
+    const popupHideTimeout = useRef(null);
+    const popupShowTimeout = useRef(null);
+
+    const showPopup = () => {
+      if (popupHideTimeout.current) clearTimeout(popupHideTimeout.current);
+      setProfilePopup({ visible: true, user: { email: ticket.reporter_email, fullName: ticket.reporter_name }, anchorRef: requestedByRef });
+    };
+
+    const hidePopup = () => {
+      popupHideTimeout.current = setTimeout(() => {
+        setProfilePopup((prev) => ({ ...prev, visible: false }));
+      }, 150);
+    };
+
+    // Helper to show popup for any field with delay
+    const showProfilePopup = (user, anchorRef) => {
+      if (popupHideTimeout.current) clearTimeout(popupHideTimeout.current);
+      if (popupShowTimeout.current) clearTimeout(popupShowTimeout.current);
+      popupShowTimeout.current = setTimeout(() => {
+        setProfilePopup({ visible: true, user, anchorRef });
+      }, 1000); // 1 second delay
+    };
+
+    const cancelShowProfilePopup = () => {
+      if (popupShowTimeout.current) clearTimeout(popupShowTimeout.current);
+    };
+
+    useEffect(() => {
+        // Check if the subject is truncated
+        if (subjectRef.current) {
+            setIsSubjectTruncated(subjectRef.current.scrollWidth > subjectRef.current.clientWidth);
+        }
+    }, [ticket?.short_description, subjectExpanded]);
 
     const isSupportUser = user?.role === 'support' || user?.role === 'admin';
 
@@ -148,7 +207,7 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
         }
         if (newData.updated_at && newData.updated_at.toDate) {
             newData.updated_at = newData.updated_at.toDate().toISOString();
-        }
+            }
         if (newData.resolved_at && newData.resolved_at.toDate) {
             newData.resolved_at = newData.resolved_at.toDate().toISOString();
         }
@@ -160,7 +219,7 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                 return comment;
             });
         }
-        
+
         // Handle status_history timestamps
         if (newData.status_history && Array.isArray(newData.status_history)) {
             newData.status_history = newData.status_history.map(history => {
@@ -170,7 +229,7 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                 return history;
             });
         }
-        
+
         // Handle assigned_to_history timestamps
         if (newData.assigned_to_history && Array.isArray(newData.assigned_to_history)) {
             newData.assigned_to_history = newData.assigned_to_history.map(history => {
@@ -180,7 +239,25 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                 return history;
             });
         }
-        
+        // Handle priority_history timestamps
+        if (newData.priority_history && Array.isArray(newData.priority_history)) {
+            newData.priority_history = newData.priority_history.map(history => {
+                if (history.timestamp && history.timestamp.toDate) {
+                    return { ...history, timestamp: history.timestamp.toDate().toISOString() };
+                }
+                return history;
+            });
+        }
+        // Handle category_history timestamps
+        if (newData.category_history && Array.isArray(newData.category_history)) {
+            newData.category_history = newData.category_history.map(history => {
+                if (history.timestamp && history.timestamp.toDate) {
+                    return { ...history, timestamp: history.timestamp.toDate().toISOString() };
+                }
+                return history;
+            });
+        }
+
         return newData;
     };
 
@@ -199,28 +276,25 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
             });
         }
 
-        // Event: Initial Priority (if not 'Low' at creation)
-         if (ticketData.priority && ticketData.priority !== 'Low' && ticketData.created_at) {
-             events.push({
-                type: 'priority_init',
-                timestamp: ticketData.created_at,
-                label: `Priority: ${ticketData.priority}`, // More descriptive label
-                icon: Tag,
-                detail: ''
-            });
-        }
-
         // Event: Status Changes (from history) - Ensures ALL status changes are captured
         if (ticketData.status_history && Array.isArray(ticketData.status_history)) {
             console.log('Status history:', ticketData.status_history); // Debug log
             ticketData.status_history.forEach(history => {
                 if (history.timestamp && history.new_status) {
+                    // Skip status_change event for 'Resolved' to avoid duplicate with resolved event
+                    if (history.new_status === 'Resolved') return;
                     console.log('Processing status history entry:', history); // Debug log
+                    let color = 'text-blue-600';
+                    if (history.new_status === 'In Progress') color = 'text-yellow-600';
+                    else if (history.new_status === 'Hold') color = 'text-purple-600';
+                    else if (history.new_status === 'Resolved') color = 'text-green-600';
+                    else if (history.new_status === 'Cancelled') color = 'text-red-600';
                     events.push({
                         type: 'status_change',
                         timestamp: history.timestamp,
                         label: `Status: ${history.new_status}`,
                         icon: Tag,
+                        iconColor: color,
                         detail: history.user_email ? history.user_email.split('@')[0] : 'System'
                     });
                 }
@@ -237,7 +311,7 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                 });
             }
         }
-        
+
         // Event: Assigned To Changes (from history) - Ensures ALL assigned_to changes are captured
         if (ticketData.assigned_to_history && Array.isArray(ticketData.assigned_to_history)) {
             console.log('Assignment history:', ticketData.assigned_to_history); // Debug log
@@ -282,14 +356,17 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
         }
 
         // Event: Attachments (simplified, assumes one general event for attachments)
-        if (ticketData.attachments && Array.isArray(ticketData.attachments) && ticketData.attachments.length > 0) {
-             events.push({
-                 type: 'attachment_added',
-                 timestamp: ticketData.updated_at || ticketData.created_at,
-                 label: `Attachment`,
-                 icon: Paperclip,
-                 detail: ''
-             });
+        if (ticketData.attachments && Array.isArray(ticketData.attachments)) {
+            ticketData.attachments.forEach(attachment => {
+                const timestamp = attachment.added_at || ticketData.created_at;
+                events.push({
+                    type: 'attachment_added',
+                    timestamp,
+                    label: `Attachment`,
+                    icon: Paperclip,
+                    detail: attachment.fileName || ''
+                });
+            });
         }
 
         // Event: Ticket Resolved/Cancelled
@@ -303,12 +380,46 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
             });
         }
 
+        // Priority changes
+        if (ticketData.priority_history && Array.isArray(ticketData.priority_history)) {
+            ticketData.priority_history.forEach(history => {
+                if (history.timestamp && history.new_priority) {
+                    let color = 'text-green-600';
+                    if (history.new_priority === 'Medium') color = 'text-yellow-500';
+                    else if (history.new_priority === 'High') color = 'text-orange-500';
+                    else if (history.new_priority === 'Critical') color = 'text-red-600';
+                    events.push({
+                        type: 'priority_change',
+                        timestamp: history.timestamp,
+                        label: `Priority: ${history.new_priority}`,
+                        icon: AlertTriangle,
+                        iconColor: color,
+                        detail: history.user_email ? history.user_email.split('@')[0] : 'System'
+                    });
+                }
+            });
+        }
+        // Category changes
+        if (ticketData.category_history && Array.isArray(ticketData.category_history)) {
+            ticketData.category_history.forEach(history => {
+                if (history.timestamp && history.new_category) {
+                    events.push({
+                        type: 'category_change',
+                        timestamp: history.timestamp,
+                        label: `Category: ${history.new_category}`,
+                        icon: List,
+                        detail: history.user_email ? history.user_email.split('@')[0] : 'System'
+                    });
+                }
+            });
+        }
+
         // Sort events chronologically, filtering out events with invalid timestamps
         const validEvents = events.filter(event => {
             const date = new Date(event.timestamp);
             return !isNaN(date.getTime()); // Check if the date is valid
         });
-        
+
         validEvents.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 
         console.log('Final timeline events:', validEvents); // Debug log
@@ -349,14 +460,13 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
 
                 if (!isEditing || !ticket) {
                     setEditableFields({
-                        request_for_email: fetchedTicket.request_for_email || '',
                         short_description: fetchedTicket.short_description || '',
                         long_description: fetchedTicket.long_description || '',
-                        contact_number: fetchedTicket.contact_number || '',
                         priority: fetchedTicket.priority || '',
                         status: fetchedTicket.status || '',
                         assigned_to_email: fetchedTicket.assigned_to_email || '',
-                        closed_by_email: fetchedTicket.closed_by_email || ''
+                        closed_by_email: fetchedTicket.closed_by_email || '',
+                        category: fetchedTicket.category || '',
                     });
                     setClosureNotes(fetchedTicket.closure_notes || '');
                     setTimeSpent(fetchedTicket.time_spent || '');
@@ -367,7 +477,8 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                             status: fetchedTicket.status,
                             priority: fetchedTicket.priority,
                             assigned_to_email: fetchedTicket.assigned_to_email,
-                            closed_by_email: fetchedTicket.closed_by_email
+                            closed_by_email: fetchedTicket.closed_by_email,
+                            category: fetchedTicket.category || '',
                         }));
                         setClosureNotes(fetchedTicket.closure_notes || '');
                         setTimeSpent(fetchedTicket.time_spent || '');
@@ -402,19 +513,34 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
     useEffect(() => {
         if (isEditing && ticket) {
             setEditableFields({
-                request_for_email: ticket.request_for_email || '',
                 short_description: ticket.short_description || '',
                 long_description: ticket.long_description || '',
-                contact_number: ticket.contact_number || '',
                 priority: ticket.priority || '',
                 status: ticket.status || '',
                 assigned_to_email: ticket.assigned_to_email || '',
-                closed_by_email: ticket.closed_by_email || ''
+                closed_by_email: ticket.closed_by_email || '',
+                category: ticket.category || '',
             });
             setClosureNotes(ticket.closure_notes || '');
             setTimeSpent(ticket.time_spent || '');
         }
     }, [isEditing, ticket]);
+
+    useEffect(() => {
+        if (isEditing && isSupportUser) {
+            setSupportUsersLoading(true);
+            fetch(`${API_BASE_URL}/api/users`)
+                .then(res => res.json())
+                .then(data => {
+                    setSupportUsers(Array.isArray(data) ? data.filter(u => u.role === 'support') : []);
+                    setSupportUsersLoading(false);
+                })
+                .catch(() => {
+                    setSupportUsers([]);
+                    setSupportUsersLoading(false);
+                });
+        }
+    }, [isEditing, isSupportUser]);
 
     const isTicketClosedOrResolved = ticket && ['Resolved', 'Cancelled'].includes(ticket.status);
     const canEdit = !isTicketClosedOrResolved && (isSupportUser || (ticket && ticket.reporter_id === user?.firebaseUser.uid));
@@ -474,7 +600,7 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
     }, [saveButtonState]);
 
     const handleTimeSpentChange = useCallback((e) => {
-        let val = e.target.value.replace(/[^\d]/g, '').slice(0, 3);
+        let val = e.target.value.replace(/[^\d]/g, '').slice(0, 4);
         setTimeSpent(val);
         if (saveButtonState !== 'save') {
             setSaveButtonState('save');
@@ -519,9 +645,9 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                     setTimeout(() => assignedToRef.current?.focus(), 0);
                 }
 
-                if (!timeSpent.trim() || !/^\d{1,3}$/.test(timeSpent.trim())) {
+                if (!timeSpent.trim() || !/^\d{1,4}$/.test(timeSpent.trim())) {
                     setTimeSpentHasError(true);
-                    setTimeSpentErrorMessage('Please enter time spent (in hours, max 3 digits).');
+                    setTimeSpentErrorMessage('Please enter time spent (in minutes, max 4 digits).');
                     validationFailed = true;
                     setTimeout(() => timeSpentRef.current?.focus(), 0);
                 }
@@ -657,14 +783,13 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
 
     const handleCancelEdit = useCallback(() => {
         setEditableFields({
-            request_for_email: ticket.request_for_email || '',
             short_description: ticket.short_description || '',
             long_description: ticket.long_description || '',
-            contact_number: ticket.contact_number || '',
             priority: ticket.priority || '',
             status: ticket.status || '',
             assigned_to_email: ticket.assigned_to_email || '',
-            closed_by_email: ticket.closed_by_email || ''
+            closed_by_email: ticket.closed_by_email || '',
+            category: ticket.category || '',
         });
         setClosureNotes(ticket.closure_notes || '');
         setTimeSpent(ticket.time_spent || '');
@@ -824,8 +949,8 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                     setTimeout(() => {
                         setUploadButtonState('upload');
                     }, 2000);
-            }
-        } catch (error) {
+                }
+            } catch (error) {
                 console.error('Update ticket with attachments error:', error);
                 setUploadButtonState('error');
                 showFlashMessage('Network error during updating ticket with attachments.', 'error');
@@ -877,6 +1002,8 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
             case 'comment': return 'text-green-600';
             case 'attachment_added': return 'text-teal-600';
             case 'resolved': return 'text-green-800'; // Darker green for resolved state
+            case 'priority_change': return 'text-purple-600';
+            case 'category_change': return 'text-blue-600';
             default: return 'text-gray-600';
         }
     };
@@ -891,592 +1018,751 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
     );
 
     return (
-        <div className="min-h-screen bg-gray-50">
-            {/* Header */}
-            <div className="bg-white border-b border-gray-200" style={{ height: '70px' }}>
-                <div className="flex items-center h-full px-2">
+        <div className="bg-white min-h-screen p-6 pl-4 px-0 overflow-x-hidden">
+            <div className="max-w-full w-full mx-auto px-0 sm:px-0 md:px-0 min-w-0"> {/* Fluid and responsive */}
+                {/* Header */}
+                <div className="max-w-full w-full mx-auto px-0 sm:px-0 md:px-0 min-w-0">
+                    <div className="bg-white rounded-lg py-2 pl-0 pr-6 sm:pl-0 sm:pr-4 flex items-center w-full min-w-0 justify-between">
+                        <div className="flex items-center h-full pl-0 min-w-0">
                     {/* Fixed left section with back button and ticket info */}
                     <div className="flex items-center space-x-2 flex-shrink-0 mr-4">
                         <button
                             onClick={() => navigateTo(isSupportUser ? 'allTickets' : 'myTickets')}
-                            className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
+                            className="flex items-center justify-center w-8 h-8 bg-red-400 hover:bg-red-500 text-white shadow-md transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-red-300 focus:ring-offset-2 scale-100 hover:scale-110 rounded-none"
+                            title="Back"
                         >
-                            <ChevronLeft className="w-4 h-4 text-gray-600" />
+                            <ArrowLeft className="w-4 h-4 text-white" />
                         </button>
-                        <div className="flex flex-col">
-                            <h1 className="text-lg font-semibold text-gray-900 whitespace-nowrap">{ticket.display_id}</h1>
-                            <p className="text-xs text-gray-500 whitespace-nowrap">Request Item</p>
+                                <div className="flex flex-col min-w-0">
+                                    <h1 className="text-lg font-semibold text-gray-900 whitespace-nowrap truncate">{ticket.display_id}</h1>
                         </div>
                     </div>
-
-                    {/* Scrollable timeline section */}
-                    {timelineEvents.length > 0 && (
-                        <div className="flex-1 min-w-0 h-full flex items-center overflow-x-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
-                            {/* The inner div now contains the actual scrollable content */}
-                            <div className="flex items-center h-full py-2 whitespace-nowrap min-w-max"> {/* Added whitespace-nowrap and min-w-max */}
-                                {timelineEvents.map((event, index) => (
-                                    <React.Fragment key={index}>
-                                        {/* Colored Arrow between events */}
-                                        {index > 0 && ( 
-                                            <div className="flex items-center mx-1 flex-shrink-0">
-                                                <ArrowRight size={14} className="text-gray-400" /> {/* Default arrow color */}
+                            {/* Subject (Short Description) */}
+                            <div className="flex-1 min-w-0 ml-6 flex flex-col items-start">
+                                <div className="flex items-start w-full">
+                                    <span className="text-sm font-bold text-gray-500 mr-1 pt-0.5 shrink-0">Subject Line:</span>
+                                    <div
+                                        className={`relative group flex-1`}
+                                        style={{ maxWidth: 880 }}
+                                    >
+                                        <span
+                                            ref={subjectRef}
+                                            className={"text-sm text-black transition-all duration-200 whitespace-pre-line break-words"}
+                                            style={{
+                                                maxWidth: 880,
+                                                display: 'inline-block',
+                                                verticalAlign: 'bottom',
+                                                wordBreak: 'break-word'
+                                            }}
+                                        >
+                                            {ticket.short_description || 'No subject provided.'}
+                                        </span>
+                                        {/* Tooltip on hover if truncated */}
+                                        {isSubjectTruncated && (
+                                            <div className="absolute left-0 top-full z-10 hidden group-hover:block bg-gray-900 text-white text-xs rounded px-2 py-1 mt-1 shadow-lg max-w-xs whitespace-pre-wrap">
+                                                {ticket.short_description}
                                             </div>
                                         )}
-                                        {/* Individual Event Box */}
-                                        <div className="flex flex-col items-start leading-tight min-w-[70px] flex-shrink-0 px-2 py-1 rounded border border-gray-200 bg-gray-50 text-gray-700">
-                                            <div className="flex items-center text-xs font-semibold whitespace-nowrap mb-0.5">
-                                                {event.icon && <event.icon size={12} className={`mr-1 ${getIconColorClass(event.type)}`} />}
-                                                <span>{event.label}</span>
-                                            </div>
-                                            <p className="text-[10px] text-gray-500 whitespace-nowrap">
-                                                {new Date(event.timestamp).toLocaleDateString()}
-                                            </p>
-                                            <p className="text-[10px] text-gray-500 whitespace-nowrap">
-                                                {new Date(event.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                                            </p>
-                                            {event.detail && (
-                                                <p className="text-[10px] text-gray-400 whitespace-nowrap mt-0.5">
-                                                    {event.detail.split('@')[0]}
-                                                </p>
-                                            )}
-                                        </div>
-                                    </React.Fragment>
-                                ))}
+                                    </div>
+                                </div>
                             </div>
-                        </div>
-                    )}
-                </div>
             </div>
-
-            {/* Main Content Area - Split into two columns for details and progress */}
-            <div className="max-w-7xl mx-auto px-6 py-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Left Column: Ticket Details and Descriptions */}
-                <div className="lg:col-span-2 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                    {/* Ticket Information Grid */}
-                    <div className="space-y-4 mb-8">
-                        {/* Row 1: Ticket ID and Contact Number */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div className="flex items-center">
-                                <label className="text-sm font-semibold text-gray-800 w-32 shrink-0">
-                                    Ticket ID:
-                                </label>
-                                <FieldBox className="w-full flex-1" isDisplayOnly={true}>
-                                    <span className="text-sm text-gray-700 text-wrap overflow-hidden flex-1 min-w-0">
-                                        {ticket.display_id}
-                                    </span>
-                                </FieldBox>
-                            </div>
-                            <div className="flex items-center">
-                                <label className="text-sm font-semibold text-gray-800 w-32 shrink-0">
-                                    Contact No:
-                                </label>
-                                {isEditing && canEdit ? (
-                                    <input
-                                        id="contact_number"
-                                        type="text"
-                                        value={editableFields.contact_number}
-                                        onChange={handleEditChange}
-                                        className="border-2 rounded-md px-2 py-0.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent w-full flex-1 text-sm"
-                                        disabled={!canEdit}
-                                        style={{ minWidth: 0 }}
-                                    />
-                                ) : (
-                                    <FieldBox className="w-full flex-1" isDisplayOnly={true}>
-                                        <span className="text-sm text-gray-700 text-wrap overflow-hidden flex-1 min-w-0">
-                                            {ticket.contact_number || 'N/A'}
-                                        </span>
-                                    </FieldBox>
-                                )}
-                            </div>
-                        </div>
-
-                        {/* Row 2: Requested by and Requested for */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div className="flex items-center">
-                                <label className="text-sm font-semibold text-gray-800 w-32 shrink-0">
-                                    Requested by:
-                                </label>
-                                <FieldBox className="w-full flex-1" isDisplayOnly={true}>
-                                    <User className="w-4 h-4 text-gray-400 mr-2 shrink-0" />
-                                    <span className="text-sm text-gray-700 text-wrap overflow-hidden flex-1 min-w-0">
-                                        {ticket.reporter_email || 'N/A'}
-                                    </span>
-                                </FieldBox>
-                            </div>
-                            <div className="flex items-center">
-                                <label className="text-sm font-semibold text-gray-800 w-32 shrink-0">
-                                    Requested for:
-                                </label>
-                                {isEditing && canEdit ? (
-                                    <input
-                                        id="request_for_email"
-                                        type="email"
-                                        value={editableFields.request_for_email}
-                                        onChange={handleEditChange}
-                                        className="border-2 rounded-md px-2 py-0.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent w-full flex-1 text-sm"
-                                        disabled={!canEdit}
-                                        style={{ minWidth: 0 }}
-                                    />
-                                ) : (
-                                    <FieldBox className="w-full flex-1" isDisplayOnly={true}>
-                                        <User className="w-4 h-4 text-gray-400 mr-2 shrink-0" />
-                                        <span className="text-sm text-gray-700 text-wrap overflow-hidden flex-1 min-w-0">
-                                            {ticket.request_for_email || 'N/A'}
-                                        </span>
-                                    </FieldBox>
-                                )}
-                            </div>
-                        </div>
-
-                        {/* Row 3: Category and Asset ID */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div className="flex items-center">
-                                <label className="text-sm font-semibold text-gray-800 w-32 shrink-0">
-                                    Category:
-                                </label>
-                                <FieldBox className="w-full flex-1" isDisplayOnly={true}>
-                                    <span className="text-sm text-gray-700 text-wrap overflow-hidden flex-1 min-w-0">
-                                        {ticket.category || 'N/A'}
-                                    </span>
-                                </FieldBox>
-                            </div>
-                            <div className="flex items-center">
-                                <label className="text-sm font-semibold text-gray-800 w-32 shrink-0">
-                                    Asset ID:
-                                </label>
-                                <FieldBox className="w-full flex-1" isDisplayOnly={true}>
-                                    <span className="text-sm text-gray-700 text-wrap overflow-hidden flex-1 min-w-0">
-                                        {ticket.hostname_asset_id || 'N/A'}
-                                    </span>
-                                </FieldBox>
-                            </div>
-                        </div>
-
-                        {/* Row 4: Created Date and Due Date (if exists) */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div className="flex items-center">
-                                <label className="text-sm font-semibold text-gray-800 w-32 shrink-0">
-                                    Created:
-                                </label>
-                                <FieldBox className="w-full flex-1" isDisplayOnly={true}>
-                                    <Calendar className="w-4 h-4 text-gray-400 mr-2 shrink-0" />
-                                    <span className="text-sm text-gray-700 text-wrap overflow-hidden flex-1 min-w-0">
-                                        {ticket.created_at ? new Date(ticket.created_at).toLocaleString() : 'N/A'}
-                                    </span>
-                                </FieldBox>
-                            </div>
-                            {ticket.due_date && (
-                                <div className="flex items-center">
-                                    <label className="text-sm font-semibold text-gray-800 w-32 shrink-0">
-                                        Due date:
-                                    </label>
-                                    <FieldBox className="w-full flex-1" isDisplayOnly={true}>
-                                        <Calendar className="w-4 h-4 text-gray-400 mr-2 shrink-0" />
-                                        <span className="text-sm text-gray-700 text-wrap overflow-hidden flex-1 min-w-0">
-                                            {new Date(ticket.due_date).toLocaleDateString()}
-                                        </span>
-                                    </FieldBox>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Short Description */}
-                    <div className="mb-6">
-                        <label className="block text-sm font-semibold text-gray-800 mb-2">
-                            Short description:
-                        </label>
-                        {isEditing && canEdit ? (
-                            <EditableTextarea
-                                id="short_description"
-                                value={editableFields.short_description}
-                                onChange={handleEditChange}
-                                rows={2}
-                                disabled={!canEdit}
-                                className="max-w-none w-full text-sm"
-                            />
-                        ) : (
-                            <FieldBox className="min-h-[60px] max-h-[120px] overflow-y-auto items-start py-3 w-full bg-gray-50 max-w-none" isDisplayOnly={true}>
-                                <span className="text-sm text-gray-700 whitespace-pre-wrap text-wrap">
-                                    {ticket.short_description}
-                                </span>
-                            </FieldBox>
-                        )}
-                    </div>
-
-                    {/* Long Description */}
-                    <div className="mb-8">
-                        <label className="block text-sm font-semibold text-gray-800 mb-2">
-                            Long description:
-                        </label>
-                        {isEditing && canEdit ? (
-                            <EditableTextarea
-                                id="long_description"
-                                value={editableFields.long_description}
-                                onChange={handleEditChange}
-                                rows={6}
-                                disabled={!canEdit}
-                                className="max-w-none w-full text-sm"
-                            />
-                        ) : (
-                            <FieldBox className="min-h-[120px] max-h-[240px] overflow-y-auto items-start py-3 w-full bg-gray-50 max-w-none" isDisplayOnly={true}>
-                                <span className="text-sm text-gray-700 whitespace-pre-wrap text-wrap">
-                                    {ticket.long_description || 'No long description provided.'}
-                                </span>
-                            </FieldBox>
-                        )}
                     </div>
                 </div>
+                {/* Timeline Section below header */}
+                <Timeline events={timelineEvents} />
 
-                {/* Right Column: Ticket Progress */}
-                <div className="lg:col-span-1 bg-white rounded-lg shadow-sm border border-gray-200 p-6 h-fit">
-                    <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-base font-medium text-gray-900 flex items-center">
-                            <TrendingUp className="w-4 h-4 mr-2" />
-                            Ticket Progress
-                        </h3>
-                        
-                        {/* Edit button moved to top right of progress box */}
-                        {canEdit && !isEditing && (
-                            <button
-                                onClick={() => setIsEditing(true)}
-                                className="px-2 py-1 bg-gray-700 text-yellow-300 rounded text-xs hover:bg-gray-800 transition-colors"
-                            >
-                                Edit
-                            </button>
-                        )}
-                        {isEditing && canEdit && (
-                            <div className="flex items-center space-x-1">
-                                {/* Cancel button */}
-                                <button
-                                    onClick={handleCancelEdit}
-                                    disabled={updateLoading}
-                                    className={`px-2 py-1 rounded text-xs transition-colors
-                                        ${updateLoading
-                                            ? 'bg-gray-400 text-gray-700 cursor-not-allowed'
-                                            : 'bg-gray-500 text-white hover:bg-gray-600'
-                                        }`}
-                                >
-                                    Cancel
-                                </button>
-                                {/* Save button */}
-                                <button
-                                    onClick={() => handleUpdateTicket('save')}
-                                    disabled={updateLoading || !hasChanges()}
-                                    className={`px-2 py-1 rounded text-xs transition-colors
-                                        ${saveButtonState === 'saving'
-                                            ? 'bg-gray-400 text-gray-700 cursor-not-allowed'
-                                            : saveButtonState === 'success'
-                                                ? 'bg-green-600 text-white'
-                                                : saveButtonState === 'error'
-                                                    ? 'bg-red-600 text-white'
-                                                    : hasChanges()
-                                                        ? 'bg-gray-700 text-yellow-300 hover:bg-gray-800'
-                                                        : 'bg-gray-400 text-gray-700 cursor-not-allowed'
-                                        }`}
-                                >
-                                    {saveButtonState === 'saving' && 'Saving...'}
-                                    {saveButtonState === 'success' && 'Saved!'}
-                                    {saveButtonState === 'error' && 'Error!'}
-                                    {saveButtonState === 'save' && 'Save'}
-                                </button>
-                            </div>
-                        )}
-                    </div>
+                {/* Info bar for comments and attachments */}
+                {ticket && (
+                  <div className="flex items-center gap-4 text-xs text-gray-600 mb-2 ml-2">
+                    <button
+                      className="flex items-center gap-1 hover:underline focus:outline-none"
+                      onClick={() => {
+                        const commentsSection = document.getElementById('comments-section');
+                        if (commentsSection) commentsSection.scrollIntoView({ behavior: 'smooth' });
+                      }}
+                      title="Go to comments"
+                    >
+                      <MessageSquare className="w-4 h-4 mr-1 text-blue-500" />
+                      {ticket.comments && ticket.comments.length > 0 ? `${ticket.comments.length} comment${ticket.comments.length > 1 ? 's' : ''}` : '0 comments'}
+                    </button>
+                    <button
+                      className="flex items-center gap-1 hover:underline focus:outline-none"
+                      onClick={() => {
+                        const attachmentsSection = document.getElementById('attachments-section');
+                        if (attachmentsSection) attachmentsSection.scrollIntoView({ behavior: 'smooth' });
+                      }}
+                      title="Go to attachments"
+                    >
+                      <Paperclip className="w-4 h-4 mr-1 text-green-500" />
+                      {ticket.attachments && ticket.attachments.length > 0 ? `${ticket.attachments.length} attachment${ticket.attachments.length > 1 ? 's' : ''}` : '0 attachments'}
+                    </button>
+                  </div>
+                )}
 
-                    <div className="space-y-4">
-                        {/* Status */}
-                        <div>
-                            <label className="block text-sm font-semibold text-gray-800 mb-2">
-                                Status:
-                            </label>
-                            {isEditing && isSupportUser && !isTicketClosedOrResolved ? (
-                                <div className="flex flex-wrap gap-2">
-                                    {statuses.map(s => (
-                                        <button
-                                            key={s.value}
-                                            onClick={() => handleButtonSelection('status', s.value)}
-                                            className={`px-2.5 py-0.5 rounded-md text-xs font-medium border transition-colors
-                                                ${getStatusClasses(s.value)}
-                                                ${editableFields.status === s.value
-                                                    ? 'ring-2 ring-offset-1 ring-gray-700'
-                                                    : 'hover:opacity-80'
-                                                }
-                                                ${updateLoading ? 'opacity-70 cursor-not-allowed' : ''}
-                                            `}
-                                            disabled={updateLoading}
-                                        >
-                                            {s.label}
-                                        </button>
-                                    ))}
-                                </div>
-                            ) : (
-                                <FieldBox isDisplayOnly={true} className="w-full">
-                                    <span className={`px-2 py-0.5 rounded-full text-xs font-normal border ${getStatusClasses(ticket.status)}`}>
-                                        {ticket.status}
-                                    </span>
-                                </FieldBox>
-                            )}
+                {/* Main Content Area - Split into two columns for details and progress */}
+                <div className="max-w-full w-full mx-auto px-0 sm:px-0 md:px-0 py-0 grid grid-cols-1 lg:grid-cols-3 gap-6 min-w-0"> {/* Fluid and responsive */}
+                    {/* Left Column: Ticket Details and Descriptions */}
+                    <div className="lg:col-span-2 bg-white rounded-lg pt-1 pl-1 pr-6 pb-3">
+                        <div className="mb-2 flex items-center gap-1.5">
+                            <span className="text-base font-bold text-gray-500">Details</span>
+                            <Info className="w-4 h-4 text-gray-500 ml-2" />
                         </div>
+                        {/* Ticket Information Grid */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+    {/* Left column */}
+    <div className="flex flex-col gap-6">
+        {/* Ticket ID */}
+        <div className="flex items-center">
+            <label className="text-sm font-semibold text-gray-800 w-32 shrink-0">Ticket ID:</label>
+            <FieldBox className="w-full flex-1" isDisplayOnly={true}>
+                <span className="text-sm text-blue-700 text-wrap overflow-hidden flex-1 min-w-0">{ticket.display_id}</span>
+            </FieldBox>
+        </div>
+        {/* Requested by */}
+        <div className="flex items-center">
+            <label className="text-sm font-semibold text-gray-800 w-32 shrink-0">Requested by:</label>
+            <FieldBox className="w-full flex-1" isDisplayOnly={true}>
+                <User className="w-4 h-4 text-gray-400 mr-2 shrink-0" />
+                <span
+                    ref={requestedByRef}
+                    className="text-sm text-blue-700 text-wrap overflow-hidden flex-1 min-w-0 cursor-pointer"
+                    onMouseEnter={() => showProfilePopup({ email: ticket.reporter_email, fullName: ticket.reporter_name }, requestedByRef)}
+                    onMouseLeave={() => { cancelShowProfilePopup(); hidePopup(); }}
+                >
+                    {ticket.reporter_email ? ticket.reporter_email : <span className="text-gray-400">N/A</span>}
+                </span>
+                <UserProfilePopup
+                    user={profilePopup.user}
+                    anchorRef={profilePopup.anchorRef}
+                    visible={profilePopup.visible}
+                    onMouseEnter={() => {
+                      if (popupHideTimeout.current) clearTimeout(popupHideTimeout.current);
+                      setPopupHovered(true);
+                    }}
+                    onMouseLeave={() => {
+                      setPopupHovered(false);
+                      hidePopup();
+                    }}
+                />
+            </FieldBox>
+        </div>
+        {/* Asset ID */}
+        <div className="flex items-center">
+            <label className="text-sm font-semibold text-gray-800 w-32 shrink-0">Asset ID:</label>
+            <FieldBox className="w-full flex-1" isDisplayOnly={true}>
+                <span className="text-sm text-orange-700 text-wrap overflow-hidden flex-1 min-w-0">{ticket.hostname_asset_id ? ticket.hostname_asset_id : <span className="text-gray-400">N/A</span>}</span>
+            </FieldBox>
+        </div>
+    </div>
+    {/* Right column */}
+    <div className="flex flex-col gap-6">
+        {/* Requested for */}
+        <div className="flex items-center">
+            <label className="text-sm font-semibold text-gray-800 w-32 shrink-0">Requested for:</label>
+            <FieldBox className="w-full flex-1" isDisplayOnly={true}>
+                <User className="w-4 h-4 text-gray-400 mr-2 shrink-0" />
+                <span
+                    ref={requestedForRef}
+                    className="text-sm text-blue-700 text-wrap overflow-hidden flex-1 min-w-0 cursor-pointer"
+                    onMouseEnter={() => showProfilePopup({ email: ticket.request_for_email, fullName: ticket.request_for_name }, requestedForRef)}
+                    onMouseLeave={() => { cancelShowProfilePopup(); hidePopup(); }}
+                >
+                    {ticket.request_for_email ? ticket.request_for_email : <span className="text-gray-400">N/A</span>}
+                </span>
+                <UserProfilePopup
+                    user={profilePopup.user}
+                    anchorRef={profilePopup.anchorRef}
+                    visible={profilePopup.visible && profilePopup.anchorRef === requestedForRef}
+                    onMouseEnter={() => {
+                      if (popupHideTimeout.current) clearTimeout(popupHideTimeout.current);
+                      setPopupHovered(true);
+                    }}
+                    onMouseLeave={() => {
+                      setPopupHovered(false);
+                      hidePopup();
+                    }}
+                />
+            </FieldBox>
+        </div>
+        {/* Contact No */}
+        <div className="flex items-center">
+            <label className="text-sm font-semibold text-gray-800 w-32 shrink-0">Contact No:</label>
+            <FieldBox className="w-full flex-1" isDisplayOnly={true}>
+                <span className="text-sm text-indigo-700 text-wrap overflow-hidden flex-1 min-w-0">{ticket.contact_number ? ticket.contact_number : <span className="text-gray-400">N/A</span>}</span>
+            </FieldBox>
+        </div>
+        {/* Created */}
+        <div className="flex items-center">
+            <label className="text-sm font-semibold text-gray-800 w-32 shrink-0">Created:</label>
+            <FieldBox className="w-full flex-1" isDisplayOnly={true}>
+                <Calendar className="w-4 h-4 text-gray-400 mr-2 shrink-0" />
+                <span className="text-sm text-gray-700 text-wrap overflow-hidden flex-1 min-w-0">{ticket.created_at ? new Date(ticket.created_at).toLocaleString() : <span className="text-gray-400">N/A</span>}</span>
+            </FieldBox>
+        </div>
+    </div>
+</div>
 
-                        {/* Priority */}
-                        <div>
+                        {/* Long Description */}
+                        <div className="mb-8 mt-8">
                             <label className="block text-sm font-semibold text-gray-800 mb-2">
-                                Priority:
-                            </label>
+                                Long description:
+                                </label>
                             {isEditing && canEdit ? (
-                                <div className="flex flex-wrap gap-2">
-                                    {priorities.map(p => (
-                                        <button
-                                            key={p.value}
-                                            onClick={() => handleButtonSelection('priority', p.value)}
-                                            className={`px-2.5 py-0.5 rounded-md text-xs font-medium border transition-colors
-                                                ${getPriorityClasses(p.value)}
-                                                ${editableFields.priority === p.value
-                                                    ? 'ring-2 ring-offset-1 ring-gray-700'
-                                                    : 'hover:opacity-80'
-                                                }
-                                                ${updateLoading ? 'opacity-70 cursor-not-allowed' : ''}
-                                            `}
-                                            disabled={updateLoading}
-                                        >
-                                            {p.label}
-                                        </button>
-                                    ))}
-                                </div>
-                            ) : (
-                                <FieldBox isDisplayOnly={true} className="w-full">
-                                    <span className={`px-2 py-0.5 rounded-full text-xs font-normal border ${getPriorityClasses(ticket.priority)}`}>
-                                        {ticket.priority}
-                                    </span>
-                                </FieldBox>
-                            )}
-                        </div>
-
-                        {/* Assigned to */}
-                        <div>
-                            <label className="block text-sm font-semibold text-gray-800 mb-2">
-                                Assigned to:
-                            </label>
-                            {isEditing && isSupportUser && !isTicketClosedOrResolved ? (
                                 <>
-                                    <FieldBox hasError={assignedToHasError} className={`w-full`}>
-                                        <User className="w-4 h-4 text-gray-400 mr-2 shrink-0" />
-                                        <input
-                                            id="assigned_to_email"
-                                            ref={assignedToRef}
-                                            type="email"
-                                            value={editableFields.assigned_to_email || ''}
-                                            onChange={handleEditChange}
-                                            className={`flex-1 bg-transparent border-none outline-none focus:ring-0 p-0 m-0 w-full text-sm`}
-                                            disabled={!isSupportUser || isTicketClosedOrResolved}
-                                            style={{ minWidth: 0 }}
-                                        />
-                                    </FieldBox>
-                                    {assignedToErrorMessage && (
-                                        <p className="text-xs text-red-600 mt-1">{assignedToErrorMessage}</p>
+                                    <EditableTextarea
+                                        id="long_description"
+                                        value={editableFields.long_description}
+                                        onChange={handleEditChange}
+                                        rows={10}
+                                        disabled={!canEdit}
+                                        className="FieldBox border border-blue-300 px-2 py-0.5 min-h-[32px] flex items-center bg-white rounded w-full text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-transparent max-w-none"
+                                        maxLength={1200}
+                                    />
+                                    {isEditing && canEdit && (
+                                        <div className="text-xs text-gray-400 mt-1 text-right w-full">{editableFields.long_description.length}/1200 characters</div>
                                     )}
                                 </>
                             ) : (
-                                <FieldBox isDisplayOnly={true} className="w-full">
-                                    <User className="w-4 h-4 text-gray-400 mr-2 shrink-0" />
-                                    <span className="text-sm text-gray-700 text-wrap overflow-hidden flex-1 min-w-0">
-                                        {ticket.assigned_to_email || 'Unassigned'}
-                                    </span>
+                                <FieldBox className="overflow-y-auto flex flex-col justify-start items-start w-full bg-gray-50 max-w-none" isDisplayOnly={true} style={{ minHeight: '220px', maxHeight: '220px' }}>
+                                    {ticket.long_description ? (
+                                        <span className="text-sm text-gray-700 whitespace-pre-wrap text-wrap" style={{ lineHeight: 1.5 }}>
+                                            {ticket.long_description}
+                                        </span>
+                            ) : (
+                                        <span className="text-sm text-gray-400 italic whitespace-pre-wrap text-wrap mt-0" style={{ lineHeight: 1.5 }}>
+                                            No description provided.
+                                            </span>
+                                    )}
                                 </FieldBox>
+                        )}
+                    </div>
+
+                    {/* Start of moved Attachments section */}
+                    <div className="bg-white rounded-lg pt-1 pl-1 pr-6 pb-3">
+                        <div className="flex items-center mb-4">
+                            <h3 className="text-lg font-medium text-gray-900 flex items-center">
+                                <Paperclip className="w-5 h-5 mr-2" />
+                                Attachments
+                            </h3>
+                            {canAddAttachments && (
+                                <Button
+                                    component="label"
+                                    variant="contained"
+                                    color={uploadButtonState === 'error' ? 'error' : uploadButtonState === 'success' ? 'success' : 'primary'}
+                                    size="small"
+                                    disabled={uploadButtonState === 'uploading' || !canAddAttachments}
+                                    startIcon={uploadButtonState === 'uploading' ? <Loader2 className="animate-spin" size={16} /> : uploadButtonState === 'success' ? <CheckCircle size={16} /> : uploadButtonState === 'error' ? <XCircle size={16} /> : <UploadCloud className="w-4 h-4" />}
+                                    sx={{ ml: 2, textTransform: 'none', fontWeight: 600, minHeight: 28, fontSize: '0.85rem', px: 1.5, py: 0.25 }}
+                                >
+                                    {uploadButtonState === 'uploading' && 'Uploading...'}
+                                    {uploadButtonState === 'success' && 'Uploaded!'}
+                                    {uploadButtonState === 'error' && 'Failed!'}
+                                    {uploadButtonState === 'upload' && 'Upload'}
+                                    <input
+                                        id="attachment-upload-btn"
+                                        type="file"
+                                        multiple
+                                        onChange={handleFileChange}
+                                        hidden
+                                        disabled={uploadButtonState === 'uploading' || !canAddAttachments}
+                                        value=""
+                                    />
+                                </Button>
                             )}
                         </div>
-
-                        {/* Closed By (Always rendered for support, but only if resolved/cancelled) */}
-                        {isSupportUser && (
-                            <div>
-                                <label className="block text-sm font-semibold text-gray-800 mb-2">
-                                    Closed by:
-                                </label>
-                                <FieldBox className="w-full" isDisplayOnly={true}>
-                                    <User className="w-4 h-4 text-gray-400 mr-2 shrink-0" />
-                                    <span className="text-sm text-gray-700 text-wrap overflow-hidden flex-1 min-w-0">
-                                        {(isEditing ? editableFields.status : ticket.status) === 'Resolved' ||
-                                            (isEditing ? editableFields.status : ticket.status) === 'Cancelled' ?
-                                            (isEditing && editableFields.closed_by_email
-                                                ? editableFields.closed_by_email
-                                                : ticket.closed_by_email || 'N/A')
-                                            : 'N/A'}
-                                    </span>
-                                </FieldBox>
-                            </div>
-                        )}
-
-                        {/* Resolved Date */}
-                        <div>
-                            <label className="block text-sm font-semibold text-gray-800 mb-2">
-                                Resolved Date:
-                            </label>
-                            <FieldBox className="w-full" isDisplayOnly={true}>
-                                <Calendar className="w-4 h-4 text-gray-400 mr-2 shrink-0" />
-                                <span className="text-sm text-gray-700 text-wrap overflow-hidden flex-1 min-w-0">
-                                    {(isEditing ? editableFields.status : ticket.status) === 'Resolved' ||
-                                        (isEditing ? editableFields.status : ticket.status) === 'Cancelled' ?
-                                        (isEditing && editableFields.resolved_at
-                                            ? new Date(editableFields.resolved_at).toLocaleString()
-                                            : ticket.resolved_at
-                                                ? new Date(ticket.resolved_at).toLocaleString()
-                                                : 'N/A')
-                                        : 'N/A'}
-                                </span>
-                            </FieldBox>
-                        </div>
-
-                        {/* Time Spent - Only for support/admin and when status is Resolved or closing or already resolved/cancelled */}
-                        {isSupportUser && (
-                            <div>
-                                <label className="text-sm font-semibold text-gray-800 mb-2">
-                                    Time Spent:
-                                </label>
-                                {(isEditing && (editableFields.status === 'Resolved' || editableFields.status === 'Cancelled')) || isTicketClosedOrResolved ? (
-                                    <>
-                                        <FieldBox hasError={timeSpentHasError} className={`w-full`}>
-                                            <Clock className="w-4 h-4 text-gray-400 mr-2 shrink-0" />
-                                            <input
-                                                id="time_spent"
-                                                ref={timeSpentRef}
-                                                type="text"
-                                                value={timeSpent}
-                                                onChange={handleTimeSpentChange}
-                                                className={`flex-1 bg-transparent border-none outline-none focus:ring-0 p-0 m-0 w-full text-sm`}
-                                                disabled={!isSupportUser || isTicketClosedOrResolved}
-                                                placeholder="in hours (e.g., 2.5)"
-                                                style={{ minWidth: 0 }}
-                                            />
-                                        </FieldBox>
-                                        {timeSpentErrorMessage && (
-                                            <p className="text-xs text-red-600 mt-1">{timeSpentErrorMessage}</p>
-                                        )}
-                                    </>
-                                ) : (
-                                    <FieldBox className="w-full" isDisplayOnly={true}>
-                                        <Clock className="w-4 h-4 text-gray-400 mr-2 shrink-0" />
-                                        <span className="text-sm text-gray-700 text-wrap overflow-hidden flex-1 min-w-0">
-                                            {ticket.time_spent || 'N/A'}
-                                        </span>
-                                    </FieldBox>
-                                )}
-                            </div>
-                        )}
-                    </div>
-                </div>
-            </div>
-
-            {/* Bottom Sections (Full Width) */}
-            <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
-                {/* Attachments */}
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                    <div className="flex items-center mb-4">
-                        <h3 className="text-lg font-medium text-gray-900 flex items-center">
-                            <Paperclip className="w-5 h-5 mr-2" />
-                            Attachments
-                        </h3>
-                        {canAddAttachments && (
-                            <label
-                                htmlFor="attachment-upload-btn"
-                                className={`flex items-center space-x-1 px-2 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer ml-3
-                                    ${uploadButtonState === 'uploading'
-                                        ? 'bg-gray-400 text-gray-700 cursor-not-allowed'
-                                        : uploadButtonState === 'success'
-                                            ? 'bg-green-600 text-white'
-                                            : uploadButtonState === 'error'
-                                                ? 'bg-red-600 text-white'
-                                                : 'bg-gray-700 text-yellow-300 hover:bg-gray-800'
-                                    }`}
-                            >
-                                {uploadButtonState === 'uploading' && <Loader2 className="animate-spin mr-1" size={12} />}
-                                {uploadButtonState === 'success' && <CheckCircle className="mr-1" size={12} />}
-                                {uploadButtonState === 'error' && <XCircle className="mr-1" size={12} />}
-                                {uploadButtonState === 'uploading' && 'Uploading...'}
-                                {uploadButtonState === 'success' && 'Uploaded!'}
-                                {uploadButtonState === 'error' && 'Failed!'}
-                                {uploadButtonState === 'upload' && (
-                                    <>
-                                        <UploadCloud className="w-4 h-4" />
-                                        <span>Upload</span>
-                                    </>
-                                )}
-                                <input
-                                    id="attachment-upload-btn"
-                                    type="file"
-                                    multiple
-                                    onChange={handleFileChange}
-                                    className="hidden"
-                                    disabled={uploadButtonState === 'uploading' || !canAddAttachments}
-                                    value=""
-                                />
-                            </label>
-                        )}
-                    </div>
-                    <div className="grid grid-cols-5 sm:grid-cols-6 md:grid-cols-7 lg:grid-cols-8 xl:grid-cols-9 gap-x-0 gap-y-1">
-                        {console.log('Current ticket attachments:', ticket.attachments)}
-                        {ticket.attachments && ticket.attachments.length > 0 ? (
-                            ticket.attachments.map((attachment, index) => (
-                                <a
-                                    key={index}
-                                    href={attachment.url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    download={attachment.fileName}
-                                    className="flex flex-col items-center justify-start transition-colors text-center group w-14 h-24 overflow-hidden relative"
-                                    title={attachment.fileName}
-                                >
-                                    <div className="absolute inset-x-0 top-0 flex items-center justify-center h-14 w-14 opacity-100 group-hover:opacity-0 transition-opacity duration-200">
-                                        <FileIcon fileName={attachment.fileName} />
-                                    </div>
-
-                                    <div className="absolute inset-x-0 top-0 flex items-center justify-center h-14 w-14 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                                        <Download className="w-10 h-10 text-blue-600" />
-                                    </div>
-
-                                    <span className="text-xs text-gray-700 mt-14 font-medium leading-tight truncate w-full px-0.5">
-                                        {attachment.fileName}
-                                    </span>
-                                </a>
-                            ))
-                        ) : (
-                            <p className="text-gray-500 text-sm col-span-full">No attachments yet.</p>
-                        )}
-                    </div>
-
-                    {attachmentFiles.length > 0 && (
-                        <div className="mt-4 p-4 border border-gray-200 rounded-md bg-white">
-                            <p className="text-sm font-semibold mb-3">Files selected for upload:</p>
-                            <div className="grid grid-cols-5 sm:grid-cols-6 md:grid-cols-7 lg:grid-cols-8 xl:grid-cols-9 gap-x-0 gap-y-1 mb-4">
-                                {attachmentFiles.map((file, index) => (
-                                    <div key={index} className="flex flex-col items-center justify-start text-center relative group w-14 h-24 overflow-hidden">
+                        <div id="attachments-section" className="grid grid-cols-5 sm:grid-cols-6 md:grid-cols-7 lg:grid-cols-8 xl:grid-cols-9 gap-x-0 gap-y-1">
+                            {console.log('Current ticket attachments:', ticket.attachments)}
+                            {ticket.attachments && ticket.attachments.length > 0 ? (
+                                ticket.attachments.map((attachment, index) => (
+                                    <a
+                                        key={index}
+                                        href={attachment.url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        download={attachment.fileName}
+                                        className="flex flex-col items-center justify-start transition-colors text-center group w-14 h-24 overflow-hidden relative"
+                                        title={attachment.fileName}
+                                    >
                                         <div className="absolute inset-x-0 top-0 flex items-center justify-center h-14 w-14 opacity-100 group-hover:opacity-0 transition-opacity duration-200">
-                                            <FileIcon fileName={file.name} />
+                                            <FileIcon fileName={attachment.fileName} />
                                         </div>
+
                                         <div className="absolute inset-x-0 top-0 flex items-center justify-center h-14 w-14 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                                             <Download className="w-10 h-10 text-blue-600" />
                                         </div>
 
                                         <span className="text-xs text-gray-700 mt-14 font-medium leading-tight truncate w-full px-0.5">
-                                            {file.name}
+                                            {attachment.fileName}
                                         </span>
-                                        <button
-                                            onClick={() => handleRemoveFile(file)}
-                                            className="absolute top-0 right-0 text-gray-400 hover:text-red-600 bg-white rounded-full p-0.5 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity z-10"
-                                            title={`Remove ${file.name}`}
-                                            aria-label={`Remove ${file.name}`}
-                                        >
-                                            <XCircle size={14} />
-                                        </button>
-                                    </div>
-                                ))}
-                            </div>
+                                    </a>
+                                ))
+                            ) : (
+                                <p className="text-gray-500 text-sm col-span-full">No attachments yet.</p>
+                            )}
                         </div>
-                    )}
+
+                        {attachmentFiles.length > 0 && (
+                            <div className="mt-4 p-4 border border-gray-200 rounded-md bg-white">
+                                <p className="text-sm font-semibold mb-3">Files selected for upload:</p>
+                                <div className="grid grid-cols-5 sm:grid-cols-6 md:grid-cols-7 lg:grid-cols-8 xl:grid-cols-9 gap-x-0 gap-y-1 mb-4">
+                                    {attachmentFiles.map((file, index) => (
+                                        <div key={index} className="flex flex-col items-center justify-start text-center relative group w-14 h-24 overflow-hidden">
+                                            <div className="absolute inset-x-0 top-0 flex items-center justify-center h-14 w-14 opacity-100 group-hover:opacity-0 transition-opacity duration-200">
+                                                <FileIcon fileName={file.name} />
+                                            </div>
+                                            <div className="absolute inset-x-0 top-0 flex items-center justify-center h-14 w-14 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                                                <Download className="w-10 h-10 text-blue-600" />
+                                            </div>
+
+                                            <span className="text-xs text-gray-700 mt-14 font-medium leading-tight truncate w-full px-0.5">
+                                                {file.name}
+                                            </span>
+                                            <button
+                                                onClick={() => handleRemoveFile(file)}
+                                                className="absolute top-0 right-0 text-gray-400 hover:text-red-600 bg-white rounded-full p-0.5 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                                                title={`Remove ${file.name}`}
+                                                aria-label={`Remove ${file.name}`}
+                                            >
+                                                <XCircle size={14} />
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                    {/* End of moved Attachments section */}
                 </div>
 
+                    {/* Right Column: Ticket Progress */}
+                    <div className="lg:col-span-1 bg-white rounded-lg pt-1 pl-1 pr-6 pb-3 h-fit">
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-base font-extrabold text-gray-500 flex items-center">
+                                Ticket Progress
+                                <TrendingUp className="w-4 h-4 text-gray-500 ml-2" />
+                            </h3>
+
+                            {/* Edit button moved to top right of progress box */}
+                            {canEdit && !isEditing && (
+                                <Button
+                                    onClick={() => setIsEditing(true)}
+                                    variant="contained"
+                                    color="primary"
+                                    size="small"
+                                    sx={{ textTransform: 'none', fontWeight: 600, minHeight: 28, fontSize: '0.85rem', px: 1.5, py: 0.25 }}
+                                >
+                                    Edit
+                                </Button>
+                            )}
+                            {isEditing && canEdit && (
+                                <div className="flex items-center space-x-1">
+                                    {/* Only show Cancel button if not saving */}
+                                    {saveButtonState === 'save' && (
+                                        <Button
+                                            onClick={handleCancelEdit}
+                                            disabled={updateLoading}
+                                            variant="outlined"
+                                            color="secondary"
+                                            size="small"
+                                            sx={{ textTransform: 'none', fontWeight: 600, ml: 1, minHeight: 28, fontSize: '0.85rem', px: 1.5, py: 0.25 }}
+                                        >
+                                            Cancel
+                                        </Button>
+                                    )}
+                                    {/* Save button always shown */}
+                                    <Button
+                                        onClick={() => handleUpdateTicket('save')}
+                                        disabled={updateLoading || !hasChanges()}
+                                        variant="contained"
+                                        color={saveButtonState === 'error' ? 'error' : saveButtonState === 'success' ? 'success' : 'primary'}
+                                        size="small"
+                                        sx={{ textTransform: 'none', fontWeight: 600, ml: 1, minHeight: 28, fontSize: '0.85rem', px: 1.5, py: 0.25 }}
+                                    >
+                                        {saveButtonState === 'saving' && 'Saving...'}
+                                        {saveButtonState === 'success' && 'Saved!'}
+                                        {saveButtonState === 'error' && 'Error!'}
+                                        {saveButtonState === 'save' && 'Save'}
+                                    </Button>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="space-y-4">
+                            {/* Status */}
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-800 mb-2">
+                                    Status:
+                                </label>
+                                {isEditing && isSupportUser && !isTicketClosedOrResolved ? (
+                                    <div className="flex flex-wrap gap-2">
+                                        {statuses.map(s => (
+                                            <button
+                                                key={s.value}
+                                                onClick={() => handleButtonSelection('status', s.value)}
+                                                className={`px-2.5 py-0.5 rounded-md text-xs font-medium border transition-colors
+                                                ${getStatusClasses(s.value)}
+                                                ${editableFields.status === s.value
+                                                        ? 'ring-2 ring-offset-1 ring-gray-700'
+                                                        : 'hover:opacity-80'
+                                                    }
+                                                ${updateLoading ? 'opacity-70 cursor-not-allowed' : ''}
+                                            `}
+                                                disabled={updateLoading}
+                                            >
+                                                {s.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <FieldBox isDisplayOnly={true} className="w-full">
+                                        <span className={`px-2 py-0.5 rounded-full text-xs font-normal border ${getStatusClasses(ticket.status)}`}>
+                                            {ticket.status}
+                                        </span>
+                                    </FieldBox>
+                                )}
+                            </div>
+
+                            {/* Priority */}
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-800 mb-2">
+                                    Priority:
+                                </label>
+                                {isEditing && canEdit ? (
+                                    <div className="flex flex-wrap gap-2">
+                                        {priorities.map(p => (
+                                            <button
+                                                key={p.value}
+                                                onClick={() => handleButtonSelection('priority', p.value)}
+                                                className={`px-2.5 py-0.5 rounded-md text-xs font-medium border transition-colors
+                                                ${getPriorityClasses(p.value)}
+                                                ${editableFields.priority === p.value
+                                                        ? 'ring-2 ring-offset-1 ring-gray-700'
+                                                        : 'hover:opacity-80'
+                                                    }
+                                                ${updateLoading ? 'opacity-70 cursor-not-allowed' : ''}
+                                            `}
+                                                disabled={updateLoading}
+                                            >
+                                                {p.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <FieldBox isDisplayOnly={true} className="w-full">
+                                        <span className={`px-2 py-0.5 rounded-full text-xs font-normal border ${getPriorityClasses(ticket.priority)}`}>
+                                            {ticket.priority}
+                                        </span>
+                                    </FieldBox>
+                                )}
+                            </div>
+
+                            {/* Category */}
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-800 mb-2">
+                                    Category:
+                                </label>
+                                {isEditing && canEdit ? (
+                                    <Select
+                                        id="category"
+                                        value={editableFields.category || ''}
+                                        onChange={e => handleEditChange({ target: { id: 'category', value: e.target.value } })}
+                                        fullWidth
+                                        size="small"
+                                        displayEmpty
+                                        disabled={!canEdit}
+                                        sx={{
+                                            backgroundColor: 'white',
+                                            width: '100%',
+                                            height: '32px',
+                                            minHeight: '32px',
+                                            border: isEditing && canEdit ? '1.5px solid #60a5fa' : '1px solid #d1d5db', // blue-400 when editing
+                                            borderRadius: 0,
+                                            px: 2,
+                                            fontSize: '0.875rem',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            boxSizing: 'border-box',
+                                            '& .MuiSelect-select': {
+                                                height: '32px',
+                                                minHeight: '32px',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                paddingTop: 0,
+                                                paddingBottom: 0,
+                                                paddingLeft: 0,
+                                                paddingRight: '24px',
+                                            },
+                                            '& .MuiOutlinedInput-notchedOutline': {
+                                                border: 'none',
+                                            },
+                                            '& fieldset': {
+                                                border: 'none',
+                                            },
+                                        }}
+                                        name="category"
+                                        renderValue={(selected) => selected ? selected.charAt(0).toUpperCase() + selected.slice(1) : 'Select Category'}
+                                        MenuProps={{
+                                            PaperProps: {
+                                                style: {
+                                                    marginTop: 2,
+                                                    fontSize: '0.85rem',
+                                                },
+                                            },
+                                        }}
+                                    >
+                                        <MenuItem value="" disabled sx={{ fontSize: '0.85rem' }}>Select Category</MenuItem>
+                                        <MenuItem value="software" sx={{ fontSize: '0.85rem' }}>Software</MenuItem>
+                                        <MenuItem value="hardware" sx={{ fontSize: '0.85rem' }}>Hardware</MenuItem>
+                                        <MenuItem value="troubleshoot" sx={{ fontSize: '0.85rem' }}>Troubleshoot</MenuItem>
+                                    </Select>
+                                ) : (
+                                    <FieldBox isDisplayOnly={true} className="w-full">
+                                        <span className="text-sm text-black text-wrap overflow-hidden flex-1 min-w-0">
+                                            {ticket.category || 'N/A'}
+                                        </span>
+                                    </FieldBox>
+                                )}
+                            </div>
+
+                            {/* Assigned to */}
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-800 mb-2">
+                                    Assigned to:
+                                </label>
+                                {isEditing && isSupportUser && !isTicketClosedOrResolved ? (
+                                    <div style={{ position: 'relative', width: '100%' }}>
+                                        <User className="w-4 h-4 text-gray-400" style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', zIndex: 2 }} />
+                                        <Select
+                                            id="assigned_to_email"
+                                            value={editableFields.assigned_to_email || ''}
+                                            onChange={e => handleEditChange({ target: { id: 'assigned_to_email', value: e.target.value } })}
+                                            fullWidth
+                                            size="small"
+                                            displayEmpty
+                                            disabled={!isSupportUser || isTicketClosedOrResolved || supportUsersLoading}
+                                            sx={{
+                                                backgroundColor: 'white',
+                                                width: '100%',
+                                                height: '32px',
+                                                minHeight: '32px',
+                                                border: isEditing && isSupportUser && !isTicketClosedOrResolved ? '1.5px solid #60a5fa' : '1px solid #d1d5db', // blue-400 when editing
+                                                borderRadius: 0,
+                                                pl: 3.5,
+                                                pr: 2,
+                                                fontSize: '0.875rem',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                boxSizing: 'border-box',
+                                                minWidth: 0,
+                                                maxWidth: '100%',
+                                                '& .MuiSelect-select': {
+                                                    height: '32px',
+                                                    minHeight: '32px',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    paddingTop: 0,
+                                                    paddingBottom: 0,
+                                                    paddingLeft: 0,
+                                                    paddingRight: '24px',
+                                                    minWidth: 0,
+                                                    maxWidth: '100%',
+                                                    whiteSpace: 'nowrap',
+                                                    overflow: 'hidden',
+                                                    textOverflow: 'ellipsis',
+                                                },
+                                                '& .MuiOutlinedInput-notchedOutline': {
+                                                    border: 'none',
+                                                },
+                                                '& fieldset': {
+                                                    border: 'none',
+                                                },
+                                            }}
+                                            name="assigned_to_email"
+                                            renderValue={selected => {
+                                                if (!selected) return 'Unassigned';
+                                                const found = supportUsers.find(u => u.email === selected);
+                                                const display = found ? (found.name ? `${found.name} (${found.email})` : found.email) : selected;
+                                                return (
+                                                    <span style={{
+                                                        display: 'block',
+                                                        overflow: 'hidden',
+                                                        textOverflow: 'ellipsis',
+                                                        whiteSpace: 'nowrap',
+                                                        minWidth: 0,
+                                                        maxWidth: '100%'
+                                                    }} title={display}>{display}</span>
+                                                );
+                                            }}
+                                            MenuProps={{
+                                                PaperProps: {
+                                                    style: {
+                                                        marginTop: 2,
+                                                        fontSize: '0.85rem',
+                                                    },
+                                                },
+                                            }}
+                                            inputProps={{ 'aria-label': 'Assigned To' }}
+                                        >
+                                            <MenuItem value="" sx={{ fontSize: '0.85rem' }}>Unassigned</MenuItem>
+                                            {supportUsers.map(u => (
+                                                <MenuItem key={u.email} value={u.email} sx={{ fontSize: '0.85rem' }}>
+                                                    {u.name ? `${u.name} (${u.email})` : u.email}
+                                                </MenuItem>
+                                            ))}
+                                            {/* If the current assigned_to_email is not in the list, show it as a disabled option */}
+                                            {editableFields.assigned_to_email &&
+                                                !supportUsers.some(u => u.email === editableFields.assigned_to_email) && (
+                                                    <MenuItem value={editableFields.assigned_to_email} disabled>
+                                                        {editableFields.assigned_to_email} (not a support user)
+                                                    </MenuItem>
+                                            )}
+                                        </Select>
+                                        {assignedToErrorMessage && (
+                                            <p className="text-xs text-red-600 mt-1">{assignedToErrorMessage}</p>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <FieldBox isDisplayOnly={true} className="w-full">
+                                        <User className="w-4 h-4 text-gray-400 mr-2 shrink-0" />
+                                        <span
+                                            ref={assignedToRefProfile}
+                                            className="text-sm text-blue-700 text-wrap overflow-hidden flex-1 min-w-0 cursor-pointer"
+                                            onMouseEnter={() => {
+                                                if (ticket.assigned_to_email) {
+                                                    showProfilePopup({ email: ticket.assigned_to_email, fullName: ticket.assigned_to_name }, assignedToRefProfile);
+                                                }
+                                            }}
+                                            onMouseLeave={() => {
+                                                if (ticket.assigned_to_email) {
+                                                    cancelShowProfilePopup();
+                                                    hidePopup();
+                                                }
+                                            }}
+                                        >
+                                            {ticket.assigned_to_email ? ticket.assigned_to_email : <span className="text-gray-400">Unassigned</span>}
+                                        </span>
+                                        <UserProfilePopup
+                                            user={profilePopup.user}
+                                            anchorRef={profilePopup.anchorRef}
+                                            visible={profilePopup.visible && profilePopup.anchorRef === assignedToRefProfile}
+                                            onMouseEnter={() => {
+                                              if (popupHideTimeout.current) clearTimeout(popupHideTimeout.current);
+                                              setPopupHovered(true);
+                                            }}
+                                            onMouseLeave={() => {
+                                              setPopupHovered(false);
+                                              hidePopup();
+                                            }}
+                                        />
+                                    </FieldBox>
+                                )}
+                            </div>
+
+                            {/* Closed By (Always rendered for support, but only if resolved/cancelled) */}
+                            {isSupportUser && (
+                                <div>
+                                    <label className="block text-sm font-semibold text-gray-800 mb-2">
+                                        Closed by:
+                                    </label>
+                                    <FieldBox className="w-full" isDisplayOnly={true}>
+                                        <User className="w-4 h-4 text-gray-400 mr-2 shrink-0" />
+                                        <span
+                                            ref={closedByRef}
+                                            className="text-sm text-blue-700 text-wrap overflow-hidden flex-1 min-w-0 cursor-pointer"
+                                            onMouseEnter={() => showProfilePopup({ email: (isEditing ? editableFields.closed_by_email : ticket.closed_by_email), fullName: null }, closedByRef)}
+                                            onMouseLeave={() => { cancelShowProfilePopup(); hidePopup(); }}
+                                        >
+                                            {(isEditing ? editableFields.status : ticket.status) === 'Resolved' ||
+                                            (isEditing ? editableFields.status : ticket.status) === 'Cancelled'
+                                              ? (isEditing && editableFields.closed_by_email
+                                                  ? editableFields.closed_by_email
+                                                  : ticket.closed_by_email
+                                                      ? ticket.closed_by_email
+                                                      : <span className="text-gray-400">N/A</span>)
+                                              : <span className="text-gray-400">N/A</span>}
+                                        </span>
+                                        <UserProfilePopup
+                                            user={profilePopup.user}
+                                            anchorRef={profilePopup.anchorRef}
+                                            visible={profilePopup.visible && profilePopup.anchorRef === closedByRef}
+                                            onMouseEnter={() => {
+                                              if (popupHideTimeout.current) clearTimeout(popupHideTimeout.current);
+                                              setPopupHovered(true);
+                                            }}
+                                            onMouseLeave={() => {
+                                              setPopupHovered(false);
+                                              hidePopup();
+                                            }}
+                                        />
+                                    </FieldBox>
+                                </div>
+                            )}
+
+                            {/* Resolved Date */}
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-800 mb-2">
+                                    Resolved Date:
+                                </label>
+                                <FieldBox className="w-full" isDisplayOnly={true}>
+                                    <Calendar className="w-4 h-4 text-gray-400 mr-2 shrink-0" />
+                                    <span className="text-sm text-emerald-700 text-wrap overflow-hidden flex-1 min-w-0">
+                                        {(isEditing ? editableFields.status : ticket.status) === 'Resolved' ||
+                                            (isEditing ? editableFields.status : ticket.status) === 'Cancelled'
+                                              ? (isEditing && editableFields.resolved_at
+                                                  ? new Date(editableFields.resolved_at).toLocaleString()
+                                                  : ticket.resolved_at
+                                                      ? new Date(ticket.resolved_at).toLocaleString()
+                                                      : <span className="text-gray-400">N/A</span>)
+                                              : <span className="text-gray-400">N/A</span>}
+                                    </span>
+                                </FieldBox>
+                            </div>
+
+                            {/* Time Spent - Only for support/admin and when status is Resolved or closing or already resolved/cancelled */}
+                            {isSupportUser && (
+                                <div>
+                                    <label className="text-sm font-semibold text-gray-800 mb-2">
+                                        Time Spent <span className="text-xs text-gray-500 font-normal"></span>:
+                                    </label>
+                                    {(isEditing && (editableFields.status === 'Resolved' || editableFields.status === 'Cancelled')) || isTicketClosedOrResolved ? (
+                                        <>
+                                            <FieldBox hasError={timeSpentHasError} className={`w-full`}>
+                                                <Clock className="w-4 h-4 text-gray-400 mr-2 shrink-0" />
+                                                <input
+                                                    id="time_spent"
+                                                    ref={timeSpentRef}
+                                                    type="text"
+                                                    value={timeSpent}
+                                                    onChange={handleTimeSpentChange}
+                                                    className="FieldBox border border-blue-300 px-2 py-0.5 min-h-[32px] flex items-center bg-white rounded w-full text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-transparent"
+                                                    disabled={!isSupportUser || isTicketClosedOrResolved}
+                                                    placeholder="in minutes (e.g., 45)"
+                                                    style={{ minWidth: 0 }}
+                                                />
+                                                <span className="ml-2 text-xs text-gray-500">minutes</span>
+                                            </FieldBox>
+                                            {timeSpentErrorMessage && (
+                                                <p className="text-xs text-red-600 mt-1">{timeSpentErrorMessage}</p>
+                                            )}
+                                        </>
+                                    ) : (
+                                        <FieldBox className="w-full" isDisplayOnly={true}>
+                                            <Clock className="w-4 h-4 text-gray-400 mr-2 shrink-0" />
+                                            <span className="text-sm text-amber-700 text-wrap overflow-hidden flex-1 min-w-0">
+                                                {ticket.time_spent ? `${ticket.time_spent} minutes` : <span className="text-gray-400">N/A</span>}
+                                            </span>
+                                        </FieldBox>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                        </div>
+                    </div>
+
                 {/* Updates Section (Comments & Closure Tabs) */}
-                <div ref={commentsSectionRef} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <div className="max-w-full w-full mx-auto px-0 sm:px-0 md:px-0 py-3 space-y-3 min-w-0"> {/* This div now only holds the comments/closure section */}
+                    <div ref={commentsSectionRef} id="comments-section" className="bg-white rounded-lg pt-1 pl-1 pr-6 pb-3">
                     <div className="border-b border-gray-200 mb-6">
                         <nav className="flex space-x-8">
                             <button
@@ -1538,21 +1824,25 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                                         className="w-full border-2 border-gray-300 rounded-sm px-2 py-1 focus:outline-none focus:ring-2 focus:ring-gray-700 focus:border-transparent text-sm"
                                         placeholder="Type your comment here..."
                                         disabled={commentLoading || !canAddComments}
+                                        onKeyDown={(e) => {
+                                          if (e.key === 'Enter' && !e.shiftKey) {
+                                            e.preventDefault();
+                                            handleAddComment(e);
+                                          }
+                                        }}
                                     ></textarea>
                                     <div className="flex justify-end mt-3">
-                                        <button
+                                        <Button
                                             onClick={handleAddComment}
                                             disabled={commentLoading || !commentText.trim() || !canAddComments}
-                                            className={`px-3 py-1 text-sm font-medium rounded-md transition-colors duration-200 flex items-center justify-center
-                                            ${commentLoading || !commentText.trim() || !canAddComments
-                                                    ? 'bg-gray-400 text-gray-700 cursor-not-allowed'
-                                                    : 'bg-gray-700 text-yellow-300 hover:bg-gray-800'
-                                                }`}
+                                            variant="contained"
+                                            color="primary"
+                                            size="small"
+                                            startIcon={commentLoading ? <Loader2 className="animate-spin" size={16} /> : <MessageSquare className="w-4 h-4" />}
+                                            sx={{ textTransform: 'none', fontWeight: 600, minHeight: 28, fontSize: '0.85rem', px: 1.5, py: 0.25 }}
                                         >
-                                            {commentLoading && <Loader2 className="animate-spin mr-2" size={16} />}
-                                            <MessageSquare className="w-4 h-4 inline mr-2" />
-                                            <span>Add Comment</span>
-                                        </button>
+                                            Add Comment
+                                        </Button>
                                     </div>
                                 </div>
                             )}
@@ -1572,7 +1862,7 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                                 rows={6}
                                 disabled={!isSupportUser || isTicketClosedOrResolved}
                                 hasError={closureNotesHasError}
-                                className="w-full text-sm"
+                                className="FieldBox border border-blue-300 px-2 py-0.5 min-h-[32px] flex items-center bg-white rounded w-full text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-transparent"
                                 placeholder="Enter closure notes here..."
                             />
                             {closureNotesErrorMessage && (
@@ -1582,7 +1872,7 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                             )}
                             {isSupportUser && !isTicketClosedOrResolved && (
                                 <div className="flex justify-end mt-3">
-                                    <button
+                                    <Button
                                         onClick={() => handleUpdateTicket('close')}
                                         disabled={
                                             !isSupportUser ||
@@ -1591,33 +1881,26 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                                             (editableFields.status === 'Resolved' && !closureNotes.trim()) ||
                                             assignedToHasError || timeSpentHasError || closureNotesHasError
                                         }
-                                        className={`px-3 py-1 text-sm font-medium rounded-md transition-colors flex items-center justify-center
-                                            ${closeButtonState === 'closing' || (editableFields.status === 'Resolved' && !closureNotes.trim()) || assignedToHasError || timeSpentHasError || closureNotesHasError
-                                                ? 'bg-gray-400 text-gray-700 cursor-not-allowed'
-                                                : closeButtonState === 'success'
-                                                    ? 'bg-green-600 text-white'
-                                                    : closeButtonState === 'error'
-                                                        ? 'bg-red-600 text-white'
-                                                        : 'bg-gray-700 text-yellow-300 hover:bg-gray-800'
-                                            }
-                                        `}
+                                        variant="contained"
+                                        color={closeButtonState === 'error' ? 'error' : closeButtonState === 'success' ? 'success' : 'primary'}
+                                        size="small"
+                                        startIcon={
+                                            closeButtonState === 'closing' ? <Loader2 className="animate-spin" size={16} /> :
+                                            closeButtonState === 'success' ? <CheckCircle size={16} /> :
+                                            closeButtonState === 'error' ? <XCircle size={16} /> : null
+                                        }
+                                        sx={{ textTransform: 'none', fontWeight: 600, ml: 1, minHeight: 28, fontSize: '0.85rem', px: 1.5, py: 0.25 }}
                                     >
-                                        {closeButtonState === 'closing' && <Loader2 className="animate-spin mr-2" size={16} />}
-                                        {closeButtonState === 'success' && <CheckCircle className="mr-2" size={16} />}
-                                        {closeButtonState === 'error' && <XCircle className="mr-2" size={16} />}
                                         {closeButtonState === 'closing' && 'Closing...'}
                                         {closeButtonState === 'success' && 'Closed!'}
                                         {closeButtonState === 'error' && 'Error!'}
-                                        {closeButtonState === 'default' && (
-                                            <>
-                                                <span>Close Ticket</span>
-                                            </>
-                                        )}
-                                    </button>
+                                        {closeButtonState === 'default' && 'Close Ticket'}
+                                    </Button>
                                 </div>
                             )}
                         </div>
                     )}
+                    </div>
                 </div>
             </div>
         </div>

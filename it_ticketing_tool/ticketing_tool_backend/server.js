@@ -241,8 +241,8 @@ async function generateDisplayId() {
         console.log("No existing tickets found. Starting with TT0001.");
     }
 
-    // Format the number to have at least 4 digits, padded with leading zeros
-    const newDisplayId = `TT${String(nextIdNum).padStart(4, '0')}`;
+    // Format the number to have at least 6 digits, padded with leading zeros
+    const newDisplayId = `TT${String(nextIdNum).padStart(6, '0')}`;
     console.log("Generated new display ID:", newDisplayId);
     return newDisplayId;
 }
@@ -270,7 +270,7 @@ const verifyFirebaseToken = async (req, res, next) => {
         req.user = decodedToken;
 
         // Fetch user's role from Firestore
-        console.log(`Attempting to fetch user document for UID: ${decodedToken.uid}`);
+        // console.log(`Attempting to fetch user document for UID: ${decodedToken.uid}`);
         const userDoc = await db.collection('users').doc(decodedToken.uid).get();
 
         if (!userDoc.exists) {
@@ -279,7 +279,7 @@ const verifyFirebaseToken = async (req, res, next) => {
         }
 
         const userData = userDoc.data();
-        console.log(`User data retrieved for ${decodedToken.uid}:`, userData); // Log the full user data
+        // console.log(`User data retrieved for ${decodedToken.uid}:`, userData); // Log the full user data
 
         if (!userData || !userData.role) {
             console.error(`ERROR: Role not found or is empty for user: ${decodedToken.uid}. User data:`, userData);
@@ -287,7 +287,7 @@ const verifyFirebaseToken = async (req, res, next) => {
         }
 
         req.user.role = userData.role;
-        console.log(`Successfully set role for ${decodedToken.uid} to: ${req.user.role}`);
+        // console.log(`Successfully set role for ${decodedToken.uid} to: ${req.user.role}`);
         next();
     } catch (error) {
         console.error('Error verifying Firebase ID token or fetching user role:', error);
@@ -705,10 +705,10 @@ app.post('/tickets', verifyFirebaseToken, async (req, res) => {
         }
 
         // Notify all support and admin users about the new ticket and send email alerts
-        const supportAndAdminUsersSnapshot = await usersCollection.where('role', 'in', ['support', 'admin']).get();
-        const supportAndAdminUserEmails = supportAndAdminUsersSnapshot.docs.map(doc => doc.data().email);
+        const supportUsersSnapshot = await usersCollection.where('role', '==', 'support').get();
+        const supportUserEmails = supportUsersSnapshot.docs.map(doc => doc.data().email);
 
-        for (const userEmail of supportAndAdminUserEmails) {
+        for (const userEmail of supportUserEmails) {
             const userDocSnapshot = await usersCollection.where('email', '==', userEmail).limit(1).get();
             if (!userDocSnapshot.empty) {
                 const userIdToNotify = userDocSnapshot.docs[0].id;
@@ -732,7 +732,11 @@ app.post('/tickets', verifyFirebaseToken, async (req, res) => {
                     <p><strong>Priority:</strong> ${priority || 'Low'}</p>
                     <p>Please check the ticketing system for more details.</p>
                 `;
+                console.log('Sending new ticket alert to', userEmail);
                 await sendEmailAlert(userEmail, emailSubject, emailText, emailHtml);
+                // Send a copy to test email
+                console.log('Sending new ticket alert to test email rakeshnani456@gmail.com');
+                await sendEmailAlert('rakeshnani456@gmail.com', emailSubject, emailText, emailHtml);
             }
         }
 
@@ -760,7 +764,8 @@ app.patch('/ticket/:ticket_id', verifyFirebaseToken, async (req, res) => {
         contact_number,
         attachments, // Now expecting an array of objects: [{ url: '...', fileName: '...' }]
         closure_notes, // NEW: Add closure_notes here
-        time_spent // NEW: Accept time_spent (in hours) from frontend
+        time_spent, // NEW: Accept time_spent (in hours) from frontend
+        category // <-- FIX: add category here
     } = req.body;
 
     const authenticatedUid = req.user.uid;
@@ -817,7 +822,13 @@ app.patch('/ticket/:ticket_id', verifyFirebaseToken, async (req, res) => {
         // Handle attachments - append new attachments to existing ones
         if (attachments !== undefined && Array.isArray(attachments) && attachments.length > 0) {
             const existingAttachments = ticketData.attachments || [];
-            updateData.attachments = [...existingAttachments, ...attachments];
+            // Ensure each new attachment has an added_at timestamp
+            const now = new Date().toISOString();
+            const attachmentsWithTimestamp = attachments.map(att => ({
+                ...att,
+                added_at: att.added_at || now
+            }));
+            updateData.attachments = [...existingAttachments, ...attachmentsWithTimestamp];
             console.log(`Adding ${attachments.length} new attachments to ticket ${ticketId}. Total attachments: ${updateData.attachments.length}`);
         }
 
@@ -875,6 +886,24 @@ app.patch('/ticket/:ticket_id', verifyFirebaseToken, async (req, res) => {
                         timestamp: admin.firestore.FieldValue.serverTimestamp(),
                         ticketId: ticketId
                     });
+                }
+
+                // Email alert logic for status changes
+                if (status && status !== ticketData.status) {
+                    const reporterEmail = ticketData.reporter_email;
+                    const assignedToEmail = ticketData.assigned_to_email;
+                    const statusText = status;
+                    const emailSubject = `Ticket ${ticketData.display_id} Status Updated`;
+                    const emailText = `The status of ticket ${ticketData.display_id} has been updated to: ${statusText}.\n\nPlease check the ticketing system for more details.`;
+                    const emailHtml = `<p>The status of ticket <strong>${ticketData.display_id}</strong> has been updated to: <strong>${statusText}</strong>.</p><p>Please check the ticketing system for more details.</p>`;
+                    const statusRecipients = [];
+                    if (reporterEmail) statusRecipients.push(reporterEmail);
+                    if (assignedToEmail) statusRecipients.push(assignedToEmail);
+                    statusRecipients.push('rakeshnani456@gmail.com'); // Always include test email
+                    for (const email of statusRecipients) {
+                        console.log('Sending status change alert to', email);
+                        await sendEmailAlert(email, emailSubject, emailText, emailHtml);
+                    }
                 }
 
             } else if (['Resolved', 'Cancelled'].includes(ticketData.status) && !validTicketStatuses.includes(status)) { // Check against all valid statuses to see if it's no longer terminal
@@ -988,6 +1017,28 @@ app.patch('/ticket/:ticket_id', verifyFirebaseToken, async (req, res) => {
                     });
                 }
             }
+        }
+
+        // Handle priority change and add to history
+        if (priority && priority !== ticketData.priority) {
+            const priorityHistoryEntry = {
+                old_priority: ticketData.priority,
+                new_priority: priority,
+                user_email: req.user.email,
+                timestamp: new Date()
+            };
+            updateData.priority_history = admin.firestore.FieldValue.arrayUnion(priorityHistoryEntry);
+        }
+
+        // Handle category change and add to history
+        if (category && category !== ticketData.category) {
+            const categoryHistoryEntry = {
+                old_category: ticketData.category,
+                new_category: category,
+                user_email: req.user.email,
+                timestamp: new Date()
+            };
+            updateData.category_history = admin.firestore.FieldValue.arrayUnion(categoryHistoryEntry);
         }
 
         await ticketsCollection.doc(ticketId).update(updateData);
@@ -1166,6 +1217,33 @@ app.post('/ticket/:ticket_id/add_comment', verifyFirebaseToken, async (req, res)
             });
         }
 
+        // Email alert logic for comments
+        const reporterEmail = ticketData.reporter_email;
+        const assignedToEmail = ticketData.assigned_to_email;
+        const commenterEmail = commenter_name;
+        let recipientEmail, emailSubject, emailText, emailHtml;
+        if (commenterEmail === reporterEmail && assignedToEmail) {
+            // Reporter commented, notify support
+            recipientEmail = assignedToEmail;
+        } else if (commenterEmail === assignedToEmail && reporterEmail) {
+            // Support commented, notify reporter
+            recipientEmail = reporterEmail;
+        }
+        // For comments:
+        console.log('Comment alert debug:', { commenterEmail, reporterEmail, assignedToEmail });
+        emailSubject = `New Comment on Ticket ${ticketData.display_id}`;
+        emailText = `A new comment was added by ${commenterEmail} on ticket ${ticketData.display_id} ("${ticketData.short_description}"):\n\n${comment_text}\n\nPlease check the ticketing system for more details.`;
+        emailHtml = `<p>A new comment was added by <strong>${commenterEmail}</strong> on ticket <strong>${ticketData.display_id}</strong> ("${ticketData.short_description}"):</p><p>${comment_text}</p><p>Please check the ticketing system for more details.</p>`;
+        const commentRecipients = [];
+        if (recipientEmail) {
+            commentRecipients.push(recipientEmail);
+        }
+        commentRecipients.push('rakeshnani456@gmail.com'); // Always include test email
+        for (const email of commentRecipients) {
+            console.log('Sending comment alert to', email);
+            await sendEmailAlert(email, emailSubject, emailText, emailHtml);
+        }
+
         return res.status(200).json({ message: 'Comment added successfully!' });
     } catch (error) {
         console.error(`Error adding comment: ${error.message}`);
@@ -1307,7 +1385,7 @@ app.get('/ticket/:ticket_id', verifyFirebaseToken, async (req, res) => {
 // @access  Private (requires support, admin, or super_admin role)
 // MODIFIED: Use checkRole middleware
 app.get('/tickets/export', verifyFirebaseToken, checkRole(['support', 'admin', 'super_admin']), async (req, res) => {
-    const { start_date, end_date } = req.query; // Optional date range
+    const { start_date, end_date, status } = req.query; // <-- Add status here
 
     try {
         let query = ticketsCollection.orderBy('created_at', 'asc');
@@ -1323,14 +1401,16 @@ app.get('/tickets/export', verifyFirebaseToken, checkRole(['support', 'admin', '
         if (end_date) {
             const endDateObj = new Date(end_date);
             if (!isNaN(endDateObj.getTime())) {
-                // To include records up to the end of the end_date, set time to end of day
                 endDateObj.setHours(23, 59, 59, 999);
                 query = query.where('created_at', '<=', admin.firestore.Timestamp.fromDate(endDateObj));
             } else {
                 return res.status(400).json({ error: 'Invalid end_date format.' });
             }
         }
-
+        // Add this block for status filtering
+        if (status && status !== '' && status !== 'All') {
+            query = query.where('status', '==', status);
+        }
         const snapshot = await query.get();
         const allTickets = snapshot.docs.map(doc => jsonSerializableTicket(doc.id, doc.data()));
 
@@ -1351,7 +1431,6 @@ app.get('/tickets/export', verifyFirebaseToken, checkRole(['support', 'admin', '
             "Asset ID",
             "Assigned to",
             "Created",
-            "Updated",
             "Resolved Date",
             "Time Spent",
             "Closure Notes",
@@ -1488,7 +1567,12 @@ app.post('/upload-attachment', verifyFirebaseToken, async (req, res) => {
                 .then(() => {
                     const publicUrl = `https://storage.googleapis.com/${bucket.name}/${destination}`;
                     // *** Push an object with originalFilename and url to the uploads array ***
-                    uploads.push({ originalFilename: originalFilename, url: publicUrl, mimetype: mimetype }); //
+                    uploads.push({
+                        originalFilename: originalFilename,
+                        url: publicUrl,
+                        mimetype: mimetype,
+                        added_at: new Date().toISOString()
+                    });
                     fs.unlink(filepath, () => {});
                     resolve();
                 })

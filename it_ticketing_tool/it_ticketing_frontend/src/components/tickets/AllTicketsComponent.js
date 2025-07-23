@@ -6,6 +6,8 @@ import { collection, query, onSnapshot, where, orderBy, getFirestore } from 'fir
 
 // Import common UI components
 import PrimaryButton from '../common/PrimaryButton';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
 
 // Import API Base URL from constants
 import { API_BASE_URL } from '../../config/constants';
@@ -59,6 +61,9 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
 
     // New state for export success message on the export button
     const [exportSuccess, setExportSuccess] = useState(false);
+
+    // Add state for export status filter
+    const [exportStatus, setExportStatus] = useState('');
 
     // Get today's date in ISO-MM-DD format for the max attribute of the end date input
     const today = new Date().toISOString().split('T')[0];
@@ -297,6 +302,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
             const queryParams = new URLSearchParams();
             if (startDate) queryParams.append('start_date', startDate);
             if (endDate) queryParams.append('end_date', endDate);
+            if (exportStatus) queryParams.append('status', exportStatus);
 
             // Note: The backend endpoint '/tickets/export' still uses HTTP fetch,
             // as real-time export directly from Firestore client is not a typical use case.
@@ -459,17 +465,18 @@ const counts = {
     if (error && !showExportPopup) return <div className="text-center text-red-600 mt-8 text-base flex items-center justify-center space-x-2"><XCircle size={20} /> <span>Error: {error}</span></div>;
 
     return (
-        <div className="p-4 bg-offwhite flex-1 overflow-auto">
+        <div className="p-4 bg-white flex-1 overflow-auto">
             {/* Decreased heading size from text-xl to text-lg */}
             <h2 className="text-lg font-extrabold text-gray-800 mb-4">
                 {getPageHeading()}
             </h2>
+            <div className="w-full h-px bg-gray-200 mb-2 mt-0" />
 
          
 
             {/* Filter and Export Section (Conditional Rendering based on `showFilters` prop) */}
             {showFilters && (
-                <div className="mb-4 p-3 bg-gray-50 rounded-md shadow-inner border border-gray-100 flex flex-wrap gap-2 items-center relative">
+                <div className="mb-2 p-3 bg-white rounded-md flex flex-wrap gap-2 items-center relative">
                     <span className="text-sm font-semibold text-gray-700 flex items-center"><ListFilter className="mr-1" size={16} /> Filter By:</span>
                     {/* MODIFIED: 'All' button now sets filterStatus to empty string to show all tickets */}
                     <button
@@ -502,13 +509,14 @@ const counts = {
 
                         {showExportPopup && (
                             <div ref={exportPopupRef} className="absolute top-full right-0 mt-2 p-3 bg-white border border-gray-300 rounded-md shadow-lg z-10 flex flex-col space-y-2">
-                                <p className="text-xs font-semibold text-gray-700">Select Date Range for Export:</p>
+                                <p className="text-xs font-semibold text-gray-700">Select Date Range and Status for Export:</p>
                                 <div className="flex items-center space-x-2">
                                     <input
                                         type="date"
                                         value={startDate}
                                         onChange={(e) => setStartDate(e.target.value)}
                                         className="p-1 border border-gray-300 rounded-md text-xs w-28"
+                                        max={today}
                                     />
                                     <span className="text-sm">to</span>
                                     <input
@@ -518,6 +526,46 @@ const counts = {
                                         className="p-1 border border-gray-300 rounded-md text-xs w-28"
                                         max={today}
                                     />
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                    <label htmlFor="export-status" className="text-xs font-semibold text-gray-700">Status:</label>
+                                    <Select
+                                        id="export-status"
+                                        value={exportStatus}
+                                        onChange={e => setExportStatus(e.target.value)}
+                                        size="small"
+                                        displayEmpty
+                                        sx={{
+                                            minWidth: 110,
+                                            fontSize: '0.8rem',
+                                            background: 'white',
+                                            borderRadius: 1,
+                                            height: '26px',
+                                            minHeight: '26px',
+                                            border: '1px solid #d1d5db',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            '& .MuiSelect-select': {
+                                                height: '26px',
+                                                minHeight: '26px',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                paddingTop: 0,
+                                                paddingBottom: 0,
+                                                paddingLeft: '0.5rem',
+                                                paddingRight: '1.5rem', // for dropdown arrow
+                                                boxSizing: 'border-box',
+                                            },
+                                        }}
+                                        inputProps={{ 'aria-label': 'Status' }}
+                                    >
+                                        <MenuItem value="" sx={{ fontSize: '0.85rem' }}>All</MenuItem>
+                                        <MenuItem value="Open" sx={{ fontSize: '0.85rem' }}>Open</MenuItem>
+                                        <MenuItem value="In Progress" sx={{ fontSize: '0.85rem' }}>In Progress</MenuItem>
+                                        <MenuItem value="Hold" sx={{ fontSize: '0.85rem' }}>Hold</MenuItem>
+                                        <MenuItem value="Resolved" sx={{ fontSize: '0.85rem' }}>Resolved</MenuItem>
+                                        <MenuItem value="Cancelled" sx={{ fontSize: '0.85rem' }}>Cancelled</MenuItem>
+                                    </Select>
                                 </div>
                                 <div className="flex justify-end space-x-2 mt-2">
                                     <button
@@ -546,7 +594,7 @@ const counts = {
                     {searchKeyword ? `No tickets found matching "${searchKeyword}".` : "No tickets found matching the criteria."}
                 </p>
             ) : (
-                <div className="w-full max-w-full overflow-x-auto rounded-lg shadow-md border border-gray-200 bg-white">
+                <div className="w-full max-w-full overflow-x-auto rounded-lg shadow-md border border-gray-200 bg-white mt-0">
                     <table className="w-full min-w-0 bg-white text-xs">
                         <thead className="hidden sm:table-header-group bg-gray-100 border-b border-gray-200">
                             <tr>
