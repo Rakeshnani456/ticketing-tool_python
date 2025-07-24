@@ -45,6 +45,8 @@ import UserProfilePopup from '../common/UserProfilePopup';
 import Button from '@mui/material/Button';
 import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
+import { CircularProgressbar, buildStyles } from 'react-circular-progressbar';
+import 'react-circular-progressbar/dist/styles.css';
 
 const FieldBox = ({ children, className = "", isDisplayOnly = false, hasError = false }) => (
     <div className={`FieldBox border px-2 py-0.5 min-h-[32px] flex items-center
@@ -114,6 +116,8 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
     const [timelineEvents, setTimelineEvents] = useState([]);
     const [supportUsers, setSupportUsers] = useState([]);
     const [supportUsersLoading, setSupportUsersLoading] = useState(false);
+    const [uploadProgress, setUploadProgress] = useState({}); // { fileName: percent }
+    const [uploadingFiles, setUploadingFiles] = useState([]); // [{file, previewUrl, isImage}]
 
     const commentsSectionRef = useRef(null);
     const closureNotesRef = useRef(null);
@@ -715,7 +719,7 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                 setEditableFields(prev => ({ ...prev, resolved_at: payload.resolved_at }));
             }
 
-            const response = await fetch(`${API_BASE_URL}/ticket/${ticketId}`, {
+            const response = await fetch(`${API_BASE_URL}/tickets/${ticketId}`, {
                 method: 'PATCH',
                 headers: {
                     'Content-Type': 'application/json',
@@ -812,7 +816,7 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
         setCommentLoading(true);
         try {
             const idToken = await user.firebaseUser.getIdToken();
-            const response = await fetch(`${API_BASE_URL}/ticket/${ticketId}/add_comment`, {
+            const response = await fetch(`${API_BASE_URL}/tickets/${ticketId}/add_comment`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -837,7 +841,7 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
     const handleFileChange = async (e) => {
         const files = Array.from(e.target.files);
         const validFiles = [];
-
+        const newUploadingFiles = [];
         for (const file of files) {
             const allowedTypes = [
                 'application/pdf',
@@ -856,71 +860,78 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                 continue;
             }
             validFiles.push(file);
+            const isImage = file.type.startsWith('image/');
+            newUploadingFiles.push({
+                file,
+                previewUrl: isImage ? URL.createObjectURL(file) : null,
+                isImage
+            });
         }
-
         if (validFiles.length > 0) {
             setAttachmentFiles(prevFiles => [...prevFiles, ...validFiles]);
-            await handleAddAttachmentsToTicket(validFiles);
+            setUploadingFiles(prev => [...prev, ...newUploadingFiles]);
+            await handleAddAttachmentsToTicket(validFiles, newUploadingFiles);
         } else {
             setUploadButtonState('upload');
         }
     };
 
-    const handleRemoveFile = (fileToRemove) => {
-        setAttachmentFiles(prevFiles => prevFiles.filter(file => file !== fileToRemove));
+    const uploadFileWithProgress = (file, onProgress, idToken) => {
+        return new Promise((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            const formData = new FormData();
+            formData.append('attachment', file);
+            xhr.open('POST', `${API_BASE_URL}/upload-attachment`);
+            xhr.setRequestHeader('Authorization', `Bearer ${idToken}`);
+            xhr.upload.onprogress = (event) => {
+                if (event.lengthComputable) {
+                    const percent = Math.round((event.loaded / event.total) * 100);
+                    onProgress(percent);
+                }
+            };
+            xhr.onload = () => {
+                if (xhr.status === 200) {
+                    resolve(JSON.parse(xhr.responseText));
+                } else {
+                    reject(xhr.responseText);
+                }
+            };
+            xhr.onerror = () => reject(xhr.responseText);
+            xhr.send(formData);
+        });
     };
 
-    const handleAddAttachmentsToTicket = async (filesToUpload) => {
+    const handleAddAttachmentsToTicket = async (filesToUpload, uploadingFileObjs) => {
         if (filesToUpload.length === 0) {
             setUploadButtonState('upload');
             return;
         }
-
         setUploadButtonState('uploading');
-
         const uploadedAttachmentData = [];
         let anyUploadFailed = false;
-
-        const uploadPromises = filesToUpload.map(async (file) => {
-            const formData = new FormData();
-            formData.append('attachment', file);
-
-            try {
-                const idToken = await user.firebaseUser.getIdToken();
-                const response = await fetch(`${API_BASE_URL}/upload-attachment`, {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${idToken}` },
-                    body: formData,
-                });
-                if (response.ok) {
-                    const data = await response.json();
-                    if (data.files && data.files.length > 0) {
-                        return { url: data.files[0].url, fileName: data.files[0].originalFilename };
-                    }
-                } else {
-                    const errorData = await response.json();
-                    showFlashMessage(`Failed to upload ${file.name}: ${errorData.error || 'Server error'}`, 'error');
-                    anyUploadFailed = true;
+        const idToken = await user.firebaseUser.getIdToken();
+        const uploadPromises = filesToUpload.map((file, idx) => {
+            return uploadFileWithProgress(file, (percent) => {
+                setUploadProgress(prev => ({ ...prev, [file.name]: percent }));
+            }, idToken).then(data => {
+                if (data.files && data.files.length > 0) {
+                    uploadedAttachmentData.push({ url: data.files[0].url, fileName: data.files[0].originalFilename });
                 }
-            } catch (error) {
-                console.error('Attachment upload error:', error);
-                showFlashMessage(`Network error during upload for ${file.name}.`, 'error');
+            }).catch(err => {
+                showFlashMessage(`Failed to upload ${file.name}: ${err || 'Server error'}`, 'error');
                 anyUploadFailed = true;
-            }
-            return null;
+            });
         });
-
-        const results = await Promise.all(uploadPromises);
-        results.forEach(attachmentObject => {
-            if (attachmentObject) {
-                uploadedAttachmentData.push(attachmentObject);
-            }
+        await Promise.all(uploadPromises);
+        setUploadingFiles(prev => prev.filter(f => !filesToUpload.some(file => file.name === f.file.name)));
+        setUploadProgress(prev => {
+            const newProgress = { ...prev };
+            filesToUpload.forEach(file => { delete newProgress[file.name]; });
+            return newProgress;
         });
-
         if (uploadedAttachmentData.length > 0) {
             try {
-                const idToken = await user.firebaseUser.getIdToken();
-                const response = await fetch(`${API_BASE_URL}/ticket/${ticketId}`, {
+                const response = await fetch(`${API_BASE_URL}/tickets/${ticketId}`, {
                     method: 'PATCH',
                     headers: {
                         'Content-Type': 'application/json',
@@ -931,14 +942,11 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                 if (response.ok) {
                     setAttachmentFiles([]);
                     showFlashMessage('Attachments added successfully!', 'success');
-                    console.log('Attachments updated successfully:', uploadedAttachmentData);
-
                     if (!anyUploadFailed) {
                         setUploadButtonState('success');
                     } else {
                         setUploadButtonState('error');
                     }
-
                     setTimeout(() => {
                         setUploadButtonState('upload');
                     }, 1500);
@@ -951,7 +959,6 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                     }, 2000);
                 }
             } catch (error) {
-                console.error('Update ticket with attachments error:', error);
                 setUploadButtonState('error');
                 showFlashMessage('Network error during updating ticket with attachments.', 'error');
                 setTimeout(() => {
@@ -967,6 +974,10 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                 setUploadButtonState('upload');
             }, 2000);
         }
+    };
+
+    const handleRemoveFile = (fileToRemove) => {
+        setAttachmentFiles(prevFiles => prevFiles.filter(file => file !== fileToRemove));
     };
 
     const getStatusClasses = (status) => {
@@ -1023,50 +1034,26 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                 {/* Header */}
                 <div className="max-w-full w-full mx-auto px-0 sm:px-0 md:px-0 min-w-0">
                     <div className="bg-white rounded-lg py-2 pl-0 pr-6 sm:pl-0 sm:pr-4 flex items-center w-full min-w-0 justify-between">
-                        <div className="flex items-center h-full pl-0 min-w-0">
-                    {/* Fixed left section with back button and ticket info */}
-                    <div className="flex items-center space-x-2 flex-shrink-0 mr-4">
-                        <button
-                            onClick={() => navigateTo(isSupportUser ? 'allTickets' : 'myTickets')}
-                            className="flex items-center justify-center w-8 h-8 bg-red-400 hover:bg-red-500 text-white shadow-md transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-red-300 focus:ring-offset-2 scale-100 hover:scale-110 rounded-none"
-                            title="Back"
-                        >
-                            <ArrowLeft className="w-4 h-4 text-white" />
-                        </button>
-                                <div className="flex flex-col min-w-0">
-                                    <h1 className="text-lg font-semibold text-gray-900 whitespace-nowrap truncate">{ticket.display_id}</h1>
-                        </div>
-                    </div>
-                            {/* Subject (Short Description) */}
-                            <div className="flex-1 min-w-0 ml-6 flex flex-col items-start">
-                                <div className="flex items-start w-full">
-                                    <span className="text-sm font-bold text-gray-500 mr-1 pt-0.5 shrink-0">Subject Line:</span>
-                                    <div
-                                        className={`relative group flex-1`}
-                                        style={{ maxWidth: 880 }}
-                                    >
-                                        <span
-                                            ref={subjectRef}
-                                            className={"text-sm text-black transition-all duration-200 whitespace-pre-line break-words"}
-                                            style={{
-                                                maxWidth: 880,
-                                                display: 'inline-block',
-                                                verticalAlign: 'bottom',
-                                                wordBreak: 'break-word'
-                                            }}
-                                        >
-                                            {ticket.short_description || 'No subject provided.'}
-                                        </span>
-                                        {/* Tooltip on hover if truncated */}
-                                        {isSubjectTruncated && (
-                                            <div className="absolute left-0 top-full z-10 hidden group-hover:block bg-gray-900 text-white text-xs rounded px-2 py-1 mt-1 shadow-lg max-w-xs whitespace-pre-wrap">
-                                                {ticket.short_description}
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
+                        <div className="flex items-center w-full min-w-0">
+                            {/* Back button and ticket ID */}
+                            <div className="flex items-center space-x-2 flex-shrink-0 mr-4">
+                                <button
+                                    onClick={() => navigateTo(isSupportUser ? 'allTickets' : 'myTickets')}
+                                    className="flex items-center justify-center w-8 h-8 bg-red-400 hover:bg-red-500 text-white shadow-md transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-red-300 focus:ring-offset-2 scale-100 hover:scale-110 rounded-none"
+                                    title="Back"
+                                >
+                                    <ArrowLeft className="w-4 h-4 text-white" />
+                                </button>
+                                <h1 className="text-lg font-semibold text-gray-900 whitespace-nowrap truncate">{ticket.display_id}</h1>
                             </div>
-            </div>
+                            {/* Subject line */}
+                            <div className="flex items-center min-w-0">
+                                <span className="text-sm font-bold text-gray-500 mr-1 shrink-0">Subject Line:</span>
+                                <span className="text-sm text-black truncate" style={{ maxWidth: 600 }}>
+                                    {ticket.short_description || <span className="text-gray-400">N/A</span>}
+                                </span>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 {/* Timeline Section below header */}
@@ -1240,97 +1227,85 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
 
                     {/* Start of moved Attachments section */}
                     <div className="bg-white rounded-lg pt-1 pl-1 pr-6 pb-3">
-                        <div className="flex items-center mb-4">
-                            <h3 className="text-lg font-medium text-gray-900 flex items-center">
-                                <Paperclip className="w-5 h-5 mr-2" />
+                        <div className="flex items-center mb-4 justify-between">
+                            <h3 className="text-sm font-medium text-gray-900 flex items-center">
                                 Attachments
                             </h3>
                             {canAddAttachments && (
-                                <Button
-                                    component="label"
-                                    variant="contained"
-                                    color={uploadButtonState === 'error' ? 'error' : uploadButtonState === 'success' ? 'success' : 'primary'}
-                                    size="small"
-                                    disabled={uploadButtonState === 'uploading' || !canAddAttachments}
-                                    startIcon={uploadButtonState === 'uploading' ? <Loader2 className="animate-spin" size={16} /> : uploadButtonState === 'success' ? <CheckCircle size={16} /> : uploadButtonState === 'error' ? <XCircle size={16} /> : <UploadCloud className="w-4 h-4" />}
-                                    sx={{ ml: 2, textTransform: 'none', fontWeight: 600, minHeight: 28, fontSize: '0.85rem', px: 1.5, py: 0.25 }}
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const input = document.getElementById('attachment-upload-btn');
+                                        if (input) input.click();
+                                    }}
+                                    className="ml-2 p-1 rounded-full bg-gray-100 hover:bg-blue-100 text-blue-600 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-300"
+                                    title="Upload attachments"
                                 >
-                                    {uploadButtonState === 'uploading' && 'Uploading...'}
-                                    {uploadButtonState === 'success' && 'Uploaded!'}
-                                    {uploadButtonState === 'error' && 'Failed!'}
-                                    {uploadButtonState === 'upload' && 'Upload'}
-                                    <input
-                                        id="attachment-upload-btn"
-                                        type="file"
-                                        multiple
-                                        onChange={handleFileChange}
-                                        hidden
-                                        disabled={uploadButtonState === 'uploading' || !canAddAttachments}
-                                        value=""
-                                    />
-                                </Button>
+                                    <Paperclip className="w-5 h-5" />
+                                </button>
                             )}
+                            <input
+                                id="attachment-upload-btn"
+                                type="file"
+                                multiple
+                                onChange={handleFileChange}
+                                hidden
+                                disabled={uploadButtonState === 'uploading' || !canAddAttachments}
+                                value=""
+                            />
                         </div>
                         <div id="attachments-section" className="grid grid-cols-5 sm:grid-cols-6 md:grid-cols-7 lg:grid-cols-8 xl:grid-cols-9 gap-x-0 gap-y-1">
-                            {console.log('Current ticket attachments:', ticket.attachments)}
+                            {uploadingFiles.map((fileObj, idx) => (
+                                <div key={fileObj.file.name} className="relative w-10 h-20 flex flex-col items-center justify-start text-center group overflow-hidden">
+                                    {fileObj.isImage ? (
+                                        <img src={fileObj.previewUrl} alt={fileObj.file.name} className="w-10 h-10 object-cover rounded" />
+                                    ) : (
+                                        <FileIcon fileName={fileObj.file.name} className="w-10 h-10" />
+                                    )}
+                                    <div className="absolute top-0 left-0 w-10 h-10 flex items-center justify-center">
+                                        <CircularProgressbar
+                                            value={uploadProgress[fileObj.file.name] || 0}
+                                            text={`${uploadProgress[fileObj.file.name] || 0}%`}
+                                            styles={buildStyles({ pathColor: '#2563eb', textColor: '#2563eb', trailColor: '#e5e7eb', textSize: '20px' })}
+                                        />
+                                    </div>
+                                    <span className="text-[10px] mt-10 truncate w-full px-0.5">{fileObj.file.name}</span>
+                                </div>
+                            ))}
+                            {/* Existing attachments */}
                             {ticket.attachments && ticket.attachments.length > 0 ? (
-                                ticket.attachments.map((attachment, index) => (
-                                    <a
-                                        key={index}
-                                        href={attachment.url}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        download={attachment.fileName}
-                                        className="flex flex-col items-center justify-start transition-colors text-center group w-14 h-24 overflow-hidden relative"
-                                        title={attachment.fileName}
-                                    >
-                                        <div className="absolute inset-x-0 top-0 flex items-center justify-center h-14 w-14 opacity-100 group-hover:opacity-0 transition-opacity duration-200">
-                                            <FileIcon fileName={attachment.fileName} />
-                                        </div>
-
-                                        <div className="absolute inset-x-0 top-0 flex items-center justify-center h-14 w-14 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                                            <Download className="w-10 h-10 text-blue-600" />
-                                        </div>
-
-                                        <span className="text-xs text-gray-700 mt-14 font-medium leading-tight truncate w-full px-0.5">
-                                            {attachment.fileName}
-                                        </span>
-                                    </a>
-                                ))
+                                ticket.attachments.map((attachment, index) => {
+                                    const isImage = attachment.fileName && /\.(jpg|jpeg|png)$/i.test(attachment.fileName);
+                                    return (
+                                        <a
+                                            key={index}
+                                            href={attachment.url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            download={attachment.fileName}
+                                            className="flex flex-col items-center justify-start transition-colors text-center group w-10 h-20 overflow-hidden relative"
+                                            title={attachment.fileName}
+                                        >
+                                            <div className="absolute inset-x-0 top-0 flex items-center justify-center h-10 w-10 opacity-100 group-hover:opacity-0 transition-opacity duration-200">
+                                                {isImage ? (
+                                                    <img src={attachment.url} alt={attachment.fileName} className="w-10 h-10 object-cover rounded" />
+                                                ) : (
+                                                    <FileIcon fileName={attachment.fileName} className="w-10 h-10" />
+                                                )}
+                                            </div>
+                                            <div className="absolute inset-x-0 top-0 flex items-center justify-center h-10 w-10 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                                                <Download className="w-8 h-8 text-blue-600" />
+                                            </div>
+                                            <span className="text-[10px] text-gray-700 mt-10 font-medium leading-tight truncate w-full px-0.5">
+                                                {attachment.fileName}
+                                            </span>
+                                        </a>
+                                    );
+                                })
                             ) : (
-                                <p className="text-gray-500 text-sm col-span-full">No attachments yet.</p>
+                                <p className="text-gray-500 text-[11px] col-span-full">No attachments yet.</p>
                             )}
                         </div>
-
-                        {attachmentFiles.length > 0 && (
-                            <div className="mt-4 p-4 border border-gray-200 rounded-md bg-white">
-                                <p className="text-sm font-semibold mb-3">Files selected for upload:</p>
-                                <div className="grid grid-cols-5 sm:grid-cols-6 md:grid-cols-7 lg:grid-cols-8 xl:grid-cols-9 gap-x-0 gap-y-1 mb-4">
-                                    {attachmentFiles.map((file, index) => (
-                                        <div key={index} className="flex flex-col items-center justify-start text-center relative group w-14 h-24 overflow-hidden">
-                                            <div className="absolute inset-x-0 top-0 flex items-center justify-center h-14 w-14 opacity-100 group-hover:opacity-0 transition-opacity duration-200">
-                                                <FileIcon fileName={file.name} />
-                                            </div>
-                                            <div className="absolute inset-x-0 top-0 flex items-center justify-center h-14 w-14 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                                                <Download className="w-10 h-10 text-blue-600" />
-                                            </div>
-
-                                            <span className="text-xs text-gray-700 mt-14 font-medium leading-tight truncate w-full px-0.5">
-                                                {file.name}
-                                            </span>
-                                            <button
-                                                onClick={() => handleRemoveFile(file)}
-                                                className="absolute top-0 right-0 text-gray-400 hover:text-red-600 bg-white rounded-full p-0.5 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity z-10"
-                                                title={`Remove ${file.name}`}
-                                                aria-label={`Remove ${file.name}`}
-                                            >
-                                                <XCircle size={14} />
-                                            </button>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
                     </div>
                     {/* End of moved Attachments section */}
                 </div>

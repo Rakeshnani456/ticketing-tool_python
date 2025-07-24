@@ -2,7 +2,9 @@
 
 import React, { useState } from 'react';
 import { updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth'; // Import reauthenticateWithCredential and EmailAuthProvider
+import { doc, updateDoc } from 'firebase/firestore'; // Import Firestore helpers
 import { FilePenLine, Loader2, XCircle } from 'lucide-react'; // Icons
+import { dbClient } from '../config/firebase'; // Import dbClient
 
 // Import common UI components
 import FormInput from './common/FormInput';
@@ -17,7 +19,6 @@ import PrimaryButton from './common/PrimaryButton';
  * @returns {JSX.Element} The password change view.
  */
 const ChangePasswordComponent = ({ user, showFlashMessage, navigateTo }) => {
-    const [currentPassword, setCurrentPassword] = useState(''); // NEW: State for current password
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [passwordChangeLoading, setPasswordChangeLoading] = useState(false);
@@ -47,13 +48,15 @@ const ChangePasswordComponent = ({ user, showFlashMessage, navigateTo }) => {
         setPasswordChangeLoading(true);
         try {
             // Step 1: Re-authenticate the user with their current password
-            const credential = EmailAuthProvider.credential(user.firebaseUser.email, currentPassword);
+            const credential = EmailAuthProvider.credential(user.firebaseUser.email, newPassword); // Use newPassword for re-authentication
             await reauthenticateWithCredential(user.firebaseUser, credential);
 
             // Step 2: If re-authentication is successful, proceed with password update
             await updatePassword(user.firebaseUser, newPassword);
+            // Update mustChangePassword in Firestore
+            const userDocRef = doc(dbClient, 'users', user.firebaseUser.uid);
+            await updateDoc(userDocRef, { mustChangePassword: false });
             showFlashMessage('Password updated successfully!', 'success');
-            setCurrentPassword(''); // Clear current password field
             setNewPassword('');
             setConfirmPassword('');
             navigateTo('profile'); // Navigate back to profile after successful change
@@ -80,21 +83,12 @@ const ChangePasswordComponent = ({ user, showFlashMessage, navigateTo }) => {
         return <div className="text-center text-red-600 mt-8 text-base flex items-center justify-center space-x-2"><XCircle size={20} /> <span>You must be logged in to change your password.</span></div>;
     }
 
+    // Only show new password and confirm password fields, and a single change button
     return (
         <div className="p-4 bg-offwhite flex-1 overflow-auto">
-            <h2 className="text-xl font-extrabold text-gray-800 mb-4 text-center">Change Password</h2>
-            <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-xl mx-auto border border-gray-200">
+            <h2 className="text-xl font-extrabold text-gray-800 mb-4 text-center">Set New Password</h2>
+            <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-md mx-auto border border-gray-200">
                 <form onSubmit={handleChangePassword} className="space-y-3">
-                    {/* NEW: Current Password Input */}
-                    <FormInput
-                        id="currentPassword"
-                        label="Current Password"
-                        type="password"
-                        value={currentPassword}
-                        onChange={(e) => setCurrentPassword(e.target.value)}
-                        required
-                        showPasswordToggle={true}
-                    />
                     <FormInput
                         id="newPassword"
                         label="New Password"
@@ -106,7 +100,7 @@ const ChangePasswordComponent = ({ user, showFlashMessage, navigateTo }) => {
                     />
                     <FormInput
                         id="confirmPassword"
-                        label="Confirm New Password"
+                        label="Re-enter New Password"
                         type="password"
                         value={confirmPassword}
                         onChange={(e) => setConfirmPassword(e.target.value)}
@@ -115,11 +109,8 @@ const ChangePasswordComponent = ({ user, showFlashMessage, navigateTo }) => {
                         error={!!passwordError}
                     />
                     {passwordError && <p className="text-red-500 text-xs mt-1">{passwordError}</p>}
-                    <PrimaryButton type="submit" loading={passwordChangeLoading ? "Updating..." : null} Icon={FilePenLine} className="bg-orange-600 hover:bg-orange-700 focus:ring-orange-300">
-                        Update Password
-                    </PrimaryButton>
-                    <PrimaryButton onClick={() => navigateTo('profile')} className="bg-gray-500 hover:bg-gray-600 focus:ring-gray-300 ml-2">
-                        Cancel
+                    <PrimaryButton type="submit" loading={passwordChangeLoading ? "Changing..." : null} Icon={FilePenLine} className="bg-orange-600 hover:bg-orange-700 focus:ring-orange-300 w-full">
+                        {passwordChangeLoading ? "Changing..." : "Change Password"}
                     </PrimaryButton>
                 </form>
             </div>

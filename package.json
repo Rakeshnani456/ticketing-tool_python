@@ -11,6 +11,8 @@
     "antd": "^5.26.6",
     "downshift": "^9.0.10",
     "framer-motion": "^12.23.7",
+    "pdfjs-dist": "^5.3.93",
+    "react-circular-progressbar": "^2.2.0",
     "reselect": "^4.1.8",
     "styled-components": "^6.1.19"
   }

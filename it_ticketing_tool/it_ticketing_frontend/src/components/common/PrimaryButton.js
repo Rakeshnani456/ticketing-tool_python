@@ -20,7 +20,7 @@ const PrimaryButton = ({ children, onClick, loading, Icon, type = 'button', disa
     <button
         type={type}
         onClick={onClick}
-        className={`w-full bg-blue-600 text-white py-2 px-3 rounded-md font-bold text-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-300 transition duration-300 flex items-center justify-center space-x-2 disabled:opacity-60 disabled:cursor-not-allowed shadow-md hover:shadow-lg transform hover:scale-[1.01] ${className}`}
+        className={`bg-blue-600 text-white py-2 px-3 rounded-md font-bold text-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-300 transition duration-300 flex items-center justify-center space-x-2 disabled:opacity-60 disabled:cursor-not-allowed shadow-md hover:shadow-lg transform hover:scale-[1.01] ${className}`}
         disabled={loading || disabled} // Disable if loading or explicitly disabled
     >
         {loading ? (

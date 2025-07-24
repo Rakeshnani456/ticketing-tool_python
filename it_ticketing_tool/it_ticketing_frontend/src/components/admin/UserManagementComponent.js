@@ -3,10 +3,9 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import {
     Button, Chip, TextField, Box, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
-    IconButton, Snackbar, Alert, Typography, Popover,
-    Collapse // Import Collapse component
+    IconButton, Snackbar, Alert, Typography, Popover, Collapse, Dialog, DialogTitle, DialogContent, DialogActions, MenuItem, Select, useMediaQuery, Card, CardContent, CardActions, Grid
 } from '@mui/material';
-import { Edit as EditIcon, Delete as DeleteIcon, Add as AddIcon, Clear as ClearIcon, VpnKey as VpnKeyIcon } from '@mui/icons-material';
+import { Edit as EditIcon, Delete as DeleteIcon, Add as AddIcon, Clear as ClearIcon, VpnKey as VpnKeyIcon, LockReset as LockResetIcon, Save as SaveIcon } from '@mui/icons-material';
 import SearchIcon from '@mui/icons-material/Search';
 import { API_BASE_URL } from '../../config/constants';
 import './UserManagementComponent.css';
@@ -15,6 +14,8 @@ import { getFirestore, collection, onSnapshot } from 'firebase/firestore';
 import { app } from '../../config/firebase';
 import Autocomplete from '@mui/material/Autocomplete';
 import InputAdornment from '@mui/material/InputAdornment';
+import { useTheme } from '@mui/material/styles';
+import * as XLSX from 'xlsx';
 
 // Helper for deep comparison (simple for this case, but can be replaced with a library like lodash.isequal)
 const areUsersEqual = (arr1, arr2) => {
@@ -28,24 +29,63 @@ const areUsersEqual = (arr1, arr2) => {
             user1.name !== user2.name ||
             user1.email !== user2.email ||
             user1.asset_id !== user2.asset_id ||
-            user1.domain !== user2.domain) {
+            user1.domain !== user2.domain ||
+            user1.firstName !== user2.firstName || // Added new fields
+            user1.lastName !== user2.lastName ||
+            user1.contactNumber !== user2.contactNumber ||
+            user1.managerEmail !== user2.managerEmail ||
+            user1.employmentType !== user2.employmentType ||
+            user1.designation !== user2.designation) {
             return false;
         }
     }
     return true;
 };
 
-// 1. Update initialUserState to include domain and emailPrefix
+// 1. Update initialUserState to include all fields for clarity and completeness
 const initialUserState = {
-  clientname: '', // Added clientname to initial state for the Autocomplete
-  name: '',
-  domain: '',
-  emailPrefix: '',
+  companyName: '',
+  firstName: '',
+  lastName: '',
+  email: '', // This will be composed from emailPrefix and domain
   password: '',
+  contactNumber: '',
+  managerEmail: '',
+  employmentType: '',
+  designation: '',
+  // Fields for the add form that aren't directly part of initialUserState for existing users
+  emailPrefix: '',
+  domain: '',
   asset_id: '',
-  role: 'user',
-  joined_date: '',
+  clientname: '', // For the add form client selection
 };
+
+const EMPLOYMENT_TYPES = [
+  { value: 'contract', label: 'Contract' },
+  { value: 'permanent', label: 'Permanent' },
+  { value: 'intern', label: 'Intern' },
+  { value: 'freelance', label: 'Freelance' },
+];
+
+function generatePassword(length = 10) {
+  const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*';
+  let password = '';
+  for (let i = 0; i < length; i++) {
+    password += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return password;
+}
+
+const USER_TEMPLATE_HEADERS = [
+  'companyName',
+  'firstName',
+  'lastName',
+  'email',
+  'contactNumber',
+  'managerEmail',
+  'employmentType',
+  'designation',
+];
 
 const UserManagementComponent = ({ user, showFlashMessage }) => {
     const [users, setUsers] = useState([]);
@@ -56,17 +96,36 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
     const [addMode, setAddMode] = useState(false);
     const [addRowData, setAddRowData] = useState(initialUserState);
     const [editRowId, setEditRowId] = useState(null);
-    // Update editRowData to include all editable fields
-    const [editRowData, setEditRowData] = useState({ clientname: '', name: '', domain: '', emailPrefix: '', password: '', asset_id: '', showPasswordField: false });
+    // Update editRowData to include all editable fields from initialUserState
+    const [editRowData, setEditRowData] = useState({ ...initialUserState, showPasswordField: false });
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
     const navigate = useNavigate();
     const db = getFirestore(app);
+    const [addUserModalOpen, setAddUserModalOpen] = useState(false);
+    const [addUserData, setAddUserData] = useState(initialUserState); // Used for the new modal
+    const theme = useTheme();
+    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+    const isXs = useMediaQuery(theme.breakpoints.only('xs'));
+    const isSm = useMediaQuery(theme.breakpoints.only('sm'));
 
     // State for the custom confirmation Popover
     const [openConfirmPopover, setOpenConfirmPopover] = useState(false);
     const [currentUserEmailToDelete, setCurrentUserEmailToDelete] = useState('');
     const userToDeleteUidRef = useRef(null);
     const anchorEl = useRef(null);
+
+    // State for Change Password Modal
+    const [changePwdModalOpen, setChangePwdModalOpen] = useState(false);
+    const [pwdUserId, setPwdUserId] = useState(null);
+    const [newPassword, setNewPassword] = useState('');
+
+    // Import Excel modal state
+    const [importModalOpen, setImportModalOpen] = useState(false);
+    const [importedUsers, setImportedUsers] = useState([]);
+    const [importError, setImportError] = useState('');
+    const [importResults, setImportResults] = useState(null); // <-- new state
+    const [importedPasswords, setImportedPasswords] = useState([]); // <-- new state for passwords
+    const fileInputRef = useRef();
 
     // Fetch clients
     const fetchClients = useCallback(async () => {
@@ -100,6 +159,13 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                     asset_id: u.asset_id || u.assetid || '',
                     domain: clientMatch ? clientMatch.Domain : (u.domain || ''),
                     clientname: clientMatch ? clientMatch['Client name'] : (u.client_name || 'Unknown Client'),
+                    companyName: u.client_name || u.companyName || 'Unknown Company', // Ensure companyName is set
+                    firstName: u.firstName || '',
+                    lastName: u.lastName || '',
+                    contactNumber: u.contactNumber || '',
+                    managerEmail: u.managerEmail || '',
+                    employmentType: u.employmentType || '',
+                    designation: u.designation || '',
                 };
             });
 
@@ -199,22 +265,18 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
         setAddRowData(initialUserState);
     };
 
-    const handleEditClick = (userToEdit) => {
-        // Split email into prefix and domain
-        let emailPrefix = '';
-        let domain = '';
-        if (userToEdit.email && userToEdit.email.includes('@')) {
-            [emailPrefix, domain] = userToEdit.email.split('@');
-        }
-        setEditRowId(userToEdit.uid);
+    const handleEditClick = (user) => {
+        // Populate editRowData with ALL fields from the selected user
+        setEditRowId(user.uid);
         setEditRowData({
-            clientname: userToEdit.clientname || '',
-            name: userToEdit.name || '',
-            domain: domain || userToEdit.domain || '',
-            emailPrefix: emailPrefix || '',
-            password: '',
-            asset_id: userToEdit.asset_id || userToEdit.assetid || '',
+            ...user, // Spread all existing user data
             showPasswordField: false,
+            password: '', // Clear password field for security
+            // Ensure emailPrefix and domain are correctly derived for display if needed in edit,
+            // though for existing users we typically don't edit email prefix/domain directly.
+            // If email is directly editable, this logic would need to change.
+            emailPrefix: user.email ? user.email.split('@')[0] : '',
+            domain: user.email ? user.email.split('@')[1] : (user.domain || ''),
         });
     };
 
@@ -229,16 +291,31 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
 
     const handleEditSave = async (uid) => {
         try {
-            const currentUser = users.find(u => u.uid === uid);
-            const updatePayload = {};
-            if (editRowData.name && editRowData.name !== currentUser.name) updatePayload.name = editRowData.name;
-            if (editRowData.asset_id && editRowData.asset_id !== currentUser.asset_id) updatePayload.asset_id = editRowData.asset_id;
-            if (editRowData.showPasswordField && editRowData.password) updatePayload.password = editRowData.password;
-            // Optionally allow updating joined_date or role if needed
-            if (Object.keys(updatePayload).length === 0) {
-                setSnackbar({ open: true, message: 'No changes to update.', severity: 'info' });
-                return;
+            // Always send all editable fields (except password, which is only sent if changed)
+            const updatePayload = {
+                firstName: editRowData.firstName,
+                lastName: editRowData.lastName,
+                contactNumber: editRowData.contactNumber,
+                managerEmail: editRowData.managerEmail,
+                employmentType: editRowData.employmentType,
+                designation: editRowData.designation,
+                companyName: editRowData.companyName,
+                client_name: editRowData.companyName, // For backend compatibility
+                name: editRowData.name,
+                asset_id: editRowData.asset_id,
+            };
+            // Password handling (only if changed and showPasswordField is true)
+            if (editRowData.showPasswordField && editRowData.password) {
+                updatePayload.password = editRowData.password;
             }
+
+            // Remove undefined fields (in case any are missing)
+            Object.keys(updatePayload).forEach(key => {
+                if (updatePayload[key] === undefined) {
+                    delete updatePayload[key];
+                }
+            });
+
             const res = await fetch(`${API_BASE_URL}/api/users/${uid}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
@@ -249,7 +326,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                 throw new Error(errData.error || 'Failed to update user');
             }
             setEditRowId(null);
-            setEditRowData({ clientname: '', name: '', domain: '', emailPrefix: '', password: '', asset_id: '', showPasswordField: false });
+            setEditRowData({ ...initialUserState, showPasswordField: false }); // Reset edit state
             setSnackbar({ open: true, message: 'User updated successfully.', severity: 'success' });
         } catch (err) {
             setSnackbar({ open: true, message: err.message, severity: 'error' });
@@ -258,7 +335,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
 
     const handleEditCancel = () => {
         setEditRowId(null);
-        setEditRowData({ clientname: '', name: '', domain: '', emailPrefix: '', password: '', asset_id: '', showPasswordField: false });
+        setEditRowData({ ...initialUserState, showPasswordField: false });
     };
 
     const handleDeleteClick = (event, uid, email) => {
@@ -309,13 +386,16 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
             u.role === 'user' &&
             (u.email.toLowerCase().includes(search.toLowerCase()) ||
              u.clientname.toLowerCase().includes(search.toLowerCase()) ||
-             (u.asset_id && u.asset_id.toLowerCase().includes(search.toLowerCase())))
+             (u.asset_id && u.asset_id.toLowerCase().includes(search.toLowerCase())) ||
+             (u.firstName && u.firstName.toLowerCase().includes(search.toLowerCase())) || // Added for search
+             (u.lastName && u.lastName.toLowerCase().includes(search.toLowerCase()))
+            )
         );
     }, [users, search]);
 
     const groupedUsers = useMemo(() => {
         return filteredUsers.reduce((acc, user) => {
-            const client = user.clientname || 'Unknown Client';
+            const client = user.companyName || user.clientname || 'Unknown Client'; // Prioritize companyName
             if (!acc[client]) acc[client] = [];
             acc[client].push(user);
             return acc;
@@ -324,51 +404,277 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
 
     const clientOrder = useMemo(() => Object.keys(groupedUsers).sort(), [groupedUsers]);
 
+    const openAddUserModal = () => {
+      setAddUserData({ ...initialUserState, password: generatePassword() });
+      setAddUserModalOpen(true);
+    };
+    const closeAddUserModal = () => {
+      setAddUserModalOpen(false);
+      setAddUserData(initialUserState);
+    };
+    const handleAddUserChange = (e) => {
+      const { name, value } = e.target;
+      setAddUserData(prev => ({ ...prev, [name]: value }));
+    };
+    const handleAddUserSave = async (e) => {
+      e.preventDefault();
+      // Validation (basic)
+      if (!addUserData.companyName || !addUserData.firstName || !addUserData.lastName || !addUserData.email || !addUserData.contactNumber || !addUserData.managerEmail || !addUserData.employmentType || !addUserData.designation) {
+        setSnackbar({ open: true, message: 'All fields are required.', severity: 'error' });
+        return;
+      }
+      try {
+        const payload = {
+          companyName: addUserData.companyName,
+          firstName: addUserData.firstName,
+          lastName: addUserData.lastName,
+          email: addUserData.email,
+          password: addUserData.password,
+          contactNumber: addUserData.contactNumber,
+          managerEmail: addUserData.managerEmail,
+          employmentType: addUserData.employmentType,
+          designation: addUserData.designation,
+          role: 'user',
+          // Assuming client_name is derived from companyName for the backend
+          client_name: addUserData.companyName,
+        };
+        const res = await fetch(`${API_BASE_URL}/api/users`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) {
+          const errData = await res.json();
+          throw new Error(errData.error || 'Failed to create user');
+        }
+        setAddUserModalOpen(false);
+        setSnackbar({ open: true, message: 'User created successfully.', severity: 'success' });
+      } catch (err) {
+        setSnackbar({ open: true, message: err.message, severity: 'error' });
+      }
+    };
+
+    const openChangePwdModal = (uid) => {
+      setPwdUserId(uid);
+      setNewPassword('');
+      setChangePwdModalOpen(true);
+    };
+    const closeChangePwdModal = () => {
+      setChangePwdModalOpen(false);
+      setPwdUserId(null);
+      setNewPassword('');
+    };
+    const handleChangePassword = async (e) => {
+      e.preventDefault();
+      if (!newPassword || newPassword.length < 6) {
+        setSnackbar({ open: true, message: 'Password must be at least 6 characters.', severity: 'error' });
+        return;
+      }
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/users/${pwdUserId}/password`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: newPassword }),
+        });
+        if (!res.ok) {
+          const errData = await res.json();
+          throw new Error(errData.error || 'Failed to change password');
+        }
+        setSnackbar({ open: true, message: 'Password updated successfully.', severity: 'success' });
+        closeChangePwdModal();
+      } catch (err) {
+        setSnackbar({ open: true, message: err.message, severity: 'error' });
+      }
+    };
+
+    // Helper to check if there are unsaved changes in editable fields
+    const hasUnsavedChanges = (editRowData, originalUser) => {
+        return (
+            editRowData.managerEmail !== (originalUser.managerEmail || '') ||
+            editRowData.employmentType !== (originalUser.employmentType || '') ||
+            editRowData.contactNumber !== (originalUser.contactNumber || '') ||
+            editRowData.designation !== (originalUser.designation || '')
+        );
+    };
+
+    // Define column widths for tableLayout: 'fixed' to prevent shifts
+    const FIXED_COLUMN_WIDTHS = {
+        companyName: '15%',
+        firstName: '10%',
+        lastName: '10%',
+        email: '20%',
+        contactNumber: '10%',
+        managerEmail: '15%',
+        employmentType: '10%',
+        designation: '10%',
+        actions: '10%', // Adjust as needed
+    };
+
+    // Excel template download
+    const handleDownloadTemplate = () => {
+      const ws = XLSX.utils.aoa_to_sheet([
+        USER_TEMPLATE_HEADERS,
+        // Optionally, add a sample row:
+        ['Acme Corp', 'John', 'Doe', 'john.doe@acme.com', '1234567890', 'manager@acme.com', 'permanent', 'Engineer']
+      ]);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'UsersTemplate');
+      XLSX.writeFile(wb, 'user_import_template.xlsx');
+    };
+
+    // Handle file upload and parse
+    const handleImportFile = (e) => {
+      setImportError('');
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        try {
+          const data = new Uint8Array(evt.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const sheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[sheetName];
+          const json = XLSX.utils.sheet_to_json(worksheet, { header: USER_TEMPLATE_HEADERS, defval: '' });
+          // Remove header row if present
+          const users = json.filter(row => row.email && row.email !== 'email');
+          // Validate columns
+          const missingCols = USER_TEMPLATE_HEADERS.filter(h => !Object.keys(users[0] || {}).includes(h));
+          if (missingCols.length > 0) {
+            setImportError('Missing columns: ' + missingCols.join(', '));
+            setImportedUsers([]);
+            setImportedPasswords([]);
+            return;
+          }
+          // Auto-generate password for each user
+          const usersWithPasswords = users.map(row => ({ ...row, password: generatePassword() }));
+          setImportedUsers(usersWithPasswords);
+          setImportedPasswords(usersWithPasswords.map(u => ({ email: u.email, password: u.password })));
+        } catch (err) {
+          setImportError('Failed to parse file. Please use the provided template.');
+          setImportedUsers([]);
+          setImportedPasswords([]);
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    };
+
+    const openImportModal = () => {
+      setImportModalOpen(true);
+      setImportedUsers([]);
+      setImportError('');
+    };
+    const closeImportModal = () => {
+      setImportModalOpen(false);
+      setImportedUsers([]);
+      setImportError('');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    };
+    // Confirm import: send to backend
+    const handleConfirmImport = async () => {
+      setImportError('');
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/users/bulk`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ users: importedUsers }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setImportError(data.error || 'Bulk import failed.');
+          setImportResults(null);
+        } else {
+          setImportResults(data.results);
+          // Only keep passwords for successfully imported users
+          setImportedPasswords(importedPasswords.filter(pw => data.results.some(r => r.email === pw.email && r.success)));
+          setImportedUsers([]);
+        }
+      } catch (err) {
+        setImportError('Bulk import failed.');
+        setImportResults(null);
+      }
+    };
+
+    // Download passwords as Excel
+    const handleDownloadPasswords = () => {
+      if (!importedPasswords.length) return;
+      const ws = XLSX.utils.json_to_sheet(importedPasswords);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Passwords');
+      XLSX.writeFile(wb, 'imported_user_passwords.xlsx');
+    };
+
     return (
         // Removed 'container', 'mx-auto', and all 'p-*' classes to eliminate external gaps
         // Added 'w-full' to ensure it takes full width
         <div className="w-full bg-white shadow-sm rounded-lg animate-fade-in">
             <h2 className="user-mgmt-title compact-ui" style={{ marginBottom: 0, padding: '16px 24px 0' }}>User Management</h2> {/* Added padding here */}
-            <Box display="flex" alignItems="center" gap={1} mb={0} className="compact-ui" justifyContent="flex-end" sx={{ padding: '0 24px 16px' }}> {/* Added padding here */}
-                {!addMode && (
-                    <TextField
-                        className="compact-ui"
-                        value={search}
-                        onChange={e => setSearch(e.target.value)}
-                        placeholder="Search by email, client, or asset ID..."
-                        size="small"
-                        sx={{ minWidth: 220, height: 32, mt: '-4px', '.MuiInputBase-root': { height: 32 }, '.MuiInputBase-input': { height: 20, padding: '0 8px', display: 'flex', alignItems: 'center' } }}
-                        InputProps={{
-                            endAdornment: (
-                                <>
-                                    <IconButton size="small" onClick={() => {/* Optionally trigger search logic here */}} sx={{ fontSize: 16, p: 0.25 }}>
-                                        <SearchIcon fontSize="inherit" />
-                                    </IconButton>
-                                    {search ? (
-                                        <IconButton size="small" onClick={() => setSearch('')} sx={{ fontSize: 16, p: 0.25 }}>
-                                            <ClearIcon fontSize="inherit" />
-                                        </IconButton>
-                                    ) : null}
-                                </>
-                            ),
-                            style: { height: 32, display: 'flex', alignItems: 'center' },
-                            inputProps: { style: { height: 20, padding: '0 8px', display: 'flex', alignItems: 'center' } }
-                        }}
-                    />
-                )}
-                <Box sx={{ width: 110, display: 'flex', justifyContent: 'flex-end' }}>
-                    {!addMode ? (
-                        <Button
+            <Box
+                sx={{
+                    display: 'flex',
+                    flexDirection: { xs: 'column', sm: 'row' },
+                    alignItems: { xs: 'stretch', sm: 'center' },
+                    justifyContent: 'space-between',
+                    gap: 2,
+                    px: 3,
+                    py: 2,
+                    mb: 1,
+                }}
+            >
+                {/* Search Bar */}
+                <Box sx={{ flex: 1, mb: { xs: 1, sm: 0 }, maxWidth: { xs: '100%', sm: 350 } }}>
+                    {!addMode && (
+                        <TextField
                             className="compact-ui"
-                            variant="contained"
-                            color="primary"
-                            startIcon={<AddIcon sx={{ fontSize: 14 }} />}
-                            onClick={handleAdd}
+                            value={search}
+                            onChange={e => setSearch(e.target.value)}
+                            placeholder="Search by email, client, or asset ID..."
                             size="small"
-                            sx={{ fontSize: '0.6rem', minHeight: 20, height: 20, px: 1, py: 0, borderRadius: 1, lineHeight: 1, width: '100%' }}
-                        >
-                            Add User
-                        </Button>
+                            sx={{ width: '100%', minWidth: 220, height: 32, '.MuiInputBase-root': { height: 32 }, '.MuiInputBase-input': { height: 20, padding: '0 8px', display: 'flex', alignItems: 'center' } }}
+                            InputProps={{
+                                endAdornment: (
+                                    <>
+                                        <IconButton size="small" onClick={() => {/* Optionally trigger search logic here */}} sx={{ fontSize: 16, p: 0.25 }}>
+                                            <SearchIcon fontSize="inherit" />
+                                        </IconButton>
+                                        {search ? (
+                                            <IconButton size="small" onClick={() => setSearch('')} sx={{ fontSize: 16, p: 0.25 }}>
+                                                <ClearIcon fontSize="inherit" />
+                                            </IconButton>
+                                        ) : null}
+                                    </>
+                                ),
+                                style: { height: 32, display: 'flex', alignItems: 'center' },
+                                inputProps: { style: { height: 20, padding: '0 8px', display: 'flex', alignItems: 'center' } }
+                            }}
+                        />
+                    )}
+                </Box>
+                {/* Buttons */}
+                <Box sx={{ display: 'flex', flexDirection: 'row', gap: 1, minWidth: { xs: '100%', sm: 'auto' } }}>
+                    {!addMode ? (
+                        <>
+                            <Button
+                                className="compact-ui"
+                                variant="contained"
+                                color="primary"
+                                startIcon={<AddIcon sx={{ fontSize: 14 }} />}
+                                onClick={openAddUserModal}
+                                size="small"
+                                sx={{ fontSize: '0.6rem', minHeight: 26, height: 26, px: 1.2, borderRadius: 1, lineHeight: 1, minWidth: 80 }}
+                            >
+                                Add User
+                            </Button>
+                            <Button
+                                className="compact-ui"
+                                variant="outlined"
+                                color="primary"
+                                onClick={openImportModal}
+                                size="small"
+                                sx={{ fontSize: '0.6rem', minHeight: 26, height: 26, px: 1.2, borderRadius: 1, lineHeight: 1, minWidth: 80 }}
+                            >
+                                Import
+                            </Button>
+                        </>
                     ) : (
                         <>
                             <Button
@@ -376,37 +682,18 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                                 onClick={handleAddCancel}
                                 color="inherit"
                                 size="small"
-                                sx={{
-                                    height: 24,
-                                    minWidth: 32,
-                                    px: 0.5,
-                                    py: 0,
-                                    fontSize: '0.6rem',
-                                    lineHeight: 1,
-                                    boxShadow: 'none',
-                                    flexShrink: 0,
-                                    // Removed ml: 'auto' as it's now alongside SAVE
-                                }}
+                                sx={{ height: 26, minWidth: 48, px: 0.8, fontSize: '0.6rem', lineHeight: 1, boxShadow: 'none', flexShrink: 0 }}
                             >
                                 CANCEL
                             </Button>
                             <Button
                                 className="compact-ui"
-                                type="submit" // Keep type submit if form is wrapped around it
+                                type="submit"
                                 variant="contained"
                                 color="primary"
                                 size="small"
-                                onClick={handleAddSave} // Manually trigger save
-                                sx={{
-                                    height: 24,
-                                    minWidth: 32,
-                                    px: 0.5,
-                                    py: 0,
-                                    fontSize: '0.6rem',
-                                    lineHeight: 1,
-                                    boxShadow: 2,
-                                    flexShrink: 0
-                                }}
+                                onClick={handleAddSave}
+                                sx={{ height: 26, minWidth: 48, px: 0.8, fontSize: '0.6rem', lineHeight: 1, boxShadow: 2, flexShrink: 0 }}
                             >
                                 SAVE
                             </Button>
@@ -519,182 +806,472 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                 </Box>
             </Collapse> {/* End Collapse component */}
 
-            {clientOrder.length === 0 && !loading && !error && (
-                <Typography variant="body1" color="textSecondary" sx={{ mt: 2, px: 3 }}> {/* Added horizontal padding here */}
-                    No user profiles found.
-                </Typography>
-            )}
-            {clientOrder.map((client) => (
-                <Box key={client} mb={3} sx={{ px: 3 }}> {/* Added horizontal padding here */}
-                    <Typography variant="subtitle2" sx={{ color: '#174ea6', fontStyle: 'italic', fontWeight: 300, fontSize: '0.9rem', letterSpacing: 0.5, mb: 0.5 }}>
-                        {client} ({groupedUsers[client].length} user{groupedUsers[client].length !== 1 ? 's' : ''})
-                    </Typography>
-                    <TableContainer component={Paper} sx={{ border: '1px solid #e0e0e0', borderRadius: 2, boxShadow: 'none', marginTop: 0 }}>
-                        <Table
-                            size="small"
-                            sx={{
-                                // Changed to border-collapse: collapse for better border alignment
-                                borderCollapse: 'collapse',
-                                '& .MuiTableCell-root': {
-                                    fontSize: '0.68rem',
-                                    padding: '6px 8px', // Slightly increased padding for better readability
-                                    border: '1px solid #e0e0e0', // Apply border to all cells
-                                    // Remove individual borderRight, borderBottom to rely on collapse
-                                    height: 'auto', // Let height be determined by content and padding
-                                    verticalAlign: 'middle', // Align content vertically in the middle
-                                },
-                                '& .MuiTableRow-root': {
-                                    height: 'auto', // Let row height adjust
-                                },
-                            }}
-                        >
-                            <TableHead>
-                                <TableRow sx={{ backgroundColor: '#f5f5f5' }}>
-                                    <TableCell sx={{ width: 36, minWidth: 36, maxWidth: 36, textAlign: 'center' }}>#</TableCell>
-                                    <TableCell sx={{ width: 140, minWidth: 100, maxWidth: 180 }}>Client Name</TableCell>
-                                    <TableCell sx={{ width: 140, minWidth: 100, maxWidth: 180 }}>User Name</TableCell>
-                                    <TableCell sx={{ width: 180, minWidth: 140, maxWidth: 220 }}>Email</TableCell>
-                                    <TableCell sx={{ width: 100, minWidth: 80, maxWidth: 140 }}>Password</TableCell>
-                                    <TableCell sx={{ width: 100, minWidth: 80, maxWidth: 140 }}>Asset ID</TableCell>
-                                    <TableCell align="right" sx={{ width: 90, minWidth: 70, maxWidth: 120 }}>Actions</TableCell>
-                                </TableRow>
-                            </TableHead>
-                            <TableBody>
-                                {groupedUsers[client].sort((a, b) => a.email.localeCompare(b.email)).map((u, i) => (
-                                    <TableRow key={u.uid}>
-                                        <TableCell sx={{ textAlign: 'center', fontWeight: 500, color: '#888', width: 36, minWidth: 36, maxWidth: 36 }}>
-                                            {i + 1}
-                                        </TableCell>
-                                        {editRowId === u.uid ? (
-                                            <>
-                                                {/* Client Name - Disabled/Read-only */}
-                                                <TableCell sx={{ width: 140, minWidth: 100, maxWidth: 180 }}>
-                                                    <TextField
-                                                        className="compact-ui"
-                                                        value={editRowData.clientname || u.clientname}
-                                                        disabled // Disable editing
-                                                        variant="standard"
-                                                        size="small"
-                                                        InputLabelProps={{ style: { fontSize: '0.65rem' } }}
-                                                        InputProps={{ disableUnderline: true, style: { fontSize: '0.65rem', padding: '0' } }} // Adjusted padding
-                                                        sx={{ width: '100%', '.MuiInputBase-input': { padding: '0' } }} // Ensure no extra padding from MUI defaults
-                                                    />
-                                                </TableCell>
-                                                {/* User Name - Editable */}
-                                                <TableCell sx={{ width: 140, minWidth: 100, maxWidth: 180 }}>
-                                                    <TextField
-                                                        className="compact-ui"
-                                                        name="name"
-                                                        value={editRowData.name || u.name}
-                                                        disabled={false} // Make editable
-                                                        variant="standard"
-                                                        size="small"
-                                                        InputLabelProps={{ style: { fontSize: '0.65rem' } }}
-                                                        InputProps={{ disableUnderline: true, style: { fontSize: '0.65rem', padding: '0' } }} // Adjusted padding
-                                                        sx={{ width: '100%', '.MuiInputBase-input': { padding: '0' } }}
-                                                    />
-                                                </TableCell>
-                                                {/* Email - Disabled/Read-only */}
-                                                <TableCell sx={{ width: 180, minWidth: 140, maxWidth: 220 }}>
-                                                    <Box display="flex" alignItems="center">
-                                                        <TextField
-                                                            className="compact-ui"
-                                                            name="emailPrefix"
-                                                            value={editRowData.emailPrefix || u.email.split('@')[0]}
-                                                            disabled // Disable editing
-                                                            variant="standard"
-                                                            size="small"
-                                                            InputLabelProps={{ style: { fontSize: '0.65rem' } }}
-                                                            InputProps={{ disableUnderline: true, style: { fontSize: '0.65rem', padding: '0' } }} // Adjusted padding
-                                                            sx={{ flexGrow: 1, '.MuiInputBase-input': { padding: '0' } }}
-                                                        />
-                                                        <span style={{ fontSize: '0.65rem', marginLeft: 2, flexShrink: 0 }}>@{editRowData.domain || u.email.split('@')[1] || 'domain.com'}</span>
-                                                    </Box>
-                                                </TableCell>
-                                                {/* Password column in EDIT mode */}
-                                                <TableCell sx={{ width: 100, minWidth: 80, maxWidth: 140, backgroundColor: editRowData.showPasswordField ? '#f0faff' : 'inherit', textAlign: 'center' }}>
-                                                    {!editRowData.showPasswordField ? (
-                                                        <Button
-                                                            variant="text"
-                                                            size="small"
-                                                            onClick={handleTogglePasswordField}
-                                                            startIcon={<VpnKeyIcon sx={{ fontSize: '1rem', color: '#1976d2' }} />}
-                                                            sx={{ fontSize: '0.6rem', height: 20, minWidth: 'auto', padding: '2px 4px', color: '#1976d2' }}
-                                                        >
-                                                            Change
-                                                        </Button>
-                                                    ) : (
-                                                        <TextField
-                                                            name="password"
-                                                            label="New Password"
-                                                            type="password"
-                                                            value={editRowData.password}
-                                                            onChange={handleEditChange}
-                                                            size="small"
-                                                            variant="standard"
-                                                            InputLabelProps={{ style: { fontSize: '0.65rem' } }}
-                                                            InputProps={{ disableUnderline: true, style: { fontSize: '0.65rem', padding: '0' } }} // Adjusted padding
-                                                            sx={{ width: '100%', '.MuiInputBase-input': { padding: '0' } }}
-                                                            placeholder="Enter new password"
-                                                        />
-                                                    )}
-                                                </TableCell>
-                                                {/* Asset ID - Editable */}
-                                                <TableCell sx={{ width: 100, minWidth: 80, maxWidth: 140 }}>
-                                                    <TextField
-                                                        className="compact-ui"
-                                                        name="asset_id"
-                                                        value={editRowData.asset_id}
-                                                        onChange={handleEditChange}
-                                                        required
-                                                        size="small"
-                                                        variant="standard"
-                                                        InputLabelProps={{ style: { fontSize: '0.65rem' } }}
-                                                        InputProps={{ disableUnderline: true, style: { fontSize: '0.65rem', padding: '0' } }} // Adjusted padding
-                                                        placeholder="Asset ID"
-                                                        sx={{ width: '100%', '.MuiInputBase-input': { padding: '0' } }}
-                                                    />
-                                                </TableCell>
-                                                <TableCell sx={{ width: 90, minWidth: 70, maxWidth: 120 }} align="right">
-                                                    <IconButton onClick={() => handleEditSave(u.uid)} size="small"><EditIcon sx={{ fontSize: '1rem' }} /></IconButton>
-                                                    <IconButton onClick={handleEditCancel} size="small"><ClearIcon sx={{ fontSize: '1rem' }} /></IconButton>
-                                                </TableCell>
-                                            </>
-                                        ) : (
-                                            <>
-                                                <TableCell sx={{ width: 140, minWidth: 100, maxWidth: 180 }}>{u.clientname}</TableCell>
-                                                <TableCell sx={{ width: 140, minWidth: 100, maxWidth: 180 }}>{u.name}</TableCell>
-                                                <TableCell sx={{ width: 180, minWidth: 140, maxWidth: 220 }}>{u.email}</TableCell>
-                                                {/* Password column in VIEW mode */}
-                                                <TableCell sx={{ width: 100, minWidth: 80, maxWidth: 140, textAlign: 'center' }}>
-                                                    <IconButton
-                                                        onClick={() => handleEditClick(u)}
-                                                        size="small"
-                                                        sx={{ color: '#9e9e9e' }} // Ash color
-                                                        disabled={true} // Disable click in normal mode
-                                                    >
-                                                        <VpnKeyIcon sx={{ fontSize: '1rem' }} />
-                                                    </IconButton>
-                                                </TableCell>
-                                                <TableCell sx={{ width: 100, minWidth: 80, maxWidth: 140 }}>{u.asset_id || u.assetid}</TableCell>
-                                                <TableCell align="right" sx={{ width: 90, minWidth: 70, maxWidth: 120 }}>
-                                                    <IconButton onClick={() => handleEditClick(u)} size="small"><EditIcon sx={{ fontSize: '1rem' }} /></IconButton>
-                                                    <IconButton
-                                                        onClick={(event) => handleDeleteClick(event, u.uid, u.email)}
-                                                        size="small"
-                                                    >
-                                                        <DeleteIcon sx={{ fontSize: '1rem' }} />
-                                                    </IconButton>
-                                                </TableCell>
-                                            </>
-                                        )}
+            {/* New Add User Modal */}
+            <Dialog open={addUserModalOpen} onClose={closeAddUserModal} maxWidth="xs" fullWidth>
+              <DialogTitle sx={{ fontSize: 18, py: 1.5 }}>Create User</DialogTitle>
+              <form onSubmit={handleAddUserSave}>
+                <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, py: 2 }}>
+                  <Select
+                    name="companyName"
+                    value={addUserData.companyName}
+                    onChange={handleAddUserChange}
+                    required
+                    displayEmpty
+                    size="small"
+                    sx={{ mb: 1 }}
+                  >
+                    <MenuItem value="" disabled>Select Company</MenuItem>
+                    {clients.map(c => (
+                      <MenuItem key={c['Client name'] || c.companyName || c.id} value={c['Client name'] || c.companyName}>{c['Client name'] || c.companyName}</MenuItem>
+                    ))}
+                  </Select>
+                  <Box display="flex" gap={1}>
+                    <TextField
+                      label="First Name"
+                      name="firstName"
+                      value={addUserData.firstName}
+                      onChange={handleAddUserChange}
+                      required
+                      size="small"
+                      fullWidth
+                    />
+                    <TextField
+                      label="Last Name"
+                      name="lastName"
+                      value={addUserData.lastName}
+                      onChange={handleAddUserChange}
+                      required
+                      size="small"
+                      fullWidth
+                    />
+                  </Box>
+                  <TextField
+                    label="Email"
+                    name="email"
+                    value={addUserData.email}
+                    onChange={handleAddUserChange}
+                    required
+                    size="small"
+                    fullWidth
+                  />
+                  <TextField
+                    label="Password"
+                    name="password"
+                    value={addUserData.password}
+                    InputProps={{ readOnly: true }}
+                    size="small"
+                    fullWidth
+                    helperText="Auto-generated password"
+                  />
+                  <TextField
+                    label="Contact Number"
+                    name="contactNumber"
+                    value={addUserData.contactNumber}
+                    onChange={handleAddUserChange}
+                    required
+                    size="small"
+                    fullWidth
+                  />
+                  <TextField
+                    label="Manager Email"
+                    name="managerEmail"
+                    value={addUserData.managerEmail}
+                    onChange={handleAddUserChange}
+                    required
+                    size="small"
+                    fullWidth
+                  />
+                  <Select
+                    name="employmentType"
+                    value={addUserData.employmentType}
+                    onChange={handleAddUserChange}
+                    required
+                    displayEmpty
+                    size="small"
+                    sx={{ mb: 1 }}
+                  >
+                    <MenuItem value="" disabled>Select Employment Type</MenuItem>
+                    {EMPLOYMENT_TYPES.map(opt => (
+                      <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
+                    ))}
+                  </Select>
+                  <TextField
+                    label="Designation"
+                    name="designation"
+                    value={addUserData.designation}
+                    onChange={handleAddUserChange}
+                    required
+                    size="small"
+                    fullWidth
+                  />
+                </DialogContent>
+                <DialogActions sx={{ py: 1, px: 2 }}>
+                  <Button onClick={closeAddUserModal} size="small">Cancel</Button>
+                  <Button type="submit" variant="contained" color="primary" size="small">Create</Button>
+                </DialogActions>
+              </form>
+            </Dialog>
+
+            {/* Change Password Modal */}
+            <Dialog open={changePwdModalOpen} onClose={closeChangePwdModal} maxWidth="xs" fullWidth>
+              <DialogTitle sx={{ fontSize: 18, py: 1.5 }}>Change Password</DialogTitle>
+              <form onSubmit={handleChangePassword}>
+                <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, py: 2 }}>
+                  <TextField
+                    label="New Password"
+                    name="newPassword"
+                    value={newPassword}
+                    onChange={e => setNewPassword(e.target.value)}
+                    required
+                    size="small"
+                    fullWidth
+                    type="password"
+                    helperText="At least 6 characters"
+                  />
+                </DialogContent>
+                <DialogActions sx={{ py: 1, px: 2 }}>
+                  <Button onClick={closeChangePwdModal} size="small">Cancel</Button>
+                  <Button type="submit" variant="contained" color="primary" size="small">Update</Button>
+                </DialogActions>
+              </form>
+            </Dialog>
+
+            {/* Import Excel Modal */}
+            <Dialog open={importModalOpen} onClose={closeImportModal} maxWidth="sm" fullWidth>
+                <DialogTitle sx={{ fontSize: 18, py: 1.5 }}>Import Users from Excel</DialogTitle>
+                <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, py: 2 }}>
+                    <Button onClick={handleDownloadTemplate} variant="outlined" size="small" sx={{ mb: 1, width: 'fit-content' }}>
+                        Download Template
+                    </Button>
+                    <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept=".xlsx,.xls"
+                        onChange={handleImportFile}
+                        style={{ marginBottom: 8 }}
+                    />
+                    {importError && <Alert severity="error">{importError}</Alert>}
+                    {importedUsers.length > 0 && (
+                        <Box sx={{ maxHeight: 250, overflow: 'auto', border: '1px solid #eee', borderRadius: 1, mt: 1 }}>
+                            <Table size="small">
+                                <TableHead>
+                                    <TableRow>
+                                        {USER_TEMPLATE_HEADERS.map(h => (
+                                            <TableCell key={h} sx={{ fontWeight: 700 }}>{h}</TableCell>
+                                        ))}
                                     </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                    {importedUsers.map((row, idx) => (
+                                        <TableRow key={idx}>
+                                            {USER_TEMPLATE_HEADERS.map(h => (
+                                                <TableCell key={h}>{row[h]}</TableCell>
+                                            ))}
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </Box>
+                    )}
+                    {/* Show import results if present */}
+                    {importResults && (
+                        <Box sx={{ mt: 2 }}>
+                            <Alert severity="info" sx={{ mb: 1 }}>Import Results</Alert>
+                            <Table size="small">
+                                <TableHead>
+                                    <TableRow>
+                                        <TableCell>Email</TableCell>
+                                        <TableCell>Status</TableCell>
+                                        <TableCell>Error</TableCell>
+                                    </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                    {importResults.map((r, idx) => (
+                                        <TableRow key={idx}>
+                                            <TableCell>{r.email}</TableCell>
+                                            <TableCell>{r.success ? 'Success' : 'Failed'}</TableCell>
+                                            <TableCell>{r.error || ''}</TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </Box>
+                    )}
+                    {importResults && importedPasswords.length > 0 && (
+                        <Box sx={{ mt: 2 }}>
+                            <Alert severity="success" sx={{ mb: 1 }}>Default Passwords for Imported Users</Alert>
+                            <Button onClick={handleDownloadPasswords} variant="contained" size="small" sx={{ mb: 1 }}>
+                                Download Passwords
+                            </Button>
+                            <Table size="small">
+                                <TableHead>
+                                    <TableRow>
+                                        <TableCell>Email</TableCell>
+                                        <TableCell>Password</TableCell>
+                                    </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                    {importedPasswords.map((row, idx) => (
+                                        <TableRow key={idx}>
+                                            <TableCell>{row.email}</TableCell>
+                                            <TableCell>{row.password}</TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </Box>
+                    )}
+                </DialogContent>
+                <DialogActions sx={{ py: 1, px: 2 }}>
+                    <Button onClick={closeImportModal} size="small" color="error">{importResults ? 'Close' : 'Cancel'}</Button>
+                    <Button onClick={handleConfirmImport} variant="contained" color="primary" size="small" disabled={importedUsers.length === 0 || !!importResults}>Confirm Import</Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* Responsive: Table for md+, Card for xs/sm */}
+            {isMobile ? (
+                <Box sx={{ width: '100%', px: 1 }}>
+                    {clientOrder.length === 0 && !loading && !error && (
+                        <Typography variant="body1" color="textSecondary" sx={{ mt: 2, px: 1 }}>
+                            No user profiles found.
+                        </Typography>
+                    )}
+                    {clientOrder.map((client) => (
+                        <Box key={client} mb={2}>
+                            <Typography variant="subtitle2" sx={{ color: '#174ea6', fontStyle: 'italic', fontWeight: 300, fontSize: '0.95rem', letterSpacing: 0.5, mb: 0.5, px: 1 }}>
+                                {client} ({groupedUsers[client].length} user{groupedUsers[client].length !== 1 ? 's' : ''})
+                            </Typography>
+                            <Grid container spacing={2}>
+                                {groupedUsers[client].map((u, i) => (
+                                    <Grid item xs={12} key={u.uid}>
+                                        <Card variant="outlined" sx={{ width: '100%' }}>
+                                            <CardContent sx={{ p: 2 }}>
+                                                <Grid container spacing={1}>
+                                                    <Grid item xs={6}><b>Company Name:</b> {u.companyName || u.client_name || '-'}</Grid>
+                                                    <Grid item xs={6}><b>First Name:</b> {u.firstName || '-'}</Grid>
+                                                    <Grid item xs={6}><b>Last Name:</b> {u.lastName || '-'}</Grid>
+                                                    <Grid item xs={12}><b>Email:</b> {u.email}</Grid>
+                                                    <Grid item xs={12}><b>Contact Number:</b> {u.contactNumber || '-'}</Grid>
+                                                    <Grid item xs={12}><b>Manager Email:</b> {u.managerEmail || '-'}</Grid>
+                                                    <Grid item xs={6}><b>Employment Type:</b> {u.employmentType || '-'}</Grid>
+                                                    <Grid item xs={6}><b>Designation:</b> {u.designation || '-'}</Grid>
+                                                </Grid>
+                                            </CardContent>
+                                            <CardActions sx={{ justifyContent: 'flex-end', gap: 1 }}>
+                                                <IconButton size="small" onClick={() => openChangePwdModal(u.uid)} title="Change Password">
+                                                    <LockResetIcon fontSize="small" />
+                                                </IconButton>
+                                                <IconButton size="small" onClick={() => handleEditClick(u)} title="Edit">
+                                                    <EditIcon fontSize="small" />
+                                                </IconButton>
+                                            </CardActions>
+                                        </Card>
+                                    </Grid>
                                 ))}
-                            </TableBody>
-                        </Table>
-                    </TableContainer>
+                            </Grid>
+                        </Box>
+                    ))}
                 </Box>
-            ))}
+            ) : (
+                // Existing table rendering (as previously fixed, with tableLayout: 'fixed', no x-scroll)
+                <>
+                    {clientOrder.length === 0 && !loading && !error && (
+                        <Typography variant="body1" color="textSecondary" sx={{ mt: 2, px: 3 }}> {/* Added horizontal padding here */}
+                            No user profiles found.
+                        </Typography>
+                    )}
+                    {clientOrder.map((client) => (
+                        <Box key={client} mb={3} sx={{ px: 3 }}> {/* Added horizontal padding here */}
+                            <Typography variant="subtitle2" sx={{ color: '#174ea6', fontStyle: 'italic', fontWeight: 300, fontSize: '0.9rem', letterSpacing: 0.5, mb: 0.5 }}>
+                                {client} ({groupedUsers[client].length} user{groupedUsers[client].length !== 1 ? 's' : ''})
+                            </Typography>
+                            <TableContainer component={Paper} sx={{ border: '1px solid #e0e0e0', borderRadius: 2, boxShadow: 'none', mt: 2, mb: 2, width: '100%', overflowX: 'auto' }}>
+                                <Table size="small" sx={{
+                                    width: '100%',
+                                    tableLayout: 'fixed', // Crucial for fixed layout
+                                    minWidth: 0,
+                                    '& .MuiTableCell-root': {
+                                        fontSize: '0.68rem',
+                                        padding: '2px 6px',
+                                        height: 28, // Ensure consistent row height
+                                        whiteSpace: 'normal',
+                                        wordBreak: 'break-word',
+                                        minWidth: 0,
+                                        maxWidth: '100%',
+                                    },
+                                    '& .MuiTableRow-root': { height: 28 }, // Explicit row height
+                                    borderCollapse: 'separate',
+                                    borderSpacing: 0,
+                                }}>
+                                    <TableHead>
+                                        <TableRow>
+                                            <TableCell sx={{ width: FIXED_COLUMN_WIDTHS.companyName, borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word', fontWeight: 700, fontSize: '1rem', color: '#174ea6', letterSpacing: 0.5 }}>Company Name</TableCell>
+                                            <TableCell sx={{ width: FIXED_COLUMN_WIDTHS.firstName, borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word', fontWeight: 700, fontSize: '1rem', color: '#174ea6', letterSpacing: 0.5 }}>First Name</TableCell>
+                                            <TableCell sx={{ width: FIXED_COLUMN_WIDTHS.lastName, borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word', fontWeight: 700, fontSize: '1rem', color: '#174ea6', letterSpacing: 0.5 }}>Last Name</TableCell>
+                                            <TableCell sx={{ width: FIXED_COLUMN_WIDTHS.email, borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word', fontWeight: 700, fontSize: '1rem', color: '#174ea6', letterSpacing: 0.5 }}>Email</TableCell>
+                                            <TableCell sx={{ width: FIXED_COLUMN_WIDTHS.contactNumber, borderRight: (!isXs && !isSm) ? '1px solid #e0e0e0' : undefined, whiteSpace: 'normal', wordBreak: 'break-word', fontWeight: 700, fontSize: '1rem', color: '#174ea6', letterSpacing: 0.5 }}>Contact Number</TableCell>
+                                            {!isXs && !isSm && <TableCell sx={{ width: FIXED_COLUMN_WIDTHS.managerEmail, borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word', fontWeight: 700, fontSize: '1rem', color: '#174ea6', letterSpacing: 0.5 }}>Manager Email</TableCell>}
+                                            {!isXs && !isSm && <TableCell sx={{ width: FIXED_COLUMN_WIDTHS.employmentType, borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word', fontWeight: 700, fontSize: '1rem', color: '#174ea6', letterSpacing: 0.5 }}>Employment Type</TableCell>}
+                                            {!isXs && !isSm && <TableCell sx={{ width: FIXED_COLUMN_WIDTHS.designation, borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word', fontWeight: 700, fontSize: '1rem', color: '#174ea6', letterSpacing: 0.5 }}>Designation</TableCell>}
+                                            <TableCell sx={{ width: FIXED_COLUMN_WIDTHS.actions, whiteSpace: 'normal', wordBreak: 'break-word', fontWeight: 700, fontSize: '1rem', color: '#174ea6', letterSpacing: 0.5 }}>Actions</TableCell>
+                                        </TableRow>
+                                    </TableHead>
+                                    <TableBody>
+                                        {groupedUsers[client].map((u, i) => (
+                                            <TableRow key={u.uid}>
+                                                {editRowId === u.uid ? (
+                                                    // In Edit Mode
+                                                    <>
+                                                        {/* Company Name (read-only) */}
+                                                        <TableCell sx={{ borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word' }}>
+                                                            <TextField
+                                                                value={editRowData.companyName || ''}
+                                                                size="small"
+                                                                variant="standard"
+                                                                InputProps={{ readOnly: true, disableUnderline: true, style: { fontSize: '0.68rem', height: '100%', padding: '2px 0 2px 6px', background: 'none', border: 'none' } }}
+                                                                sx={{ width: '100%', height: '100%' }}
+                                                                fullWidth
+                                                            />
+                                                        </TableCell>
+                                                        {/* First Name (read-only) */}
+                                                        <TableCell sx={{ borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word' }}>
+                                                            <TextField
+                                                                value={editRowData.firstName || ''}
+                                                                size="small"
+                                                                variant="standard"
+                                                                InputProps={{ readOnly: true, disableUnderline: true, style: { fontSize: '0.68rem', height: '100%', padding: '2px 0 2px 6px', background: 'none', border: 'none' } }}
+                                                                sx={{ width: '100%', height: '100%' }}
+                                                                fullWidth
+                                                            />
+                                                        </TableCell>
+                                                        {/* Last Name (read-only) */}
+                                                        <TableCell sx={{ borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word' }}>
+                                                            <TextField
+                                                                value={editRowData.lastName || ''}
+                                                                size="small"
+                                                                variant="standard"
+                                                                InputProps={{ readOnly: true, disableUnderline: true, style: { fontSize: '0.68rem', height: '100%', padding: '2px 0 2px 6px', background: 'none', border: 'none' } }}
+                                                                sx={{ width: '100%', height: '100%' }}
+                                                                fullWidth
+                                                            />
+                                                        </TableCell>
+                                                        {/* Email (read-only) */}
+                                                        <TableCell sx={{ borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word' }}>
+                                                            <TextField
+                                                                value={editRowData.email || ''}
+                                                                size="small"
+                                                                variant="standard"
+                                                                InputProps={{ readOnly: true, disableUnderline: true, style: { fontSize: '0.68rem', height: '100%', padding: '2px 0 2px 6px', background: 'none', border: 'none' } }}
+                                                                sx={{ width: '100%', height: '100%' }}
+                                                                fullWidth
+                                                            />
+                                                        </TableCell>
+                                                        {/* Contact Number (editable, blue outline) */}
+                                                        <TableCell sx={{ borderRight: (!isXs && !isSm) ? '1px solid #e0e0e0' : undefined, whiteSpace: 'normal', wordBreak: 'break-word' }}>
+                                                            <TextField
+                                                                name="contactNumber"
+                                                                value={editRowData.contactNumber || ''}
+                                                                onChange={handleEditChange}
+                                                                size="small"
+                                                                variant="standard"
+                                                                InputProps={{ disableUnderline: true, style: { fontSize: '0.68rem', height: '100%', padding: '2px 0 2px 6px', background: 'none', border: 'none', outline: '2px solid #1976d2' } }}
+                                                                sx={{ width: '100%', height: '100%' }}
+                                                                fullWidth
+                                                            />
+                                                        </TableCell>
+                                                        {/* Manager Email (editable, blue outline) */}
+                                                        {!isXs && !isSm && (
+                                                            <TableCell sx={{ borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word' }}>
+                                                                <TextField
+                                                                    name="managerEmail"
+                                                                    value={editRowData.managerEmail || ''}
+                                                                    onChange={handleEditChange}
+                                                                    size="small"
+                                                                    variant="standard"
+                                                                    InputProps={{ disableUnderline: true, style: { fontSize: '0.68rem', height: '100%', padding: '2px 0 2px 6px', background: 'none', border: 'none', outline: '2px solid #1976d2' } }}
+                                                                    sx={{ width: '100%', height: '100%' }}
+                                                                    fullWidth
+                                                                />
+                                                            </TableCell>
+                                                        )}
+                                                        {/* Employment Type (editable, blue outline) */}
+                                                        {!isXs && !isSm && (
+                                                            <TableCell sx={{ borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word' }}>
+                                                                <Select
+                                                                    name="employmentType"
+                                                                    value={editRowData.employmentType || ''}
+                                                                    onChange={handleEditChange}
+                                                                    size="small"
+                                                                    variant="standard"
+                                                                    disableUnderline
+                                                                    sx={{ fontSize: '0.68rem', height: '100%', padding: 0, background: 'none', boxShadow: 'none', border: 'none', width: '100%', outline: '2px solid #1976d2', '.MuiSelect-select': { padding: '2px 0 2px 6px', minHeight: 0, lineHeight: 'normal' } }}
+                                                                    MenuProps={{ PaperProps: { sx: { fontSize: '0.68rem' } } }}
+                                                                    fullWidth
+                                                                >
+                                                                    {EMPLOYMENT_TYPES.map(opt => (
+                                                                        <MenuItem key={opt.value} value={opt.value} sx={{ fontSize: '0.68rem' }}>{opt.label}</MenuItem>
+                                                                    ))}
+                                                                </Select>
+                                                            </TableCell>
+                                                        )}
+                                                        {/* Designation (editable, blue outline) */}
+                                                        {!isXs && !isSm && (
+                                                            <TableCell sx={{ borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word' }}>
+                                                                <TextField
+                                                                    name="designation"
+                                                                    value={editRowData.designation || ''}
+                                                                    onChange={handleEditChange}
+                                                                    size="small"
+                                                                    variant="standard"
+                                                                    InputProps={{ disableUnderline: true, style: { fontSize: '0.68rem', height: '100%', padding: '2px 0 2px 6px', background: 'none', border: 'none', outline: '2px solid #1976d2' } }}
+                                                                    sx={{ width: '100%', height: '100%' }}
+                                                                    fullWidth
+                                                                />
+                                                            </TableCell>
+                                                        )}
+                                                        {/* Actions */}
+                                                        <TableCell sx={{ whiteSpace: 'normal', wordBreak: 'break-word', minWidth: 120, p: 0 }}>
+                                                            <IconButton size="small" onClick={() => handleEditSave(u.uid)} title="Save" sx={{ p: 0.5, minWidth: 28, height: 28 }}>
+                                                                <SaveIcon fontSize="inherit" color={hasUnsavedChanges(editRowData, u) ? 'primary' : 'inherit'} style={{ fontSize: 18 }} />
+                                                            </IconButton>
+                                                            <IconButton size="small" onClick={handleEditCancel} title="Cancel" color="error" sx={{ p: 0.5, minWidth: 28, height: 28 }}>
+                                                                <ClearIcon fontSize="inherit" style={{ fontSize: 18 }} />
+                                                            </IconButton>
+                                                        </TableCell>
+                                                    </>
+                                                ) : (
+                                                    // Display Mode
+                                                    <>
+                                                        <TableCell sx={{ borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word' }}>{u.companyName || u.client_name || '-'}</TableCell>
+                                                        <TableCell sx={{ borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word' }}>{u.firstName || '-'}</TableCell>
+                                                        <TableCell sx={{ borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word' }}>{u.lastName || '-'}</TableCell>
+                                                        <TableCell sx={{ borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word' }}>{u.email}</TableCell>
+                                                        <TableCell sx={{ borderRight: (!isXs && !isSm) ? '1px solid #e0e0e0' : undefined, whiteSpace: 'normal', wordBreak: 'break-word' }}>{u.contactNumber || '-'}</TableCell>
+                                                        {!isXs && !isSm && <TableCell sx={{ borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word' }}>{u.managerEmail || '-'}</TableCell>}
+                                                        {!isXs && !isSm && <TableCell sx={{ borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word' }}>{u.employmentType || '-'}</TableCell>}
+                                                        {!isXs && !isSm && <TableCell sx={{ borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word' }}>{u.designation || '-'}</TableCell>}
+                                                        <TableCell sx={{ whiteSpace: 'normal', wordBreak: 'break-word', minWidth: 120, p: 0 }}>
+                                                            <IconButton size="small" onClick={() => openChangePwdModal(u.uid)} title="Change Password" sx={{ p: 0.5, minWidth: 28, height: 28 }}>
+                                                                <LockResetIcon fontSize="inherit" style={{ fontSize: 18 }} />
+                                                            </IconButton>
+                                                            <IconButton size="small" onClick={() => handleEditClick(u)} title="Edit" sx={{ p: 0.5, minWidth: 28, height: 28 }}>
+                                                                <EditIcon fontSize="inherit" style={{ fontSize: 18 }} />
+                                                            </IconButton>
+                                                            <IconButton size="small" onClick={(e) => handleDeleteClick(e, u.uid, u.email)} title="Delete" color="error" sx={{ p: 0.5, minWidth: 28, height: 28 }}>
+                                                                <DeleteIcon fontSize="inherit" style={{ fontSize: 18 }} />
+                                                            </IconButton>
+                                                        </TableCell>
+                                                    </>
+                                                )}
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </TableContainer>
+                        </Box>
+                    ))}
+                </>
+            )}
             <Snackbar open={snackbar.open} autoHideDuration={3000} onClose={() => setSnackbar({ ...snackbar, open: false })}>
                 <Alert onClose={() => setSnackbar({ ...snackbar, open: false })} severity={snackbar.severity} sx={{ width: '100%' }}>
                     {snackbar.message}

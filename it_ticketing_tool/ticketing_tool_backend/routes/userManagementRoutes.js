@@ -16,19 +16,37 @@ module.exports = (db, admin, usersCollection, clientsCollection) => {
         }
     });
 
-    // PUT /api/users/:uid - Update password and/or asset_id
+    // PUT /api/users/:uid - Update user fields
     router.put('/:uid', async (req, res) => {
         const { uid } = req.params;
-        const { name, asset_id, joined_date, role } = req.body;
-        if (!name && asset_id === undefined && !joined_date && !role) {
+        // Accept all possible fields
+        const {
+            name, asset_id, joined_date, role,
+            firstName, lastName, companyName, client_name,
+            contactNumber, managerEmail, employmentType, designation,
+            password // If you want to allow password update here (optional)
+        } = req.body;
+
+        // Build updateData with all fields that are present
+        const updateData = {};
+        if (name) updateData.name = name;
+        if (asset_id !== undefined) updateData.asset_id = asset_id;
+        if (joined_date) updateData.joined_date = joined_date;
+        if (role) updateData.role = role;
+        if (firstName) updateData.firstName = firstName;
+        if (lastName) updateData.lastName = lastName;
+        if (companyName) updateData.companyName = companyName;
+        if (client_name) updateData.client_name = client_name;
+        if (contactNumber) updateData.contactNumber = contactNumber;
+        if (managerEmail) updateData.managerEmail = managerEmail;
+        if (employmentType) updateData.employmentType = employmentType;
+        if (designation) updateData.designation = designation;
+        // Optionally handle password update here if needed (not recommended for Firestore, should be done via Auth)
+
+        if (Object.keys(updateData).length === 0) {
             return res.status(400).json({ error: 'No fields to update.' });
         }
         try {
-            const updateData = {};
-            if (name) updateData.name = name;
-            if (asset_id !== undefined) updateData.asset_id = asset_id;
-            if (joined_date) updateData.joined_date = joined_date;
-            if (role) updateData.role = role;
             await usersCollection.doc(uid).update(updateData);
             return res.status(200).json({ message: 'User updated successfully.' });
         } catch (err) {
@@ -65,9 +83,10 @@ module.exports = (db, admin, usersCollection, clientsCollection) => {
                 return res.status(500).json({ error: err.message || 'Failed to create engineer.' });
             }
         } else if (role === 'user') {
-            const { client_name, name, domain, email, password, asset_id } = req.body;
-            if (!client_name || !name || !domain || !email || !password || !asset_id) {
-                return res.status(400).json({ error: 'Missing required fields for user: client_name, name, domain, email, password, asset_id' });
+            // NEW LOGIC: Accept and save all new user fields
+            const { companyName, firstName, lastName, email, password, contactNumber, managerEmail, employmentType, designation } = req.body;
+            if (!companyName || !firstName || !lastName || !email || !password || !contactNumber || !managerEmail || !employmentType || !designation) {
+                return res.status(400).json({ error: 'Missing required fields for user: companyName, firstName, lastName, email, password, contactNumber, managerEmail, employmentType, designation' });
             }
             try {
                 let userRecord;
@@ -78,7 +97,18 @@ module.exports = (db, admin, usersCollection, clientsCollection) => {
                 }
                 const uid = userRecord.uid;
                 const userRef = usersCollection.doc(uid);
-                const userData = { client_name, name, domain, email, role, asset_id };
+                const userData = {
+                    client_name: companyName,
+                    firstName,
+                    lastName,
+                    email,
+                    role,
+                    contactNumber,
+                    managerEmail,
+                    employmentType,
+                    designation,
+                    mustChangePassword: true // <-- enforce password change on first login
+                };
                 await userRef.set(userData);
                 return res.status(201).json({ message: 'User created in Auth and Firestore.' });
             } catch (err) {
@@ -148,6 +178,67 @@ module.exports = (db, admin, usersCollection, clientsCollection) => {
             console.error('Error updating user:', err);
             return res.status(500).json({ error: err.message || 'Failed to update user.' });
         }
+    });
+
+    // PUT /api/users/:uid/password - Change user password
+    router.put('/:uid/password', async (req, res) => {
+        const { uid } = req.params;
+        const { password } = req.body;
+        if (!password || password.length < 6) {
+            return res.status(400).json({ error: 'Password must be at least 6 characters.' });
+        }
+        try {
+            await admin.auth().updateUser(uid, { password });
+            return res.status(200).json({ message: 'Password updated successfully.' });
+        } catch (err) {
+            console.error('Error updating password:', err);
+            return res.status(500).json({ error: err.message || 'Failed to update password.' });
+        }
+    });
+
+    // BULK IMPORT USERS
+    router.post('/bulk', async (req, res) => {
+        const users = req.body.users;
+        if (!Array.isArray(users) || users.length === 0) {
+            return res.status(400).json({ error: 'No users provided.' });
+        }
+        const results = [];
+        for (const user of users) {
+            const { companyName, firstName, lastName, email, password, contactNumber, managerEmail, employmentType, designation } = user;
+            // Validate required fields
+            if (!companyName || !firstName || !lastName || !email || !password || !contactNumber || !managerEmail || !employmentType || !designation) {
+                results.push({ email, success: false, error: 'Missing required fields.' });
+                continue;
+            }
+            try {
+                let userRecord;
+                try {
+                    userRecord = await admin.auth().createUser({ email, password });
+                } catch (err) {
+                    results.push({ email, success: false, error: err.message || 'Failed to create user in Auth.' });
+                    continue;
+                }
+                const uid = userRecord.uid;
+                const userRef = usersCollection.doc(uid);
+                const userData = {
+                    client_name: companyName,
+                    firstName,
+                    lastName,
+                    email,
+                    role: 'user',
+                    contactNumber,
+                    managerEmail,
+                    employmentType,
+                    designation,
+                    mustChangePassword: true // <-- enforce password change on first login
+                };
+                await userRef.set(userData);
+                results.push({ email, success: true });
+            } catch (err) {
+                results.push({ email, success: false, error: err.message || 'Failed to create user.' });
+            }
+        }
+        return res.status(200).json({ results });
     });
 
     router.delete('/:uid', async (req, res) => {

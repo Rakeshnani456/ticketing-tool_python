@@ -113,7 +113,7 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
         if (!validTicketCategories.includes(category)) {
             return res.status(400).json({ error: 'Invalid category specified.' });
         }
-        if (!/^\S+@\S+\.\S+$/.test(request_for_email)) {
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(request_for_email)) {
             return res.status(400).json({ error: 'Invalid email format for "Request for".' });
         }
 
@@ -159,36 +159,28 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                 });
             }
 
-            const supportUsersSnapshot = await usersCollection.where('role', 'in', ['support', 'admin', 'super_admin']).get();
-            const supportUserEmails = supportUsersSnapshot.docs.map(doc => doc.data().email);
-
-            for (const userEmail of supportUserEmails) {
-                const userDocSnapshot = await usersCollection.where('email', '==', userEmail).limit(1).get();
-                if (!userDocSnapshot.empty) {
-                    const userIdToNotify = userDocSnapshot.docs[0].id;
-                    await notificationsCollection.add({
-                        userId: userIdToNotify,
-                        message: `New ticket ${newDisplayId} created by ${reporterEmail}: "${short_description}"`,
-                        type: 'new_ticket_for_support',
-                        read: false,
-                        timestamp: admin.firestore.FieldValue.serverTimestamp(),
-                        ticketId: docRef.id
-                    });
-
-                    const emailSubject = `New Ticket Created: ${newDisplayId}`;
-                    const emailText = `A new ticket has been created by ${reporterEmail}.\n\nTicket ID: ${newDisplayId}\nShort Description: ${short_description}\nCategory: ${category}\nPriority: ${priority || 'Low'}\n\nPlease check the ticketing system for more details.`;
+            // Prepare email content before setImmediate
+            const emailSubject = `New IT Support Ticket Created: ${newDisplayId}`;
+            const emailText = `A new IT support ticket has been logged in the Ticketing Tool. Details are as follows:\n\nTicket ID: ${newDisplayId}\nShort Description: ${short_description}\nCategory: ${category}\nPriority: ${priority || 'Low'}\nRequested For: ${request_for_email}\nRequested By: ${reporterEmail}\nContact Number: ${contact_number}\n\nAccess the Ticketing Tool to review and take necessary action.`;
                     const emailHtml = `
-                        <p>A new ticket has been created by <strong>${reporterEmail}</strong>.</p>
-                        <p><strong>Ticket ID:</strong> <strong>${newDisplayId}</strong></p>
-                        <p><strong>Short Description:</strong> <strong>${short_description}</strong></p>
-                        <p><strong>Category:</strong> ${category}</p>
-                        <p><strong>Priority:</strong> ${priority || 'Low'}</p>
-                        <p>Please check the ticketing system for more details.</p>
-                    `;
-                    await sendEmailAlert(userEmail, emailSubject, emailText, emailHtml);
-                    await sendEmailAlert('rakeshnani456@gmail.com', emailSubject, emailText, emailHtml); // Test email
-                }
-            }
+                <div style=\"font-family: Arial, sans-serif; color: #222;\">
+                    <p>A new <strong>IT support ticket</strong> has been logged in the Ticketing Tool. Details are as follows:</p>
+                    <table style=\"border-collapse: collapse; margin: 10px 0;\">
+                        <tr><td style=\"padding: 4px 8px; font-weight: bold;\">Ticket ID:</td><td style=\"padding: 4px 8px;\">${newDisplayId}</td></tr>
+                        <tr><td style=\"padding: 4px 8px; font-weight: bold;\">Short Description:</td><td style=\"padding: 4px 8px;\">${short_description}</td></tr>
+                        <tr><td style=\"padding: 4px 8px; font-weight: bold;\">Category:</td><td style=\"padding: 4px 8px;\">${category}</td></tr>
+                        <tr><td style=\"padding: 4px 8px; font-weight: bold;\">Priority:</td><td style=\"padding: 4px 8px;\">${priority || 'Low'}</td></tr>
+                        <tr><td style=\"padding: 4px 8px; font-weight: bold;\">Requested For:</td><td style=\"padding: 4px 8px;\">${request_for_email}</td></tr>
+                        <tr><td style=\"padding: 4px 8px; font-weight: bold;\">Requested By:</td><td style=\"padding: 4px 8px;\">${reporterEmail}</td></tr>
+                        <tr><td style=\"padding: 4px 8px; font-weight: bold;\">Contact Number:</td><td style=\"padding: 4px 8px;\">${contact_number}</td></tr>
+                    </table>
+                    <p>Access the Ticketing Tool to review and take necessary action.</p>
+                </div>
+            `;
+            // Send email only to tt.support@kriasol.com (fire-and-forget)
+            setImmediate(() => {
+                sendEmailAlert('tt.support@kriasol.com', emailSubject, emailText, emailHtml, reporterEmail);
+            });
 
             return res.status(201).json({ message: 'Ticket created successfully!', id: docRef.id, display_id: newDisplayId });
         } catch (error) {
@@ -278,10 +270,10 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                 };
                 updateData.status_history = admin.firestore.FieldValue.arrayUnion(statusHistoryEntry);
 
-                if (['Resolved', 'Cancelled'].includes(status)) {
+                if (["Resolved", "Cancelled"].includes(status)) {
                     updateData.resolved_at = admin.firestore.FieldValue.serverTimestamp();
                     updateData.closed_by_email = req.user.email;
-                    if ((time_spent === undefined || time_spent === null || time_spent === '') && ticketData.created_at && ticketData.created_at.toDate) {
+                    if ((time_spent === undefined || time_spent === null || time_spent === "") && ticketData.created_at && ticketData.created_at.toDate) {
                         const createdAt = ticketData.created_at.toDate();
                         const resolvedAt = new Date();
                         const timeDiffMillis = resolvedAt.getTime() - createdAt.getTime();
@@ -289,67 +281,13 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                         updateData.time_spent_minutes = timeSpentMinutes;
                     }
 
-                    const ticketReporterId = ticketData.reporter_id;
                     const ticketReporterEmail = ticketData.reporter_email;
-                    const ticketAssignedToId = ticketData.assigned_to_id;
-                    const ticketAssignedToEmail = ticketData.assigned_to_email;
-
-                    await notificationsCollection.add({
-                        userId: ticketReporterId,
-                        message: `Your ticket ${ticketData.display_id} - "${ticketData.short_description}" has been marked as ${status}.`,
-                        type: 'ticket_status_update',
-                        read: false,
-                        timestamp: admin.firestore.FieldValue.serverTimestamp(),
-                        ticketId: ticketId
+                    const emailSubject = `Ticket ${ticketData.display_id} Status Updated`;
+                    const emailText = `The status of your ticket (${ticketData.display_id} - ${ticketData.short_description}) has been updated to: ${status}.\n\nAccess the Ticketing Tool for more details.`;
+                    const emailHtml = `<div style=\"font-family: Arial, sans-serif; color: #222;\"><p>The status of your ticket (<strong>${ticketData.display_id}</strong> - ${ticketData.short_description}) has been updated to: <strong>${status}</strong>.</p><p>Access the Ticketing Tool for more details.</p></div>`;
+                    setImmediate(() => {
+                        sendEmailAlert(ticketReporterEmail, emailSubject, emailText, emailHtml, 'tt.support@kriasol.com');
                     });
-
-                    if (ticketAssignedToId && ticketAssignedToId !== authenticatedUid) {
-                        await notificationsCollection.add({
-                            userId: ticketAssignedToId,
-                            message: `Ticket ${ticketData.display_id} - "${ticketData.short_description}" has been marked as ${status}.`,
-                            type: 'ticket_status_update_assigned',
-                            read: false,
-                            timestamp: admin.firestore.FieldValue.serverTimestamp(),
-                            ticketId: ticketId
-                        });
-                    }
-
-                    const statusRecipients = [];
-                    if (ticketReporterEmail) statusRecipients.push(ticketReporterEmail);
-                    if (ticketAssignedToEmail) statusRecipients.push(ticketAssignedToEmail);
-                    statusRecipients.push('rakeshnani456@gmail.com');
-                    for (const email of statusRecipients) {
-                        await sendEmailAlert(email, `Ticket ${ticketData.display_id} Status Updated`, `The status of ticket ${ticketData.display_id} has been updated to: ${status}.\n\nPlease check the ticketing system for more details.`, `<p>The status of ticket <strong>${ticketData.display_id}</strong> has been updated to: <strong>${status}</strong>.</p><p>Please check the ticketing system for more details.</p>`);
-                    }
-
-                } else if (['Resolved', 'Cancelled'].includes(ticketData.status) && !validTicketStatuses.includes(status)) {
-                    updateData.resolved_at = null;
-                    updateData.time_spent_minutes = null;
-                    updateData.closed_by_email = null;
-                    updateData.closure_notes = null;
-
-                    const ticketReporterId = ticketData.reporter_id;
-                    const ticketAssignedToId = ticketData.assigned_to_id;
-
-                    await notificationsCollection.add({
-                        userId: ticketReporterId,
-                        message: `Your ticket ${ticketData.display_id} - "${ticketData.short_description}" has been re-opened to ${status}.`,
-                        type: 'ticket_reopened',
-                        read: false,
-                        timestamp: admin.firestore.FieldValue.serverTimestamp(),
-                        ticketId: ticketId
-                    });
-
-                    if (ticketAssignedToId && ticketAssignedToId !== authenticatedUid) {
-                        await notificationsCollection.add({
-                            userId: ticketAssignedToId,
-                            message: `Ticket ${ticketData.display_id} - "${ticketData.short_description}" has been re-opened to ${status}.`,
-                            type: 'ticket_reopened_assigned',
-                            read: false,
-                            timestamp: admin.firestore.FieldValue.serverTimestamp(),
-                            ticketId: ticketId
-                        });
-                    }
                 }
             }
 
@@ -533,6 +471,15 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                 });
             }
 
+            // After cancellation, notify the reporter
+            const ticketReporterEmail = ticketData.reporter_email;
+            const emailSubject = `Ticket ${ticketData.display_id} Cancelled`;
+            const emailText = `Your ticket (${ticketData.display_id} - ${ticketData.short_description}) has been cancelled.\n\nAccess the Ticketing Tool for more details.`;
+            const emailHtml = `<div style=\"font-family: Arial, sans-serif; color: #222;\"><p>Your ticket (<strong>${ticketData.display_id}</strong> - ${ticketData.short_description}) has been cancelled.</p><p>Access the Ticketing Tool for more details.</p></div>`;
+            setImmediate(() => {
+                sendEmailAlert(ticketReporterEmail, emailSubject, emailText, emailHtml, 'tt.support@kriasol.com');
+            });
+
             return res.status(200).json({ message: 'Ticket cancelled successfully!', id: ticketId });
 
         } catch (error) {
@@ -597,23 +544,13 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
             const reporterEmail = ticketData.reporter_email;
             const assignedToEmail = ticketData.assigned_to_email;
             const commenterEmail = commenter_name;
-            let recipientEmail;
-            if (commenterEmail === reporterEmail && assignedToEmail) {
-                recipientEmail = assignedToEmail;
-            } else if (commenterEmail === assignedToEmail && reporterEmail) {
-                recipientEmail = reporterEmail;
-            }
+            // Always notify the reporter, CC support
             const emailSubject = `New Comment on Ticket ${ticketData.display_id}`;
-            const emailText = `A new comment was added by ${commenterEmail} on ticket ${ticketData.display_id} ("${ticketData.short_description}"):\n\n${comment_text}\n\nPlease check the ticketing system for more details.`;
-            const emailHtml = `<p>A new comment was added by <strong>${commenterEmail}</strong> on ticket <strong>${ticketData.display_id}</strong> ("${ticketData.short_description}"):</p><p>${comment_text}</p><p>Please check the ticketing system for more details.</p>`;
-            const commentRecipients = [];
-            if (recipientEmail) {
-                commentRecipients.push(recipientEmail);
-            }
-            commentRecipients.push('rakeshnani456@gmail.com');
-            for (const email of commentRecipients) {
-                await sendEmailAlert(email, emailSubject, emailText, emailHtml);
-            }
+            const emailText = `A new comment has been added to your ticket (${ticketData.display_id} - ${ticketData.short_description}):\n\n${comment_text}\n\nAccess the Ticketing Tool for more details.`;
+            const emailHtml = `<div style=\"font-family: Arial, sans-serif; color: #222;\"><p>A new comment has been added to your ticket (<strong>${ticketData.display_id}</strong> - ${ticketData.short_description}):</p><blockquote style=\"margin: 8px 0; padding-left: 12px; border-left: 2px solid #ccc;\">${comment_text}</blockquote><p>Access the Ticketing Tool for more details.</p></div>`;
+            setImmediate(() => {
+                sendEmailAlert(reporterEmail, emailSubject, emailText, emailHtml, 'tt.support@kriasol.com');
+            });
 
             return res.status(200).json({ message: 'Comment added successfully!' });
         } catch (error) {

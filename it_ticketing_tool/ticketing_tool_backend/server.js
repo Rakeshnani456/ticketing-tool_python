@@ -53,12 +53,15 @@ try {
     dbConnected = false;
 }
 
+// Office365 SMTP transporter for sending as TT.Support@kriasol.com via testing@kriasol.com
 const transporter = nodemailer.createTransport({
-    service: 'gmail',
+    host: 'smtp.office365.com',
+    port: 587,
+    secure: false, // use TLS
     auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-    },
+        user: process.env.EMAIL_USER, // Use process.env.EMAIL_USER in production
+        pass: process.env.EMAIL_PASS       // Use process.env.EMAIL_PASS in production
+    }
 });
 
 app.use(cors());
@@ -185,19 +188,22 @@ const requireSuperAdmin = (req, res, next) => {
 };
 
 // NEW: Helper function to send email alerts
-async function sendEmailAlert(toEmail, subject, text, html) {
+async function sendEmailAlert(toEmail, subject, text, html, cc = null) {
     try {
         const mailOptions = {
-            from: process.env.EMAIL_USER,
+            from: 'TT.Support@kriasol.com',
             to: toEmail,
             subject: subject,
             text: text,
             html: html,
         };
+        if (cc) {
+            mailOptions.cc = cc;
+        }
         await transporter.sendMail(mailOptions);
-        console.log(`Email sent successfully to ${toEmail}`);
+        console.log(`Email sent successfully to ${toEmail}${cc ? ' (cc: ' + cc + ')' : ''}`);
     } catch (error) {
-        console.error(`Error sending email to ${toEmail}: ${error.message}`);
+        console.error(`Error sending email to ${toEmail}${cc ? ' (cc: ' + cc + ')' : ''}: ${error.message}`);
     }
 }
 
@@ -210,6 +216,7 @@ const notificationRoutes = require('./routes/notificationRoutes');
 const clientRoutes = require('./routes/clientRoutes');
 const userManagementRoutes = require('./routes/userManagementRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
+const attachmentRoutes = require('./routes/attachmentRoutes');
 
 
 app.use('/', authRoutes(db, admin, usersCollection, verifyFirebaseToken));
@@ -219,6 +226,7 @@ app.use('/notifications', notificationRoutes(db, notificationsCollection, verify
 app.use('/api/clients', clientRoutes(db, clientsCollection, usersCollection));
 app.use('/api/users', userManagementRoutes(db, admin, usersCollection, clientsCollection));
 app.use('/dashboard', dashboardRoutes(db, ticketsCollection, clientsCollection, usersCollection, requireSuperAdmin));
+app.use('/upload-attachment', attachmentRoutes(admin, verifyFirebaseToken));
 
 
 // Add a dummy client if none exist (for testing) - keep this in server.js or a separate setup file
