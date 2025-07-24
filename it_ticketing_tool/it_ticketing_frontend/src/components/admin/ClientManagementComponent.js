@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { Avatar, Chip, Tooltip, Button, Menu, MenuItem, Snackbar, Alert, TextField, Box, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, IconButton, Typography } from '@mui/material';
+import { Avatar, Chip, Tooltip, Button, Menu, MenuItem, Snackbar, Alert, TextField, Box, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, IconButton, Typography, Collapse } from '@mui/material';
 import { ArrowDownward, ArrowUpward, Edit as EditIcon, Delete as DeleteIcon, Save as SaveIcon, Cancel as CancelIcon, Add as AddIcon, Clear as ClearIcon } from '@mui/icons-material';
 import Select from 'react-select'; // Import react-select
 import {
@@ -13,6 +13,8 @@ import {
 import { API_BASE_URL } from '../../config/constants';
 import { getFirestore, collection, onSnapshot } from 'firebase/firestore';
 import { app } from '../../config/firebase';
+import ClientInfoModal from '../common/ClientInfoModal';
+import PrimaryButton from '../common/PrimaryButton';
 
 // Helper to get initials from email or name
 const getInitials = (nameOrEmail) => {
@@ -35,17 +37,48 @@ const getContractStatus = (contractEnd) => {
 };
 
 const initialClientState = {
-  'Client name': '',
-  'Client type': '',
-  'Location': '',
-  'Domain': '',
-  'Joined date': '',
-  'No of users': '',
-  'Contract end': '',
-  'Site admin': '',
+  companyName: '',
+  website: '',
+  location: '',
+  clientContactNumber: '',
+  authFirstName: '',
+  authLastName: '',
+  authContactNumber: '',
+  authOfficeEmail: '',
+  authPersonalEmail: '',
+  authDesignation: '',
+  siteFirstName: '',
+  siteLastName: '',
+  siteEmail: '',
+  siteContactNumber: '',
+  siteDesignation: '',
 };
 
 const columnHelper = createColumnHelper();
+
+const GROUPS = [
+  {
+    key: 'company',
+    label: 'Company Info',
+    columns: [
+      'companyName', 'website', 'location', 'clientContactNumber'
+    ]
+  },
+  {
+    key: 'auth',
+    label: 'Auth Info',
+    columns: [
+      'authFirstName', 'authLastName', 'authContactNumber', 'authOfficeEmail', 'authPersonalEmail', 'authDesignation'
+    ]
+  },
+  {
+    key: 'site',
+    label: 'Site Admin Info',
+    columns: [
+      'siteFirstName', 'siteLastName', 'siteEmail', 'siteContactNumber', 'siteDesignation'
+    ]
+  }
+];
 
 const ClientManagementComponent = () => {
   const [clients, setClients] = useState([]);
@@ -53,145 +86,39 @@ const ClientManagementComponent = () => {
   const [error, setError] = useState(null);
   const [sorting, setSorting] = useState([]);
   const [centralFilterValue, setCentralFilterValue] = useState('');
-  const [centralFilterColumn, setCentralFilterColumn] = useState(null); // Changed to null for react-select value
-  const [manageAnchorEl, setManageAnchorEl] = useState(null);
+  const [centralFilterColumn, setCentralFilterColumn] = useState(null);
   const [editRowId, setEditRowId] = useState(null);
   const [editRowData, setEditRowData] = useState(null);
-  const [addMode, setAddMode] = useState(false);
-  const [addRowData, setAddRowData] = useState(initialClientState);
   const [deleteMode, setDeleteMode] = useState(false);
   const [selectedRowId, setSelectedRowId] = useState(null);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
   const [editMode, setEditMode] = useState(false);
+  const [showClientModal, setShowClientModal] = useState(false);
+  const [collapsedGroups, setCollapsedGroups] = useState({});
 
   const db = getFirestore(app);
 
   useEffect(() => {
     setLoading(true);
     setError(null);
-    let clientsData = [];
-    let usersData = [];
     let unsubClients = null;
-    let unsubUsers = null;
-
-    // Helper to recalculate and set clients with live user count
-    const updateClientsWithUserCount = () => {
-      // Build a map: domain -> user count
-      const domainUserCount = {};
-      usersData.forEach(user => {
-        if (user.domain) {
-          domainUserCount[user.domain] = (domainUserCount[user.domain] || 0) + 1;
-        }
-      });
-      setClients(clientsData.map(doc => {
-        const data = doc.data();
-        const userCount = domainUserCount[data.domain] || 0;
-        return {
-          id: doc.id,
-          'Client name': data.client_name,
-          'Client type': data.client_type,
-          'Location': data.location,
-          'Domain': data.domain,
-          'Joined date': data.joined_date,
-          'No of users': userCount,
-          'Contract end': data.contract_end,
-          'Site admin': data.site_admin
-        };
-      }));
-      setLoading(false);
-    };
-
     unsubClients = onSnapshot(collection(db, 'clients'), (snapshot) => {
-      clientsData = snapshot.docs;
-      updateClientsWithUserCount();
+      setClients(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setLoading(false);
     }, (err) => {
       setError('Could not load clients.');
       setClients([]);
       setLoading(false);
     });
-
-    unsubUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
-      usersData = snapshot.docs.map(doc => doc.data());
-      updateClientsWithUserCount();
-    }, (err) => {
-      setError('Could not load users for client count.');
-      setClients([]);
-      setLoading(false);
-    });
-
     return () => {
       if (unsubClients) unsubClients();
-      if (unsubUsers) unsubUsers();
     };
   }, []);
-
-  const handleManageClick = (event) => {
-    setManageAnchorEl(event.currentTarget);
-  };
-  const handleManageClose = () => {
-    setManageAnchorEl(null);
-  };
-
-  const handleAdd = () => {
-    setAddMode(true);
-    setAddRowData(initialClientState);
-    setEditRowId(null);
-    setDeleteMode(false);
-    handleManageClose();
-  };
-  const handleAddChange = (colId, value) => {
-    setAddRowData(prev => ({ ...prev, [colId]: value }));
-  };
-  const handleAddSave = async () => {
-    try {
-      const payload = {
-        client_name: addRowData['Client name'],
-        client_type: addRowData['Client type'],
-        location: addRowData['Location'],
-        domain: addRowData['Domain'],
-        joined_date: addRowData['Joined date'],
-        no_of_users: addRowData['No of users'],
-        contract_end: addRowData['Contract end'],
-        site_admin: addRowData['Site admin'],
-      };
-      const res = await fetch(`${API_BASE_URL}/api/clients`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) throw new Error('Failed to add client');
-      const newClient = await res.json();
-      setClients(prev => [
-        {
-          id: newClient.id,
-          'Client name': newClient.client_name,
-          'Client type': newClient.client_type,
-          'Location': newClient.location,
-          'Domain': newClient.domain,
-          'Joined date': newClient.joined_date,
-          'No of users': newClient.no_of_users,
-          'Contract end': newClient.contract_end,
-          'Site admin': newClient.site_admin,
-        },
-        ...prev,
-      ]);
-      setAddMode(false);
-      setSnackbar({ open: true, message: 'Client added successfully.', severity: 'success' });
-    } catch (err) {
-      setSnackbar({ open: true, message: err.message, severity: 'error' });
-    }
-  };
-  const handleAddCancel = () => {
-    setAddMode(false);
-    setAddRowData(initialClientState);
-  };
 
   const handleEdit = () => {
     setEditMode(true);
     setEditRowId(null);
-    setAddMode(false);
     setDeleteMode(false);
-    handleManageClose();
   };
   const handleEditClick = (row) => {
     setEditRowId(row.id);
@@ -203,14 +130,21 @@ const ClientManagementComponent = () => {
   const handleEditSave = async () => {
     try {
       const payload = {
-        client_name: editRowData['Client name'],
-        client_type: editRowData['Client type'],
-        location: editRowData['Location'],
-        domain: editRowData['Domain'],
-        joined_date: editRowData['Joined date'],
-        no_of_users: editRowData['No of users'],
-        contract_end: editRowData['Contract end'],
-        site_admin: editRowData['Site admin'],
+        companyName: editRowData['companyName'],
+        website: editRowData['website'],
+        location: editRowData['location'],
+        clientContactNumber: editRowData['clientContactNumber'],
+        authFirstName: editRowData['authFirstName'],
+        authLastName: editRowData['authLastName'],
+        authContactNumber: editRowData['authContactNumber'],
+        authOfficeEmail: editRowData['authOfficeEmail'],
+        authPersonalEmail: editRowData['authPersonalEmail'],
+        authDesignation: editRowData['authDesignation'],
+        siteFirstName: editRowData['siteFirstName'],
+        siteLastName: editRowData['siteLastName'],
+        siteEmail: editRowData['siteEmail'],
+        siteContactNumber: editRowData['siteContactNumber'],
+        siteDesignation: editRowData['siteDesignation'],
       };
       const res = await fetch(`${API_BASE_URL}/api/clients/${editRowId}`, {
         method: 'PUT',
@@ -234,9 +168,7 @@ const ClientManagementComponent = () => {
 
   const handleDelete = () => {
     setDeleteMode(true);
-    setAddMode(false);
     setEditRowId(null);
-    handleManageClose();
   };
   const handleDeleteConfirm = async () => {
     try {
@@ -261,128 +193,83 @@ const ClientManagementComponent = () => {
     table.setGlobalFilter('');
   };
 
-  const columns = useMemo(() => {
-    // Determine if any row is being edited, deleted, or if editMode is active
+  const groupedColumns = useMemo(() => {
+    return GROUPS.map(group => {
+      const isCollapsed = collapsedGroups[group.key];
+      return {
+        header: (
+          <Box display="flex" alignItems="center" gap={0.5}>
+            <IconButton
+              size="small"
+              onClick={e => {
+                e.stopPropagation();
+                setCollapsedGroups(prev => ({ ...prev, [group.key]: !prev[group.key] }));
+              }}
+              sx={{ p: 0.2 }}
+              aria-label={isCollapsed ? `Expand ${group.label}` : `Collapse ${group.label}`}
+            >
+              {isCollapsed ? <ArrowDownward fontSize="inherit" /> : <ArrowUpward fontSize="inherit" />}
+            </IconButton>
+            <span>{group.label}</span>
+          </Box>
+        ),
+        columns: isCollapsed
+          ? []
+          : group.columns.map(colId =>
+              columnHelper.accessor(colId, { header: colId.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase()), enableSorting: true })
+            )
+      };
+    });
+  }, [collapsedGroups]);
+
+  const actionsColumn = useMemo(() => {
     const showActionsColumn = Boolean(
-      addMode ||
       editMode ||
       (typeof editRowId !== 'undefined' && editRowId !== null) ||
       (typeof deleteMode !== 'undefined' && deleteMode && typeof selectedRowId !== 'undefined' && selectedRowId !== null)
     );
-    const baseColumns = [
-      columnHelper.accessor('Client name', {
-        id: 'clientName',
-        header: 'Client name',
-        cell: info => (
-          <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Avatar sx={{ width: 18, height: 18, fontSize: 9, bgcolor: '#1976d2' }}>{getInitials(info.getValue())}</Avatar>
-            <span style={{ fontWeight: 600 }}>{info.getValue()}</span>
-          </span>
-        ),
-        enableSorting: true,
-      }),
-      columnHelper.accessor('Client type', {
-        id: 'clientType',
-        header: 'Type',
-        cell: info => (
-          <Chip label={info.getValue()} size="small" color={info.getValue() === 'Enterprise' ? 'primary' : info.getValue() === 'SMB' ? 'secondary' : 'default'} sx={{ fontWeight: 500, fontSize: 8, height: 16 }} />
-        ),
-        enableSorting: true,
-      }),
-      columnHelper.accessor('Location', {
-        id: 'location',
-        header: 'Location',
-        enableSorting: true,
-      }),
-      columnHelper.accessor('Domain', {
-        id: 'domain',
-        header: 'Domain',
-        enableSorting: true,
-      }),
-      columnHelper.accessor('Joined date', {
-        id: 'joinedDate',
-        header: 'Joined',
-        enableSorting: true,
-      }),
-      columnHelper.accessor('No of users', {
-        id: 'noOfUsers',
-        header: 'Users',
-        sortingFn: (rowA, rowB, columnId) => {
-          const valA = Number(rowA.getValue(columnId));
-          const valB = Number(rowB.getValue(columnId));
-          return valA - valB;
+    if (!showActionsColumn) return [];
+    return [
+      columnHelper.display({
+        id: 'actions',
+        header: '',
+        cell: ({ row }) => {
+          const isEditingThisRow = editRowId === row.original.id;
+          const isDeletingThisRow = deleteMode && selectedRowId === row.original.id;
+          if (isEditingThisRow) {
+            return (
+              <>
+                <Button onClick={handleEditSave} color="primary" size="small" sx={{ fontSize: '0.65rem', minWidth: 0, px: 0.5, py: 0 }}><SaveIcon fontSize="small" /></Button>
+                <Button onClick={handleEditCancel} color="inherit" size="small" sx={{ fontSize: '0.65rem', minWidth: 0, px: 0.5, py: 0 }}><CancelIcon fontSize="small" /></Button>
+              </>
+            );
+          }
+          if (isDeletingThisRow) {
+            return (
+              <>
+                <Button onClick={handleDeleteConfirm} color="error" size="small" sx={{ fontSize: '0.65rem', minWidth: 0, px: 0.5, py: 0 }}><DeleteIcon fontSize="small" /></Button>
+                <Button onClick={handleDeleteCancel} color="inherit" size="small" sx={{ fontSize: '0.65rem', minWidth: 0, px: 0.5, py: 0 }}><CancelIcon fontSize="small" /></Button>
+              </>
+            );
+          }
+          if (editMode) {
+            return (
+              <Button onClick={() => handleEditClick(row.original)} color="primary" size="small" sx={{ fontSize: '0.65rem', minWidth: 0, px: 0.5, py: 0 }}><EditIcon fontSize="small" /></Button>
+            );
+          }
+          return null;
         },
-        enableSorting: true,
-      }),
-      columnHelper.accessor('Contract end', {
-        id: 'contractEnd',
-        header: 'Contract',
-        cell: info => {
-          const status = getContractStatus(info.getValue());
-          return <Chip label={status.label} size="small" color={status.color} variant={status.color === 'default' ? 'outlined' : 'filled'} sx={{ fontWeight: 500, fontSize: 8, height: 16 }} />;
-        },
-        sortingFn: (rowA, rowB, columnId) => {
-          const dateA = new Date(rowA.getValue(columnId));
-          const dateB = new Date(rowB.getValue(columnId));
-          if (dateA < dateB) return -1;
-          if (dateA > dateB) return 1;
-          return 0;
-        },
-        enableSorting: true,
-      }),
-      columnHelper.accessor('Site admin', {
-        id: 'siteAdmin',
-        header: 'Site admin',
-        cell: info => (
-          <Tooltip title={info.getValue()}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Avatar sx={{ width: 18, height: 18, fontSize: 9, bgcolor: '#607d8b' }}>{getInitials(info.getValue())}</Avatar>
-              <span style={{ fontWeight: 500 }}>{info.getValue()}</span>
-            </span>
-          </Tooltip>
-        ),
-        enableSorting: true,
-      }),
+        enableSorting: false,
+        size: 70,
+      })
     ];
-    if (showActionsColumn) {
-      baseColumns.push(
-        columnHelper.display({
-          id: 'actions',
-          header: '',
-          cell: ({ row }) => {
-            const isEditingThisRow = editRowId === row.original.id;
-            const isDeletingThisRow = deleteMode && selectedRowId === row.original.id;
+  }, [editMode, editRowId, deleteMode, selectedRowId, handleEditSave, handleEditCancel, handleDeleteConfirm, handleDeleteCancel, handleEditClick]);
 
-            if (isEditingThisRow) {
-              return (
-                <>
-                  <Button onClick={handleEditSave} color="primary" size="small" sx={{ fontSize: '0.65rem', minWidth: 0, px: 0.5, py: 0 }}><SaveIcon fontSize="small" /></Button>
-                  <Button onClick={handleEditCancel} color="inherit" size="small" sx={{ fontSize: '0.65rem', minWidth: 0, px: 0.5, py: 0 }}><CancelIcon fontSize="small" /></Button>
-                </>
-              );
-            }
-            if (isDeletingThisRow) {
-              return (
-                <>
-                  <Button onClick={handleDeleteConfirm} color="error" size="small" sx={{ fontSize: '0.65rem', minWidth: 0, px: 0.5, py: 0 }}><DeleteIcon fontSize="small" /></Button>
-                  <Button onClick={handleDeleteCancel} color="inherit" size="small" sx={{ fontSize: '0.65rem', minWidth: 0, px: 0.5, py: 0 }}><CancelIcon fontSize="small" /></Button>
-                </>
-              );
-            }
-            if (editMode) {
-              return (
-                <Button onClick={() => handleEditClick(row.original)} color="primary" size="small" sx={{ fontSize: '0.65rem', minWidth: 0, px: 0.5, py: 0 }}><EditIcon fontSize="small" /></Button>
-              );
-            }
-            return null;
-          },
-          enableSorting: false,
-          size: 70,
-        })
-      );
-    }
-    return baseColumns;
-  }, [addMode, editMode, editRowId, deleteMode, selectedRowId, handleEditSave, handleEditCancel, handleDeleteConfirm, handleDeleteCancel, handleEditClick]);
+  const columns = useMemo(() => {
+    // Flatten grouped columns and add actions column if needed
+    const flatCols = groupedColumns.flatMap(group => group.columns);
+    return [...flatCols, ...actionsColumn];
+  }, [groupedColumns, actionsColumn]);
 
   const customGlobalFilterFn = useMemo(() => {
     return (row, columnId, filterValue) => {
@@ -390,7 +277,6 @@ const ClientManagementComponent = () => {
         return true;
       }
 
-      // `centralFilterColumn` will be an object `{ value: columnId, label: headerName }` from react-select
       const selectedColumnId = centralFilterColumn ? centralFilterColumn.value : null;
 
       if (selectedColumnId) {
@@ -567,12 +453,53 @@ const ClientManagementComponent = () => {
   };
 
   return (
-    <div className="p-6" style={{ width: '100%', minHeight: '100vh', overflow: 'hidden', boxSizing: 'border-box' }}>
-      <div style={{ marginBottom: 8 }}>
-        <h2 className="text-2xl font-bold" style={{ marginBottom: 0 }}>Client Management</h2>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginTop: 4, marginBottom: 8, gap: 8 }}>
+    <div className="p-6" style={{ width: '100%', minHeight: '100vh', overflowX: 'hidden', overflowY: 'auto', boxSizing: 'border-box' }}>
+      {/* Add Client and Manage Buttons */}
+      <div className="flex items-center gap-2 mb-4" style={{ width: '100%', overflowX: 'hidden' }}>
+        <Button
+          variant="contained"
+          color="primary"
+          onClick={() => setShowClientModal(true)}
+          size="small"
+          sx={{ fontSize: '0.6rem', textTransform: 'none', minWidth: 'auto', padding: '2px 10px', height: 24, lineHeight: 1, boxShadow: 'none', borderRadius: 1 }}
+        >
+          Add Client
+        </Button>
+        <Button
+          variant="outlined"
+          color="primary"
+          onClick={handleEdit}
+          size="small"
+          sx={{ fontSize: '0.6rem', textTransform: 'none', minWidth: 'auto', padding: '2px 10px', height: 24, lineHeight: 1, boxShadow: 'none', borderRadius: 1 }}
+        >
+          {editMode ? 'Exit Edit' : 'Edit Clients'}
+        </Button>
+        <Button
+          variant="outlined"
+          color="error"
+          onClick={handleDelete}
+          size="small"
+          sx={{ fontSize: '0.6rem', textTransform: 'none', minWidth: 'auto', padding: '2px 10px', height: 24, lineHeight: 1, boxShadow: 'none', borderRadius: 1 }}
+        >
+          {deleteMode ? 'Cancel Delete' : 'Delete Clients'}
+        </Button>
+        {deleteMode && selectedRowId && (
+          <Button
+            variant="contained"
+            color="error"
+            onClick={handleDeleteConfirm}
+            size="small"
+            sx={{ fontSize: '0.6rem', textTransform: 'none', minWidth: 'auto', padding: '2px 10px', height: 24, lineHeight: 1, boxShadow: 'none', borderRadius: 1 }}
+          >
+            Confirm Delete
+          </Button>
+        )}
+      </div>
+      <div style={{ marginBottom: 8, width: '100%', overflowX: 'hidden' }}>
+        <h2 className="text-2xl font-bold" style={{ marginBottom: 0, wordBreak: 'break-word', maxWidth: '100%' }}>Client Management</h2>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginTop: 4, marginBottom: 8, gap: 8, flexWrap: 'wrap', maxWidth: '100%' }}>
           {/* Filter by Section */}
-          <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center', width: 'auto' }}>
+          <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center', width: 'auto', overflowX: 'hidden' }}>
             {/* Filter By Label */}
             <Typography variant="body2" sx={{ fontSize: `${newFontSizeRem}rem`, whiteSpace: 'nowrap', pr: 0.5 }}>
               Filter By:
@@ -644,194 +571,160 @@ const ClientManagementComponent = () => {
               }}
             />
           </Box>
-
-          {/* Manage Button */}
-          {(editMode || addMode || deleteMode) ? (
-            <Button
-              variant="outlined"
-              color="error"
-              onClick={() => {
-                // Cancel all modes and close menu
-                if (editMode) handleEditCancel();
-                if (addMode) handleAddCancel();
-                if (deleteMode) handleDeleteCancel();
-                handleManageClose();
-              }}
-              size="small"
-              sx={{ fontSize: '0.6rem', textTransform: 'none', minWidth: 'auto', padding: '2px 10px', height: 24, lineHeight: 1, boxShadow: 'none', borderRadius: 1 }}
-            >
-              Cancel
-            </Button>
-          ) : (
-            <Button
-              variant="contained"
-              color="primary"
-              onClick={handleManageClick}
-              size="small"
-              sx={{ fontSize: '0.6rem', textTransform: 'none', minWidth: 'auto', padding: '2px 10px', height: 24, lineHeight: 1, boxShadow: 'none', borderRadius: 1 }}
-            >
-              Manage
-            </Button>
-          )}
-          <Menu
-            anchorEl={manageAnchorEl}
-            open={Boolean(manageAnchorEl)}
-            onClose={handleManageClose}
-            anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-            transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-          >
-            <MenuItem onClick={handleEdit} sx={{ fontSize: '0.65rem', paddingY: 0.5, paddingX: 1.5, minHeight: 28 }}>Edit</MenuItem>
-            <MenuItem onClick={handleAdd} sx={{ fontSize: '0.65rem', paddingY: 0.5, paddingX: 1.5, minHeight: 28 }}>Add</MenuItem>
-            <MenuItem onClick={handleDelete} sx={{ fontSize: '0.65rem', paddingY: 0.5, paddingX: 1.5, minHeight: 28 }}>Delete</MenuItem>
-          </Menu>
         </div>
       </div>
       {error && <div className="text-red-600 mb-2">{error}</div>}
 
-      <TableContainer component={Paper} sx={{
-        width: '100%',
-        overflowX: 'hidden',
-        overflowY: 'auto',
-        background: 'white',
-        borderRadius: 2,
-        boxShadow: 'none',
-        flexGrow: 1,
-        display: 'flex',
-        flexDirection: 'column',
-      }}>
-        <Table stickyHeader aria-label="client table" size="small" sx={{
-          minWidth: 700,
-          '& .MuiTableCell-root': { fontSize: '0.7rem' },
-          tableLayout: 'auto'
+      {/* Responsive Table Wrapper - This is where the table's internal scrollbar is managed */}
+      <div style={{ width: '100%', overflowX: 'hidden', maxWidth: '100%' }}>
+        {/* TableContainer is now the only element that can scroll horizontally if needed */}
+        <TableContainer component={Paper} sx={{
+          width: '100%', // Take full width of its parent
+          overflowX: 'auto', // Allow horizontal scroll only for the table
+          overflowY: 'auto',
+          background: 'white',
+          borderRadius: 2,
+          boxShadow: 'none',
+          flexGrow: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          marginBottom: 0,
         }}>
-          <TableHead>
-            {table.getHeaderGroups().map(headerGroup => (
-              <TableRow key={headerGroup.id}>
-                {headerGroup.headers.map((header, idx) => (
-                  <TableCell
-                    key={header.id}
-                    colSpan={header.colSpan}
-                    sx={{
-                      fontWeight: 'bold',
-                      backgroundColor: '#f8f9fb',
-                      paddingY: 0.5,
-                      fontSize: '0.7rem',
-                      cursor: header.column.getCanSort() ? 'pointer' : 'default',
-                      borderRight: idx !== headerGroup.headers.length - 1 ? '1px solid #e0e0e0' : 'none',
-                    }}
-                    onClick={header.column.getToggleSortingHandler()}
-                  >
-                    {header.isPlaceholder ? null : (
-                      <Box display="flex" alignItems="center" gap={0.5}>
-                        {flexRender(
-                          header.column.columnDef.header,
-                          header.getContext()
-                        )}
-                        {header.column.getIsSorted() === 'asc' && <ArrowUpward fontSize="inherit" sx={{ fontSize: '0.6rem' }} />}
-                        {header.column.getIsSorted() === 'desc' && <ArrowDownward fontSize="inherit" sx={{ fontSize: '0.6rem' }} />}
-                      </Box>
-                    )}
-                  </TableCell>
-                ))}
-              </TableRow>
-            ))}
-          </TableHead>
-          <TableBody>
-            {addMode && (
-              <TableRow>
-                {table.getAllColumns().map(column => {
-                  const colIdMap = {
-                    'clientName': 'Client name', 'clientType': 'Client type', 'location': 'Location',
-                    'domain': 'Domain', 'joinedDate': 'Joined date', 'noOfUsers': 'No of users',
-                    'contractEnd': 'Contract end', 'siteAdmin': 'Site admin',
-                  };
-                  const displayColId = colIdMap[column.id] || column.id;
-                  if (column.id === 'actions') {
-                    return (
-                      <TableCell key={column.id} sx={{ paddingY: 0.5 }}>
-                        <Button onClick={handleAddSave} color="primary" size="small" sx={{ fontSize: '0.6rem', minWidth: 0, mr: 1 }}><SaveIcon fontSize="small" /></Button>
-                        <Button onClick={handleAddCancel} color="inherit" size="small" sx={{ fontSize: '0.6rem', minWidth: 0 }}><CancelIcon fontSize="small" /></Button>
-                      </TableCell>
-                    );
-                  }
-                  return (
-                    <TableCell key={column.id} sx={{ paddingY: 0.5 }}>
-                      <input
-                        value={addRowData[displayColId]}
-                        onChange={e => handleAddChange(displayColId, e.target.value)}
-                        style={{
-                          width: '100%',
-                          fontSize: '0.65rem',
-                          padding: 0,
-                          border: 'none',
-                          borderRadius: 0,
-                          background: 'transparent',
-                          boxSizing: 'border-box',
-                          outline: 'none',
-                          height: '1.8em',
-                        }}
-                        placeholder={displayColId}
-                      />
-                    </TableCell>
-                  );
-                })}
-              </TableRow>
-            )}
-
-            {table.getRowModel().rows.map(row => (
-              <TableRow
-                key={row.id}
-                onClick={() => deleteMode && setSelectedRowId(row.original.id)}
-                sx={{
-                  '&:nth-of-type(odd)': { backgroundColor: '#fdfdfe' },
-                  '&:hover': { backgroundColor: '#f0f0f0' },
-                  cursor: deleteMode ? 'pointer' : 'default',
-                  backgroundColor: deleteMode && selectedRowId === row.original.id ? '#ffebee' : 'inherit',
-                }}
-              >
-                {row.getVisibleCells().map((cell, idx) => {
-                  const isEditingThisCell = editRowId === row.original.id && cell.column.id !== 'actions';
-                  const colIdMap = {
-                    'clientName': 'Client name', 'clientType': 'Client type', 'location': 'Location',
-                    'domain': 'Domain', 'joinedDate': 'Joined date', 'noOfUsers': 'No of users',
-                    'contractEnd': 'Contract end', 'siteAdmin': 'Site admin',
-                  };
-                  const displayColId = colIdMap[cell.column.id] || cell.column.id;
-                  return (
-                    <TableCell key={cell.id} sx={{ paddingY: 0.5, borderRight: idx !== row.getVisibleCells().length - 1 ? '1px solid #e0e0e0' : 'none' }}>
-                      {isEditingThisCell ? (
-                        <input
-                          value={editRowData?.[displayColId] || ''}
-                          onChange={e => handleEditChange(displayColId, e.target.value)}
-                          style={{
-                            width: '100%',
-                            fontSize: '0.65rem',
-                            padding: 0,
-                            border: 'none',
-                            borderRadius: 0,
-                            background: 'transparent',
-                            boxSizing: 'border-box',
-                            outline: 'none',
-                            height: '1.8em',
-                          }}
-                          placeholder={displayColId}
-                        />
-                      ) : (
-                        flexRender(cell.column.columnDef.cell, cell.getContext())
+          {/*
+            Responsive Table: The table will always fit the canvas width. If there are too many columns, only the table content will scroll horizontally. The main canvas will never have a horizontal scrollbar.
+          */}
+          <Table stickyHeader aria-label="client table" size="small" sx={{
+            width: 'max-content', // Table grows as needed for columns
+            minWidth: '100%', // Always at least as wide as the container
+            '& .MuiTableCell-root': { fontSize: '0.7rem' },
+            tableLayout: 'auto', // Let browser calculate column widths
+          }}>
+            <TableHead>
+              {table.getHeaderGroups().map(headerGroup => (
+                <TableRow key={headerGroup.id}>
+                  {headerGroup.headers.map((header, idx) => (
+                    <TableCell
+                      key={header.id}
+                      colSpan={header.colSpan}
+                      sx={{
+                        fontWeight: 'bold',
+                        backgroundColor: '#f8f9fb',
+                        paddingY: 0.5,
+                        fontSize: '0.7rem',
+                        cursor: header.column.getCanSort() ? 'pointer' : 'default',
+                        borderRight: idx !== headerGroup.headers.length - 1 ? '1px solid #e0e0e0' : 'none',
+                        whiteSpace: 'nowrap', // Prevents header text from wrapping
+                      }}
+                      onClick={header.column.getToggleSortingHandler()}
+                    >
+                      {header.isPlaceholder ? null : (
+                        <Box display="flex" alignItems="center" gap={0.5}>
+                          {flexRender(
+                            header.column.columnDef.header,
+                            header.getContext()
+                          )}
+                          {header.column.getIsSorted() === 'asc' && <ArrowUpward fontSize="inherit" sx={{ fontSize: '0.6rem' }} />}
+                          {header.column.getIsSorted() === 'desc' && <ArrowDownward fontSize="inherit" sx={{ fontSize: '0.6rem' }} />}
+                        </Box>
                       )}
                     </TableCell>
-                  );
-                })}
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </TableContainer>
+                  ))}
+                </TableRow>
+              ))}
+            </TableHead>
+            <TableBody>
+              {table.getRowModel().rows.map(row => (
+                <TableRow
+                  key={row.id}
+                  onClick={() => deleteMode && setSelectedRowId(row.original.id)}
+                  sx={{
+                    '&:nth-of-type(odd)': { backgroundColor: '#fdfdfe' },
+                    '&:hover': { backgroundColor: '#f0f0f0' },
+                    cursor: deleteMode ? 'pointer' : 'default',
+                    backgroundColor: deleteMode && selectedRowId === row.original.id ? '#ffebee' : 'inherit',
+                  }}
+                >
+                  {row.getVisibleCells().map((cell, idx) => {
+                    const isEditingThisCell = editRowId === row.original.id && cell.column.id !== 'actions';
+                    return (
+                      <TableCell key={cell.id} sx={{
+                        paddingY: 0.5,
+                        borderRight: idx !== row.getVisibleCells().length - 1 ? '1px solid #e0e0e0' : 'none',
+                        whiteSpace: 'nowrap', // Prevents body cell text from wrapping
+                        maxWidth: 200, // Prevents cells from growing too wide
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      }}>
+                        {isEditingThisCell ? (
+                          <input
+                            value={editRowData?.[cell.column.id] || ''}
+                            onChange={e => handleEditChange(cell.column.id, e.target.value)}
+                            style={{
+                              width: '100%',
+                              fontSize: '0.65rem',
+                              padding: 0,
+                              border: 'none',
+                              borderRadius: 0,
+                              background: 'transparent',
+                              boxSizing: 'border-box',
+                              outline: 'none',
+                              height: '1.8em',
+                            }}
+                            placeholder={cell.column.header}
+                          />
+                        ) : (
+                          flexRender(cell.column.columnDef.cell, cell.getContext())
+                        )}
+                      </TableCell>
+                    );
+                  })}
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </div>
       <Snackbar open={snackbar.open} autoHideDuration={3000} onClose={() => setSnackbar({ ...snackbar, open: false })}>
         <Alert onClose={() => setSnackbar({ ...snackbar, open: false })} severity={snackbar.severity} sx={{ width: '100%' }}>
           {snackbar.message}
         </Alert>
       </Snackbar>
+      {/* Client Info Modal */}
+      <ClientInfoModal
+        isOpen={showClientModal}
+        onClose={() => setShowClientModal(false)}
+        onSave={async (data) => {
+          const payload = {
+            companyName: data.companyName,
+            website: data.website,
+            location: data.location,
+            clientContactNumber: data.clientContactNumber,
+            authFirstName: data.authFirstName,
+            authLastName: data.authLastName,
+            authContactNumber: data.authContactNumber,
+            authOfficeEmail: data.authOfficeEmail,
+            authPersonalEmail: data.authPersonalEmail,
+            authDesignation: data.authDesignation,
+            siteFirstName: data.siteFirstName,
+            siteLastName: data.siteLastName,
+            siteEmail: data.siteEmail,
+            siteContactNumber: data.siteContactNumber,
+            siteDesignation: data.siteDesignation,
+          };
+          try {
+            const res = await fetch(`${API_BASE_URL}/api/clients`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+            });
+            if (!res.ok) throw new Error('Failed to add client');
+            setSnackbar({ open: true, message: 'Client info saved successfully.', severity: 'success' });
+            setShowClientModal(false);
+          } catch (err) {
+            setSnackbar({ open: true, message: err.message, severity: 'error' });
+          }
+        }}
+      />
     </div>
   );
 };
