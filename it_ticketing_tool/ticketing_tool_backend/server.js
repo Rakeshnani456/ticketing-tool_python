@@ -1414,10 +1414,6 @@ app.get('/tickets/export', verifyFirebaseToken, checkRole(['support', 'admin', '
         const snapshot = await query.get();
         const allTickets = snapshot.docs.map(doc => jsonSerializableTicket(doc.id, doc.data()));
 
-        if (allTickets.length === 0) {
-            return res.status(404).json({ message: 'No tickets found for the specified criteria.' });
-        }
-
         // CSV Generation Logic
         const headers = [
             "Ticket ID",
