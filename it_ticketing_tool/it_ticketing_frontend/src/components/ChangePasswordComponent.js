@@ -19,6 +19,7 @@ import PrimaryButton from './common/PrimaryButton';
  * @returns {JSX.Element} The password change view.
  */
 const ChangePasswordComponent = ({ user, showFlashMessage, navigateTo }) => {
+    const [currentPassword, setCurrentPassword] = useState('');
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [passwordChangeLoading, setPasswordChangeLoading] = useState(false);
@@ -34,6 +35,11 @@ const ChangePasswordComponent = ({ user, showFlashMessage, navigateTo }) => {
         setPasswordError('');
 
         // Client-side validation for password match and length
+        if (!currentPassword) {
+            setPasswordError('Current password is required.');
+            showFlashMessage('Current password is required.', 'error');
+            return;
+        }
         if (newPassword !== confirmPassword) {
             setPasswordError('New password and confirm password do not match.');
             showFlashMessage('New password and confirm password do not match.', 'error');
@@ -48,7 +54,7 @@ const ChangePasswordComponent = ({ user, showFlashMessage, navigateTo }) => {
         setPasswordChangeLoading(true);
         try {
             // Step 1: Re-authenticate the user with their current password
-            const credential = EmailAuthProvider.credential(user.firebaseUser.email, newPassword); // Use newPassword for re-authentication
+            const credential = EmailAuthProvider.credential(user.firebaseUser.email, currentPassword);
             await reauthenticateWithCredential(user.firebaseUser, credential);
 
             // Step 2: If re-authentication is successful, proceed with password update
@@ -57,9 +63,10 @@ const ChangePasswordComponent = ({ user, showFlashMessage, navigateTo }) => {
             const userDocRef = doc(dbClient, 'users', user.firebaseUser.uid);
             await updateDoc(userDocRef, { mustChangePassword: false });
             showFlashMessage('Password updated successfully!', 'success');
+            setCurrentPassword('');
             setNewPassword('');
             setConfirmPassword('');
-            navigateTo('profile'); // Navigate back to profile after successful change
+            navigateTo('/profile'); // Navigate back to profile after successful change
         } catch (err) {
             console.error('Password change error:', err);
             let errorMessage = 'Failed to update password.';
@@ -89,6 +96,15 @@ const ChangePasswordComponent = ({ user, showFlashMessage, navigateTo }) => {
             <h2 className="text-xl font-extrabold text-gray-800 mb-4 text-center">Set New Password</h2>
             <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-md mx-auto border border-gray-200">
                 <form onSubmit={handleChangePassword} className="space-y-3">
+                    <FormInput
+                        id="currentPassword"
+                        label="Current Password"
+                        type="password"
+                        value={currentPassword}
+                        onChange={(e) => setCurrentPassword(e.target.value)}
+                        required
+                        showPasswordToggle={true}
+                    />
                     <FormInput
                         id="newPassword"
                         label="New Password"

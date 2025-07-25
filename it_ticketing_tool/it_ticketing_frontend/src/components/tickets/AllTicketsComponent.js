@@ -1,7 +1,7 @@
 // src/components/tickets/AllTicketsComponent.js
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Loader2, XCircle, ListFilter, Download, User, CheckCircle } from 'lucide-react';
+import { Loader2, XCircle, ListFilter, Download, User, CheckCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { collection, query, onSnapshot, where, orderBy, getFirestore } from 'firebase/firestore';
 
 // Import common UI components
@@ -462,7 +462,41 @@ const counts = {
     }, []); // No dependencies for handleCloseMessage itself, uses refs
 
     // Conditional rendering for error states only
-    if (error && !showExportPopup) return <div className="text-center text-red-600 mt-8 text-base flex items-center justify-center space-x-2"><XCircle size={20} /> <span>Error: {error}</span></div>;
+    const [currentPage, setCurrentPage] = useState(1);
+    const ticketsPerPage = 15;
+    const totalPages = Math.ceil(displayedTickets.length / ticketsPerPage);
+    const paginatedTickets = displayedTickets.slice((currentPage - 1) * ticketsPerPage, currentPage * ticketsPerPage);
+
+    useEffect(() => { setCurrentPage(1); }, [displayedTickets]);
+
+    const handlePageChange = (page) => {
+      if (page >= 1 && page <= totalPages) setCurrentPage(page);
+    };
+
+    function renderPagination() {
+      if (totalPages <= 1) return null;
+      const pages = [];
+      let start = Math.max(1, currentPage - 1);
+      let end = Math.min(totalPages, start + 2);
+      if (end - start < 2) start = Math.max(1, end - 2);
+      for (let i = start; i <= end; i++) {
+        pages.push(
+          <button key={i} onClick={() => handlePageChange(i)} className={`mx-0.5 w-5 h-5 flex items-center justify-center rounded-full text-[10px] font-semibold transition-colors duration-200 ${i === currentPage ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}>{i}</button>
+        );
+      }
+      const firstTicket = (currentPage - 1) * ticketsPerPage + 1;
+      const lastTicket = Math.min(currentPage * ticketsPerPage, displayedTickets.length);
+      return (
+        <>
+          <div className="inline-flex items-center gap-0.5 align-middle">
+            <button onClick={() => handlePageChange(currentPage - 1)} disabled={currentPage === 1} className="w-5 h-5 flex items-center justify-center rounded-full bg-gray-200 text-gray-800 hover:bg-gray-300 disabled:opacity-50"><ChevronLeft size={10} /></button>
+            {pages}
+            <button onClick={() => handlePageChange(currentPage + 1)} disabled={currentPage === totalPages} className="w-5 h-5 flex items-center justify-center rounded-full bg-gray-200 text-gray-800 hover:bg-gray-300 disabled:opacity-50"><ChevronRight size={10} /></button>
+          </div>
+          <div className="text-[10px] text-gray-500 mt-1 ml-1" style={{ position: 'absolute', left: 0, top: '100%' }}>Showing tickets {firstTicket}-{lastTicket} of {displayedTickets.length}</div>
+        </>
+      );
+    }
 
     return (
         <div className="p-4 bg-white flex-1 overflow-auto">
@@ -495,9 +529,10 @@ const counts = {
                     <button onClick={() => { setFilterAssignment('unassigned'); setFilterStatus(''); }} className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors duration-200 shadow-sm ${filterAssignment === 'unassigned' && filterStatus === '' ? 'bg-orange-600 text-white hover:bg-orange-700' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`} > Unassigned ({counts.unassigned}) </button>
                     {/* Removed the 'Assigned to Me' button */}
 
-                    {/* Export button and popup */}
-                    <div className="relative ml-auto flex items-center">
-                        <PrimaryButton
+                    {/* In the filter/export section, move pagination to be just left of Export button */}
+                    <div className="relative ml-auto flex items-center gap-2">
+                        {renderPagination()}
+                        <div className="ml-3"><PrimaryButton
                             onClick={toggleExportPopup}
                             Icon={Download}
                             className="w-auto px-3 py-1 text-xs"
@@ -505,7 +540,7 @@ const counts = {
                             ref={exportButtonRef}
                         >
                             Export
-                        </PrimaryButton>
+                        </PrimaryButton></div>
 
                         {showExportPopup && (
                             <div ref={exportPopupRef} className="absolute top-full right-0 mt-2 p-3 bg-white border border-gray-300 rounded-md shadow-lg z-10 flex flex-col space-y-2">
@@ -609,7 +644,7 @@ const counts = {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200">
-                            {displayedTickets.map((ticket, index) => (
+                            {paginatedTickets.map((ticket, index) => (
                                 <tr key={ticket.id} className="block sm:table-row bg-white border-b border-gray-200 hover:bg-gray-50 transition-colors duration-150 odd:bg-white even:bg-gray-50 text-xs">
                                     <td className="block sm:table-cell px-2 py-2 text-xs text-gray-800 whitespace-normal break-words">
                                         <span className="block sm:hidden font-semibold text-gray-600">#:</span>

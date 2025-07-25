@@ -29,7 +29,7 @@ const LoginComponent = ({ onLoginSuccess, navigateTo, showFlashMessage }) => {
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [mustChangePassword, setMustChangePassword] = useState(false);
-    const [firebaseUserForChange, setFirebaseUserForChange] = useState(null);
+    const [userUidForChange, setUserUidForChange] = useState(null); // Store UID for password change
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [passwordChangeLoading, setPasswordChangeLoading] = useState(false);
@@ -67,19 +67,15 @@ const LoginComponent = ({ onLoginSuccess, navigateTo, showFlashMessage }) => {
 
             // 3. Handle backend response
             if (response.ok) {
-                // Fetch Firestore user document to check mustChangePassword
-                const userDocRef = doc(dbClient, 'users', firebaseUser.uid);
-                const userDocSnap = await getDoc(userDocRef);
-                if (userDocSnap.exists() && userDocSnap.data().mustChangePassword) {
-                    setMustChangePassword(true);
-                    setFirebaseUserForChange(firebaseUser);
-                    setLoading(false);
-                    showFlashMessage('You must change your password before continuing.', 'info');
-                    return;
-                } else {
-                    // If backend verification is successful, call onLoginSuccess with user data
-                    onLoginSuccess({ firebaseUser, role: data.user.role, email: firebaseUser.email });
-                }
+                // If backend verification is successful, call onLoginSuccess with user data
+                onLoginSuccess({ firebaseUser, role: data.user.role, email: firebaseUser.email });
+            } else if (response.status === 403 && data.mustChangePassword) {
+                // Backend requires password change
+                setMustChangePassword(true);
+                setUserUidForChange(data.user.id); // Store UID for password change
+                setLoading(false);
+                showFlashMessage('You must change your password before continuing.', 'info');
+                return;
             } else {
                 // If backend verification fails, set form error and sign out from Firebase
                 setFormError(data.error || 'Login failed after token verification. Please try again.');
@@ -119,7 +115,7 @@ const LoginComponent = ({ onLoginSuccess, navigateTo, showFlashMessage }) => {
         }
     };
 
-    // Change password logic for forced change
+    // Change password logic for forced change (calls backend)
     const handleChangePassword = async (e) => {
         e.preventDefault();
         setPasswordError('');
@@ -135,31 +131,31 @@ const LoginComponent = ({ onLoginSuccess, navigateTo, showFlashMessage }) => {
         }
         setPasswordChangeLoading(true);
         try {
-            // Re-authenticate with the old password (already done in login), so just update password
-            await updatePassword(firebaseUserForChange, newPassword);
-            // Update mustChangePassword in Firestore
-            const userDocRef = doc(dbClient, 'users', firebaseUserForChange.uid);
-            await updateDoc(userDocRef, { mustChangePassword: false });
-            showFlashMessage('Password updated successfully! Please log in with your new password.', 'success');
-            setMustChangePassword(false);
-            setFirebaseUserForChange(null);
-            setNewPassword('');
-            setConfirmPassword('');
-            setPasswordError('');
-            setPasswordChangeLoading(false);
-            setEmail('');
-            setPassword('');
-            // Optionally, sign out the user and force re-login
-            await authClient.signOut();
-        } catch (err) {
-            let errorMessage = 'Failed to update password.';
-            if (err.code === 'auth/weak-password') {
-                errorMessage = 'Password is too weak.';
+            // Call backend to change password and clear mustChangePassword
+            const response = await fetch(`${API_BASE_URL}/change-password`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ uid: userUidForChange, newPassword }),
+            });
+            const data = await response.json();
+            if (response.ok) {
+                showFlashMessage('Password updated successfully! Please log in with your new password.', 'success');
+                setMustChangePassword(false);
+                setUserUidForChange(null);
+                setNewPassword('');
+                setConfirmPassword('');
+                setPasswordError('');
+                setPasswordChangeLoading(false);
+                setEmail('');
+                setPassword('');
+                await authClient.signOut();
             } else {
-                errorMessage = err.message;
+                setPasswordError(data.error || 'Failed to update password.');
+                showFlashMessage(data.error || 'Failed to update password.', 'error');
             }
-            setPasswordError(errorMessage);
-            showFlashMessage(errorMessage, 'error');
+        } catch (err) {
+            setPasswordError('Failed to update password.');
+            showFlashMessage('Failed to update password.', 'error');
         } finally {
             setPasswordChangeLoading(false);
         }
@@ -223,46 +219,90 @@ const LoginComponent = ({ onLoginSuccess, navigateTo, showFlashMessage }) => {
 
     return (
         <div className="flex flex-col items-center justify-center min-h-[calc(100vh-4rem)] bg-gradient-to-br from-gray-50 to-blue-100 p-4">
-            <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md border border-gray-100 animate-fade-in">
-                <div className="flex flex-col items-center mb-6">
-                    <img src={require('../../assets/logo/logo.png')} alt="Company Logo" className="h-20 mb-2" />
-                    <h2 className="text-2xl font-bold text-gray-800 mb-1 tracking-tight">Sign in to your account</h2>
-                    <p className="text-gray-500 text-sm">Enter your credentials to continue</p>
-                </div>
-                <form onSubmit={handleSubmit} className="space-y-4">
-                    {formError && (
-                        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-2 rounded relative text-sm" role="alert">
-                            <span className="block sm:inline">{formError}</span>
+            <div className={`flip-container ${mustChangePassword ? 'flipped' : ''} bg-white rounded-2xl shadow-2xl w-full max-w-md border border-gray-100 animate-fade-in`}>
+                <div className="flipper">
+                    {/* Front: Login Form */}
+                    <div className="front">
+                        <div className="p-8">
+                            <div className="flex flex-col items-center mb-6">
+                                <img src={require('../../assets/logo/logo.png')} alt="Company Logo" className="h-20 mb-2" />
+                                <h2 className="text-2xl font-bold text-gray-800 mb-1 tracking-tight">Sign in to your account</h2>
+                                <p className="text-gray-500 text-sm">Enter your credentials to continue</p>
+                            </div>
+                            <form onSubmit={handleSubmit} className="space-y-4">
+                                {formError && (
+                                    <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-2 rounded relative text-sm" role="alert">
+                                        <span className="block sm:inline">{formError}</span>
+                                    </div>
+                                )}
+                                <FormInput
+                                    id="email"
+                                    label="Email Address"
+                                    type="email"
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
+                                    onFocus={handleEmailFocus}
+                                    required
+                                    autoComplete="username"
+                                />
+                                <FormInput
+                                    id="password"
+                                    label="Password"
+                                    type="password"
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    onFocus={handlePasswordFocus}
+                                    required
+                                    error={passwordError}
+                                    showPasswordToggle={true}
+                                    autoComplete="current-password"
+                                />
+                                <div className="flex items-center justify-center">
+                                    <PrimaryButton type="submit" loading={loading ? "Logging In..." : null} Icon={LogIn} className="w-40 whitespace-nowrap">
+                                        {loading ? "Logging In..." : "Log In"}
+                                    </PrimaryButton>
+                                </div>
+                            </form>
                         </div>
-                    )}
-                    <FormInput
-                        id="email"
-                        label="Email Address"
-                        type="email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        onFocus={handleEmailFocus}
-                        required
-                        autoComplete="username"
-                    />
-                    <FormInput
-                        id="password"
-                        label="Password"
-                        type="password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        onFocus={handlePasswordFocus}
-                        required
-                        error={passwordError}
-                        showPasswordToggle={true}
-                        autoComplete="current-password"
-                    />
-                    <div className="flex items-center justify-center">
-                        <PrimaryButton type="submit" loading={loading ? "Logging In..." : null} Icon={LogIn} className="w-40 whitespace-nowrap">
-                            {loading ? "Logging In..." : "Log In"}
-                        </PrimaryButton>
                     </div>
-                </form>
+                    {/* Back: Password Change Form */}
+                    <div className="back">
+                        <div className="p-8">
+                            <div className="flex flex-col items-center mb-6">
+                                <img src={require('../../assets/logo/logo.png')} alt="Company Logo" className="h-20 mb-2" />
+                                <h2 className="text-2xl font-bold text-gray-800 mb-1 tracking-tight">Set New Password</h2>
+                                <p className="text-gray-500 text-sm">You must set a new password before continuing.</p>
+                            </div>
+                            <form onSubmit={handleChangePassword} className="space-y-4">
+                                <FormInput
+                                    id="newPassword"
+                                    label="New Password"
+                                    type="password"
+                                    value={newPassword}
+                                    onChange={(e) => setNewPassword(e.target.value)}
+                                    required
+                                    showPasswordToggle={true}
+                                />
+                                <FormInput
+                                    id="confirmPassword"
+                                    label="Re-enter New Password"
+                                    type="password"
+                                    value={confirmPassword}
+                                    onChange={(e) => setConfirmPassword(e.target.value)}
+                                    required
+                                    showPasswordToggle={true}
+                                    error={!!passwordError}
+                                />
+                                {passwordError && <p className="text-red-500 text-xs mt-1">{passwordError}</p>}
+                                <div className="flex items-center justify-center">
+                                    <PrimaryButton type="submit" loading={passwordChangeLoading ? "Changing..." : null} Icon={LogIn} className="w-40 whitespace-nowrap">
+                                        {passwordChangeLoading ? "Changing..." : "Change Password"}
+                                    </PrimaryButton>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     );

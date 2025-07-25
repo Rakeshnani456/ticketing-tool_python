@@ -1,7 +1,7 @@
 // src/components/tickets/MyTicketsComponent.js
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Loader2, XCircle, PlusCircle, User } from 'lucide-react'; // Icons
+import { Loader2, XCircle, PlusCircle, User, ChevronLeft, ChevronRight } from 'lucide-react'; // Icons
 import { collection, query, onSnapshot, where, orderBy, getFirestore } from 'firebase/firestore'; // NEW: Firestore imports
 
 // Import common UI components
@@ -24,6 +24,10 @@ const MyTicketsComponent = ({ user, navigateTo, showFlashMessage, searchKeyword,
     const [tickets, setTickets] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [currentPage, setCurrentPage] = useState(1);
+    const ticketsPerPage = 15;
+    const totalPages = Math.ceil(tickets.length / ticketsPerPage);
+    const paginatedTickets = tickets.slice((currentPage - 1) * ticketsPerPage, currentPage * ticketsPerPage);
 
     // Initialize Firestore DB client.
     const db = dbClient; // Use the already initialized dbClient
@@ -130,6 +134,37 @@ const MyTicketsComponent = ({ user, navigateTo, showFlashMessage, searchKeyword,
         return () => unsubscribe();
     }, [db, searchKeyword, showFlashMessage]); // Dependencies for the effect
 
+    const handlePageChange = (page) => {
+      if (page >= 1 && page <= totalPages) setCurrentPage(page);
+    };
+
+    useEffect(() => { setCurrentPage(1); }, [tickets]);
+
+    function renderPagination() {
+      if (totalPages <= 1) return null;
+      const pages = [];
+      let start = Math.max(1, currentPage - 1);
+      let end = Math.min(totalPages, start + 2);
+      if (end - start < 2) start = Math.max(1, end - 2);
+      for (let i = start; i <= end; i++) {
+        pages.push(
+          <button key={i} onClick={() => handlePageChange(i)} className={`mx-0.5 w-5 h-5 flex items-center justify-center rounded-full text-[10px] font-semibold transition-colors duration-200 ${i === currentPage ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}>{i}</button>
+        );
+      }
+      const firstTicket = (currentPage - 1) * ticketsPerPage + 1;
+      const lastTicket = Math.min(currentPage * ticketsPerPage, tickets.length);
+      return (
+        <>
+          <div className="inline-flex items-center gap-0.5 align-middle">
+            <button onClick={() => handlePageChange(currentPage - 1)} disabled={currentPage === 1} className="w-5 h-5 flex items-center justify-center rounded-full bg-gray-200 text-gray-800 hover:bg-gray-300 disabled:opacity-50"><ChevronLeft size={10} /></button>
+            {pages}
+            <button onClick={() => handlePageChange(currentPage + 1)} disabled={currentPage === totalPages} className="w-5 h-5 flex items-center justify-center rounded-full bg-gray-200 text-gray-800 hover:bg-gray-300 disabled:opacity-50"><ChevronRight size={10} /></button>
+          </div>
+          <div className="text-[10px] text-gray-500 mt-1 ml-1 text-right">Showing tickets {firstTicket}-{lastTicket} of {tickets.length}</div>
+        </>
+      );
+    }
+
     /**
      * Determines CSS classes for a ticket's status badge.
      * @param {string} status - The status of the ticket (e.g., 'Open', 'In Progress').
@@ -165,11 +200,15 @@ const MyTicketsComponent = ({ user, navigateTo, showFlashMessage, searchKeyword,
 
     return (
         <div className="p-4 bg-white flex-1 overflow-auto">
-            <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
-                <h2 className="text-xl font-extrabold text-gray-800">My Tickets</h2> {/* Changed label to be more general */}
-                <LinkButton onClick={() => navigateTo('create-ticket')} className="text-sm flex items-center space-x-1">
+            {/* Header layout: title and Create Ticket button on the left, pagination on the far right */}
+            <div className="flex items-center mb-4 gap-2 flex-wrap">
+                <h2 className="text-xl font-extrabold text-gray-800 mr-2">My Tickets</h2>
+                <LinkButton onClick={() => navigateTo('create-ticket')} className="text-sm flex items-center space-x-1 ml-2">
                     <PlusCircle size={16} /> <span>Create Ticket</span>
                 </LinkButton>
+                <div className="relative flex flex-col items-end ml-auto">
+                    {renderPagination()}
+                </div>
             </div>
             {tickets.length === 0 ? (
                 // Message when no tickets are found
@@ -194,7 +233,7 @@ const MyTicketsComponent = ({ user, navigateTo, showFlashMessage, searchKeyword,
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200">
-                            {tickets.map((ticket, index) => (
+                            {paginatedTickets.map((ticket, index) => (
                                 <tr key={ticket.id} className="block sm:table-row bg-white border-b border-gray-200 hover:bg-gray-50 transition-colors duration-150 odd:bg-white even:bg-gray-50 text-xs">
                                     <td className="block sm:table-cell px-2 py-2 text-xs text-gray-800 whitespace-normal break-words">
                                         <span className="block sm:hidden font-semibold text-gray-600">#:</span>

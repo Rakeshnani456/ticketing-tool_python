@@ -160,26 +160,44 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
             }
 
             // Prepare email content before setImmediate
-            const emailSubject = `New IT Support Ticket Created: ${newDisplayId}`;
-            const emailText = `A new IT support ticket has been logged in the Ticketing Tool. Details are as follows:\n\nTicket ID: ${newDisplayId}\nShort Description: ${short_description}\nCategory: ${category}\nPriority: ${priority || 'Low'}\nRequested For: ${request_for_email}\nRequested By: ${reporterEmail}\nContact Number: ${contact_number}\n\nAccess the Ticketing Tool to review and take necessary action.`;
-                    const emailHtml = `
+            const emailSubject = `🔔 New IT Support Ticket Logged – ${newDisplayId}: ${short_description}`;
+            const emailText = `Dear Team,\n\nA new IT support request has been logged in the Kriasol Helpdesk. Please review the details below and take appropriate action as needed.\n\nTicket ID: ${newDisplayId}\nIssue Summary: ${short_description}\nCategory: ${category}\nPriority: ${priority || 'Low'}\nRequested For: ${request_for_email}\nRequested By: ${reporterEmail}\nContact Number: ${contact_number}\n\nAccess the Kriasol Helpdesk to view, assign, or update the ticket.\n\nThank you for your prompt attention.\n\nBest regards,\nIT Service Desk\nKriasol Technologies`;
+            const baseUrl = getBaseUrl(req);
+            const ticketLink = `${baseUrl}/tickets/${docRef.id}`;
+            const emailHtml = `
                 <div style=\"font-family: Arial, sans-serif; color: #222;\">
-                    <p>A new <strong>IT support ticket</strong> has been logged in the Ticketing Tool. Details are as follows:</p>
-                    <table style=\"border-collapse: collapse; margin: 10px 0;\">
-                        <tr><td style=\"padding: 4px 8px; font-weight: bold;\">Ticket ID:</td><td style=\"padding: 4px 8px;\">${newDisplayId}</td></tr>
-                        <tr><td style=\"padding: 4px 8px; font-weight: bold;\">Short Description:</td><td style=\"padding: 4px 8px;\">${short_description}</td></tr>
+                    <p>Dear Team,</p>
+                    <p>A new IT support request has been logged in the <strong>Kriasol Helpdesk</strong>. Please review the details below and take appropriate action as needed.</p>
+                    <div style=\"margin: 18px 0 10px 0; font-size: 1.1em;\">📌 <strong>Ticket Information</strong></div>
+                    <table style=\"border-collapse: collapse; margin: 10px 0 18px 0;\">
+                        <tr><td style=\"padding: 4px 8px; font-weight: bold;\">Ticket ID:</td><td style=\"padding: 4px 8px;\"><a href=\"${ticketLink}\" style=\"color: #2563eb; text-decoration: underline; font-weight: bold;\" target=\"_blank\">${newDisplayId}</a></td></tr>
+                        <tr><td style=\"padding: 4px 8px; font-weight: bold;\">Issue Summary:</td><td style=\"padding: 4px 8px;\">${short_description}</td></tr>
                         <tr><td style=\"padding: 4px 8px; font-weight: bold;\">Category:</td><td style=\"padding: 4px 8px;\">${category}</td></tr>
                         <tr><td style=\"padding: 4px 8px; font-weight: bold;\">Priority:</td><td style=\"padding: 4px 8px;\">${priority || 'Low'}</td></tr>
                         <tr><td style=\"padding: 4px 8px; font-weight: bold;\">Requested For:</td><td style=\"padding: 4px 8px;\">${request_for_email}</td></tr>
                         <tr><td style=\"padding: 4px 8px; font-weight: bold;\">Requested By:</td><td style=\"padding: 4px 8px;\">${reporterEmail}</td></tr>
                         <tr><td style=\"padding: 4px 8px; font-weight: bold;\">Contact Number:</td><td style=\"padding: 4px 8px;\">${contact_number}</td></tr>
                     </table>
-                    <p>Access the Ticketing Tool to review and take necessary action.</p>
+                    <div style=\"margin: 18px 0 10px 0;\">🔗 <a href=\"${ticketLink}\" style=\"color: #2563eb; text-decoration: underline; font-weight: bold;\" target=\"_blank\">Access the Kriasol Helpdesk to view, assign, or update the ticket.</a></div>
+                    <p>Thank you for your prompt attention.</p>
+                    <p style=\"margin-top: 24px;\">Best regards,<br/>IT Service Desk<br/>Kriasol Technologies</p>
                 </div>
             `;
-            // Send email only to tt.support@kriasol.com (fire-and-forget)
+            // Send email to support, cc both request_for_email and reporterEmail (if different)
             setImmediate(() => {
-                sendEmailAlert('tt.support@kriasol.com', emailSubject, emailText, emailHtml, reporterEmail);
+                let ccList = [];
+                if (request_for_email && reporterEmail) {
+                    if (request_for_email === reporterEmail) {
+                        ccList = [request_for_email];
+                    } else {
+                        ccList = [request_for_email, reporterEmail];
+                    }
+                } else if (request_for_email) {
+                    ccList = [request_for_email];
+                } else if (reporterEmail) {
+                    ccList = [reporterEmail];
+                }
+                sendEmailAlert('tt.support@kriasol.com', emailSubject, emailText, emailHtml, ccList.length > 0 ? ccList.join(',') : null);
             });
 
             return res.status(201).json({ message: 'Ticket created successfully!', id: docRef.id, display_id: newDisplayId });
@@ -284,7 +302,9 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                     const ticketReporterEmail = ticketData.reporter_email;
                     const emailSubject = `Ticket ${ticketData.display_id} Status Updated`;
                     const emailText = `The status of your ticket (${ticketData.display_id} - ${ticketData.short_description}) has been updated to: ${status}.\n\nAccess the Ticketing Tool for more details.`;
-                    const emailHtml = `<div style=\"font-family: Arial, sans-serif; color: #222;\"><p>The status of your ticket (<strong>${ticketData.display_id}</strong> - ${ticketData.short_description}) has been updated to: <strong>${status}</strong>.</p><p>Access the Ticketing Tool for more details.</p></div>`;
+                    const baseUrl = getBaseUrl(req);
+                    const ticketLink = `${baseUrl}/tickets/${ticketId}`;
+                    const emailHtml = `<div style=\"font-family: Arial, sans-serif; color: #222;\"><p>The status of your ticket (<a href=\"${ticketLink}\" style=\"color: #2563eb; text-decoration: underline;\" target=\"_blank\"><strong>${ticketData.display_id}</strong></a> - ${ticketData.short_description}) has been updated to: <strong>${status}</strong>.</p><p>Access the Ticketing Tool for more details.</p></div>`;
                     setImmediate(() => {
                         sendEmailAlert(ticketReporterEmail, emailSubject, emailText, emailHtml, 'tt.support@kriasol.com');
                     });
@@ -475,7 +495,9 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
             const ticketReporterEmail = ticketData.reporter_email;
             const emailSubject = `Ticket ${ticketData.display_id} Cancelled`;
             const emailText = `Your ticket (${ticketData.display_id} - ${ticketData.short_description}) has been cancelled.\n\nAccess the Ticketing Tool for more details.`;
-            const emailHtml = `<div style=\"font-family: Arial, sans-serif; color: #222;\"><p>Your ticket (<strong>${ticketData.display_id}</strong> - ${ticketData.short_description}) has been cancelled.</p><p>Access the Ticketing Tool for more details.</p></div>`;
+            const baseUrl = getBaseUrl(req);
+            const ticketLink = `${baseUrl}/tickets/${ticketId}`;
+            const emailHtml = `<div style=\"font-family: Arial, sans-serif; color: #222;\"><p>Your ticket (<a href=\"${ticketLink}\" style=\"color: #2563eb; text-decoration: underline;\" target=\"_blank\"><strong>${ticketData.display_id}</strong></a> - ${ticketData.short_description}) has been cancelled.</p><p>Access the Ticketing Tool for more details.</p></div>`;
             setImmediate(() => {
                 sendEmailAlert(ticketReporterEmail, emailSubject, emailText, emailHtml, 'tt.support@kriasol.com');
             });
@@ -544,13 +566,17 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
             const reporterEmail = ticketData.reporter_email;
             const assignedToEmail = ticketData.assigned_to_email;
             const commenterEmail = commenter_name;
-            // Always notify the reporter, CC support
             const emailSubject = `New Comment on Ticket ${ticketData.display_id}`;
             const emailText = `A new comment has been added to your ticket (${ticketData.display_id} - ${ticketData.short_description}):\n\n${comment_text}\n\nAccess the Ticketing Tool for more details.`;
-            const emailHtml = `<div style=\"font-family: Arial, sans-serif; color: #222;\"><p>A new comment has been added to your ticket (<strong>${ticketData.display_id}</strong> - ${ticketData.short_description}):</p><blockquote style=\"margin: 8px 0; padding-left: 12px; border-left: 2px solid #ccc;\">${comment_text}</blockquote><p>Access the Ticketing Tool for more details.</p></div>`;
-            setImmediate(() => {
-                sendEmailAlert(reporterEmail, emailSubject, emailText, emailHtml, 'tt.support@kriasol.com');
-            });
+            const baseUrl = getBaseUrl(req);
+            const ticketLink = `${baseUrl}/tickets/${ticketId}`;
+            const emailHtml = `<div style=\"font-family: Arial, sans-serif; color: #222;\"><p>A new comment has been added to your ticket (<a href=\"${ticketLink}\" style=\"color: #2563eb; text-decoration: underline;\" target=\"_blank\"><strong>${ticketData.display_id}</strong></a> - ${ticketData.short_description}):</p><blockquote style=\"margin: 8px 0; padding-left: 12px; border-left: 2px solid #ccc;\">${comment_text}</blockquote><p>Access the Ticketing Tool for more details.</p></div>`;
+            // Only send email if assigned to a support engineer
+            if (assignedToEmail) {
+                setImmediate(() => {
+                    sendEmailAlert(assignedToEmail, emailSubject, emailText, emailHtml, 'tt.support@kriasol.com');
+                });
+            }
 
             return res.status(200).json({ message: 'Comment added successfully!' });
         } catch (error) {
@@ -895,3 +921,17 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
 
     return router;
 };
+
+// Helper to get the base URL for links in emails
+function getBaseUrl(req) {
+    if (req.headers.origin) {
+        return req.headers.origin;
+    }
+    const protocol = req.protocol || 'https';
+    const host = req.get ? req.get('host') : null;
+    if (host) {
+        return `${protocol}://${host}`;
+    }
+    // Fallback to production URL
+    return 'https://ticketing.kriasol.com';
+}

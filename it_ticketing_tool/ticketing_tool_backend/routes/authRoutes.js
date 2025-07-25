@@ -92,13 +92,23 @@ module.exports = (db, admin, usersCollection, verifyFirebaseToken) => {
             const loggedInUser = {
                 id: uid,
                 email: emailFromToken,
-                role: userProfile.role || 'user'
+                role: userProfile.role || 'user',
+                mustChangePassword: userProfile.mustChangePassword || false
             };
 
             await userDocRef.update({
                 lastLogin: admin.firestore.FieldValue.serverTimestamp(),
                 loginActivity: admin.firestore.FieldValue.arrayUnion(new Date().toISOString())
             });
+
+            if (userProfile.mustChangePassword) {
+                // Require password change before allowing login
+                return res.status(403).json({
+                    error: 'Password change required before login.',
+                    mustChangePassword: true,
+                    user: loggedInUser
+                });
+            }
 
             return res.status(200).json({ message: 'Login successful', user: loggedInUser });
         } catch (error) {
@@ -107,6 +117,22 @@ module.exports = (db, admin, usersCollection, verifyFirebaseToken) => {
             }
             console.error(`Unexpected login error: ${error.message}`);
             return res.status(500).json({ error: `An unexpected error occurred during login: ${error.message}` });
+        }
+    });
+
+    // Route to change password and clear mustChangePassword flag
+    router.post('/change-password', async (req, res) => {
+        const { uid, newPassword } = req.body;
+        if (!uid || !newPassword || newPassword.length < 6) {
+            return res.status(400).json({ error: 'Valid uid and new password (min 6 chars) required.' });
+        }
+        try {
+            await admin.auth().updateUser(uid, { password: newPassword });
+            await usersCollection.doc(uid).update({ mustChangePassword: false });
+            return res.status(200).json({ message: 'Password changed successfully. You can now log in.' });
+        } catch (err) {
+            console.error('Error changing password:', err);
+            return res.status(500).json({ error: err.message || 'Failed to change password.' });
         }
     });
 
@@ -128,7 +154,19 @@ module.exports = (db, admin, usersCollection, verifyFirebaseToken) => {
                 return res.status(404).json({ error: 'User profile not found.' });
             }
             const profileData = userDoc.data();
-            return res.status(200).json({ uid: requestedUid, email: profileData.email, role: profileData.role });
+            let fullName = '';
+            if (profileData.firstName || profileData.lastName) {
+                fullName = `${profileData.firstName || ''} ${profileData.lastName || ''}`.trim();
+            } else if (profileData.name) {
+                fullName = profileData.name;
+            }
+            return res.status(200).json({
+                uid: requestedUid,
+                fullName,
+                employeeid: profileData.employeeid || '',
+                email: profileData.email,
+                role: profileData.role
+            });
         } catch (error) {
             console.error(`Error fetching user profile for ${requestedUid}: ${error.message}`);
             return res.status(500).json({ error: `Failed to fetch user profile: ${error.message}` });

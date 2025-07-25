@@ -62,20 +62,54 @@ module.exports = (db, admin, usersCollection, clientsCollection) => {
             return res.status(400).json({ error: 'Missing required field: role' });
         }
         if (role === 'support') {
-            const { name, email, password, asset_id, joined_date, employeeid, designation } = req.body;
-            if (!name || !email || !password || !asset_id || !joined_date || !employeeid || !designation) {
-                return res.status(400).json({ error: 'Missing required fields for engineer: name, email, password, asset_id, joined_date, employeeid, designation' });
+            const { firstName, lastName, email, password, contactNumber, managerEmail, employmentType, designation, asset_id, employeeid } = req.body;
+            if (!firstName || !lastName || !email || !contactNumber || !managerEmail || !employmentType || !designation || !asset_id || !employeeid) {
+                return res.status(400).json({ error: 'Missing required fields for engineer: firstName, lastName, email, contactNumber, managerEmail, employmentType, designation, asset_id, employeeid' });
             }
+            // Uniqueness checks
+            const queries = [
+                usersCollection.where('employeeid', '==', employeeid).limit(1).get(),
+                usersCollection.where('asset_id', '==', asset_id).limit(1).get(),
+                usersCollection.where('email', '==', email).limit(1).get(),
+                usersCollection.where('contactNumber', '==', contactNumber).limit(1).get(),
+            ];
+            const [empSnap, assetSnap, emailSnap, contactSnap] = await Promise.all(queries);
+            if (!empSnap.empty) {
+                return res.status(400).json({ error: 'Employee ID already exists.' });
+            }
+            if (!assetSnap.empty) {
+                return res.status(400).json({ error: 'Asset ID already exists.' });
+            }
+            if (!emailSnap.empty) {
+                return res.status(400).json({ error: 'Email already exists.' });
+            }
+            if (!contactSnap.empty) {
+                return res.status(400).json({ error: 'Contact Number already exists.' });
+            }
+            const finalPassword = password && password.length >= 6 ? password : 'Welcome@123';
             try {
                 let userRecord;
                 try {
-                    userRecord = await admin.auth().createUser({ email, password });
+                    userRecord = await admin.auth().createUser({ email, password: finalPassword });
                 } catch (err) {
                     return res.status(400).json({ error: err.message || 'Failed to create user in Auth.' });
                 }
                 const uid = userRecord.uid;
                 const userRef = usersCollection.doc(uid);
-                const userData = { name, email, role, asset_id, joined_date, employeeid, designation };
+                const userData = {
+                    name: `${firstName} ${lastName}`.trim(),
+                    firstName,
+                    lastName,
+                    email,
+                    contactNumber,
+                    managerEmail,
+                    employmentType,
+                    designation,
+                    asset_id,
+                    employeeid,
+                    role,
+                    mustChangePassword: true
+                };
                 await userRef.set(userData);
                 return res.status(201).json({ message: 'Engineer created in Auth and Firestore.' });
             } catch (err) {
@@ -183,12 +217,16 @@ module.exports = (db, admin, usersCollection, clientsCollection) => {
     // PUT /api/users/:uid/password - Change user password
     router.put('/:uid/password', async (req, res) => {
         const { uid } = req.params;
-        const { password } = req.body;
+        const { password, mustChangePassword } = req.body;
         if (!password || password.length < 6) {
             return res.status(400).json({ error: 'Password must be at least 6 characters.' });
         }
         try {
             await admin.auth().updateUser(uid, { password });
+            // Also update mustChangePassword in Firestore if requested
+            if (mustChangePassword) {
+                await usersCollection.doc(uid).update({ mustChangePassword: true });
+            }
             return res.status(200).json({ message: 'Password updated successfully.' });
         } catch (err) {
             console.error('Error updating password:', err);

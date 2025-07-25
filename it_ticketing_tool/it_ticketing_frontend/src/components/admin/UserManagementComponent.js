@@ -456,7 +456,8 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
 
     const openChangePwdModal = (uid) => {
       setPwdUserId(uid);
-      setNewPassword('');
+      const generated = generatePassword();
+      setNewPassword(generated);
       setChangePwdModalOpen(true);
     };
     const closeChangePwdModal = () => {
@@ -474,7 +475,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
         const res = await fetch(`${API_BASE_URL}/api/users/${pwdUserId}/password`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ password: newPassword }),
+          body: JSON.stringify({ password: newPassword, mustChangePassword: true }),
         });
         if (!res.ok) {
           const errData = await res.json();
@@ -606,7 +607,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
     return (
         // Removed 'container', 'mx-auto', and all 'p-*' classes to eliminate external gaps
         // Added 'w-full' to ensure it takes full width
-        <div className="w-full bg-white shadow-sm rounded-lg animate-fade-in">
+        <div className="w-full bg-white animate-fade-in">
             <h2 className="user-mgmt-title compact-ui" style={{ marginBottom: 0, padding: '16px 24px 0' }}>User Management</h2> {/* Added padding here */}
             <Box
                 sx={{
@@ -921,12 +922,12 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                     label="New Password"
                     name="newPassword"
                     value={newPassword}
-                    onChange={e => setNewPassword(e.target.value)}
+                    InputProps={{ readOnly: true }}
                     required
                     size="small"
                     fullWidth
-                    type="password"
-                    helperText="At least 6 characters"
+                    type="text"
+                    helperText="Auto-generated password. Copy and share with the user."
                   />
                 </DialogContent>
                 <DialogActions sx={{ py: 1, px: 2 }}>

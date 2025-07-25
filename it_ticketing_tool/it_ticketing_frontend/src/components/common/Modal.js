@@ -46,7 +46,7 @@ const Modal = ({ children, title, onClose, isOpen }) => {
         <div className="fixed inset-0 bg-gray-600 bg-opacity-40 backdrop-blur-sm flex items-center justify-center p-4 z-50 transition-all duration-300 animate-fade-in">
             {/* Modal content container with Animate.css zoomIn/zoomOut animation */}
             <div
-                className={`bg-white p-4 md:p-6 rounded-lg shadow-xl w-full max-w-3xl relative max-h-screen overflow-y-auto animate__animated ${animateClass} animate__faster`}
+                className={`bg-white p-4 md:p-6 rounded-lg shadow-xl w-full max-w-[700px] min-h-[350px] relative max-h-screen overflow-y-auto animate__animated ${animateClass} animate__faster`}
                 onAnimationEnd={handleAnimationEnd}
             >
                 {/* Close button positioned at the top right */}
