@@ -87,7 +87,7 @@ module.exports = (db, clientsCollection, usersCollection) => {
                 password: 'Welcome@123', // Default password, can be randomized
                 contactNumber: siteContactNumber,
                 designation: siteDesignation,
-                role: 'user',
+                role: 'site_admin',
                 managerEmail: '',
                 employmentType: '',
                 mustChangePassword: true

@@ -118,6 +118,41 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
         }
 
         try {
+            // Look up client_name for reporter_email and request_for_email
+            let clientName = null;
+            // Try reporter_email first
+            let userSnap = await usersCollection.where('email', '==', reporterEmail).limit(1).get();
+            if (!userSnap.empty) {
+                const userData = userSnap.docs[0].data();
+                clientName = userData.client_name || null;
+                console.log("Found user by reporter_email:", {
+                    email: reporterEmail,
+                    client_name: userData.client_name,
+                    companyName: userData.companyName,
+                    role: userData.role
+                });
+            } else {
+                // Try request_for_email
+                userSnap = await usersCollection.where('email', '==', request_for_email).limit(1).get();
+                if (!userSnap.empty) {
+                    const userData = userSnap.docs[0].data();
+                    clientName = userData.client_name || null;
+                    console.log("Found user by request_for_email:", {
+                        email: request_for_email,
+                        client_name: userData.client_name,
+                        companyName: userData.companyName,
+                        role: userData.role
+                    });
+                } else {
+                    console.warn("No user found for either reporter_email or request_for_email:", {
+                        reporterEmail,
+                        request_for_email
+                    });
+                }
+            }
+
+            console.log("Final client_name for ticket:", clientName);
+
             const newDisplayId = await generateDisplayIdInternal();
 
             const newTicket = {
@@ -143,6 +178,7 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                 closure_notes: null,
                 status_history: [],
                 assigned_to_history: [],
+                client_name: clientName,
             };
 
             const docRef = await ticketsCollection.add(newTicket);

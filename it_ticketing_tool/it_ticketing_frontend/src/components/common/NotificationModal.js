@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect, useRef } from 'react';
 import { Bell, Eye, CheckCircle, X, Info, AlertCircle, Mail, Loader2, Check, Trash2 } from 'lucide-react';
 
 // Helper for relative time
@@ -29,7 +29,36 @@ const getIconForNotificationType = (type) => {
     }
 };
 
-const NotificationModal = ({ isOpen, onClose, notifications = [], onClearAll, onMarkRead, onViewTicket, isLoading = false }) => {
+const NotificationModal = ({ isOpen, onClose, notifications = [], onClearAll, onMarkRead, onViewTicket, isLoading = false, containerRef }) => {
+    const localRef = useRef(null);
+    const modalRef = containerRef || localRef;
+
+    // Scroll lock effect
+    useEffect(() => {
+        if (isOpen) {
+            document.body.style.overflow = 'hidden';
+        } else {
+            document.body.style.overflow = '';
+        }
+        return () => {
+            document.body.style.overflow = '';
+        };
+    }, [isOpen]);
+
+    // Outside click effect
+    useEffect(() => {
+        if (!isOpen) return;
+        const handleClickOutside = (event) => {
+            if (modalRef.current && !modalRef.current.contains(event.target)) {
+                onClose && onClose();
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [isOpen, onClose, modalRef]);
+
     const uniqueNotifications = useMemo(() => {
         const seenTitles = new Set();
         return notifications.filter(n => {
@@ -44,7 +73,7 @@ const NotificationModal = ({ isOpen, onClose, notifications = [], onClearAll, on
     if (!isOpen) return null;
 
     return (
-        <div className="absolute right-2 top-8 z-50 animate-in slide-in-from-top-2 duration-300">
+        <div ref={modalRef} className="absolute right-2 top-8 z-50 animate-in slide-in-from-top-2 duration-300">
             <div 
                 className="w-64 max-h-[70vh] bg-white/95 backdrop-blur-xl rounded border border-gray-200/50 overflow-hidden flex flex-col text-xs"
                 style={{

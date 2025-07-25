@@ -48,6 +48,7 @@ try {
     clientsCollection = db.collection('clients');
     console.log("Connected to Firebase Firestore successfully!");
     dbConnected = true;
+    app.locals.admin = admin; // Make admin available in routes
 } catch (error) {
     console.error(`Error connecting to Firebase Firestore. Make sure environment variables are correct and accessible: ${error.message}`);
     dbConnected = false;
@@ -155,6 +156,7 @@ const verifyFirebaseToken = async (req, res, next) => {
             return res.status(403).json({ error: 'Forbidden: User role not found.' });
         }
         req.user.role = userData.role;
+        req.user.client_name = userData.client_name || userData.companyName;
         next();
     } catch (error) {
         console.error('Error verifying Firebase ID token or fetching user role:', error);
@@ -217,6 +219,7 @@ const clientRoutes = require('./routes/clientRoutes');
 const userManagementRoutes = require('./routes/userManagementRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
 const attachmentRoutes = require('./routes/attachmentRoutes');
+const adminManagementRouter = require('./routes/adminManagement');
 
 
 app.use('/', authRoutes(db, admin, usersCollection, verifyFirebaseToken));
@@ -224,9 +227,10 @@ app.use('/tickets', ticketRoutes(db, admin, ticketsCollection, usersCollection, 
 app.use('/admin', adminRoutes(db, admin, usersCollection, verifyFirebaseToken, checkRole));
 app.use('/notifications', notificationRoutes(db, notificationsCollection, verifyFirebaseToken, jsonSerializableNotification));
 app.use('/api/clients', clientRoutes(db, clientsCollection, usersCollection));
-app.use('/api/users', userManagementRoutes(db, admin, usersCollection, clientsCollection));
+app.use('/api/users', userManagementRoutes(db, admin, usersCollection, clientsCollection, verifyFirebaseToken));
 app.use('/dashboard', dashboardRoutes(db, ticketsCollection, clientsCollection, usersCollection, requireSuperAdmin));
 app.use('/upload-attachment', attachmentRoutes(admin, verifyFirebaseToken));
+app.use('/admin-management', adminManagementRouter(db, usersCollection, verifyFirebaseToken, requireSuperAdmin));
 
 
 // Add a dummy client if none exist (for testing) - keep this in server.js or a separate setup file

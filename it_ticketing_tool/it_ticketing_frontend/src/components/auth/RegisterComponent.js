@@ -35,7 +35,6 @@ const RegisterComponent = ({ currentUser, navigateTo, showFlashMessage }) => {
                 { value: 'user', label: 'User' },
                 { value: 'support', label: 'Support Associate' },
                 { value: 'admin', label: 'Admin' },
-                { value: 'site_admin', label: 'Site Admin' },
                 { value: 'super_admin', label: 'Super Admin' },
             ];
         } else if (currentUser.role === 'site_admin') {
@@ -110,7 +109,7 @@ const RegisterComponent = ({ currentUser, navigateTo, showFlashMessage }) => {
                             label="Role"
                             value={role}
                             onChange={(e) => setRole(e.target.value)}
-                            options={roleOptions}
+                            options={roleOptions.filter(option => option.value !== 'site_admin')}
                         />
                     )}
                     <PrimaryButton type="submit" loading={loading ? "Registering..." : null} Icon={User} className="bg-green-600 hover:bg-green-700 focus:ring-green-300">

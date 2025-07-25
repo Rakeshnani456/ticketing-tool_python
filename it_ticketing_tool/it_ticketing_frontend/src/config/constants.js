@@ -2,8 +2,8 @@
 
 // --- API Base URL for your Node.js Backend ---
 // Make sure this matches your backend server's address
-export const API_BASE_URL = 'http://localhost:5000';
-//export const API_BASE_URL = 'https://ticketing-tool-python-1.onrender.com';
+//export const API_BASE_URL = 'http://localhost:5000';
+export const API_BASE_URL = 'https://ticketing-tool-python-1.onrender.com';
 
 // --- Colors for Charts ---
 // These colors are used in the DashboardComponent for the Pie Chart

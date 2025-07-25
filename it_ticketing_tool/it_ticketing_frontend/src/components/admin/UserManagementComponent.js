@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import {
     Button, Chip, TextField, Box, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
-    IconButton, Snackbar, Alert, Typography, Popover, Collapse, Dialog, DialogTitle, DialogContent, DialogActions, MenuItem, Select, useMediaQuery, Card, CardContent, CardActions, Grid
+    IconButton, Snackbar, Alert, Typography, Popover, Collapse, Dialog, DialogTitle, DialogContent, DialogActions, MenuItem, Select, useMediaQuery, Card, CardContent, CardActions, Grid, CircularProgress
 } from '@mui/material';
 import { Edit as EditIcon, Delete as DeleteIcon, Add as AddIcon, Clear as ClearIcon, VpnKey as VpnKeyIcon, LockReset as LockResetIcon, Save as SaveIcon } from '@mui/icons-material';
 import SearchIcon from '@mui/icons-material/Search';
@@ -19,10 +19,25 @@ import * as XLSX from 'xlsx';
 
 // Helper for deep comparison (simple for this case, but can be replaced with a library like lodash.isequal)
 const areUsersEqual = (arr1, arr2) => {
-    if (arr1.length !== arr2.length) return false;
+    if (!Array.isArray(arr1) || !Array.isArray(arr2)) {
+        console.warn("areUsersEqual: One or both arguments are not arrays:", { arr1, arr2 });
+        return false;
+    }
+    
+    if (arr1.length !== arr2.length) {
+        console.log("areUsersEqual: Array lengths differ:", { arr1Length: arr1.length, arr2Length: arr2.length });
+        return false;
+    }
+    
     for (let i = 0; i < arr1.length; i++) {
         const user1 = arr1[i];
         const user2 = arr2[i];
+        
+        if (!user1 || !user2) {
+            console.warn("areUsersEqual: One or both users are null/undefined at index", i);
+            return false;
+        }
+        
         // Compare relevant properties instead of stringifying the whole object for robustness
         if (user1.uid !== user2.uid ||
             user1.clientname !== user2.clientname ||
@@ -36,6 +51,7 @@ const areUsersEqual = (arr1, arr2) => {
             user1.managerEmail !== user2.managerEmail ||
             user1.employmentType !== user2.employmentType ||
             user1.designation !== user2.designation) {
+            console.log("areUsersEqual: Users differ at index", i, { user1, user2 });
             return false;
         }
     }
@@ -133,6 +149,10 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
       setCollapsedClients(prev => ({ ...prev, [client]: !prev[client] }));
     };
 
+    // Add ref to track previous users state to prevent infinite loops
+    const previousUsersRef = useRef([]);
+    const previousClientsRef = useRef([]);
+
     // Fetch clients
     const fetchClients = useCallback(async () => {
         try {
@@ -140,54 +160,99 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
             if (!res.ok) throw new Error('Failed to fetch clients');
             const data = await res.json();
             // Deep comparison for clients to prevent unnecessary re-renders if content is same
-            if (JSON.stringify(clients) !== JSON.stringify(data)) {
+            if (JSON.stringify(previousClientsRef.current) !== JSON.stringify(data)) {
                 setClients(data);
+                previousClientsRef.current = data;
             }
         } catch (err) {
             console.error("Error fetching clients:", err);
         }
-    }, [clients]); // Dependency on 'clients' state for comparison
+    }, []); // Remove clients dependency
 
-    // Fetch users (live snapshot)
+    // Fetch clients independently
     useEffect(() => {
-        setLoading(true);
-        setError(null);
-
         fetchClients();
+    }, [fetchClients]);
 
-        const unsub = onSnapshot(collection(db, 'users'), (snapshot) => {
-            const fetchedUsers = snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() }));
+    // Fetch users from backend API
+    useEffect(() => {
+        const fetchUsers = async () => {
+            setLoading(true);
+            setError(null);
 
-            const usersWithClientDetails = fetchedUsers.map(u => {
-                const clientMatch = clients.find(c => c['Client name'] === u.client_name);
-                return {
-                    ...u,
-                    asset_id: u.asset_id || u.assetid || '',
-                    domain: clientMatch ? clientMatch.Domain : (u.domain || ''),
-                    clientname: clientMatch ? clientMatch['Client name'] : (u.client_name || 'Unknown Client'),
-                    companyName: u.client_name || u.companyName || 'Unknown Company', // Ensure companyName is set
-                    firstName: u.firstName || '',
-                    lastName: u.lastName || '',
-                    contactNumber: u.contactNumber || '',
-                    managerEmail: u.managerEmail || '',
-                    employmentType: u.employmentType || '',
-                    designation: u.designation || '',
-                };
-            });
+            try {
+                // First, fetch clients if not already available
+                if (previousClientsRef.current.length === 0) {
+                    await fetchClients();
+                }
 
-            // Use the improved areUsersEqual for more robust comparison
-            if (!areUsersEqual(users, usersWithClientDetails)) {
-                setUsers(usersWithClientDetails);
+                // Get user's ID token for authentication
+                const idToken = await user.firebaseUser.getIdToken();
+
+                const response = await fetch(`${API_BASE_URL}/api/users`, {
+                    headers: {
+                        'Authorization': `Bearer ${idToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const fetchedUsers = await response.json();
+                console.log("Fetched users from API:", fetchedUsers.length);
+
+                const usersWithClientDetails = fetchedUsers.map(u => {
+                    const clientMatch = previousClientsRef.current.find(c => c['Client name'] === u.client_name);
+                    return {
+                        ...u,
+                        asset_id: u.asset_id || u.assetid || '',
+                        domain: clientMatch ? clientMatch.Domain : (u.domain || ''),
+                        clientname: clientMatch ? clientMatch['Client name'] : (u.client_name || 'Unknown Client'),
+                        companyName: u.client_name || u.companyName || 'Unknown Company',
+                        firstName: u.firstName || '',
+                        lastName: u.lastName || '',
+                        contactNumber: u.contactNumber || '',
+                        managerEmail: u.managerEmail || '',
+                        employmentType: u.employmentType || '',
+                        designation: u.designation || '',
+                    };
+                });
+
+                console.log("Processed users with client details:", usersWithClientDetails.length);
+
+                // Always update users if we have data, but use comparison to prevent unnecessary updates
+                if (usersWithClientDetails.length > 0) {
+                    if (!areUsersEqual(previousUsersRef.current, usersWithClientDetails)) {
+                        console.log("Updating users state with new data");
+                        setUsers(usersWithClientDetails);
+                        previousUsersRef.current = usersWithClientDetails;
+                    } else {
+                        console.log("Users data unchanged, skipping update");
+                    }
+                } else {
+                    console.log("No users found, setting empty array");
+                    if (previousUsersRef.current.length === 0) {
+                        setUsers([]);
+                        previousUsersRef.current = [];
+                    } else {
+                        console.log("Keeping existing users data to prevent table from vanishing");
+                    }
+                }
+                
+                setLoading(false);
+                setError(null);
+            } catch (error) {
+                console.error("Error fetching users:", error);
+                setError('Could not load users.');
+                setUsers([]);
+                setLoading(false);
             }
-            setLoading(false);
-        }, (err) => {
-            setError('Could not load users.');
-            setUsers([]);
-            setLoading(false);
-        });
+        };
 
-        return () => unsub();
-    }, [db, clients, fetchClients, users]); // Added 'users' to dependencies for areUsersEqual check
+        fetchUsers();
+    }, [user, fetchClients]); // Depend on user and fetchClients
 
     const handleAdd = () => {
         setAddMode(true);
@@ -197,7 +262,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
 
     // 3. Update handleAddClientChange to auto-fill domain if possible
     const handleAddClientChange = (event, value) => {
-        const selectedClient = clients.find(c => c['Client name'] === value);
+        const selectedClient = previousClientsRef.current.find(c => c['Client name'] === value);
         setAddRowData(prev => ({
             ...prev,
             clientname: value || '',
@@ -389,24 +454,43 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
     };
 
     const filteredUsers = useMemo(() => {
-        return users.filter(u =>
-            u.role === 'user' &&
+        console.log("filteredUsers useMemo triggered with:", { usersLength: users.length, search, userRole: user?.role });
+        
+        let filtered = users.filter(u =>
+            (u.role === 'user' || u.role === 'site_admin') &&
             (u.email.toLowerCase().includes(search.toLowerCase()) ||
              u.clientname.toLowerCase().includes(search.toLowerCase()) ||
              (u.asset_id && u.asset_id.toLowerCase().includes(search.toLowerCase())) ||
-             (u.firstName && u.firstName.toLowerCase().includes(search.toLowerCase())) || // Added for search
+             (u.firstName && u.firstName.toLowerCase().includes(search.toLowerCase())) ||
              (u.lastName && u.lastName.toLowerCase().includes(search.toLowerCase()))
             )
         );
-    }, [users, search]);
+        
+        console.log("After initial filtering:", filtered.length);
+        
+        // If the logged-in user is a site_admin, only show users from their company/client
+        if (user && user.role === 'site_admin' && user.companyName) {
+            const beforeSiteAdminFilter = filtered.length;
+            filtered = filtered.filter(u => u.clientname === user.companyName || u.companyName === user.companyName);
+            console.log("After site admin filtering:", { before: beforeSiteAdminFilter, after: filtered.length, userCompanyName: user.companyName });
+        }
+        
+        console.log("Final filtered users:", filtered.length);
+        return filtered;
+    }, [users, search, user]);
 
     const groupedUsers = useMemo(() => {
-        return filteredUsers.reduce((acc, user) => {
+        console.log("groupedUsers useMemo triggered with filteredUsers:", filteredUsers.length);
+        
+        const result = filteredUsers.reduce((acc, user) => {
             const client = user.companyName || user.clientname || 'Unknown Client'; // Prioritize companyName
             if (!acc[client]) acc[client] = [];
             acc[client].push(user);
             return acc;
         }, {});
+        
+        console.log("groupedUsers result:", Object.keys(result).length, "clients");
+        return result;
     }, [filteredUsers]);
 
     const clientOrder = useMemo(() => Object.keys(groupedUsers).sort(), [groupedUsers]);
@@ -718,7 +802,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                     <Box display="flex" gap={0.5} alignItems="center" flexWrap="wrap" width="100%">
                             <Autocomplete
                                 className="compact-ui"
-                                options={clients.map(c => c['Client name'])}
+                                options={previousClientsRef.current.map(c => c['Client name'])}
                                 value={addRowData.clientname || ''}
                                 onChange={handleAddClientChange}
                                 renderInput={(params) => (
@@ -829,7 +913,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                     sx={{ mb: 1 }}
                   >
                     <MenuItem value="" disabled>Select Company</MenuItem>
-                    {clients.map(c => (
+                    {previousClientsRef.current.map(c => (
                       <MenuItem key={c['Client name'] || c.companyName || c.id} value={c['Client name'] || c.companyName}>{c['Client name'] || c.companyName}</MenuItem>
                     ))}
                   </Select>
@@ -1037,7 +1121,15 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
             </Dialog>
 
             {/* Responsive: Table for md+, Card for xs/sm */}
-            {isMobile ? (
+            {loading ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '200px' }}>
+                    <CircularProgress />
+                </Box>
+            ) : error ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '200px' }}>
+                    <Typography color="error">{error}</Typography>
+                </Box>
+            ) : isMobile ? (
                 <Box sx={{ width: '100%', px: 1 }}>
                     {clientOrder.length === 0 && !loading && !error && (
                         <Typography variant="body1" color="textSecondary" sx={{ mt: 2, px: 1 }}>

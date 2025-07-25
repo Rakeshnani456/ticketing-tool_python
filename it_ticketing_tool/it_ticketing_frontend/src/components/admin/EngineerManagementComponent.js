@@ -36,7 +36,7 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
     const [addMode, setAddMode] = useState(false);
     const [addRowData, setAddRowData] = useState(initialUserState);
     const [editRowId, setEditRowId] = useState(null);
-    const [editRowData, setEditRowData] = useState({ name: '', asset_id: '', joined_date: '', role: '' });
+    const [editRowData, setEditRowData] = useState({ firstName: '', lastName: '', email: '', contactNumber: '', managerEmail: '', employmentType: '', designation: '', asset_id: '', employeeid: '', role: 'support' });
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
     const navigate = useNavigate();
 
@@ -69,19 +69,30 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
         fetchClients();
         const fetchEngineers = async () => {
             try {
-                const res = await fetch(`${API_BASE_URL}/api/users`);
+                // Get user's ID token for authentication
+                const idToken = await user.firebaseUser.getIdToken();
+                
+                const res = await fetch(`${API_BASE_URL}/api/users`, {
+                    headers: {
+                        'Authorization': `Bearer ${idToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
                 if (!res.ok) throw new Error('Failed to fetch users');
                 const data = await res.json();
                 setUsers(data.filter(u => u.role === 'support'));
                 setLoading(false);
             } catch (err) {
-                setError('Could not load engineers.');
+                console.error('Error fetching engineers:', err);
+                // For testing, you can uncomment the next line to show mock data
+                // setUsers([{ uid: '1', firstName: 'John', lastName: 'Doe', email: 'john.doe@example.com', role: 'support', designation: 'Engineer', employeeid: 'EMP001', asset_id: 'AST001', contactNumber: '1234567890', managerEmail: 'manager@example.com' }]);
+                setError('Could not load engineers. Please check if the backend server is running and Firebase is configured.');
                 setUsers([]);
                 setLoading(false);
             }
         };
         fetchEngineers();
-    }, [fetchClients]);
+    }, [fetchClients, user]);
 
     function generatePassword(length = 10) {
         const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*';
@@ -136,9 +147,15 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
                 lastName: addRowData.lastName,
                 role: 'support',
             };
+            // Get user's ID token for authentication
+            const idToken = await user.firebaseUser.getIdToken();
+            
             const res = await fetch(`${API_BASE_URL}/api/users`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Authorization': `Bearer ${idToken}`,
+                    'Content-Type': 'application/json' 
+                },
                 body: JSON.stringify(payload),
             });
             if (!res.ok) {
@@ -149,7 +166,15 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
             setSnackbar({ open: true, message: 'Engineer added successfully.', severity: 'success' });
             const fetchEngineers = async () => {
                 try {
-                    const res = await fetch(`${API_BASE_URL}/api/users`);
+                    // Get user's ID token for authentication
+                    const idToken = await user.firebaseUser.getIdToken();
+                    
+                    const res = await fetch(`${API_BASE_URL}/api/users`, {
+                        headers: {
+                            'Authorization': `Bearer ${idToken}`,
+                            'Content-Type': 'application/json'
+                        }
+                    });
                     if (!res.ok) throw new Error('Failed to fetch users');
                     const data = await res.json();
                     setUsers(data.filter(u => u.role === 'support'));
@@ -172,12 +197,16 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
     const handleEditClick = (userToEdit) => {
         setEditRowId(userToEdit.uid);
         setEditRowData({
-            name: userToEdit.name || '',
+            firstName: userToEdit.firstName || (userToEdit.name ? userToEdit.name.split(' ')[0] : ''),
+            lastName: userToEdit.lastName || (userToEdit.name ? userToEdit.name.split(' ').slice(1).join(' ') : ''),
+            email: userToEdit.email || '',
+            contactNumber: userToEdit.contactNumber || '',
+            managerEmail: userToEdit.managerEmail || '',
+            employmentType: userToEdit.employmentType || '',
+            designation: userToEdit.designation || '',
             asset_id: userToEdit.asset_id || '',
-            joined_date: userToEdit.joined_date || '',
-            role: userToEdit.role || 'support',
-            password: '',
-            showPasswordField: false
+            employeeid: userToEdit.employeeid || '',
+            role: userToEdit.role || 'support'
         });
     };
 
@@ -191,17 +220,33 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
             const payload = {};
             const originalUser = users.find(u => u.uid === uid);
 
-            if (editRowData.name !== (originalUser?.name || '')) {
-                payload.name = editRowData.name;
+            // Check for changes in each field
+            if (editRowData.firstName !== (originalUser?.firstName || '')) {
+                payload.firstName = editRowData.firstName;
+            }
+            if (editRowData.lastName !== (originalUser?.lastName || '')) {
+                payload.lastName = editRowData.lastName;
+            }
+            if (editRowData.email !== (originalUser?.email || '')) {
+                payload.email = editRowData.email;
+            }
+            if (editRowData.contactNumber !== (originalUser?.contactNumber || '')) {
+                payload.contactNumber = editRowData.contactNumber;
+            }
+            if (editRowData.managerEmail !== (originalUser?.managerEmail || '')) {
+                payload.managerEmail = editRowData.managerEmail;
+            }
+            if (editRowData.employmentType !== (originalUser?.employmentType || '')) {
+                payload.employmentType = editRowData.employmentType;
+            }
+            if (editRowData.designation !== (originalUser?.designation || '')) {
+                payload.designation = editRowData.designation;
             }
             if (editRowData.asset_id !== (originalUser?.asset_id || '')) {
                 payload.asset_id = editRowData.asset_id;
             }
-            if (editRowData.joined_date !== (originalUser?.joined_date || '')) {
-                payload.joined_date = editRowData.joined_date;
-            }
-            if (editRowData.showPasswordField && editRowData.password) {
-                payload.password = editRowData.password;
+            if (editRowData.employeeid !== (originalUser?.employeeid || '')) {
+                payload.employeeid = editRowData.employeeid;
             }
 
             if (Object.keys(payload).length === 0) {
@@ -210,9 +255,15 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
                 return;
             }
 
+            // Get user's ID token for authentication
+            const idToken = await user.firebaseUser.getIdToken();
+            
             const res = await fetch(`${API_BASE_URL}/api/users/${uid}`, {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Authorization': `Bearer ${idToken}`,
+                    'Content-Type': 'application/json' 
+                },
                 body: JSON.stringify(payload),
             });
             if (!res.ok) {
@@ -220,11 +271,19 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
                 throw new Error(errData.error || 'Failed to update engineer');
             }
             setEditRowId(null);
-            setEditRowData({ name: '', asset_id: '', joined_date: '', role: '', password: '', showPasswordField: false });
+            setEditRowData({ firstName: '', lastName: '', email: '', contactNumber: '', managerEmail: '', employmentType: '', designation: '', asset_id: '', employeeid: '', role: 'support' });
             setSnackbar({ open: true, message: 'Engineer updated successfully.', severity: 'success' });
             const fetchEngineers = async () => {
                 try {
-                    const res = await fetch(`${API_BASE_URL}/api/users`);
+                    // Get user's ID token for authentication
+                    const idToken = await user.firebaseUser.getIdToken();
+                    
+                    const res = await fetch(`${API_BASE_URL}/api/users`, {
+                        headers: {
+                            'Authorization': `Bearer ${idToken}`,
+                            'Content-Type': 'application/json'
+                        }
+                    });
                     if (!res.ok) throw new Error('Failed to fetch users');
                     const data = await res.json();
                     setUsers(data.filter(u => u.role === 'support'));
@@ -241,7 +300,7 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
 
     const handleEditCancel = () => {
         setEditRowId(null);
-        setEditRowData({ name: '', asset_id: '', joined_date: '', role: '', password: '', showPasswordField: false });
+        setEditRowData({ firstName: '', lastName: '', email: '', contactNumber: '', managerEmail: '', employmentType: '', designation: '', asset_id: '', employeeid: '', role: 'support' });
     };
 
     const handleDeleteClick = (event, uid, email) => {
@@ -257,8 +316,15 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
         if (!uid) return;
 
         try {
+            // Get user's ID token for authentication
+            const idToken = await user.firebaseUser.getIdToken();
+            
             const res = await fetch(`${API_BASE_URL}/api/users/${uid}`, {
-                method: 'DELETE'
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${idToken}`,
+                    'Content-Type': 'application/json'
+                }
             });
 
             if (!res.ok) {
@@ -270,7 +336,15 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
             setCurrentUserEmailToDelete('');
             const fetchEngineers = async () => {
                 try {
-                    const res = await fetch(`${API_BASE_URL}/api/users`);
+                    // Get user's ID token for authentication
+                    const idToken = await user.firebaseUser.getIdToken();
+                    
+                    const res = await fetch(`${API_BASE_URL}/api/users`, {
+                        headers: {
+                            'Authorization': `Bearer ${idToken}`,
+                            'Content-Type': 'application/json'
+                        }
+                    });
                     if (!res.ok) throw new Error('Failed to fetch users');
                     const data = await res.json();
                     setUsers(data.filter(u => u.role === 'support'));
@@ -317,9 +391,15 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
             return;
         }
         try {
+            // Get user's ID token for authentication
+            const idToken = await user.firebaseUser.getIdToken();
+            
             const res = await fetch(`${API_BASE_URL}/api/users/${pwdUserId}/password`, {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Authorization': `Bearer ${idToken}`,
+                    'Content-Type': 'application/json' 
+                },
                 body: JSON.stringify({ password: newPassword, mustChangePassword: true }),
             });
             if (!res.ok) {
@@ -348,6 +428,18 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
     return (
         <div className="w-full h-full rounded-lg animate-fade-in" style={{ width: '100%', boxSizing: 'border-box' }}>
             <h2 className="user-mgmt-title compact-ui">Engineer Management</h2>
+            
+            {loading && (
+                <Typography variant="body1" color="textSecondary" align="center" sx={{ mt: 4 }}>
+                    Loading engineers...
+                </Typography>
+            )}
+            
+            {error && (
+                <Typography variant="body1" color="error" align="center" sx={{ mt: 4 }}>
+                    {error}
+                </Typography>
+            )}
             <Box display="flex" alignItems="center" justifyContent="space-between" mt={1} mb={2} px={2}>
                 <Box>
                     <TextField
@@ -447,12 +539,7 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
                     </Box>
                 </form>
             </Modal>
-            {filteredUsers.length === 0 && !loading && !error && (
-                <Typography variant="body1" color="textSecondary" align="center" sx={{ mt: 4 }}>
-                    No engineer profiles found.
-                </Typography>
-            )}
-            {filteredUsers.length > 0 && (
+            {!loading && !error && (
                 <TableContainer
                     component={Paper}
                     sx={{
@@ -493,27 +580,35 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
                             </TableRow>
                         </TableHead>
                         <TableBody>
-                            {filteredUsers.sort((a, b) => a.email.localeCompare(b.email)).map((u, i) => (
-                                <TableRow key={u.id || u.uid} sx={{ '&:last-child td, &:last-child th': { borderBottom: 0 } }}>
-                                    <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: i === filteredUsers.length - 1 ? '0' : '1px solid #e0e0e0', textAlign: 'center', fontWeight: 500, color: '#888' }}>{i + 1}</TableCell>
-                                    <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: i === filteredUsers.length - 1 ? '0' : '1px solid #e0e0e0' }}>{u.firstName || (u.name ? u.name.split(' ')[0] : '')}</TableCell>
-                                    <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: i === filteredUsers.length - 1 ? '0' : '1px solid #e0e0e0' }}>{u.lastName || (u.name ? u.name.split(' ').slice(1).join(' ') : '')}</TableCell>
-                                    <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: i === filteredUsers.length - 1 ? '0' : '1px solid #e0e0e0' }}>{u.employeeid}</TableCell>
-                                    <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: i === filteredUsers.length - 1 ? '0' : '1px solid #e0e0e0' }}>{u.designation}</TableCell>
-                                    <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: i === filteredUsers.length - 1 ? '0' : '1px solid #e0e0e0' }}>{u.email}</TableCell>
-                                    <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: i === filteredUsers.length - 1 ? '0' : '1px solid #e0e0e0' }}>{u.contactNumber}</TableCell>
-                                    <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: i === filteredUsers.length - 1 ? '0' : '1px solid #e0e0e0' }}>{u.managerEmail}</TableCell>
-                                    <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: i === filteredUsers.length - 1 ? '0' : '1px solid #e0e0e0' }}>
-                                        <Chip label={u.role} size="small" color={u.role === 'admin' ? 'primary' : u.role === 'support' ? 'secondary' : 'default'} sx={{ fontSize: '0.7rem', height: 20 }} />
-                                    </TableCell>
-                                        <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: i === filteredUsers.length - 1 ? '0' : '1px solid #e0e0e0' }}>{u.asset_id}</TableCell>
-                                    <TableCell align="right" sx={{ borderBottom: i === filteredUsers.length - 1 ? '0' : '1px solid #e0e0e0' }}>
-                                        <IconButton onClick={() => openChangePwdModal(u.uid)} size="small" title="Reset Password"><LockResetIcon sx={{ fontSize: '1rem' }} /></IconButton>
-                                                <IconButton onClick={() => handleEditClick(u)} size="small" sx={{ p: 0.5 }}><EditIcon sx={{ fontSize: '1rem' }} /></IconButton>
-                                        <IconButton onClick={(event) => handleDeleteClick(event, u.id || u.uid, u.email)} size="small" sx={{ p: 0.5 }}><DeleteIcon sx={{ fontSize: '1rem' }} /></IconButton>
+                            {filteredUsers.length === 0 ? (
+                                <TableRow>
+                                    <TableCell colSpan={11} align="center" sx={{ py: 4, color: 'text.secondary' }}>
+                                        No engineer profiles found.
                                     </TableCell>
                                 </TableRow>
-                            ))}
+                            ) : (
+                                filteredUsers.sort((a, b) => a.email.localeCompare(b.email)).map((u, i) => (
+                                    <TableRow key={u.id || u.uid} sx={{ '&:last-child td, &:last-child th': { borderBottom: 0 } }}>
+                                        <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: i === filteredUsers.length - 1 ? '0' : '1px solid #e0e0e0', textAlign: 'center', fontWeight: 500, color: '#888' }}>{i + 1}</TableCell>
+                                        <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: i === filteredUsers.length - 1 ? '0' : '1px solid #e0e0e0' }}>{u.firstName || (u.name ? u.name.split(' ')[0] : '')}</TableCell>
+                                        <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: i === filteredUsers.length - 1 ? '0' : '1px solid #e0e0e0' }}>{u.lastName || (u.name ? u.name.split(' ').slice(1).join(' ') : '')}</TableCell>
+                                        <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: i === filteredUsers.length - 1 ? '0' : '1px solid #e0e0e0' }}>{u.employeeid}</TableCell>
+                                        <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: i === filteredUsers.length - 1 ? '0' : '1px solid #e0e0e0' }}>{u.designation}</TableCell>
+                                        <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: i === filteredUsers.length - 1 ? '0' : '1px solid #e0e0e0' }}>{u.email}</TableCell>
+                                        <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: i === filteredUsers.length - 1 ? '0' : '1px solid #e0e0e0' }}>{u.contactNumber}</TableCell>
+                                        <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: i === filteredUsers.length - 1 ? '0' : '1px solid #e0e0e0' }}>{u.managerEmail}</TableCell>
+                                        <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: i === filteredUsers.length - 1 ? '0' : '1px solid #e0e0e0' }}>
+                                            <Chip label={u.role} size="small" color={u.role === 'admin' ? 'primary' : u.role === 'support' ? 'secondary' : 'default'} sx={{ fontSize: '0.7rem', height: 20 }} />
+                                        </TableCell>
+                                        <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: i === filteredUsers.length - 1 ? '0' : '1px solid #e0e0e0' }}>{u.asset_id}</TableCell>
+                                        <TableCell align="right" sx={{ borderBottom: i === filteredUsers.length - 1 ? '0' : '1px solid #e0e0e0' }}>
+                                            <IconButton onClick={() => openChangePwdModal(u.uid)} size="small" title="Reset Password"><LockResetIcon sx={{ fontSize: '1rem' }} /></IconButton>
+                                            <IconButton onClick={() => handleEditClick(u)} size="small" sx={{ p: 0.5 }}><EditIcon sx={{ fontSize: '1rem' }} /></IconButton>
+                                            <IconButton onClick={(event) => handleDeleteClick(event, u.id || u.uid, u.email)} size="small" sx={{ p: 0.5 }}><DeleteIcon sx={{ fontSize: '1rem' }} /></IconButton>
+                                        </TableCell>
+                                    </TableRow>
+                                ))
+                            )}
                         </TableBody>
                     </Table>
                 </TableContainer>
@@ -557,6 +652,61 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
                     </Button>
                 </Box>
             </Popover>
+            {/* Edit Engineer Modal */}
+            <Modal isOpen={editRowId !== null} onClose={handleEditCancel} title="Edit Engineer">
+                <form onSubmit={(e) => handleEditSave(editRowId)}>
+                    <Box display="grid" gridTemplateColumns={{ xs: '1fr', sm: '1fr 1fr', md: 'repeat(3, 1fr)', lg: 'repeat(4, 1fr)' }} gap={2} p={2}>
+                        <TextField label="First Name" name="firstName" value={editRowData.firstName || ''} onChange={handleEditChange} required size="small" fullWidth
+                            InputLabelProps={{ style: { fontSize: '0.75rem' } }}
+                            inputProps={{ style: { fontSize: '0.75rem', height: 28, padding: '2px 6px' } }}
+                        />
+                        <TextField label="Last Name" name="lastName" value={editRowData.lastName || ''} onChange={handleEditChange} required size="small" fullWidth
+                            InputLabelProps={{ style: { fontSize: '0.75rem' } }}
+                            inputProps={{ style: { fontSize: '0.75rem', height: 28, padding: '2px 6px' } }}
+                        />
+                        <TextField label="Email" name="email" value={editRowData.email || ''} onChange={handleEditChange} required size="small" fullWidth
+                            InputLabelProps={{ style: { fontSize: '0.75rem' } }}
+                            inputProps={{ style: { fontSize: '0.75rem', height: 28, padding: '2px 6px' } }}
+                        />
+                        <TextField label="Contact Number" name="contactNumber" value={editRowData.contactNumber || ''} onChange={handleEditChange} required size="small" fullWidth
+                            InputLabelProps={{ style: { fontSize: '0.75rem' } }}
+                            inputProps={{ style: { fontSize: '0.75rem', height: 28, padding: '2px 6px' } }}
+                        />
+                        <TextField label="Manager Email" name="managerEmail" value={editRowData.managerEmail || ''} onChange={handleEditChange} required size="small" fullWidth
+                            InputLabelProps={{ style: { fontSize: '0.75rem' } }}
+                            inputProps={{ style: { fontSize: '0.75rem', height: 28, padding: '2px 6px' } }}
+                        />
+                        <TextField select label="Employment Type" name="employmentType" value={editRowData.employmentType || ''} onChange={handleEditChange} required size="small" fullWidth
+                            InputLabelProps={{ style: { fontSize: '0.75rem' } }}
+                            inputProps={{ style: { fontSize: '0.75rem', height: 28, padding: '2px 6px' } }}
+                        >
+                            <MenuItem value="contract">Contract</MenuItem>
+                            <MenuItem value="permanent">Permanent</MenuItem>
+                            <MenuItem value="intern">Intern</MenuItem>
+                        </TextField>
+                        <TextField label="Designation" name="designation" value={editRowData.designation || ''} onChange={handleEditChange} required size="small" fullWidth
+                            InputLabelProps={{ style: { fontSize: '0.75rem' } }}
+                            inputProps={{ style: { fontSize: '0.75rem', height: 28, padding: '2px 6px' } }}
+                        />
+                        <TextField label="Asset ID" name="asset_id" value={editRowData.asset_id || ''} onChange={handleEditChange} required size="small" fullWidth
+                            InputLabelProps={{ style: { fontSize: '0.75rem' } }}
+                            inputProps={{ style: { fontSize: '0.75rem', height: 28, padding: '2px 6px' } }}
+                        />
+                        <TextField label="Employee ID" name="employeeid" value={editRowData.employeeid || ''} onChange={handleEditChange} required size="small" fullWidth
+                            InputLabelProps={{ style: { fontSize: '0.75rem' } }}
+                            inputProps={{ style: { fontSize: '0.75rem', height: 28, padding: '2px 6px' } }}
+                        />
+                    </Box>
+                    <Box display="flex" justifyContent="flex-end" gap={1} p={2}>
+                        <Button onClick={handleEditCancel} color="inherit" size="small" variant="text" sx={{ fontSize: '0.75rem' }}>
+                            Cancel
+                        </Button>
+                        <Button type="submit" variant="contained" color="primary" size="small" sx={{ fontSize: '0.75rem' }}>
+                            Save
+                        </Button>
+                    </Box>
+                </form>
+            </Modal>
             {/* Password Reset Modal */}
             <Modal isOpen={changePwdModalOpen} onClose={closeChangePwdModal} title="Reset Password">
                 <form onSubmit={handleChangePassword}>

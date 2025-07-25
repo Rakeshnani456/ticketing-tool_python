@@ -2,17 +2,33 @@
 const express = require('express');
 const router = express.Router();
 
-module.exports = (db, admin, usersCollection, clientsCollection) => {
+module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseToken) => {
 
-    // GET /api/users - Get all engineers (users with role 'support')
-    router.get('/', async (req, res) => {
+    // GET /api/users - Get users based on role
+    router.get('/', verifyFirebaseToken, async (req, res) => {
         try {
-            const snapshot = await usersCollection.where('role', '==', 'support').get();
+            const userRole = req.user.role;
+            const userClientName = req.user.client_name;
+            
+            let snapshot;
+            if (userRole === 'site_admin' && userClientName) {
+                // For site_admin, get users from their company/client
+                snapshot = await usersCollection.where('client_name', '==', userClientName).get();
+            } else if (userRole === 'support') {
+                // For support role, get all support users
+                snapshot = await usersCollection.where('role', '==', 'support').get();
+            } else if (userRole === 'admin' || userRole === 'super_admin') {
+                // For admin/super_admin, get all users
+                snapshot = await usersCollection.get();
+            } else {
+                return res.status(403).json({ error: 'Insufficient permissions to view users.' });
+            }
+            
             const users = snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() }));
             return res.status(200).json(users);
         } catch (err) {
-            console.error('Error fetching engineers:', err);
-            return res.status(500).json({ error: err.message || 'Failed to fetch engineers.' });
+            console.error('Error fetching users:', err);
+            return res.status(500).json({ error: err.message || 'Failed to fetch users.' });
         }
     });
 

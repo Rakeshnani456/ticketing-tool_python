@@ -46,7 +46,7 @@ import NotificationModal from './components/common/NotificationModal';
 // Import Firebase auth client and dbClient
 import { authClient, dbClient } from './config/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth'; // Firebase authentication methods
-import { collection, query, onSnapshot, where } from 'firebase/firestore'; // Firestore imports and 'where'
+import { collection, query, onSnapshot, where, doc, getDoc } from 'firebase/firestore'; // Firestore imports and 'where'
 
 // Import API Base URL from constants
 import { API_BASE_URL } from './config/constants';
@@ -349,7 +349,30 @@ const App = () => {
                     const data = await response.json();
                     if (response.ok) {
                         // On successful verification, set currentUser state with Firebase user and role
-                        const userProfile = { firebaseUser, role: data.user.role, email: firebaseUser.email, uid: firebaseUser.uid };
+                        let userProfile = { firebaseUser, role: data.user.role, email: firebaseUser.email, uid: firebaseUser.uid };
+                        
+                        // For site_admin users, fetch complete profile from Firestore to get client_name
+                        if (data.user.role === 'site_admin') {
+                            try {
+                                const userDocRef = doc(dbClient, 'users', firebaseUser.uid);
+                                const userDoc = await getDoc(userDocRef);
+                                if (userDoc.exists()) {
+                                    const userData = userDoc.data();
+                                    console.log("Site admin user data:", userData);
+                                    userProfile = {
+                                        ...userProfile,
+                                        client_name: userData.client_name || userData.companyName,
+                                        companyName: userData.client_name || userData.companyName
+                                    };
+                                    console.log("Site admin profile after enhancement:", userProfile);
+                                } else {
+                                    console.error("Site admin user document not found in Firestore");
+                                }
+                            } catch (error) {
+                                console.error('Error fetching site admin profile:', error);
+                            }
+                        }
+                        
                         setCurrentUser(userProfile);
                         fetchNotifications(userProfile); // Fetch notifications for logged-in user
 
@@ -366,7 +389,7 @@ const App = () => {
                         let ticketsQuery;
 
                         // Adjust the Firestore query based on user role to match security rules
-                        if (userProfile.role === 'support' || userProfile.role === 'admin') {
+                        if (userProfile.role === 'support' || userProfile.role === 'admin' || userProfile.role === 'site_admin') {
                             // Admins and Support can read all tickets (as per your rules)
                             ticketsQuery = query(ticketsCollectionRef);
                         } else {
@@ -400,7 +423,7 @@ const App = () => {
                         // Note: React Router handles the initial page load based on URL.
                         // This `Maps` call ensures a default route upon successful login if the current path isn't ideal.
                         if (location.pathname === '/login' || location.pathname === '/register' || location.pathname === '/') {
-                             if (data.user.role === 'support' || data.user.role === 'admin') {
+                             if (data.user.role === 'support' || data.user.role === 'admin' || data.user.role === 'site_admin') {
                                  navigate('/dashboard');
                              } else {
                                  navigate('/my-tickets');
@@ -450,21 +473,21 @@ const App = () => {
     }, [fetchNotifications, navigate, location.pathname]); // Added navigate and location.pathname to dependency array
 
     // Effect hook to handle clicks outside the notification menu
-    useEffect(() => {
-        const handleClickOutside = (event) => {
-            // If the notification menu is open and the click is outside of it, close it
-            if (notificationMenuRef.current && !notificationMenuRef.current.contains(event.target) && isNotificationMenuOpen) {
-                setIsNotificationMenuOpen(false);
-            }
-        };
+    // useEffect(() => {
+    //     const handleClickOutside = (event) => {
+    //         // If the notification menu is open and the click is outside of it, close it
+    //         if (notificationMenuRef.current && !notificationMenuRef.current.contains(event.target) && isNotificationMenuOpen) {
+    //             setIsNotificationMenuOpen(false);
+    //         }
+    //     };
 
-        // Add event listener when component mounts
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => {
-            // Clean up the event listener when component unmounts
-            document.removeEventListener('mousedown', handleClickOutside);
-        };
-    }, [isNotificationMenuOpen]);
+    //     // Add event listener when component mounts
+    //     document.addEventListener('mousedown', handleClickOutside);
+    //     return () => {
+    //         // Clean up the event listener when component unmounts
+    //         document.removeEventListener('mousedown', handleClickOutside);
+    //     };
+    // }, [isNotificationMenuOpen]);
 
 
     /**
@@ -476,7 +499,7 @@ const App = () => {
     const handleLoginSuccess = (user) => {
         setCurrentUser(user);
         fetchNotifications(user); // Fetch notifications on login
-        if (user.role === 'support' || user.role === 'admin') {
+        if (user.role === 'support' || user.role === 'admin' || user.role === 'site_admin') {
             navigate('/dashboard'); // Use navigate hook
         } else {
             navigate('/my-tickets'); // Use navigate hook
@@ -749,13 +772,13 @@ const App = () => {
                     <Link to={currentUser ? '/my-tickets' : '/login'}>
                         <img src={KriasolLogo} alt="Kriasol Logo" className="h-20 w-auto cursor-pointer" />
                     </Link>
-                    {currentUser && (currentUser.role === 'admin' || currentUser.role === 'super_admin') && (
+                    {currentUser && (['admin', 'site_admin', 'super_admin'].includes(currentUser.role)) && (
                         <Link to="/dashboard" className={`ml-2 flex items-center px-2 py-1 rounded-lg text-sm font-medium transition-colors duration-200 hover:bg-blue-100 ${location.pathname === '/dashboard' ? 'bg-blue-100 text-blue-700 font-semibold' : 'text-gray-700'}`}> 
                             Dashboard
                         </Link>
                     )}
                     {/* Management Dropdown (right of Dashboard) - Now using Material-UI Menu */}
-                    {currentUser && (currentUser.role === 'super_admin' || currentUser.role === 'admin') && (
+                    {currentUser && (['super_admin', 'admin'].includes(currentUser.role)) && (
                         <div className="relative ml-2">
                             <button
                                 onClick={handleClick} // Use handleClick to open the MUI Menu
@@ -880,6 +903,7 @@ const App = () => {
                                 onClearAll={clearAllNotifications}
                                 onMarkRead={markNotificationAsRead}
                                 onViewTicket={viewTicket}
+                                containerRef={notificationMenuRef}
                             />
                         </div>
                         {/* Profile Dropdown */}
@@ -1031,10 +1055,49 @@ const App = () => {
                                     </Link>
                                 </li>
                             </>
+                        ) : currentUser.role === 'site_admin' ? (
+                            <>
+                                <li>
+                                    <Link to="/all-tickets" className={`menu-item flex items-center w-full px-2 py-1 rounded-lg text-left transition-colors duration-300 text-xs ${location.pathname === '/all-tickets' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                        <MenuIconSvg width={18} height={18} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-1.5' : ''}`} fill="currentColor" />
+                                        <motion.span
+                                                variants={textVariants}
+                                                animate={isSidebarExpanded ? "expanded" : "collapsed"}
+                                                className="whitespace-nowrap overflow-hidden"
+                                            >
+                                                All Tickets
+                                            </motion.span>
+                                    </Link>
+                                </li>
+                                <li>
+                                    <Link to="/my-tickets" className={`menu-item flex items-center w-full px-2 py-1 rounded-lg text-left transition-colors duration-300 text-xs ${location.pathname === '/my-tickets' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                        <AssignedToMeIcon height={18} width={18} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-1.5' : ''}`} />
+                                        <motion.span
+                                                variants={textVariants}
+                                                animate={isSidebarExpanded ? "expanded" : "collapsed"}
+                                                className="whitespace-nowrap overflow-hidden"
+                                            >
+                                                My Tickets
+                                            </motion.span>
+                                    </Link>
+                                </li>
+                                <li>
+                                    <Link to="/user-management" className={`menu-item flex items-center w-full px-2 py-1 rounded-lg text-left transition-colors duration-300 text-xs ${location.pathname === '/user-management' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                        <User width={16} height={16} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-1.5' : ''}`} />
+                                        <motion.span
+                                                variants={textVariants}
+                                                animate={isSidebarExpanded ? "expanded" : "collapsed"}
+                                                className="whitespace-nowrap overflow-hidden"
+                                            >
+                                                Users
+                                            </motion.span>
+                                    </Link>
+                                </li>
+                            </>
                         ) : (
                             <>
                             {/* Only show Dashboard in sidebar for support and other non-admin roles */}
-                            {(currentUser.role === 'support') && (
+                            {(['support', 'admin', 'site_admin'].includes(currentUser.role)) && (
                                 <>
                                     
                                     <li>
@@ -1088,7 +1151,7 @@ const App = () => {
                             </Link>
                         </li>
                         {/* Remove 'Assigned to Me' from sidebar for admin */}
-                        {currentUser.role === 'admin' && false && (
+                        {['admin', 'site_admin'].includes(currentUser.role) && false && (
                             <li>
                                 <Link to="/user-management" className={`menu-item flex items-center w-full px-2 py-1 rounded-lg text-left transition-colors duration-300 text-xs ${location.pathname === '/user-management' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                     <UsersIconSvg width={15} height={15} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-1.5' : ''}`} fill="currentColor" />
@@ -1145,23 +1208,23 @@ const App = () => {
                         <>
                             {/* Default route for logged-in users, redirect based on role */}
                             <Route path="/" element={
-                                currentUser.role === 'support' || currentUser.role === 'admin' || currentUser.role === 'super_admin' ?
+                                ['support', 'admin', 'site_admin', 'super_admin'].includes(currentUser.role) ?
                                     <DashboardComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} /> :
                                     <MyTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} isSidebarExpanded={isSidebarExpanded} />
                             } />
 
                             <Route path="/dashboard" element={
-                                (["support", "admin", "super_admin", "site_admin"].includes(currentUser.role)) ?
+                                (['support', 'admin', 'site_admin', 'super_admin'].includes(currentUser.role)) ?
                                     <DashboardComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} /> :
                                     <AccessDeniedComponent />
                             } />
                             <Route path="/all-tickets" element={
-                                (currentUser.role === 'support' || currentUser.role === 'admin' || currentUser.role === 'super_admin') ?
+                                (['support', 'admin', 'site_admin', 'super_admin'].includes(currentUser.role)) ?
                                     <AllTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} showFilters={true} isSidebarExpanded={isSidebarExpanded} /> :
                                     <AccessDeniedComponent />
                             } />
                             <Route path="/assigned-to-me" element={
-                                (currentUser.role === 'support' || currentUser.role === 'admin' || currentUser.role === 'super_admin') ?
+                                (['support', 'admin', 'site_admin', 'super_admin'].includes(currentUser.role)) ?
                                     <AllTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} initialFilterAssignment="assigned_to_me" showFilters={false} isSidebarExpanded={isSidebarExpanded} /> :
                                     <AccessDeniedComponent />
                             } />
@@ -1187,7 +1250,7 @@ const App = () => {
                             <Route path="/profile" element={<ProfileComponent user={currentUser} showFlashMessage={showFlashMessage} navigateTo={navigateTo} handleLogout={handleLogout} />} />
                             <Route path="/change-password" element={<ChangePasswordComponent user={currentUser} showFlashMessage={showFlashMessage} navigateTo={navigateTo} />} />
                             <Route path="/user-management" element={
-                                (currentUser.role === 'admin' || currentUser.role === 'super_admin') ?
+                                (['admin', 'site_admin', 'super_admin'].includes(currentUser.role)) ?
                                     <UserManagementComponent user={currentUser} showFlashMessage={showFlashMessage} navigateTo={navigateTo} /> :
                                     <AccessDeniedComponent />
                             } />
@@ -1199,17 +1262,17 @@ const App = () => {
                                     <AccessDeniedComponent />
                             } />
                             {/* Admin-only routes */}
-                            <Route path="/client-management" element={currentUser.role === 'admin' ? <ClientManagementComponent /> : <AccessDeniedComponent />} />
-                            <Route path="/siteadmin-management" element={currentUser.role === 'admin' ? <SiteAdminManagementComponent /> : <AccessDeniedComponent />} />
-                            <Route path="/engineer-management" element={(currentUser.role === 'admin' || currentUser.role === 'super_admin') ? <EngineerManagementComponent /> : <AccessDeniedComponent />} />
-                            <Route path="/reports" element={currentUser.role === 'admin' ? <ReportsComponent /> : <AccessDeniedComponent />} />
-                            <Route path="/insights" element={currentUser.role === 'admin' ? <InsightsComponent /> : <AccessDeniedComponent />} />
+                            <Route path="/client-management" element={['admin', 'site_admin', 'super_admin'].includes(currentUser.role) ? <ClientManagementComponent /> : <AccessDeniedComponent />} />
+                            <Route path="/siteadmin-management" element={['admin', 'site_admin', 'super_admin'].includes(currentUser.role) ? <SiteAdminManagementComponent /> : <AccessDeniedComponent />} />
+                            <Route path="/engineer-management" element={(['admin', 'site_admin', 'super_admin'].includes(currentUser.role)) ? <EngineerManagementComponent user={currentUser} showFlashMessage={showFlashMessage} /> : <AccessDeniedComponent />} />
+                            <Route path="/reports" element={['admin', 'site_admin', 'super_admin'].includes(currentUser.role) ? <ReportsComponent /> : <AccessDeniedComponent />} />
+                            <Route path="/insights" element={['admin', 'site_admin', 'super_admin'].includes(currentUser.role) ? <InsightsComponent /> : <AccessDeniedComponent />} />
                             <Route path="/clients" element={currentUser.role === 'super_admin' ? <ClientManagementComponent /> : <AccessDeniedComponent />} />
 
                             {/* Catch-all for logged-in users if no other route matches */}
                             {/* This ensures that if they go to an invalid path, they are redirected to their default view */}
                             <Route path="*" element={
-                                currentUser.role === 'support' || currentUser.role === 'admin' || currentUser.role === 'super_admin' ?
+                                ['support', 'admin', 'site_admin', 'super_admin'].includes(currentUser.role) ?
                                     <DashboardComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} /> :
                                     <MyTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} isSidebarExpanded={isSidebarExpanded} />
                             } />

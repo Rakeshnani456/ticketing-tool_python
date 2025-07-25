@@ -1,7 +1,7 @@
 {
   "files": {
-    "main.css": "/static/css/main.5d15a26f.css",
-    "main.js": "/static/js/main.01415bfd.js",
+    "main.css": "/static/css/main.f6b1230f.css",
+    "main.js": "/static/js/main.10a54fe3.js",
     "static/media/logo.png": "/static/media/logo.a6f6a1126de7c85c4310.png",
     "static/media/OutlookIcon.svg": "/static/media/OutlookIcon.8aa969bd975697efa862d228956ad96b.svg",
     "static/media/TeamsLogo.svg": "/static/media/TeamsLogo.bf8c2490bc0532f9f6df1220eda1387e.svg",
@@ -16,14 +16,16 @@
     "static/media/DocIcon.svg": "/static/media/DocIcon.d75ba303d91ea482a176f60dbe459ba1.svg",
     "static/media/PdfIcon.svg": "/static/media/PdfIcon.49ed2770cd4637f1dabf4d087fab6941.svg",
     "static/media/TxtIcon.svg": "/static/media/TxtIcon.f58aa8d1f491f9d823a2833b475b8fd2.svg",
+    "static/media/CancelFilterIcon.svg": "/static/media/CancelFilterIcon.176210ab6f3e9b21968d006fb9811fb3.svg",
     "static/media/FileIcon.svg": "/static/media/FileIcon.1ea0084a9017b36ca9dd2437ee3a9853.svg",
     "static/media/JpgIcon.svg": "/static/media/JpgIcon.3b0a99884ec1bb78aab6d82e54c14cc5.svg",
     "static/media/PngIcon.svg": "/static/media/PngIcon.e4c19c070b68b25d550cf062d1c8e0d5.svg",
-    "main.5d15a26f.css.map": "/static/css/main.5d15a26f.css.map",
-    "main.01415bfd.js.map": "/static/js/main.01415bfd.js.map"
+    "static/media/FilterIcon.svg": "/static/media/FilterIcon.e392822388d476c678496d34744ab6b1.svg",
+    "main.f6b1230f.css.map": "/static/css/main.f6b1230f.css.map",
+    "main.10a54fe3.js.map": "/static/js/main.10a54fe3.js.map"
   },
   "entrypoints": [
-    "static/css/main.5d15a26f.css",
-    "static/js/main.01415bfd.js"
+    "static/css/main.f6b1230f.css",
+    "static/js/main.10a54fe3.js"
   ]
 }

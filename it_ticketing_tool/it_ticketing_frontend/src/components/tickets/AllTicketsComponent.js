@@ -118,6 +118,17 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
 
         setError(null);
 
+        // Debug site admin user profile
+        if (user.role === 'site_admin') {
+            console.log("Site admin user profile debug:", {
+                uid: user.uid,
+                email: user.email,
+                client_name: user.client_name,
+                companyName: user.companyName,
+                firebaseUser: user.firebaseUser ? 'present' : 'missing'
+            });
+        }
+
         let ticketsRef = collection(db, 'tickets');
         let q;
 
@@ -126,9 +137,15 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
         if (searchKeyword && searchKeyword.toUpperCase().startsWith('TICKET-')) {
             const exactId = searchKeyword.toUpperCase();
             q = query(ticketsRef, where('display_id', '==', exactId), orderBy('created_at', 'desc'));
+        } else if (user && user.role === 'site_admin' && user.client_name) {
+            // Only fetch tickets for this site_admin's company
+            q = query(ticketsRef, where('client_name', '==', user.client_name), orderBy('created_at', 'desc'));
+        } else if (user && user.role === 'site_admin') {
+            // Fallback: if site admin doesn't have client_name, fetch all tickets and filter client-side
+            console.warn("Site admin user doesn't have client_name field, falling back to client-side filtering");
+            q = query(ticketsRef, orderBy('created_at', 'desc'));
         } else {
             // Otherwise, fetch all tickets ordered by creation date.
-            // Client-side filtering for status and assignment will be applied in the next useEffect.
             q = query(ticketsRef, orderBy('created_at', 'desc'));
         }
 
@@ -143,6 +160,15 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
             setError(null);
         }, (err) => {
             console.error("Firestore onSnapshot error:", err);
+            // Add more specific error handling for site admin
+            if (user && user.role === 'site_admin') {
+                console.error("Site admin ticket fetch error details:", {
+                    userClientName: user.client_name,
+                    userCompanyName: user.companyName,
+                    error: err.message,
+                    code: err.code
+                });
+            }
             setError(`Failed to load tickets: ${err.message}`);
             showFlashMessage(`Failed to load tickets: ${err.message}`, 'error');
             setLoading(false);
@@ -150,7 +176,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
 
         // Cleanup function: unsubscribe from the listener when the component unmounts
         return () => unsubscribe();
-    }, [db, searchKeyword]); // Re-run effect if these dependencies change
+    }, [db, searchKeyword, user]); // Add user as dependency
 
 
     /**
@@ -159,6 +185,36 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
      */
     useEffect(() => {
         let currentFilteredTickets = [...allTickets]; // Start with all tickets fetched by Firestore
+
+        // If user is a site_admin, filter tickets by their company/client
+        if (user && user.role === 'site_admin') {
+            if (user.client_name) {
+                console.log("Site admin filtering tickets:", {
+                    userClientName: user.client_name,
+                    userCompanyName: user.companyName,
+                    totalTickets: currentFilteredTickets.length
+                });
+                currentFilteredTickets = currentFilteredTickets.filter(ticket => {
+                    const ticketClientName = ticket.client_name || ticket.companyName;
+                    const matches = ticketClientName === user.client_name || ticketClientName === user.companyName;
+                    if (!matches) {
+                        console.log("Filtered out ticket:", {
+                            ticketId: ticket.display_id,
+                            ticketClientName: ticketClientName,
+                            userClientName: user.client_name,
+                            userCompanyName: user.companyName
+                        });
+                    }
+                    return matches;
+                });
+                console.log("After site admin filtering:", {
+                    filteredTickets: currentFilteredTickets.length
+                });
+            } else {
+                console.warn("Site admin user doesn't have client_name field - showing all tickets");
+                showFlashMessage('Warning: Site admin profile missing company information. Showing all tickets.', 'warning');
+            }
+        }
 
         // Always filter out 'Closed' and 'Resolved' tickets from being displayed in the grid
 // Always filter out 'Closed', 'Resolved', and 'Cancelled' tickets from being displayed in the grid
@@ -515,12 +571,17 @@ const counts = {
     return (
         <div className="p-4 bg-white flex-1 overflow-auto">
             {/* Decreased heading size from text-xl to text-lg */}
-            <h2 className="text-lg font-extrabold text-gray-800 mb-4">
-                {getPageHeading()}
-            </h2>
+            <div className="flex items-center space-x-3 mb-4">
+                <h2 className="text-lg font-extrabold text-gray-800">
+                    {getPageHeading()}
+                </h2>
+                {user && user.role === 'site_admin' && !user.client_name && (
+                    <div className="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded-md">
+                        ⚠️ Missing company info
+                    </div>
+                )}
+            </div>
             <div className="w-full h-px bg-gray-200 mb-2 mt-0" />
-
-         
 
             {/* Filter and Export Section (Conditional Rendering based on `showFilters` prop) */}
             {showFilters && (

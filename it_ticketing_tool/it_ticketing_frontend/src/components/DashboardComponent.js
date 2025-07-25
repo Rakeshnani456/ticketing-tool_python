@@ -59,7 +59,7 @@ const DashboardComponent = ({ user, navigateTo, showFlashMessage }) => {
         if (!user || !user.firebaseUser) return;
         let ticketsRef = collection(dbClient, 'tickets');
         let q;
-        if (user.role === 'support' || user.role === 'admin') {
+        if (user.role === 'support' || user.role === 'admin' || user.role === 'site_admin') {
             q = query(ticketsRef, orderBy('created_at', 'desc'), limit(10));
         } else {
             q = query(ticketsRef, where('reporter_id', '==', user.firebaseUser.uid), orderBy('created_at', 'desc'), limit(10));
@@ -86,7 +86,7 @@ const DashboardComponent = ({ user, navigateTo, showFlashMessage }) => {
         if (!user || !user.firebaseUser) return;
         let ticketsRef = collection(dbClient, 'tickets');
         let q;
-        if (user.role === 'support' || user.role === 'admin') {
+        if (user.role === 'support' || user.role === 'admin' || user.role === 'site_admin') {
             q = query(ticketsRef, orderBy('created_at', 'desc'));
         } else {
             q = query(ticketsRef, where('reporter_id', '==', user.firebaseUser.uid), orderBy('created_at', 'desc'));
@@ -190,7 +190,7 @@ const DashboardComponent = ({ user, navigateTo, showFlashMessage }) => {
 
     // Compute metrics for cards
     let openCount, inProgressCount, holdCount, assignedToMeCount;
-    if (user && (user.role === 'support' || user.role === 'admin')) {
+    if (user && (user.role === 'support' || user.role === 'admin' || user.role === 'site_admin')) {
         openCount = kanbanTickets.filter(t => t.status === 'Open').length;
         inProgressCount = kanbanTickets.filter(t => t.status === 'In Progress').length;
         holdCount = kanbanTickets.filter(t => t.status === 'Hold').length;
@@ -211,7 +211,7 @@ const DashboardComponent = ({ user, navigateTo, showFlashMessage }) => {
             .slice(0, 5);
     } else if (selectedStatus === 'Assigned') {
         filteredTableTickets = kanbanTickets.filter(t => t.assigned_to_email === user.firebaseUser.email && ['Open', 'In Progress'].includes(t.status));
-    } else if (user && (user.role === 'support' || user.role === 'admin')) {
+    } else if (user && (user.role === 'support' || user.role === 'admin' || user.role === 'site_admin')) {
         filteredTableTickets = kanbanTickets.filter(t => t.status === selectedStatus);
     } else {
         filteredTableTickets = kanbanTickets.filter(t => t.status === selectedStatus && (t.assigned_to_email === user.firebaseUser.email || t.reporter_id === user.firebaseUser.uid));
@@ -231,7 +231,7 @@ const DashboardComponent = ({ user, navigateTo, showFlashMessage }) => {
         { label: 'Hold', count: holdCount, icon: PauseCircle, color: 'bg-purple-200/80 text-purple-900', status: 'Hold' },
     ];
     // Only show 'Assigned to Me' for non-admin, non-super_admin roles
-    if (user && user.role !== 'admin' && user.role !== 'super_admin') {
+    if (user && user.role !== 'admin' && user.role !== 'super_admin' && user.role !== 'site_admin') {
         metricCards.push({ label: 'Assigned to Me', count: assignedToMeCount, icon: User, color: 'bg-orange-200/80 text-orange-900', status: 'Assigned' });
     }
 
@@ -261,7 +261,7 @@ const DashboardComponent = ({ user, navigateTo, showFlashMessage }) => {
                 Dashboard Overview
             </h1>
             {/* Super Admin Widgets */}
-            {user && (user.role === 'super_admin' || user.role === 'admin') && (
+            {user && (user.role === 'super_admin' || user.role === 'admin' || user.role === 'site_admin') && (
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
                     <div className="flex flex-col items-center justify-center rounded-lg shadow-md p-4 bg-green-100 border border-green-200">
                         <div className="text-2xl font-bold text-green-800">{superAdminStats.totalClients}</div>

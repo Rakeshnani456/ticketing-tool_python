@@ -533,7 +533,16 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
     useEffect(() => {
         if (isEditing && isSupportUser) {
             setSupportUsersLoading(true);
-            fetch(`${API_BASE_URL}/api/users`)
+            // Get user's ID token for authentication
+            user.firebaseUser.getIdToken()
+                .then(idToken => {
+                    return fetch(`${API_BASE_URL}/api/users`, {
+                        headers: {
+                            'Authorization': `Bearer ${idToken}`,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                })
                 .then(res => res.json())
                 .then(data => {
                     setSupportUsers(Array.isArray(data) ? data.filter(u => u.role === 'support') : []);
@@ -544,7 +553,7 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                     setSupportUsersLoading(false);
                 });
         }
-    }, [isEditing, isSupportUser]);
+    }, [isEditing, isSupportUser, user]);
 
     const isTicketClosedOrResolved = ticket && ['Resolved', 'Cancelled'].includes(ticket.status);
     const canEdit = !isTicketClosedOrResolved && (isSupportUser || (ticket && ticket.reporter_id === user?.firebaseUser.uid));
