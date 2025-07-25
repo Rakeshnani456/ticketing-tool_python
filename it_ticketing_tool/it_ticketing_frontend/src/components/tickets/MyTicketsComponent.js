@@ -218,7 +218,7 @@ const MyTicketsComponent = ({ user, navigateTo, showFlashMessage, searchKeyword,
                 </div>
             ) : (
                 // Table to display tickets
-                <div className="w-full max-w-full overflow-x-auto rounded-lg shadow-md border border-gray-200 bg-white">
+                <div className="w-full max-w-full overflow-x-auto border border-gray-200 bg-white">
                     <table className="w-full min-w-0 bg-white text-xs">
                         <thead className="hidden sm:table-header-group bg-gray-100 border-b border-gray-200">
                             <tr>
@@ -234,32 +234,32 @@ const MyTicketsComponent = ({ user, navigateTo, showFlashMessage, searchKeyword,
                         </thead>
                         <tbody className="divide-y divide-gray-200">
                             {paginatedTickets.map((ticket, index) => (
-                                <tr key={ticket.id} className="block sm:table-row bg-white border-b border-gray-200 hover:bg-gray-50 transition-colors duration-150 odd:bg-white even:bg-gray-50 text-xs">
-                                    <td className="block sm:table-cell px-2 py-2 text-xs text-gray-800 whitespace-normal break-words">
+                                <tr key={ticket.id} className="block sm:table-row bg-white border-b border-gray-200 hover:bg-gray-50 transition-colors duration-150 text-xs">
+                                    <td className="block sm:table-cell px-2 py-2 text-xs text-gray-800 whitespace-normal break-words border-r border-gray-200">
                                         <span className="block sm:hidden font-semibold text-gray-600">#:</span>
                                         {index + 1}
                                     </td>
-                                    <td className="block sm:table-cell px-2 py-2 text-xs text-blue-700 hover:underline font-medium cursor-pointer whitespace-normal break-words" onClick={() => navigateTo('/tickets', ticket.id)}>
+                                    <td className="block sm:table-cell px-2 py-2 text-xs text-blue-700 hover:underline font-medium cursor-pointer whitespace-normal break-words border-r border-gray-200" onClick={() => navigateTo('/tickets', ticket.id)}>
                                         <span className="block sm:hidden font-semibold text-gray-600">Ticket ID:</span>
                                         {ticket.display_id}
                                     </td>
-                                    <td className="block sm:table-cell px-2 py-2 text-xs text-gray-800 max-w-xs truncate whitespace-normal break-words" title={ticket.short_description}>
+                                    <td className="block sm:table-cell px-2 py-2 text-xs text-gray-800 max-w-xs truncate whitespace-normal break-words border-r border-gray-200" title={ticket.short_description}>
                                         <span className="block sm:hidden font-semibold text-gray-600">Short Description:</span>
                                         {ticket.short_description}
                                     </td>
-                                    <td className="block sm:table-cell px-2 py-2 text-xs text-gray-800 whitespace-normal break-words">
+                                    <td className="block sm:table-cell px-2 py-2 text-xs text-gray-800 whitespace-normal break-words border-r border-gray-200">
                                         <span className="block sm:hidden font-semibold text-gray-600">Category:</span>
                                         {ticket.category}
                                     </td>
-                                    <td className="block sm:table-cell px-2 py-2 text-xs text-gray-800 whitespace-normal break-words">
+                                    <td className="block sm:table-cell px-2 py-2 text-xs text-gray-800 whitespace-normal break-words border-r border-gray-200">
                                         <span className="block sm:hidden font-semibold text-gray-600">Priority:</span>
                                         <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getPriorityClasses(ticket.priority)}`}>{ticket.priority}</span>
                                     </td>
-                                    <td className="block sm:table-cell px-2 py-2 whitespace-normal break-words text-xs text-gray-800">
+                                    <td className="block sm:table-cell px-2 py-2 whitespace-normal break-words text-xs text-gray-800 border-r border-gray-200">
                                         <span className="block sm:hidden font-semibold text-gray-600">Status:</span>
                                         <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getStatusClasses(ticket.status)}`}>{ticket.status}</span>
                                     </td>
-                                    <td className="block sm:table-cell px-2 py-2 whitespace-normal break-words text-xs text-gray-800">
+                                    <td className="block sm:table-cell px-2 py-2 whitespace-normal break-words text-xs text-gray-800 border-r border-gray-200">
                                         <span className="block sm:hidden font-semibold text-gray-600">Assigned To:</span>
                                         {ticket.assigned_to_email || 'Unassigned'}
                                     </td>

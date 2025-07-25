@@ -1,7 +1,7 @@
 // src/components/tickets/AllTicketsComponent.js
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Loader2, XCircle, ListFilter, Download, User, CheckCircle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Loader2, XCircle, ListFilter, Download, User, CheckCircle, ChevronLeft, ChevronRight, ChevronUp } from 'lucide-react';
 import { collection, query, onSnapshot, where, orderBy, getFirestore } from 'firebase/firestore';
 
 // Import common UI components
@@ -14,6 +14,8 @@ import { API_BASE_URL } from '../../config/constants';
 
 // Import Firebase client (now including dbClient)
 import { app, dbClient } from '../../config/firebase';
+import { ReactComponent as FilterIcon } from '../../assets/icons/FilterIcon.svg';
+import { ReactComponent as CancelFilterIcon } from '../../assets/icons/CancelFilterIcon.svg';
 
 /**
  * Component to display all tickets, primarily for support users.
@@ -64,6 +66,10 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
 
     // Add state for export status filter
     const [exportStatus, setExportStatus] = useState('');
+
+    // Add at the top of the component (after useState declarations)
+    const [filterBy, setFilterBy] = useState('status'); // 'status' or 'priority'
+    const [filterPriority, setFilterPriority] = useState('');
 
     // Get today's date in ISO-MM-DD format for the max attribute of the end date input
     const today = new Date().toISOString().split('T')[0];
@@ -159,7 +165,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
         currentFilteredTickets = currentFilteredTickets.filter(ticket => !['Closed', 'Resolved', 'Cancelled'].includes(ticket.status));
         // Apply status filter based on filterStatus state
         // If filterStatus is an empty string, no status filter is applied, showing all statuses
-        if (filterStatus) {
+        if (filterBy === 'status' && filterStatus) {
             currentFilteredTickets = currentFilteredTickets.filter(ticket => ticket.status === filterStatus);
         }
 
@@ -192,8 +198,16 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
             });
         }
 
+        // Apply priority filter
+        if (filterBy === 'priority' && filterPriority) {
+            // Debug: log priorities
+            console.log('Filtering by priority:', filterPriority);
+            console.log('Ticket priorities:', currentFilteredTickets.map(t => t.priority));
+            currentFilteredTickets = currentFilteredTickets.filter(ticket => (ticket.priority || '').toLowerCase() === filterPriority.toLowerCase());
+        }
+
         setDisplayedTickets(currentFilteredTickets); // Update displayed tickets
-    }, [allTickets, filterStatus, filterAssignment, searchKeyword]); // Dependencies include all filtering states and user
+    }, [allTickets, filterStatus, filterPriority, filterBy, filterAssignment, searchKeyword]); // Dependencies include all filtering states and user
 
 
     // Effect hook to measure message box height and set up auto-hide timer
@@ -424,7 +438,7 @@ const counts = {
             }
             return `${filterStatus} Tickets`;
         }
-        return 'All Tickets'; // Default if no specific filter is active
+        return 'Workflow'; // Default if no specific filter is active
     }, [filterStatus, filterAssignment, searchKeyword]);
 
     // Function to handle closing the message with a fade-out effect and upward movement
@@ -511,22 +525,48 @@ const counts = {
             {/* Filter and Export Section (Conditional Rendering based on `showFilters` prop) */}
             {showFilters && (
                 <div className="mb-2 p-3 bg-white rounded-md flex flex-wrap gap-2 items-center relative">
-                    <span className="text-sm font-semibold text-gray-700 flex items-center"><ListFilter className="mr-1" size={16} /> Filter By:</span>
-                    {/* MODIFIED: 'All' button now sets filterStatus to empty string to show all tickets */}
-                    <button
-    onClick={() => { setFilterStatus(''); setFilterAssignment(''); }} // Set to empty string for 'All' and clear assignment
-    className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors duration-200 shadow-sm ${filterStatus === '' && filterAssignment === '' ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}
+                    <span className="text-sm font-semibold text-gray-700 flex items-center">
+  {(filterBy !== 'status' || filterStatus !== '' || filterPriority !== '' || filterAssignment !== '') ? (
+    <CancelFilterIcon
+      className="mr-1 cursor-pointer"
+      style={{ width: 16, height: 16 }}
+      title="Clear Filter"
+      onClick={() => { setFilterBy('status'); setFilterStatus(''); setFilterPriority(''); setFilterAssignment(''); }}
+    />
+  ) : (
+    <FilterIcon className="mr-1" style={{ width: 16, height: 16 }} />
+  )}
+  Filter By:
+</span>
+                    <select
+  value={filterBy}
+  onChange={e => { setFilterBy(e.target.value); setFilterStatus(''); setFilterPriority(''); }}
+  className="px-2 py-1 rounded border border-gray-300 text-xs font-semibold bg-white mr-2"
 >
-    All ({counts.total_tickets}) {/* Now simply show the total_tickets which are already filtered for active ones */}
-</button>
-                    {/* MODIFIED: Ensure setFilterAssignment('') is called for status filters */}
-                    <button onClick={() => { setFilterStatus('Open'); setFilterAssignment(''); }} className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors duration-200 shadow-sm ${filterStatus === 'Open' && filterAssignment === '' ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`} > Open ({counts.open_tickets}) </button>
-                    <button onClick={() => { setFilterStatus('In Progress'); setFilterAssignment(''); }} className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors duration-200 shadow-sm ${filterStatus === 'In Progress' && filterAssignment === '' ? 'bg-yellow-600 text-white hover:bg-yellow-700' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`} > In Progress ({counts.in_progress_tickets}) </button>
-                    <button onClick={() => { setFilterStatus('Hold'); setFilterAssignment(''); }} className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors duration-200 shadow-sm ${filterStatus === 'Hold' && filterAssignment === '' ? 'bg-purple-600 text-white hover:bg-purple-700' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`} > On Hold ({counts.hold_tickets}) </button>
+  <option value="status">Status</option>
+  <option value="priority">Priority</option>
+</select>
+{filterBy === 'status' && (
+  <>
+    <button onClick={() => { setFilterStatus(''); setFilterAssignment(''); }} className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-colors duration-200 shadow-sm ${filterStatus === '' && filterAssignment === '' ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}>All ({counts.total_tickets})</button>
+    <button onClick={() => { setFilterStatus('Open'); setFilterAssignment(''); }} className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-colors duration-200 shadow-sm ${filterStatus === 'Open' && filterAssignment === '' ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}>Open ({counts.open_tickets})</button>
+    <button onClick={() => { setFilterStatus('In Progress'); setFilterAssignment(''); }} className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-colors duration-200 shadow-sm ${filterStatus === 'In Progress' && filterAssignment === '' ? 'bg-yellow-600 text-white hover:bg-yellow-700' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}>In Progress ({counts.in_progress_tickets})</button>
+    <button onClick={() => { setFilterStatus('Hold'); setFilterAssignment(''); }} className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-colors duration-200 shadow-sm ${filterStatus === 'Hold' && filterAssignment === '' ? 'bg-purple-600 text-white hover:bg-purple-700' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}>On Hold ({counts.hold_tickets})</button>
+    <button onClick={() => { setFilterAssignment('unassigned'); setFilterStatus(''); }} className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-colors duration-200 shadow-sm ${filterAssignment === 'unassigned' && filterStatus === '' ? 'bg-orange-600 text-white hover:bg-orange-700' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}>Unassigned ({counts.unassigned})</button>
+  </>
+)}
+{filterBy === 'priority' && (
+  <>
+    <button onClick={() => setFilterPriority('')} className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-colors duration-200 shadow-sm ${filterPriority === '' ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}>All</button>
+    <button onClick={() => setFilterPriority('Low')} className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-colors duration-200 shadow-sm ${filterPriority === 'Low' ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}>Low</button>
+    <button onClick={() => setFilterPriority('Medium')} className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-colors duration-200 shadow-sm ${filterPriority === 'Medium' ? 'bg-orange-600 text-white hover:bg-orange-700' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}>Medium</button>
+    <button onClick={() => setFilterPriority('High')} className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-colors duration-200 shadow-sm ${filterPriority === 'High' ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}>High</button>
+    <button onClick={() => setFilterPriority('Critical')} className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-colors duration-200 shadow-sm ${filterPriority === 'Critical' ? 'bg-red-900 text-white hover:bg-red-800' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}>Critical</button>
+  </>
+)}
                     {/* Removed the "Closed/Resolved" filter button */}
 
                     {/* MODIFIED: Filter button for 'Unassigned' - ensure setFilterStatus('') is called */}
-                    <button onClick={() => { setFilterAssignment('unassigned'); setFilterStatus(''); }} className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors duration-200 shadow-sm ${filterAssignment === 'unassigned' && filterStatus === '' ? 'bg-orange-600 text-white hover:bg-orange-700' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`} > Unassigned ({counts.unassigned}) </button>
                     {/* Removed the 'Assigned to Me' button */}
 
                     {/* In the filter/export section, move pagination to be just left of Export button */}
@@ -613,7 +653,7 @@ const counts = {
                                         onClick={handleExport}
                                         className={`w-auto px-3 py-1 text-xs ${exportSuccess ? 'bg-green-500 hover:bg-green-600' : ''}`}
                                         disabled={loading || !startDate || !endDate || (new Date(endDate) > new Date(today)) || (new Date(startDate) > new Date(endDate))}
-                                        Icon={exportSuccess ? CheckCircle : Download}
+                                        Icon={exportSuccess ? CheckCircle : ChevronUp}
                                     >
                                         {exportSuccess ? 'Exported!' : (loading ? 'Exporting...' : 'Confirm Export')}
                                     </PrimaryButton>
@@ -629,7 +669,7 @@ const counts = {
                     {searchKeyword ? `No tickets found matching "${searchKeyword}".` : "No tickets found matching the criteria."}
                 </p>
             ) : (
-                <div className="w-full max-w-full overflow-x-auto rounded-lg shadow-md border border-gray-200 bg-white mt-0">
+                <div className="w-full max-w-full overflow-x-auto border border-gray-200 bg-white mt-0">
                     <table className="w-full min-w-0 bg-white text-xs">
                         <thead className="hidden sm:table-header-group bg-gray-100 border-b border-gray-200">
                             <tr>
@@ -645,32 +685,32 @@ const counts = {
                         </thead>
                         <tbody className="divide-y divide-gray-200">
                             {paginatedTickets.map((ticket, index) => (
-                                <tr key={ticket.id} className="block sm:table-row bg-white border-b border-gray-200 hover:bg-gray-50 transition-colors duration-150 odd:bg-white even:bg-gray-50 text-xs">
-                                    <td className="block sm:table-cell px-2 py-2 text-xs text-gray-800 whitespace-normal break-words">
+                                <tr key={ticket.id} className="block sm:table-row bg-white border-b border-gray-200 hover:bg-gray-50 transition-colors duration-150 text-xs">
+                                    <td className="block sm:table-cell px-2 py-2 text-xs text-gray-800 whitespace-normal break-words border-r border-gray-200">
                                         <span className="block sm:hidden font-semibold text-gray-600">#:</span>
                                         {index + 1}
                                     </td>
-                                    <td className="block sm:table-cell px-2 py-2 text-xs text-blue-700 hover:underline font-medium cursor-pointer whitespace-normal break-words" onClick={() => navigateTo('/tickets', ticket.id)}>
+                                    <td className="block sm:table-cell px-2 py-2 text-xs text-blue-700 hover:underline font-medium cursor-pointer whitespace-normal break-words border-r border-gray-200" onClick={() => navigateTo('/tickets', ticket.id)}>
                                         <span className="block sm:hidden font-semibold text-gray-600">Ticket ID:</span>
                                         {ticket.display_id}
                                     </td>
-                                    <td className="block sm:table-cell px-2 py-2 text-xs text-gray-800 max-w-xs truncate whitespace-normal break-words" title={ticket.short_description}>
+                                    <td className="block sm:table-cell px-2 py-2 text-xs text-gray-800 max-w-xs truncate whitespace-normal break-words border-r border-gray-200" title={ticket.short_description}>
                                         <span className="block sm:hidden font-semibold text-gray-600">Short Description:</span>
                                         {ticket.short_description}
                                     </td>
-                                    <td className="block sm:table-cell px-2 py-2 text-xs text-gray-800 whitespace-normal break-words">
+                                    <td className="block sm:table-cell px-2 py-2 text-xs text-gray-800 whitespace-normal break-words border-r border-gray-200">
                                         <span className="block sm:hidden font-semibold text-gray-600">Category:</span>
                                         {ticket.category}
                                     </td>
-                                    <td className="block sm:table-cell px-2 py-2 text-xs text-gray-800 whitespace-normal break-words">
+                                    <td className="block sm:table-cell px-2 py-2 text-xs text-gray-800 whitespace-normal break-words border-r border-gray-200">
                                         <span className="block sm:hidden font-semibold text-gray-600">Priority:</span>
                                         <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getPriorityClasses(ticket.priority)}`}>{ticket.priority}</span>
                                     </td>
-                                    <td className="block sm:table-cell px-2 py-2 whitespace-normal break-words text-xs text-gray-800">
+                                    <td className="block sm:table-cell px-2 py-2 whitespace-normal break-words text-xs text-gray-800 border-r border-gray-200">
                                         <span className="block sm:hidden font-semibold text-gray-600">Status:</span>
                                         <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getStatusClasses(ticket.status)}`}>{ticket.status}</span>
                                     </td>
-                                    <td className="block sm:table-cell px-2 py-2 whitespace-normal break-words text-xs text-gray-800">
+                                    <td className="block sm:table-cell px-2 py-2 whitespace-normal break-words text-xs text-gray-800 border-r border-gray-200">
                                         <span className="block sm:hidden font-semibold text-gray-600">Assigned To:</span>
                                         {ticket.assigned_to_email || 'Unassigned'}
                                     </td>

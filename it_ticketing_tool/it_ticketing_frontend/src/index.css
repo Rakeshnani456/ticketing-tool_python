@@ -160,20 +160,22 @@ textarea.max-w-none.w-full::-webkit-scrollbar-corner {
   background: rgba(244, 76, 35, 0.12); /* #f44c23 tint */
   color: #f44c23;
   box-shadow: 0 2px 8px 0 rgba(244, 76, 35, 0.10);
+  border-radius: 0;
 }
 
 .sidebar-glass .menu-item.active, .sidebar-glass .menu-item[aria-current="page"] {
-  background: linear-gradient(90deg, rgba(51,65,85,0.10) 0%, rgba(51,65,85,0.06) 100%);
-  color: #334155;
-  box-shadow: 0 8px 24px 0 rgba(51,65,85,0.10), 0 1.5px 8px 0 rgba(51,65,85,0.08);
+  background: #e5e7eb; /* Grey bg */
+  color: #f44c23;
+  border-radius: 0;
+  box-shadow: none;
+  filter: none;
   border-left: none;
-  filter: drop-shadow(0 2px 8px rgba(51,65,85,0.08));
 }
 
 .sidebar-glass .menu-item.active svg,
 .sidebar-glass .menu-item[aria-current="page"] svg {
-  color: #334155;
-  fill: #334155;
+  color: #f44c23;
+  fill: #f44c23;
 }
 
 .sidebar-glass .menu-item.active .sidebar-count-badge {
@@ -195,6 +197,16 @@ textarea.max-w-none.w-full::-webkit-scrollbar-corner {
   justify-content: center;
   border-radius: 9999px;
   box-shadow: 0 1px 4px 0 rgba(117, 140, 163, 0.08);
+}
+
+.sidebar-glass .sidebar-section-header {
+  font-size: 0.77rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  margin-top: 1rem;
+  margin-bottom: 0.25rem;
+  padding-left: 0.5rem;
+  color: #f05118;
 }
 
 .sidebar-glass .profile-section {
@@ -272,4 +284,13 @@ body {
 .back {
   transform: rotateY(180deg);
   z-index: 1;
+}
+
+/* NotificationModal title tweaks */
+.notification-modal-title-small .modal-title, 
+.notification-modal-title-small h2, 
+.notification-modal-title-small .modal-header-title {
+  font-size: 0.95rem !important;
+  margin-bottom: 0.25rem !important;
+  padding-bottom: 0.1rem !important;
 }

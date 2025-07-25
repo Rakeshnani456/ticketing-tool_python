@@ -127,6 +127,12 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
     const [importedPasswords, setImportedPasswords] = useState([]); // <-- new state for passwords
     const fileInputRef = useRef();
 
+    // Add at the top, after other useState hooks
+    const [collapsedClients, setCollapsedClients] = useState({});
+    const handleToggleClientCollapse = (client) => {
+      setCollapsedClients(prev => ({ ...prev, [client]: !prev[client] }));
+    };
+
     // Fetch clients
     const fetchClients = useCallback(async () => {
         try {
@@ -243,6 +249,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
               joined_date: new Date().toISOString(),
               client_name: addRowData.clientname,
               domain: addRowData.domain, // <-- Add this line
+              isSiteAdmin: false, // <-- Always false from user management
             };
             const res = await fetch(`${API_BASE_URL}/api/users`, {
                 method: 'POST',
@@ -1083,192 +1090,241 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                     )}
                     {clientOrder.map((client) => (
                         <Box key={client} mb={3} sx={{ px: 3 }}> {/* Added horizontal padding here */}
-                            <Typography variant="subtitle2" sx={{ color: '#174ea6', fontStyle: 'italic', fontWeight: 300, fontSize: '0.9rem', letterSpacing: 0.5, mb: 0.5 }}>
-                                {client} ({groupedUsers[client].length} user{groupedUsers[client].length !== 1 ? 's' : ''})
-                            </Typography>
-                            <TableContainer component={Paper} sx={{ border: '1px solid #e0e0e0', borderRadius: 2, boxShadow: 'none', mt: 2, mb: 2, width: '100%', overflowX: 'auto' }}>
-                                <Table size="small" sx={{
-                                    width: '100%',
-                                    tableLayout: 'fixed', // Crucial for fixed layout
-                                    minWidth: 0,
-                                    '& .MuiTableCell-root': {
-                                        fontSize: '0.68rem',
-                                        padding: '2px 6px',
-                                        height: 28, // Ensure consistent row height
-                                        whiteSpace: 'normal',
-                                        wordBreak: 'break-word',
-                                        minWidth: 0,
-                                        maxWidth: '100%',
-                                    },
-                                    '& .MuiTableRow-root': { height: 28 }, // Explicit row height
-                                    borderCollapse: 'separate',
-                                    borderSpacing: 0,
+                            <Box display="flex" alignItems="center" justifyContent="space-between" mb={0.5}>
+                                <Typography variant="subtitle2" sx={{ color: '#174ea6', fontStyle: 'italic', fontWeight: 300, fontSize: '0.9rem', letterSpacing: 0.5 }}>
+                                    {client} ({groupedUsers[client].length} user{groupedUsers[client].length !== 1 ? 's' : ''})
+                                </Typography>
+                                <Button
+                                    size="small"
+                                    variant="text"
+                                    onClick={() => handleToggleClientCollapse(client)}
+                                    sx={{ minWidth: 0, fontSize: '1.1rem', color: '#2563eb', fontWeight: 700 }}
+                                    aria-label={collapsedClients[client] ? 'Expand' : 'Collapse'}
+                                >
+                                    {collapsedClients[client] ? '+' : '–'}
+                                </Button>
+                            </Box>
+                            {collapsedClients[client] ? (
+                                <Box sx={{
+                                    display: 'flex', alignItems: 'center', background: '#f3f4f6', borderRadius: 2, px: 2, py: 1, minHeight: 40, boxShadow: 'none', border: '1px solid #e0e0e0', mt: 1, mb: 2
                                 }}>
-                                    <TableHead>
-                                        <TableRow>
-                                            <TableCell sx={{ width: FIXED_COLUMN_WIDTHS.companyName, borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word', fontWeight: 700, fontSize: '1rem', color: '#174ea6', letterSpacing: 0.5 }}>Company Name</TableCell>
-                                            <TableCell sx={{ width: FIXED_COLUMN_WIDTHS.firstName, borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word', fontWeight: 700, fontSize: '1rem', color: '#174ea6', letterSpacing: 0.5 }}>First Name</TableCell>
-                                            <TableCell sx={{ width: FIXED_COLUMN_WIDTHS.lastName, borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word', fontWeight: 700, fontSize: '1rem', color: '#174ea6', letterSpacing: 0.5 }}>Last Name</TableCell>
-                                            <TableCell sx={{ width: FIXED_COLUMN_WIDTHS.email, borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word', fontWeight: 700, fontSize: '1rem', color: '#174ea6', letterSpacing: 0.5 }}>Email</TableCell>
-                                            <TableCell sx={{ width: FIXED_COLUMN_WIDTHS.contactNumber, borderRight: (!isXs && !isSm) ? '1px solid #e0e0e0' : undefined, whiteSpace: 'normal', wordBreak: 'break-word', fontWeight: 700, fontSize: '1rem', color: '#174ea6', letterSpacing: 0.5 }}>Contact Number</TableCell>
-                                            {!isXs && !isSm && <TableCell sx={{ width: FIXED_COLUMN_WIDTHS.managerEmail, borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word', fontWeight: 700, fontSize: '1rem', color: '#174ea6', letterSpacing: 0.5 }}>Manager Email</TableCell>}
-                                            {!isXs && !isSm && <TableCell sx={{ width: FIXED_COLUMN_WIDTHS.employmentType, borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word', fontWeight: 700, fontSize: '1rem', color: '#174ea6', letterSpacing: 0.5 }}>Employment Type</TableCell>}
-                                            {!isXs && !isSm && <TableCell sx={{ width: FIXED_COLUMN_WIDTHS.designation, borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word', fontWeight: 700, fontSize: '1rem', color: '#174ea6', letterSpacing: 0.5 }}>Designation</TableCell>}
-                                            <TableCell sx={{ width: FIXED_COLUMN_WIDTHS.actions, whiteSpace: 'normal', wordBreak: 'break-word', fontWeight: 700, fontSize: '1rem', color: '#174ea6', letterSpacing: 0.5 }}>Actions</TableCell>
-                                        </TableRow>
-                                    </TableHead>
-                                    <TableBody>
-                                        {groupedUsers[client].map((u, i) => (
-                                            <TableRow key={u.uid}>
-                                                {editRowId === u.uid ? (
-                                                    // In Edit Mode
-                                                    <>
-                                                        {/* Company Name (read-only) */}
-                                                        <TableCell sx={{ borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word' }}>
-                                                            <TextField
-                                                                value={editRowData.companyName || ''}
-                                                                size="small"
-                                                                variant="standard"
-                                                                InputProps={{ readOnly: true, disableUnderline: true, style: { fontSize: '0.68rem', height: '100%', padding: '2px 0 2px 6px', background: 'none', border: 'none' } }}
-                                                                sx={{ width: '100%', height: '100%' }}
-                                                                fullWidth
-                                                            />
-                                                        </TableCell>
-                                                        {/* First Name (read-only) */}
-                                                        <TableCell sx={{ borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word' }}>
-                                                            <TextField
-                                                                value={editRowData.firstName || ''}
-                                                                size="small"
-                                                                variant="standard"
-                                                                InputProps={{ readOnly: true, disableUnderline: true, style: { fontSize: '0.68rem', height: '100%', padding: '2px 0 2px 6px', background: 'none', border: 'none' } }}
-                                                                sx={{ width: '100%', height: '100%' }}
-                                                                fullWidth
-                                                            />
-                                                        </TableCell>
-                                                        {/* Last Name (read-only) */}
-                                                        <TableCell sx={{ borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word' }}>
-                                                            <TextField
-                                                                value={editRowData.lastName || ''}
-                                                                size="small"
-                                                                variant="standard"
-                                                                InputProps={{ readOnly: true, disableUnderline: true, style: { fontSize: '0.68rem', height: '100%', padding: '2px 0 2px 6px', background: 'none', border: 'none' } }}
-                                                                sx={{ width: '100%', height: '100%' }}
-                                                                fullWidth
-                                                            />
-                                                        </TableCell>
-                                                        {/* Email (read-only) */}
-                                                        <TableCell sx={{ borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word' }}>
-                                                            <TextField
-                                                                value={editRowData.email || ''}
-                                                                size="small"
-                                                                variant="standard"
-                                                                InputProps={{ readOnly: true, disableUnderline: true, style: { fontSize: '0.68rem', height: '100%', padding: '2px 0 2px 6px', background: 'none', border: 'none' } }}
-                                                                sx={{ width: '100%', height: '100%' }}
-                                                                fullWidth
-                                                            />
-                                                        </TableCell>
-                                                        {/* Contact Number (editable, blue outline) */}
-                                                        <TableCell sx={{ borderRight: (!isXs && !isSm) ? '1px solid #e0e0e0' : undefined, whiteSpace: 'normal', wordBreak: 'break-word' }}>
-                                                            <TextField
-                                                                name="contactNumber"
-                                                                value={editRowData.contactNumber || ''}
-                                                                onChange={handleEditChange}
-                                                                size="small"
-                                                                variant="standard"
-                                                                InputProps={{ disableUnderline: true, style: { fontSize: '0.68rem', height: '100%', padding: '2px 0 2px 6px', background: 'none', border: 'none', outline: '2px solid #1976d2' } }}
-                                                                sx={{ width: '100%', height: '100%' }}
-                                                                fullWidth
-                                                            />
-                                                        </TableCell>
-                                                        {/* Manager Email (editable, blue outline) */}
-                                                        {!isXs && !isSm && (
-                                                            <TableCell sx={{ borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word' }}>
-                                                                <TextField
-                                                                    name="managerEmail"
-                                                                    value={editRowData.managerEmail || ''}
-                                                                    onChange={handleEditChange}
-                                                                    size="small"
-                                                                    variant="standard"
-                                                                    InputProps={{ disableUnderline: true, style: { fontSize: '0.68rem', height: '100%', padding: '2px 0 2px 6px', background: 'none', border: 'none', outline: '2px solid #1976d2' } }}
-                                                                    sx={{ width: '100%', height: '100%' }}
-                                                                    fullWidth
-                                                                />
-                                                            </TableCell>
-                                                        )}
-                                                        {/* Employment Type (editable, blue outline) */}
-                                                        {!isXs && !isSm && (
-                                                            <TableCell sx={{ borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word' }}>
-                                                                <Select
-                                                                    name="employmentType"
-                                                                    value={editRowData.employmentType || ''}
-                                                                    onChange={handleEditChange}
-                                                                    size="small"
-                                                                    variant="standard"
-                                                                    disableUnderline
-                                                                    sx={{ fontSize: '0.68rem', height: '100%', padding: 0, background: 'none', boxShadow: 'none', border: 'none', width: '100%', outline: '2px solid #1976d2', '.MuiSelect-select': { padding: '2px 0 2px 6px', minHeight: 0, lineHeight: 'normal' } }}
-                                                                    MenuProps={{ PaperProps: { sx: { fontSize: '0.68rem' } } }}
-                                                                    fullWidth
-                                                                >
-                                                                    {EMPLOYMENT_TYPES.map(opt => (
-                                                                        <MenuItem key={opt.value} value={opt.value} sx={{ fontSize: '0.68rem' }}>{opt.label}</MenuItem>
-                                                                    ))}
-                                                                </Select>
-                                                            </TableCell>
-                                                        )}
-                                                        {/* Designation (editable, blue outline) */}
-                                                        {!isXs && !isSm && (
-                                                            <TableCell sx={{ borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word' }}>
-                                                                <TextField
-                                                                    name="designation"
-                                                                    value={editRowData.designation || ''}
-                                                                    onChange={handleEditChange}
-                                                                    size="small"
-                                                                    variant="standard"
-                                                                    InputProps={{ disableUnderline: true, style: { fontSize: '0.68rem', height: '100%', padding: '2px 0 2px 6px', background: 'none', border: 'none', outline: '2px solid #1976d2' } }}
-                                                                    sx={{ width: '100%', height: '100%' }}
-                                                                    fullWidth
-                                                                />
-                                                            </TableCell>
-                                                        )}
-                                                        {/* Actions */}
-                                                        <TableCell sx={{ whiteSpace: 'normal', wordBreak: 'break-word', minWidth: 120, p: 0 }}>
-                                                            <IconButton size="small" onClick={() => handleEditSave(u.uid)} title="Save" sx={{ p: 0.5, minWidth: 28, height: 28 }}>
-                                                                <SaveIcon fontSize="inherit" color={hasUnsavedChanges(editRowData, u) ? 'primary' : 'inherit'} style={{ fontSize: 18 }} />
-                                                            </IconButton>
-                                                            <IconButton size="small" onClick={handleEditCancel} title="Cancel" color="error" sx={{ p: 0.5, minWidth: 28, height: 28 }}>
-                                                                <ClearIcon fontSize="inherit" style={{ fontSize: 18 }} />
-                                                            </IconButton>
-                                                        </TableCell>
-                                                    </>
-                                                ) : (
-                                                    // Display Mode
-                                                    <>
-                                                        <TableCell sx={{ borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word' }}>{u.companyName || u.client_name || '-'}</TableCell>
-                                                        <TableCell sx={{ borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word' }}>{u.firstName || '-'}</TableCell>
-                                                        <TableCell sx={{ borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word' }}>{u.lastName || '-'}</TableCell>
-                                                        <TableCell sx={{ borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word' }}>{u.email}</TableCell>
-                                                        <TableCell sx={{ borderRight: (!isXs && !isSm) ? '1px solid #e0e0e0' : undefined, whiteSpace: 'normal', wordBreak: 'break-word' }}>{u.contactNumber || '-'}</TableCell>
-                                                        {!isXs && !isSm && <TableCell sx={{ borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word' }}>{u.managerEmail || '-'}</TableCell>}
-                                                        {!isXs && !isSm && <TableCell sx={{ borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word' }}>{u.employmentType || '-'}</TableCell>}
-                                                        {!isXs && !isSm && <TableCell sx={{ borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word' }}>{u.designation || '-'}</TableCell>}
-                                                        <TableCell sx={{ whiteSpace: 'normal', wordBreak: 'break-word', minWidth: 120, p: 0 }}>
-                                                            <IconButton size="small" onClick={() => openChangePwdModal(u.uid)} title="Change Password" sx={{ p: 0.5, minWidth: 28, height: 28 }}>
-                                                                <LockResetIcon fontSize="inherit" style={{ fontSize: 18 }} />
-                                                            </IconButton>
-                                                            <IconButton size="small" onClick={() => handleEditClick(u)} title="Edit" sx={{ p: 0.5, minWidth: 28, height: 28 }}>
-                                                                <EditIcon fontSize="inherit" style={{ fontSize: 18 }} />
-                                                            </IconButton>
-                                                            <IconButton size="small" onClick={(e) => handleDeleteClick(e, u.uid, u.email)} title="Delete" color="error" sx={{ p: 0.5, minWidth: 28, height: 28 }}>
-                                                                <DeleteIcon fontSize="inherit" style={{ fontSize: 18 }} />
-                                                            </IconButton>
-                                                        </TableCell>
-                                                    </>
-                                                )}
+                                    <Typography variant="body2" sx={{ fontWeight: 500, color: '#174ea6', fontSize: '1rem', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                        {client}
+                                    </Typography>
+                                    <Typography variant="body2" sx={{ color: '#2563eb', fontWeight: 400, fontSize: '0.95rem', ml: 2 }}>
+                                        {groupedUsers[client].length} user{groupedUsers[client].length !== 1 ? 's' : ''}
+                                    </Typography>
+                                </Box>
+                            ) : (
+                                <TableContainer component={Paper} sx={{ border: '1px solid #e0e0e0', borderRadius: 2, boxShadow: 'none', mt: 2, mb: 2, width: '100%', overflowX: 'auto' }}>
+                                    <Table size="small" sx={{
+                                        width: '100%',
+                                        tableLayout: 'fixed', // Crucial for fixed layout
+                                        minWidth: 0,
+                                        '& .MuiTableCell-root': {
+                                            fontSize: '0.68rem',
+                                            padding: '2px 6px',
+                                            height: 28, // Ensure consistent row height
+                                            whiteSpace: 'normal',
+                                            wordBreak: 'break-word',
+                                            minWidth: 0,
+                                            maxWidth: '100%',
+                                        },
+                                        '& .MuiTableRow-root': { height: 28 }, // Explicit row height
+                                        borderCollapse: 'separate',
+                                        borderSpacing: 0,
+                                    }}>
+                                        <TableHead>
+                                            <TableRow>
+                                                <TableCell sx={{ width: FIXED_COLUMN_WIDTHS.companyName, borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word', fontWeight: 700, fontSize: '1rem', color: '#174ea6', letterSpacing: 0.5 }}>Company Name</TableCell>
+                                                <TableCell sx={{ width: FIXED_COLUMN_WIDTHS.firstName, borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word', fontWeight: 700, fontSize: '1rem', color: '#174ea6', letterSpacing: 0.5 }}>First Name</TableCell>
+                                                <TableCell sx={{ width: FIXED_COLUMN_WIDTHS.lastName, borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word', fontWeight: 700, fontSize: '1rem', color: '#174ea6', letterSpacing: 0.5 }}>Last Name</TableCell>
+                                                <TableCell sx={{ width: FIXED_COLUMN_WIDTHS.email, borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word', fontWeight: 700, fontSize: '1rem', color: '#174ea6', letterSpacing: 0.5 }}>Email</TableCell>
+                                                <TableCell sx={{ width: FIXED_COLUMN_WIDTHS.contactNumber, borderRight: (!isXs && !isSm) ? '1px solid #e0e0e0' : undefined, whiteSpace: 'normal', wordBreak: 'break-word', fontWeight: 700, fontSize: '1rem', color: '#174ea6', letterSpacing: 0.5 }}>Contact Number</TableCell>
+                                                {!isXs && !isSm && <TableCell sx={{ width: FIXED_COLUMN_WIDTHS.managerEmail, borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word', fontWeight: 700, fontSize: '1rem', color: '#174ea6', letterSpacing: 0.5 }}>Manager Email</TableCell>}
+                                                {!isXs && !isSm && <TableCell sx={{ width: FIXED_COLUMN_WIDTHS.employmentType, borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word', fontWeight: 700, fontSize: '1rem', color: '#174ea6', letterSpacing: 0.5 }}>Employment Type</TableCell>}
+                                                {!isXs && !isSm && <TableCell sx={{ width: FIXED_COLUMN_WIDTHS.designation, borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word', fontWeight: 700, fontSize: '1rem', color: '#174ea6', letterSpacing: 0.5 }}>Designation</TableCell>}
+                                                <TableCell sx={{ width: FIXED_COLUMN_WIDTHS.actions, whiteSpace: 'normal', wordBreak: 'break-word', fontWeight: 700, fontSize: '1rem', color: '#174ea6', letterSpacing: 0.5 }}>Actions</TableCell>
                                             </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
-                            </TableContainer>
+                                        </TableHead>
+                                        <TableBody>
+                                            {groupedUsers[client].map((u, i) => (
+                                                <TableRow key={u.uid}>
+                                                    {editRowId === u.uid ? (
+                                                        // In Edit Mode
+                                                        <>
+                                                            {/* Company Name (read-only) */}
+                                                            <TableCell sx={{ borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word' }}>
+                                                                <TextField
+                                                                    value={editRowData.companyName || ''}
+                                                                    size="small"
+                                                                    variant="standard"
+                                                                    InputProps={{ readOnly: true, disableUnderline: true, style: { fontSize: '0.68rem', height: '100%', padding: '2px 0 2px 6px', background: 'none', border: 'none' } }}
+                                                                    sx={{ width: '100%', height: '100%' }}
+                                                                    fullWidth
+                                                                />
+                                                            </TableCell>
+                                                            {/* First Name (read-only) */}
+                                                            <TableCell sx={{ borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word' }}>
+                                                                <TextField
+                                                                    value={editRowData.firstName || ''}
+                                                                    size="small"
+                                                                    variant="standard"
+                                                                    InputProps={{ readOnly: true, disableUnderline: true, style: { fontSize: '0.68rem', height: '100%', padding: '2px 0 2px 6px', background: 'none', border: 'none' } }}
+                                                                    sx={{ width: '100%', height: '100%' }}
+                                                                    fullWidth
+                                                                />
+                                                            </TableCell>
+                                                            {/* Last Name (read-only) */}
+                                                            <TableCell sx={{ borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word' }}>
+                                                                <TextField
+                                                                    value={editRowData.lastName || ''}
+                                                                    size="small"
+                                                                    variant="standard"
+                                                                    InputProps={{ readOnly: true, disableUnderline: true, style: { fontSize: '0.68rem', height: '100%', padding: '2px 0 2px 6px', background: 'none', border: 'none' } }}
+                                                                    sx={{ width: '100%', height: '100%' }}
+                                                                    fullWidth
+                                                                />
+                                                            </TableCell>
+                                                            {/* Email (read-only) */}
+                                                            <TableCell sx={{ borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word' }}>
+                                                                <TextField
+                                                                    value={editRowData.email || ''}
+                                                                    size="small"
+                                                                    variant="standard"
+                                                                    InputProps={{ readOnly: true, disableUnderline: true, style: { fontSize: '0.68rem', height: '100%', padding: '2px 0 2px 6px', background: 'none', border: 'none' } }}
+                                                                    sx={{ width: '100%', height: '100%' }}
+                                                                    fullWidth
+                                                                />
+                                                            </TableCell>
+                                                            {/* Contact Number (editable, blue outline) */}
+                                                            <TableCell sx={{ borderRight: (!isXs && !isSm) ? '1px solid #e0e0e0' : undefined, whiteSpace: 'normal', wordBreak: 'break-word' }}>
+                                                                <TextField
+                                                                    name="contactNumber"
+                                                                    value={editRowData.contactNumber || ''}
+                                                                    onChange={handleEditChange}
+                                                                    size="small"
+                                                                    variant="standard"
+                                                                    InputProps={{ disableUnderline: true, style: { fontSize: '0.68rem', height: '100%', padding: '2px 0 2px 6px', background: 'none', border: 'none', outline: '2px solid #1976d2' } }}
+                                                                    sx={{ width: '100%', height: '100%' }}
+                                                                    fullWidth
+                                                                />
+                                                            </TableCell>
+                                                            {/* Manager Email (editable, blue outline) */}
+                                                            {!isXs && !isSm && (
+                                                                <TableCell sx={{ borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word' }}>
+                                                                    <TextField
+                                                                        name="managerEmail"
+                                                                        value={editRowData.managerEmail || ''}
+                                                                        onChange={handleEditChange}
+                                                                        size="small"
+                                                                        variant="standard"
+                                                                        InputProps={{ disableUnderline: true, style: { fontSize: '0.68rem', height: '100%', padding: '2px 0 2px 6px', background: 'none', border: 'none', outline: '2px solid #1976d2' } }}
+                                                                        sx={{ width: '100%', height: '100%' }}
+                                                                        fullWidth
+                                                                    />
+                                                                </TableCell>
+                                                            )}
+                                                            {/* Employment Type (editable, blue outline) */}
+                                                            {!isXs && !isSm && (
+                                                                <TableCell sx={{ borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word' }}>
+                                                                    <Select
+                                                                        name="employmentType"
+                                                                        value={editRowData.employmentType || ''}
+                                                                        onChange={handleEditChange}
+                                                                        size="small"
+                                                                        variant="standard"
+                                                                        disableUnderline
+                                                                        sx={{ fontSize: '0.68rem', height: '100%', padding: 0, background: 'none', boxShadow: 'none', border: 'none', width: '100%', outline: '2px solid #1976d2', '.MuiSelect-select': { padding: '2px 0 2px 6px', minHeight: 0, lineHeight: 'normal' } }}
+                                                                        MenuProps={{ PaperProps: { sx: { fontSize: '0.68rem' } } }}
+                                                                        fullWidth
+                                                                    >
+                                                                        {EMPLOYMENT_TYPES.map(opt => (
+                                                                            <MenuItem key={opt.value} value={opt.value} sx={{ fontSize: '0.68rem' }}>{opt.label}</MenuItem>
+                                                                        ))}
+                                                                    </Select>
+                                                                </TableCell>
+                                                            )}
+                                                            {/* Designation (editable, blue outline) */}
+                                                            {!isXs && !isSm && (
+                                                                <TableCell sx={{ borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word' }}>
+                                                                    <TextField
+                                                                        name="designation"
+                                                                        value={editRowData.designation || ''}
+                                                                        onChange={handleEditChange}
+                                                                        size="small"
+                                                                        variant="standard"
+                                                                        InputProps={{ disableUnderline: true, style: { fontSize: '0.68rem', height: '100%', padding: '2px 0 2px 6px', background: 'none', border: 'none', outline: '2px solid #1976d2' } }}
+                                                                        sx={{ width: '100%', height: '100%' }}
+                                                                        fullWidth
+                                                                    />
+                                                                </TableCell>
+                                                            )}
+                                                            {/* Actions */}
+                                                            <TableCell sx={{ whiteSpace: 'normal', wordBreak: 'break-word', minWidth: 120, p: 0 }}>
+                                                                <IconButton size="small" onClick={() => handleEditSave(u.uid)} title="Save" sx={{ p: 0.5, minWidth: 28, height: 28 }}>
+                                                                    <SaveIcon fontSize="inherit" color={hasUnsavedChanges(editRowData, u) ? 'primary' : 'inherit'} style={{ fontSize: 18 }} />
+                                                                </IconButton>
+                                                                <IconButton size="small" onClick={handleEditCancel} title="Cancel" color="error" sx={{ p: 0.5, minWidth: 28, height: 28 }}>
+                                                                    <ClearIcon fontSize="inherit" style={{ fontSize: 18 }} />
+                                                                </IconButton>
+                                                            </TableCell>
+                                                        </>
+                                                    ) : (
+                                                        // Display Mode
+                                                        <>
+                                                            <TableCell sx={{ borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word' }}>{u.companyName || u.client_name || '-'}</TableCell>
+                                                            <TableCell sx={{ borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word' }}>{u.firstName || '-'}</TableCell>
+                                                            <TableCell sx={{ borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word' }}>{u.lastName || '-'}</TableCell>
+                                                            <TableCell sx={{ borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word' }}>
+                                                                <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                                    {u.email}
+                                                                    {u.isSiteAdmin && (
+                                                                        <span style={{
+                                                                            display: 'inline-flex',
+                                                                            alignItems: 'center',
+                                                                            justifyContent: 'center',
+                                                                            width: '1.2em',
+                                                                            height: '1.2em',
+                                                                            borderRadius: '50%',
+                                                                            background: '#2563eb',
+                                                                            color: '#fff',
+                                                                            fontWeight: 600,
+                                                                            fontSize: '1em',
+                                                                            marginLeft: 4,
+                                                                            lineHeight: '1.2em',
+                                                                            textAlign: 'center',
+                                                                            verticalAlign: 'middle',
+                                                                            padding: 0,
+                                                                        }}
+                                                                            title="Site Admin"
+                                                                        >s</span>
+                                                                    )}
+                                                                </span>
+                                                            </TableCell>
+                                                            <TableCell sx={{ borderRight: (!isXs && !isSm) ? '1px solid #e0e0e0' : undefined, whiteSpace: 'normal', wordBreak: 'break-word' }}>{u.contactNumber || '-'}</TableCell>
+                                                            {!isXs && !isSm && <TableCell sx={{ borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word' }}>{u.managerEmail || '-'}</TableCell>}
+                                                            {!isXs && !isSm && <TableCell sx={{ borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word' }}>{u.employmentType || '-'}</TableCell>}
+                                                            {!isXs && !isSm && <TableCell sx={{ borderRight: '1px solid #e0e0e0', whiteSpace: 'normal', wordBreak: 'break-word' }}>{u.designation || '-'}</TableCell>}
+                                                            <TableCell sx={{ whiteSpace: 'normal', wordBreak: 'break-word', minWidth: 120, p: 0 }}>
+                                                                <IconButton size="small" onClick={() => openChangePwdModal(u.uid)} title="Change Password" sx={{ p: 0.5, minWidth: 28, height: 28 }}>
+                                                                    <LockResetIcon fontSize="inherit" style={{ fontSize: 18 }} />
+                                                                </IconButton>
+                                                                <IconButton size="small" onClick={() => handleEditClick(u)} title="Edit" sx={{ p: 0.5, minWidth: 28, height: 28 }}>
+                                                                    <EditIcon fontSize="inherit" style={{ fontSize: 18 }} />
+                                                                </IconButton>
+                                                                <IconButton size="small" onClick={(e) => handleDeleteClick(e, u.uid, u.email)} title="Delete" color="error" sx={{ p: 0.5, minWidth: 28, height: 28 }}>
+                                                                    <DeleteIcon fontSize="inherit" style={{ fontSize: 18 }} />
+                                                                </IconButton>
+                                                            </TableCell>
+                                                        </>
+                                                    )}
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                </TableContainer>
+                            )}
                         </Box>
                     ))}
                 </>

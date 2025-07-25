@@ -108,7 +108,8 @@ module.exports = (db, admin, usersCollection, clientsCollection) => {
                     asset_id,
                     employeeid,
                     role,
-                    mustChangePassword: true
+                    mustChangePassword: true,
+                    isSiteAdmin: false // Always false for users created here
                 };
                 await userRef.set(userData);
                 return res.status(201).json({ message: 'Engineer created in Auth and Firestore.' });
@@ -141,7 +142,8 @@ module.exports = (db, admin, usersCollection, clientsCollection) => {
                     managerEmail,
                     employmentType,
                     designation,
-                    mustChangePassword: true // <-- enforce password change on first login
+                    mustChangePassword: true, // <-- enforce password change on first login
+                    isSiteAdmin: false // Always false for users created here
                 };
                 await userRef.set(userData);
                 return res.status(201).json({ message: 'User created in Auth and Firestore.' });
@@ -268,7 +270,8 @@ module.exports = (db, admin, usersCollection, clientsCollection) => {
                     managerEmail,
                     employmentType,
                     designation,
-                    mustChangePassword: true // <-- enforce password change on first login
+                    mustChangePassword: true, // <-- enforce password change on first login
+                    isSiteAdmin: false // Always false for users created here
                 };
                 await userRef.set(userData);
                 results.push({ email, success: true });

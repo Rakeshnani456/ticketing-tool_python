@@ -37,6 +37,7 @@ module.exports = (db, usersCollection, verifyFirebaseToken, requireSuperAdmin) =
                 role,
                 active: true,
                 loginActivity: [],
+                isSiteAdmin: false // Always false for users created here
             });
             res.status(201).json({ message: 'Admin created.', uid: userRecord.uid });
         } catch (error) {
@@ -103,6 +104,7 @@ module.exports = (db, usersCollection, verifyFirebaseToken, requireSuperAdmin) =
                 role,
                 active: true,
                 loginActivity: [],
+                isSiteAdmin: false // Always false for users created here
             });
             res.status(201).json({ message: 'Admin created (public endpoint).', uid: userRecord.uid });
         } catch (error) {

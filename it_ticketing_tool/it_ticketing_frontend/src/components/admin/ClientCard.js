@@ -8,6 +8,8 @@ import PhoneIcon from '@mui/icons-material/Phone';
 import BusinessIcon from '@mui/icons-material/Business';
 import EmailIcon from '@mui/icons-material/Email';
 import PersonIcon from '@mui/icons-material/Person';
+import EditIcon from '@mui/icons-material/Edit';
+import DeleteIcon from '@mui/icons-material/Delete';
 
 const InfoRow = ({ icon, label, value, link, itemSx }) => (
   <Box
@@ -46,7 +48,7 @@ const SectionHeader = ({ icon, title }) => (
   </Box>
 );
 
-const ClientCard = ({ client }) => {
+const ClientCard = ({ client, onEdit, onRemove, showEdit, showRemove }) => {
   const [expanded, setExpanded] = useState(false);
 
   return (
@@ -78,7 +80,7 @@ const ClientCard = ({ client }) => {
       >
         <Box display="flex" alignItems="center" gap={1} sx={{ pl: 2 }}>
           <BusinessIcon sx={{ color: 'primary.main' }} />
-          <Typography variant="h6" sx={{ fontWeight: 700, fontSize: '1.1rem', minWidth: 100 }}>
+          <Typography variant="h6" sx={{ fontWeight: 700, fontSize: '0.95rem', minWidth: 100 }}>
             {client.companyName || '-'}
           </Typography>
         </Box>
@@ -88,6 +90,13 @@ const ClientCard = ({ client }) => {
           <InfoRow icon={<LanguageIcon fontSize="small" sx={{ color: 'text.secondary' }} />} label="Website" value={client.website} link={client.website ? (client.website.startsWith('http') ? client.website : `https://${client.website}`) : undefined} />
           <InfoRow icon={<EmailIcon fontSize="small" sx={{ color: 'text.secondary' }} />} label="Site Email" value={client.siteEmail} />
         </Box>
+        {/* Edit and Remove buttons */}
+        {(showEdit || showRemove) && (
+          <Box display="flex" alignItems="center" gap={1} sx={{ ml: 1, mr: 1 }} onClick={e => e.stopPropagation()}>
+            {showEdit && <Tooltip title="Edit Client"><IconButton size="small" onClick={() => onEdit && onEdit(client)}><EditIcon fontSize="small" /></IconButton></Tooltip>}
+            {showRemove && <Tooltip title="Remove Client"><IconButton size="small" color="error" onClick={() => onRemove && onRemove(client)}><DeleteIcon fontSize="small" /></IconButton></Tooltip>}
+          </Box>
+        )}
         <Tooltip title={expanded ? 'Hide Details' : 'Show Details'}>
           <IconButton size="small" sx={{ ml: 1, mr: 2 }}>
             {expanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}

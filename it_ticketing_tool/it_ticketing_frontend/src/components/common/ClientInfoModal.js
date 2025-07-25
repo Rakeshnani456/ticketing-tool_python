@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, MenuItem, Typography, Box, IconButton, Collapse, Alert, InputAdornment } from '@mui/material';
 import { Close as CloseIcon, Business as BusinessIcon, Person as PersonIcon, AdminPanelSettings as AdminIcon, Phone as PhoneIcon, Email as EmailIcon, Language as WebsiteIcon, LocationOn as LocationIcon, Save as SaveIcon, Clear as ClearIcon } from '@mui/icons-material';
+import CheckIcon from '@mui/icons-material/Check';
 import { useForm, Controller } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
@@ -127,7 +128,7 @@ const ClientInfoModal = ({ isOpen, onClose, onSave, initialData = null }) => {
           <Box className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
             <div className="flex items-center mb-3 sm:mb-4"> {/* Adjusted margin */}
               <BusinessIcon className="text-blue-500 mr-2" fontSize="medium" /> {/* Adjusted icon size */}
-              <Typography variant="h6" className="font-semibold text-blue-700 text-base sm:text-lg">Client Information</Typography> {/* Adjusted font size */}
+              <Typography variant="h6" className="font-semibold text-blue-700 text-base sm:text-lg" sx={{ fontSize: '0.95rem' }}>Client Information</Typography> {/* Adjusted font size */}
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4"> {/* Adjusted gap */}
               <Controller
@@ -145,8 +146,9 @@ const ClientInfoModal = ({ isOpen, onClose, onSave, initialData = null }) => {
                     InputProps={{
                       startAdornment: <InputAdornment position="start"><BusinessIcon className="text-gray-500" fontSize="small" /></InputAdornment>,
                     }}
-                    InputLabelProps={{ shrink: true }} // Always show label
+                    InputLabelProps={{ shrink: true, sx: { fontSize: '0.85rem' } }} // Always show label
                     autoComplete="new-password"
+                    sx={{ fontSize: '0.85rem' }}
                   />
                 )}
               />
@@ -166,8 +168,9 @@ const ClientInfoModal = ({ isOpen, onClose, onSave, initialData = null }) => {
                     InputProps={{
                       startAdornment: <InputAdornment position="start"><WebsiteIcon className="text-gray-500" fontSize="small" /></InputAdornment>,
                     }}
-                    InputLabelProps={{ shrink: true }}
+                    InputLabelProps={{ shrink: true, sx: { fontSize: '0.85rem' } }}
                     autoComplete="new-password"
+                    sx={{ fontSize: '0.85rem' }}
                   />
                 )}
               />
@@ -185,8 +188,9 @@ const ClientInfoModal = ({ isOpen, onClose, onSave, initialData = null }) => {
                     InputProps={{
                       startAdornment: <InputAdornment position="start"><LocationIcon className="text-gray-500" fontSize="small" /></InputAdornment>,
                     }}
-                    InputLabelProps={{ shrink: true }}
+                    InputLabelProps={{ shrink: true, sx: { fontSize: '0.85rem' } }}
                     autoComplete="new-password"
+                    sx={{ fontSize: '0.85rem' }}
                   />
                 )}
               />
@@ -206,8 +210,9 @@ const ClientInfoModal = ({ isOpen, onClose, onSave, initialData = null }) => {
                     InputProps={{
                       startAdornment: <InputAdornment position="start"><PhoneIcon className="text-gray-500" fontSize="small" /></InputAdornment>,
                     }}
-                    InputLabelProps={{ shrink: true }}
+                    InputLabelProps={{ shrink: true, sx: { fontSize: '0.85rem' } }}
                     autoComplete="new-password"
+                    sx={{ fontSize: '0.85rem' }}
                   />
                 )}
               />
@@ -218,7 +223,7 @@ const ClientInfoModal = ({ isOpen, onClose, onSave, initialData = null }) => {
           <Box className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
             <div className="flex items-center mb-3 sm:mb-4"> {/* Adjusted margin */}
               <PersonIcon className="text-blue-500 mr-2" fontSize="medium" /> {/* Adjusted icon size */}
-              <Typography variant="h6" className="font-semibold text-blue-700 text-base sm:text-lg">Authorized Person</Typography> {/* Adjusted font size */}
+              <Typography variant="h6" className="font-semibold text-blue-700 text-base sm:text-lg" sx={{ fontSize: '0.95rem' }}>Authorized Person</Typography> {/* Adjusted font size */}
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4"> {/* Adjusted gap */}
               <Controller
@@ -233,8 +238,9 @@ const ClientInfoModal = ({ isOpen, onClose, onSave, initialData = null }) => {
                     fullWidth
                     size="small"
                     className="bg-gray-50"
-                    InputLabelProps={{ shrink: true }}
+                    InputLabelProps={{ shrink: true, sx: { fontSize: '0.85rem' } }}
                     autoComplete="new-password"
+                    sx={{ fontSize: '0.85rem' }}
                   />
                 )}
               />
@@ -250,8 +256,9 @@ const ClientInfoModal = ({ isOpen, onClose, onSave, initialData = null }) => {
                     fullWidth
                     size="small"
                     className="bg-gray-50"
-                    InputLabelProps={{ shrink: true }}
+                    InputLabelProps={{ shrink: true, sx: { fontSize: '0.85rem' } }}
                     autoComplete="new-password"
+                    sx={{ fontSize: '0.85rem' }}
                   />
                 )}
               />
@@ -271,8 +278,9 @@ const ClientInfoModal = ({ isOpen, onClose, onSave, initialData = null }) => {
                     InputProps={{
                       startAdornment: <InputAdornment position="start"><PhoneIcon className="text-gray-500" fontSize="small" /></InputAdornment>,
                     }}
-                    InputLabelProps={{ shrink: true }}
+                    InputLabelProps={{ shrink: true, sx: { fontSize: '0.85rem' } }}
                     autoComplete="new-password"
+                    sx={{ fontSize: '0.85rem' }}
                   />
                 )}
               />
@@ -289,11 +297,12 @@ const ClientInfoModal = ({ isOpen, onClose, onSave, initialData = null }) => {
                     select
                     size="small"
                     className="bg-gray-50"
-                    InputLabelProps={{ shrink: true }}
+                    InputLabelProps={{ shrink: true, sx: { fontSize: '0.85rem' } }}
                     autoComplete="new-password"
+                    sx={{ fontSize: '0.85rem' }}
                   >
                     {designationOptions.map((option) => (
-                      <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
+                      <MenuItem key={option.value} value={option.value} sx={{ fontSize: '0.85rem' }}>{option.label}</MenuItem>
                     ))}
                   </TextField>
                 )}
@@ -314,8 +323,9 @@ const ClientInfoModal = ({ isOpen, onClose, onSave, initialData = null }) => {
                     InputProps={{
                       startAdornment: <InputAdornment position="start"><EmailIcon className="text-gray-500" fontSize="small" /></InputAdornment>,
                     }}
-                    InputLabelProps={{ shrink: true }}
+                    InputLabelProps={{ shrink: true, sx: { fontSize: '0.85rem' } }}
                     autoComplete="new-password"
+                    sx={{ fontSize: '0.85rem' }}
                   />
                 )}
               />
@@ -335,8 +345,9 @@ const ClientInfoModal = ({ isOpen, onClose, onSave, initialData = null }) => {
                     InputProps={{
                       startAdornment: <InputAdornment position="start"><EmailIcon className="text-gray-500" fontSize="small" /></InputAdornment>,
                     }}
-                    InputLabelProps={{ shrink: true }}
+                    InputLabelProps={{ shrink: true, sx: { fontSize: '0.85rem' } }}
                     autoComplete="new-password"
+                    sx={{ fontSize: '0.85rem' }}
                   />
                 )}
               />
@@ -347,7 +358,7 @@ const ClientInfoModal = ({ isOpen, onClose, onSave, initialData = null }) => {
           <Box className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
             <div className="flex items-center mb-3 sm:mb-4"> {/* Adjusted margin */}
               <AdminIcon className="text-blue-500 mr-2" fontSize="medium" /> {/* Adjusted icon size */}
-              <Typography variant="h6" className="font-semibold text-blue-700 text-base sm:text-lg">Site Administrator</Typography> {/* Adjusted font size */}
+              <Typography variant="h6" className="font-semibold text-blue-700 text-base sm:text-lg" sx={{ fontSize: '0.95rem' }}>Site Administrator</Typography> {/* Adjusted font size */}
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4"> {/* Adjusted gap */}
               <Controller
@@ -362,8 +373,9 @@ const ClientInfoModal = ({ isOpen, onClose, onSave, initialData = null }) => {
                     fullWidth
                     size="small"
                     className="bg-gray-50"
-                    InputLabelProps={{ shrink: true }}
+                    InputLabelProps={{ shrink: true, sx: { fontSize: '0.85rem' } }}
                     autoComplete="new-password"
+                    sx={{ fontSize: '0.85rem' }}
                   />
                 )}
               />
@@ -379,8 +391,9 @@ const ClientInfoModal = ({ isOpen, onClose, onSave, initialData = null }) => {
                     fullWidth
                     size="small"
                     className="bg-gray-50"
-                    InputLabelProps={{ shrink: true }}
+                    InputLabelProps={{ shrink: true, sx: { fontSize: '0.85rem' } }}
                     autoComplete="new-password"
+                    sx={{ fontSize: '0.85rem' }}
                   />
                 )}
               />
@@ -400,8 +413,9 @@ const ClientInfoModal = ({ isOpen, onClose, onSave, initialData = null }) => {
                     InputProps={{
                       startAdornment: <InputAdornment position="start"><EmailIcon className="text-gray-500" fontSize="small" /></InputAdornment>,
                     }}
-                    InputLabelProps={{ shrink: true }}
+                    InputLabelProps={{ shrink: true, sx: { fontSize: '0.85rem' } }}
                     autoComplete="new-password"
+                    sx={{ fontSize: '0.85rem' }}
                   />
                 )}
               />
@@ -421,8 +435,9 @@ const ClientInfoModal = ({ isOpen, onClose, onSave, initialData = null }) => {
                     InputProps={{
                       startAdornment: <InputAdornment position="start"><PhoneIcon className="text-gray-500" fontSize="small" /></InputAdornment>,
                     }}
-                    InputLabelProps={{ shrink: true }}
+                    InputLabelProps={{ shrink: true, sx: { fontSize: '0.85rem' } }}
                     autoComplete="new-password"
+                    sx={{ fontSize: '0.85rem' }}
                   />
                 )}
               />
@@ -439,11 +454,12 @@ const ClientInfoModal = ({ isOpen, onClose, onSave, initialData = null }) => {
                     select
                     size="small"
                     className="bg-gray-50"
-                    InputLabelProps={{ shrink: true }}
+                    InputLabelProps={{ shrink: true, sx: { fontSize: '0.85rem' } }}
                     autoComplete="new-password"
+                    sx={{ fontSize: '0.85rem' }}
                   >
                     {designationOptions.map((option) => (
-                      <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
+                      <MenuItem key={option.value} value={option.value} sx={{ fontSize: '0.85rem' }}>{option.label}</MenuItem>
                     ))}
                   </TextField>
                 )}
@@ -459,18 +475,21 @@ const ClientInfoModal = ({ isOpen, onClose, onSave, initialData = null }) => {
           variant="outlined"
           startIcon={<ClearIcon fontSize="small" />}
           disabled={isSubmitting}
-          className="border-gray-300 text-gray-700 hover:bg-gray-100 text-sm sm:text-base px-3 sm:px-4 py-1.5 sm:py-2" // Adjusted padding and font size
+          className="border-gray-300 text-gray-700 hover:bg-gray-100 text-xs px-2 py-1"
+          sx={{ fontSize: '0.75rem', minWidth: 64, height: 28, padding: '2px 10px', fontWeight: 700 }}
         >
           Cancel
         </Button>
         <Button
           onClick={handleSubmit(onSubmit)}
-          variant="contained"
-          startIcon={<SaveIcon fontSize="small" />} 
+          variant="outlined"
+          color="primary"
+          startIcon={<CheckIcon fontSize="small" />}
           disabled={!isValid || isSubmitting}
-          className="bg-gradient-to-r from-blue-500 to-blue-700 text-white hover:from-blue-600 hover:to-blue-800 text-sm sm:text-base px-3 sm:px-4 py-1.5 sm:py-2" // Adjusted padding and font size
+          className="text-xs px-2 py-1"
+          sx={{ fontSize: '0.75rem', minWidth: 64, height: 28, padding: '2px 10px', fontWeight: 600, borderWidth: 2 }}
         >
-          {isSubmitting ? 'Saving...' : 'Save Client'}
+          {isSubmitting ? 'Saving...' : 'Save'}
         </Button>
       </DialogActions>
     </Dialog>

@@ -1,7 +1,8 @@
 {
   "files": {
-    "main.css": "/static/css/main.ace17905.css",
-    "main.js": "/static/js/main.6bb17911.js",
+    "main.css": "/static/css/main.5d15a26f.css",
+    "main.js": "/static/js/main.01415bfd.js",
+    "static/media/logo.png": "/static/media/logo.a6f6a1126de7c85c4310.png",
     "static/media/OutlookIcon.svg": "/static/media/OutlookIcon.8aa969bd975697efa862d228956ad96b.svg",
     "static/media/TeamsLogo.svg": "/static/media/TeamsLogo.bf8c2490bc0532f9f6df1220eda1387e.svg",
     "static/media/LayoutDashboardIcon.svg": "/static/media/LayoutDashboardIcon.887c45802865f904b9ec73beac43728e.svg",
@@ -18,11 +19,11 @@
     "static/media/FileIcon.svg": "/static/media/FileIcon.1ea0084a9017b36ca9dd2437ee3a9853.svg",
     "static/media/JpgIcon.svg": "/static/media/JpgIcon.3b0a99884ec1bb78aab6d82e54c14cc5.svg",
     "static/media/PngIcon.svg": "/static/media/PngIcon.e4c19c070b68b25d550cf062d1c8e0d5.svg",
-    "main.ace17905.css.map": "/static/css/main.ace17905.css.map",
-    "main.6bb17911.js.map": "/static/js/main.6bb17911.js.map"
+    "main.5d15a26f.css.map": "/static/css/main.5d15a26f.css.map",
+    "main.01415bfd.js.map": "/static/js/main.01415bfd.js.map"
   },
   "entrypoints": [
-    "static/css/main.ace17905.css",
-    "static/js/main.6bb17911.js"
+    "static/css/main.5d15a26f.css",
+    "static/js/main.01415bfd.js"
   ]
 }

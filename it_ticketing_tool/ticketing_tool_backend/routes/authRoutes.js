@@ -8,7 +8,7 @@ module.exports = (db, admin, usersCollection, verifyFirebaseToken) => {
     // @desc    Register a new user with Firebase Auth and store role in Firestore
     // @access  Public or Protected (RBAC enforced)
     router.post('/register', async (req, res) => {
-        const { email, password, role = 'user' } = req.body;
+        const { email, password, role = 'user', isSiteAdmin = false } = req.body;
 
         if (!email || !password) {
             return res.status(400).json({ error: 'Email and password are required!' });
@@ -35,6 +35,12 @@ module.exports = (db, admin, usersCollection, verifyFirebaseToken) => {
             }
         }
 
+        let finalIsSiteAdmin = false;
+        if (typeof isSiteAdmin === 'boolean' && isSiteAdmin === true && requesterRole === null) {
+            // Only allow isSiteAdmin: true if registration is public (e.g., from client creation flow)
+            finalIsSiteAdmin = true;
+        }
+
         if (requesterRole === 'super_admin') {
             // Super Admin can create any role
         } else if (requesterRole === 'site_admin') {
@@ -54,7 +60,7 @@ module.exports = (db, admin, usersCollection, verifyFirebaseToken) => {
                 email: email,
                 password: password,
             });
-            await usersCollection.doc(userRecord.uid).set({ email: email, role: role });
+            await usersCollection.doc(userRecord.uid).set({ email: email, role: role, isSiteAdmin: finalIsSiteAdmin });
             return res.status(201).json({ message: `User ${email} registered successfully!`, user_id: userRecord.uid });
         } catch (error) {
             if (error.code === 'auth/email-already-exists') {

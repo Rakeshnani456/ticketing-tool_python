@@ -74,7 +74,48 @@ module.exports = (db, clientsCollection, usersCollection) => {
                 siteDesignation
             };
             const docRef = await clientsCollection.add(newClient);
-            res.status(201).json({ id: docRef.id, ...newClient });
+
+            // --- Automatically create a user for the site admin ---
+            // Get admin SDK from global require (since not passed in)
+            const admin = require('firebase-admin');
+            // Prepare user data
+            const userData = {
+                client_name: companyName,
+                firstName: siteFirstName,
+                lastName: siteLastName,
+                email: siteEmail,
+                password: 'Welcome@123', // Default password, can be randomized
+                contactNumber: siteContactNumber,
+                designation: siteDesignation,
+                role: 'user',
+                managerEmail: '',
+                employmentType: '',
+                mustChangePassword: true
+            };
+            let userRecord;
+            try {
+                userRecord = await admin.auth().createUser({ email: userData.email, password: userData.password });
+                await usersCollection.doc(userRecord.uid).set({
+                    client_name: userData.client_name,
+                    firstName: userData.firstName,
+                    lastName: userData.lastName,
+                    email: userData.email,
+                    role: userData.role,
+                    contactNumber: userData.contactNumber,
+                    managerEmail: userData.managerEmail,
+                    employmentType: userData.employmentType,
+                    designation: userData.designation,
+                    mustChangePassword: true,
+                    isSiteAdmin: true // <-- Set site admin flag
+                });
+            } catch (userErr) {
+                // Rollback client creation
+                await clientsCollection.doc(docRef.id).delete();
+                console.error('Error creating user for new client:', userErr);
+                return res.status(500).json({ error: 'Client created, but failed to create user: ' + userErr.message });
+            }
+
+            res.status(201).json({ id: docRef.id, ...newClient, userCreated: true });
         } catch (err) {
             console.error('Error adding client:', err);
             res.status(500).json({ error: 'Failed to add client' });

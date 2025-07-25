@@ -755,10 +755,10 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
             } else {
                 if (actionType === 'close') {
                     setCloseButtonState('error');
-                    showFlashMessage(data.error || 'Failed to close ticket.', 'error');
+                    showFlashMessage(data.error === 'Only the assigned engineer can update status or priority.' ? 'You cannot change the status or priority of this ticket unless it is assigned to you.' : (data.error || 'Failed to close ticket.'), 'error');
                 } else {
                     setSaveButtonState('error');
-                    showFlashMessage(data.error || 'Failed to update ticket.', 'error');
+                    showFlashMessage(data.error === 'Only the assigned engineer can update status or priority.' ? 'You cannot change the status or priority of this ticket unless it is assigned to you.' : (data.error || 'Failed to update ticket.'), 'error');
                 }
                 setTimeout(() => {
                     if (actionType === 'close') setCloseButtonState('default');

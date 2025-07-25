@@ -101,6 +101,7 @@ const DashboardComponent = ({ user, navigateTo, showFlashMessage }) => {
                     status: data.status,
                     priority: data.priority,
                     assigned_to_email: data.assigned_to_email,
+                    reporter_email: data.reporter_email,
                     created_at: data.created_at && data.created_at.toDate ? data.created_at.toDate().toISOString() : '',
                 };
             });
@@ -254,7 +255,7 @@ const DashboardComponent = ({ user, navigateTo, showFlashMessage }) => {
     }
 
     return (
-        <div className="p-6 overflow-auto flex-1 bg-gray-100">
+        <div className="p-6 overflow-auto flex-1 bg-white">
             <h1 className="text-3xl font-extrabold text-gray-900 mb-6 flex items-center">
                 <LayoutDashboard size={28} className="mr-3 text-blue-600" />
                 Dashboard Overview
@@ -317,17 +318,20 @@ const DashboardComponent = ({ user, navigateTo, showFlashMessage }) => {
                         <table className="w-full min-w-0 bg-white text-xs">
                             <thead className="bg-gray-100 border-b border-gray-200">
                                 <tr>
+                                    <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">#</th>
                                     <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Ticket ID</th>
                                     <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Short Description</th>
                                     <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Status</th>
                                     <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Priority</th>
                                     <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Assignee</th>
+                                    <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Requested By</th>
                                     <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Created</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-200">
-                                {filteredTableTickets.map(ticket => (
+                                {filteredTableTickets.map((ticket, index) => (
                                     <tr key={ticket.id} className="hover:bg-gray-50 transition-colors duration-150 text-xs cursor-pointer" onClick={() => navigateTo('/tickets', ticket.id)}>
+                                        <td className="px-2 py-2 text-xs text-gray-800">{index + 1}</td>
                                         <td className="px-2 py-2 text-xs text-blue-700 hover:underline font-medium">{ticket.display_id}</td>
                                         <td className="px-2 py-2 text-xs text-gray-800 max-w-xs truncate" title={ticket.short_description}>{ticket.short_description}</td>
                                         <td className="px-2 py-2 text-xs">
@@ -337,7 +341,8 @@ const DashboardComponent = ({ user, navigateTo, showFlashMessage }) => {
                                             <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">{ticket.priority}</span>
                                         </td>
                                         <td className="px-2 py-2 text-xs text-gray-800">{ticket.assigned_to_email || 'Unassigned'}</td>
-                                        <td className="px-2 py-2 text-xs text-gray-800">{ticket.created_at ? new Date(ticket.created_at).toLocaleDateString() : ''}</td>
+                                        <td className="px-2 py-2 text-xs text-gray-800">{ticket.reporter_email || '-'}</td>
+                                        <td className="px-2 py-2 text-xs text-gray-800">{ticket.created_at ? new Date(ticket.created_at).toLocaleString() : ''}</td>
                                     </tr>
                                 ))}
                             </tbody>

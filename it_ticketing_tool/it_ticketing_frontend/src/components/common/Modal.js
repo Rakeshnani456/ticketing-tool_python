@@ -13,7 +13,7 @@ import 'animate.css';
  * @param {boolean} props.isOpen - Controls the visibility of the modal.
  * @returns {JSX.Element|null} A modal dialog or null if not open.
  */
-const Modal = ({ children, title, onClose, isOpen }) => {
+const Modal = ({ children, title, onClose, isOpen, customClassName = '', style = {}, noBlur = false }) => {
     const [show, setShow] = useState(isOpen);
     const [animateClass, setAnimateClass] = useState('animate__zoomIn');
 
@@ -42,11 +42,12 @@ const Modal = ({ children, title, onClose, isOpen }) => {
     if (!show) return null;
 
     return (
-        // Fixed overlay for the modal background with blur and fade
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-40 backdrop-blur-sm flex items-center justify-center p-4 z-50 transition-all duration-300 animate-fade-in">
+        // Fixed overlay for the modal background with optional blur and fade
+        <div className={`fixed inset-0 ${noBlur ? '' : 'bg-gray-600 bg-opacity-40 backdrop-blur-sm'} flex items-center justify-center p-4 z-50 transition-all duration-300 animate-fade-in`} style={noBlur ? {background: 'transparent'} : {}}>
             {/* Modal content container with Animate.css zoomIn/zoomOut animation */}
             <div
-                className={`bg-white p-4 md:p-6 rounded-lg shadow-xl w-full max-w-[700px] min-h-[350px] relative max-h-screen overflow-y-auto animate__animated ${animateClass} animate__faster`}
+                className={`bg-white p-4 md:p-6 rounded-lg shadow-xl w-full max-w-[700px] min-h-[350px] relative max-h-screen overflow-y-auto animate__animated ${animateClass} animate__faster ${customClassName}`}
+                style={style}
                 onAnimationEnd={handleAnimationEnd}
             >
                 {/* Close button positioned at the top right */}

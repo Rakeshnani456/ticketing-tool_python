@@ -40,6 +40,7 @@ import PersonIcon from '@mui/icons-material/Person';
 import SecurityIcon from '@mui/icons-material/Security';
 import Menu from '@mui/material/Menu'; // Import Material-UI Menu
 import MenuItem from '@mui/material/MenuItem'; // Import Material-UI MenuItem
+import NotificationModal from './components/common/NotificationModal';
 
 
 // Import Firebase auth client and dbClient
@@ -733,8 +734,14 @@ const App = () => {
     }
 
     return (
-        // No BrowserRouter here, it's in index.js now.
         <div className="flex min-h-screen bg-white font-inter"> {/* Main flex container (row) */}
+            {/* Global Flash Message */}
+            {flashMessage && (
+                <div className={`fixed top-16 left-1/2 transform -translate-x-1/2 z-[9999] px-4 py-2 rounded shadow-lg transition-all duration-300 ${flashType === 'error' ? 'bg-red-100 text-red-800 border border-red-300' : 'bg-green-100 text-green-800 border border-green-300'}`}
+                     style={{ minWidth: 280, maxWidth: 480, textAlign: 'center', fontWeight: 500, fontSize: '1rem' }}>
+                    {flashMessage}
+                </div>
+            )}
             {/* Top Banner Header - make it fixed and full width */}
             <header className="fixed top-0 left-0 w-full bg-white text-grey flex items-center justify-between shadow-md flex-shrink-0 z-50" style={{height: '48px', minHeight: '48px', padding: '0 12px'}}>
                 {/* Update the logo container to remove extra left margin/padding and align with sidebar menu items */}
@@ -834,58 +841,46 @@ const App = () => {
                 {/* Move search bar, notification bell, and profile dropdown to the far right */}
                 {currentUser && location.pathname !== '/login' && location.pathname !== '/register' && (
                     <div className="flex items-center gap-2">
-                        <form onSubmit={handleSearchSubmit} className="flex-1 max-w-xs">
+                        <form onSubmit={handleSearchSubmit} className="flex items-center" style={{ marginLeft: 48, minWidth: 220 }}>
                             <input
                                 type="text"
                                 value={searchKeyword}
                                 onChange={handleSearchChange}
                                 placeholder="Search..."
-                                className="w-full px-2 py-1 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                className="px-2 text-sm border border-gray-300 rounded-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                style={{ width: 220, height: 32, paddingTop: 0, paddingBottom: 0 }}
                             />
+                            <button type="submit" className="ml-1 px-2 py-1 border border-gray-300 bg-white rounded-none hover:bg-gray-100 transition-colors flex items-center" style={{ height: 32 }} aria-label="Search">
+                                <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                                  <circle cx="11" cy="11" r="7" />
+                                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                                </svg>
+                            </button>
                         </form>
                         {/* Notification Bell */}
-                        <div className="relative">
+                        <div className="relative inline-block">
                             <button
-                                className="relative p-1 rounded-full hover:bg-gray-100 focus:outline-none text-sm"
+                                className="relative flex items-center p-1 rounded-full hover:bg-gray-100 focus:outline-none text-sm"
                                 onClick={() => setIsNotificationMenuOpen(open => !open)}
                                 aria-label="Notifications"
                             >
-                                <Bell size={16} className="text-gray-700" />
+                                <Bell size={18} className="text-gray-700" />
                                 {hasNewNotifications && (
                                     <span className="absolute top-0 right-0 block h-2 w-2 rounded-full ring-2 ring-white bg-red-500"></span>
                                 )}
                             </button>
-                            {isNotificationMenuOpen && (
-                                <div ref={notificationMenuRef} className="absolute right-0 mt-2 w-80 bg-white border border-gray-200 rounded-lg shadow-lg z-50 text-sm">
-                                    <div className="p-4 border-b font-semibold text-gray-700 flex items-center justify-between">
-                                        Notifications
-                                        <button onClick={clearAllNotifications} className="text-xs text-blue-600 hover:underline">Clear All</button>
-                                    </div>
-                                    <ul className="max-h-80 overflow-y-auto">
-                                        {notifications.length === 0 ? (
-                                            <li className="p-4 text-gray-500 text-sm">No notifications</li>
-                                        ) : notifications.map(n => {
-                                            const { title, body } = getNotificationTitleAndBody(n);
-                                            return (
-                                                <li key={n.id} className={`px-4 py-3 border-b last:border-b-0 flex items-start space-x-2 ${!n.read ? 'bg-blue-50' : ''}`}>
-                                                    <div className="flex-1">
-                                                        <div className="font-medium text-gray-800 text-sm">{title}</div>
-                                                        {body && <div className="text-xs text-gray-600" dangerouslySetInnerHTML={{ __html: formatNotificationMessage(body) }} />}
-                                                    </div>
-                                                    <div className="flex flex-col items-end space-y-1">
-                                                        {!n.read && (
-                                                            <button onClick={() => markNotificationAsRead(n.id)} className="text-xs text-blue-600 hover:underline">Mark as read</button>
-                                                        )}
-                                                        {n.ticket_id && (
-                                                            <button onClick={() => viewTicket(n.ticket_id)} className="text-xs text-gray-500 hover:underline">View</button>
-                                                        )}
-                                                    </div>
-                                                </li>
-                                            );
-                                        })}
-                                    </ul>
-                                </div>
-                            )}
+                            <NotificationModal
+                                isOpen={isNotificationMenuOpen}
+                                onClose={() => setIsNotificationMenuOpen(false)}
+                                notifications={notifications.map(n => ({
+                                    ...n,
+                                    title: getNotificationTitleAndBody(n).title,
+                                    body: getNotificationTitleAndBody(n).body,
+                                }))}
+                                onClearAll={clearAllNotifications}
+                                onMarkRead={markNotificationAsRead}
+                                onViewTicket={viewTicket}
+                            />
                         </div>
                         {/* Profile Dropdown */}
                         <div className="relative" ref={profileMenuRef}>
@@ -894,8 +889,8 @@ const App = () => {
                                 onClick={() => setIsProfileMenuOpen(open => !open)}
                                 aria-label="Profile"
                             >
-                                <User className="w-4 h-4" />
-                                <ChevronDown className="ml-1 w-3 h-3" />
+                                <User className="w-5 h-5" />
+                                <ChevronDown className="ml-1 w-3.5 h-3.5" />
                             </button>
                             {isProfileMenuOpen && (
                                 <ul className="absolute right-0 mt-2 w-56 bg-white border border-gray-200 rounded-lg shadow-lg z-50 text-sm">
@@ -949,7 +944,7 @@ const App = () => {
                                     <motion.div
                                         variants={textVariants}
                                         animate={isSidebarExpanded ? "expanded" : "collapsed"}
-                                        className="mt-2 mb-1 px-2 text-[9px] font-semibold tracking-wider"
+                                        className="sidebar-section-header"
                                         style={{ color: '#f05118' }}
                                     >
                                         Activity
@@ -972,7 +967,7 @@ const App = () => {
                                     <motion.div
                                         variants={textVariants}
                                         animate={isSidebarExpanded ? "expanded" : "collapsed"}
-                                        className="mt-4 mb-1 px-2 text-[9px] font-semibold tracking-wider"
+                                        className="sidebar-section-header"
                                         style={{ color: '#f05118' }}
                                     >
                                         Organisation
@@ -995,7 +990,7 @@ const App = () => {
                                     <motion.div
                                         variants={textVariants}
                                         animate={isSidebarExpanded ? "expanded" : "collapsed"}
-                                        className="mt-4 mb-1 px-2 text-[9px] font-semibold tracking-wider"
+                                        className="sidebar-section-header"
                                         style={{ color: '#f05118' }}
                                     >
                                         Planning
@@ -1052,16 +1047,6 @@ const App = () => {
                                             >
                                                 Dashboard
                                             </motion.span>
-                                            {!isSidebarExpanded && (
-                                                <span className="sidebar-count-badge absolute top-0 right-0 text-xs rounded-full h-4 w-4 flex items-center justify-center -mt-1 -mr-1">
-                                                    {ticketCounts.active_tickets}
-                                                </span>
-                                            )}
-                                            {isSidebarExpanded && (
-                                                <span className="ml-2 text-xs">
-                                                    ({ticketCounts.active_tickets})
-                                                </span>
-                                            )}
                                         </Link>
                                     </li>
                                     <li>

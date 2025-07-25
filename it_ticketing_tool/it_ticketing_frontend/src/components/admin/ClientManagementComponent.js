@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { Avatar, Chip, Tooltip, Button, Menu, MenuItem, Snackbar, Alert, TextField, Box, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, IconButton, Typography, Collapse } from '@mui/material';
+import { Avatar, Chip, Tooltip, Button, Menu, MenuItem, Snackbar, Alert, TextField, Box, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, IconButton, Typography, Collapse, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material';
 import { ArrowDownward, ArrowUpward, Edit as EditIcon, Delete as DeleteIcon, Save as SaveIcon, Cancel as CancelIcon, Add as AddIcon, Clear as ClearIcon } from '@mui/icons-material';
 import Select from 'react-select'; // Import react-select
 import {
@@ -88,6 +88,14 @@ const ClientManagementComponent = () => {
   const [error, setError] = useState(null);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
   const [showClientModal, setShowClientModal] = useState(false);
+  const [editClient, setEditClient] = useState(null);
+  const [removeClient, setRemoveClient] = useState(null);
+  const [removing, setRemoving] = useState(false);
+  const [actionMode, setActionMode] = useState(null); // 'edit' | 'delete' | null
+  const [menuAnchorEl, setMenuAnchorEl] = useState(null);
+  const handleMenuOpen = (e) => setMenuAnchorEl(e.currentTarget);
+  const handleMenuClose = () => setMenuAnchorEl(null);
+  const handleActionMode = (mode) => { setActionMode(mode); setMenuAnchorEl(null); };
 
   const db = getFirestore(app);
 
@@ -108,12 +116,38 @@ const ClientManagementComponent = () => {
     };
   }, []);
 
+  // Handler for edit
+  const handleEditClient = (client) => {
+    setEditClient(client);
+    setShowClientModal(true);
+  };
+  // Handler for remove
+  const handleRemoveClient = (client) => {
+    setRemoveClient(client);
+  };
+  const confirmRemoveClient = async () => {
+    if (!removeClient) return;
+    setRemoving(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/clients/${removeClient.id}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) throw new Error('Failed to remove client');
+      setSnackbar({ open: true, message: 'Client removed successfully.', severity: 'success' });
+      setRemoveClient(null);
+    } catch (err) {
+      setSnackbar({ open: true, message: err.message, severity: 'error' });
+    } finally {
+      setRemoving(false);
+    }
+  };
+
   return (
     <div style={{ width: '100%', minHeight: '100vh', overflowX: 'hidden', overflowY: 'auto', boxSizing: 'border-box', background: '#fff', padding: 0 }}>
       {/* Title and Add Client Button side by side, left-aligned */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, paddingTop: 24, paddingLeft: 24 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <h2 className="text-2xl font-bold" style={{ marginBottom: 0, wordBreak: 'break-word', maxWidth: '100%', fontSize: '1.4rem' }}>Client Management</h2>
+          <h2 className="text-2xl font-bold" style={{ marginBottom: 0, wordBreak: 'break-word', maxWidth: '100%', fontSize: '1.1rem' }}>Client Management</h2>
           <Button
             variant="contained"
             color="primary"
@@ -127,18 +161,26 @@ const ClientManagementComponent = () => {
             variant="text"
             size="small"
             sx={{ minWidth: 0, padding: '2px', height: 24, borderRadius: 1 }}
+            onClick={handleMenuOpen}
           >
             <MoreVertIcon fontSize="small" />
           </Button>
         </div>
-        <Button
-          variant="outlined"
-          color="error"
-          size="small"
-          sx={{ fontSize: '0.6rem', textTransform: 'none', minWidth: 'auto', padding: '2px 10px', height: 24, lineHeight: 1, borderRadius: 1, mr: 4 }}
-        >
-          Remove Client
-        </Button>
+        {actionMode && (
+          <Button
+            variant="outlined"
+            color="secondary"
+            size="small"
+            sx={{ fontSize: '0.6rem', textTransform: 'none', minWidth: 'auto', padding: '2px 10px', height: 24, lineHeight: 1, borderRadius: 1, mr: 4 }}
+            onClick={() => setActionMode(null)}
+          >
+            Cancel
+          </Button>
+        )}
+        <Menu anchorEl={menuAnchorEl} open={!!menuAnchorEl} onClose={handleMenuClose}>
+          <MenuItem onClick={() => handleActionMode('edit')} sx={{ fontSize: '0.85rem' }}>Edit Client</MenuItem>
+          <MenuItem onClick={() => handleActionMode('delete')} sx={{ fontSize: '0.85rem' }}>Delete Client</MenuItem>
+        </Menu>
       </div>
       {error && <div className="text-red-600 mb-2">{error}</div>}
       {loading ? (
@@ -149,7 +191,14 @@ const ClientManagementComponent = () => {
             <Typography variant="body2" sx={{ color: 'text.secondary', mt: 2 }}>No clients found.</Typography>
           ) : (
             clients.map(client => (
-              <ClientCard key={client.id} client={client} />
+              <ClientCard
+                key={client.id}
+                client={client}
+                onEdit={actionMode === 'edit' ? handleEditClient : undefined}
+                onRemove={actionMode === 'delete' ? handleRemoveClient : undefined}
+                showEdit={actionMode === 'edit'}
+                showRemove={actionMode === 'delete'}
+              />
             ))
           )}
         </Box>
@@ -162,7 +211,8 @@ const ClientManagementComponent = () => {
       {/* Client Info Modal */}
       <ClientInfoModal
         isOpen={showClientModal}
-        onClose={() => setShowClientModal(false)}
+        onClose={() => { setShowClientModal(false); setEditClient(null); }}
+        initialData={editClient}
         onSave={async (data) => {
           const payload = {
             companyName: data.companyName,
@@ -182,19 +232,32 @@ const ClientManagementComponent = () => {
             siteDesignation: data.siteDesignation,
           };
           try {
-            const res = await fetch(`${API_BASE_URL}/api/clients`, {
-              method: 'POST',
+            const method = editClient ? 'PUT' : 'POST';
+            const url = editClient ? `${API_BASE_URL}/api/clients/${editClient.id}` : `${API_BASE_URL}/api/clients`;
+            const res = await fetch(url, {
+              method,
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(payload),
             });
-            if (!res.ok) throw new Error('Failed to add client');
-            setSnackbar({ open: true, message: 'Client info saved successfully.', severity: 'success' });
+            if (!res.ok) throw new Error(editClient ? 'Failed to update client' : 'Failed to add client');
+            setSnackbar({ open: true, message: editClient ? 'Client updated successfully.' : 'Client info saved successfully.', severity: 'success' });
             setShowClientModal(false);
+            setEditClient(null);
           } catch (err) {
             setSnackbar({ open: true, message: err.message, severity: 'error' });
           }
         }}
       />
+      <Dialog open={!!removeClient} onClose={() => setRemoveClient(null)}>
+        <DialogTitle>Remove Client</DialogTitle>
+        <DialogContent>
+          <Typography>Are you sure you want to remove <b>{removeClient?.companyName}</b>?</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setRemoveClient(null)} disabled={removing}>Cancel</Button>
+          <Button onClick={confirmRemoveClient} color="error" disabled={removing}>{removing ? 'Removing...' : 'Remove'}</Button>
+        </DialogActions>
+      </Dialog>
     </div>
   );
 };

@@ -506,10 +506,10 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
                                     <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: i === filteredUsers.length - 1 ? '0' : '1px solid #e0e0e0' }}>
                                         <Chip label={u.role} size="small" color={u.role === 'admin' ? 'primary' : u.role === 'support' ? 'secondary' : 'default'} sx={{ fontSize: '0.7rem', height: 20 }} />
                                     </TableCell>
-                                    <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: i === filteredUsers.length - 1 ? '0' : '1px solid #e0e0e0' }}>{u.asset_id}</TableCell>
+                                        <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: i === filteredUsers.length - 1 ? '0' : '1px solid #e0e0e0' }}>{u.asset_id}</TableCell>
                                     <TableCell align="right" sx={{ borderBottom: i === filteredUsers.length - 1 ? '0' : '1px solid #e0e0e0' }}>
                                         <IconButton onClick={() => openChangePwdModal(u.uid)} size="small" title="Reset Password"><LockResetIcon sx={{ fontSize: '1rem' }} /></IconButton>
-                                        <IconButton onClick={() => handleEditClick(u)} size="small" sx={{ p: 0.5 }}><EditIcon sx={{ fontSize: '1rem' }} /></IconButton>
+                                                <IconButton onClick={() => handleEditClick(u)} size="small" sx={{ p: 0.5 }}><EditIcon sx={{ fontSize: '1rem' }} /></IconButton>
                                         <IconButton onClick={(event) => handleDeleteClick(event, u.id || u.uid, u.email)} size="small" sx={{ p: 0.5 }}><DeleteIcon sx={{ fontSize: '1rem' }} /></IconButton>
                                     </TableCell>
                                 </TableRow>

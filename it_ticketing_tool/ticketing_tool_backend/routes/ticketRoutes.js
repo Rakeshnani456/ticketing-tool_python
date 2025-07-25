@@ -243,12 +243,19 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
             }
             const ticketData = ticketDoc.data();
 
-            if (['Resolved', 'Cancelled'].includes(ticketData.status) && authenticatedUserRole === 'user') {
-                return res.status(403).json({ error: 'Forbidden: Cannot update a resolved or cancelled ticket as a regular user.' });
+            if (["Resolved", "Cancelled"].includes(ticketData.status) && authenticatedUserRole === "user") {
+                return res.status(403).json({ error: "Forbidden: Cannot update a resolved or cancelled ticket as a regular user." });
             }
 
-            if (authenticatedUserRole === 'user' && ticketData.reporter_id !== authenticatedUid) {
-                return res.status(403).json({ error: 'Forbidden: You can only update your own tickets.' });
+            if (authenticatedUserRole === "user" && ticketData.reporter_id !== authenticatedUid) {
+                return res.status(403).json({ error: "Forbidden: You can only update your own tickets." });
+            }
+
+            // Restrict status and priority updates to only the assigned engineer
+            if ((status !== undefined && status !== ticketData.status) || (priority !== undefined && priority !== ticketData.priority)) {
+                if (ticketData.assigned_to_id !== authenticatedUid) {
+                    return res.status(403).json({ error: "Only the assigned engineer can update status or priority." });
+                }
             }
 
             const updateData = {
@@ -377,6 +384,24 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                             ticketId: ticketId
                         });
                     }
+
+                    // Send assignment email
+                    const reporterEmail = ticketData.reporter_email;
+                    const requestForEmail = ticketData.request_for_email;
+                    const assignedEngineerEmail = assigned_to_email;
+                    const emailSubject = `Ticket ${ticketData.display_id} Assigned`;
+                    const emailText = `Ticket ${ticketData.display_id} - "${ticketData.short_description}" has been assigned to engineer: ${assignedEngineerEmail}.`;
+                    const baseUrl = getBaseUrl(req);
+                    const ticketLink = `${baseUrl}/tickets/${ticketId}`;
+                    const emailHtml = `<div style=\"font-family: Arial, sans-serif; color: #222;\"><p>Ticket <a href=\"${ticketLink}\" style=\"color: #2563eb; text-decoration: underline;\" target=\"_blank\"><strong>${ticketData.display_id}</strong></a> - ${ticketData.short_description} has been assigned to engineer: <strong>${assignedEngineerEmail}</strong>.</p><p>Access the Ticketing Tool for more details.</p></div>`;
+                    // To: reporter_email, request_for_email; CC: assigned engineer
+                    let toList = [];
+                    if (reporterEmail) toList.push(reporterEmail);
+                    if (requestForEmail && requestForEmail !== reporterEmail) toList.push(requestForEmail);
+                    let ccList = assignedEngineerEmail;
+                    setImmediate(() => {
+                        sendEmailAlert(toList.join(','), emailSubject, emailText, emailHtml, ccList);
+                    });
                 }
             }
 
