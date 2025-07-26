@@ -108,8 +108,14 @@ const ProfileComponent = ({ user, showFlashMessage, navigateTo, handleLogout }) 
                         </div>
                     </dl>
 
-                    {/* Action Button */}
-                    <div className="mt-8 flex justify-end">
+                    {/* Action Buttons */}
+                    <div className="mt-8 flex justify-end gap-2">
+                        <button
+                            onClick={handleLogout}
+                            className="bg-red-500 hover:bg-red-600 text-white text-xs px-3 py-1.5 min-h-0 h-8 rounded focus:outline-none focus:ring-2 focus:ring-red-300 transition-colors"
+                        >
+                            Logout
+                        </button>
                         <PrimaryButton
                             onClick={() => navigateTo('/change-password')}
                             Icon={FilePenLine}

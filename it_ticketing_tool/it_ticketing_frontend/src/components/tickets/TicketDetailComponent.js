@@ -13,13 +13,11 @@ import {
     Save,
     X,
     MessageSquare,
-    Paperclip,
     Calendar,
     User,
     CheckCircle2,
     File,
     Clock,
-    TrendingUp,
     Hourglass,
     Tag,
     ArrowRight, // Import ArrowRight icon
@@ -28,6 +26,8 @@ import {
     List,
     AlertTriangle,
 } from 'lucide-react';
+import { Paperclip } from '../common/AnimatedPaperclip';
+import { Activity } from '../common/AnimatedActivity';
 import { doc, onSnapshot, getFirestore } from 'firebase/firestore';
 import { useParams } from 'react-router-dom';
 import { getFileNameFromUrl } from '../../utils/utils';
@@ -1090,7 +1090,7 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                       }}
                       title="Go to attachments"
                     >
-                      <Paperclip className="w-4 h-4 mr-1 text-green-500" />
+                      <Paperclip size={16} className="text-green-500" />
                       {ticket.attachments && ticket.attachments.length > 0 ? `${ticket.attachments.length} attachment${ticket.attachments.length > 1 ? 's' : ''}` : '0 attachments'}
                     </button>
                   </div>
@@ -1250,7 +1250,7 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                                     className="ml-2 p-1 rounded-full bg-gray-100 hover:bg-blue-100 text-blue-600 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-300"
                                     title="Upload attachments"
                                 >
-                                    <Paperclip className="w-5 h-5" />
+                                    <Paperclip size={20} className="text-blue-600" />
                                 </button>
                             )}
                             <input
@@ -1324,7 +1324,7 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                         <div className="flex items-center justify-between mb-4">
                             <h3 className="text-base font-extrabold text-gray-500 flex items-center">
                                 Ticket Progress
-                                <TrendingUp className="w-4 h-4 text-gray-500 ml-2" />
+                                <Activity width={16} height={16} stroke="#6b7280" />
                             </h3>
 
                             {/* Edit button moved to top right of progress box */}

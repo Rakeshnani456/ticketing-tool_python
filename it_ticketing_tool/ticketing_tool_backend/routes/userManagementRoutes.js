@@ -39,7 +39,7 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
         const {
             name, asset_id, joined_date, role,
             firstName, lastName, companyName, client_name,
-            contactNumber, managerEmail, employmentType, designation,
+            contactNumber, managerEmail, employmentType, designation, employeeId,
             password // If you want to allow password update here (optional)
         } = req.body;
 
@@ -57,6 +57,7 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
         if (managerEmail) updateData.managerEmail = managerEmail;
         if (employmentType) updateData.employmentType = employmentType;
         if (designation) updateData.designation = designation;
+        if (employeeId) updateData.employeeId = employeeId; // Add employee ID to update fields
         // Optionally handle password update here if needed (not recommended for Firestore, should be done via Auth)
 
         if (Object.keys(updateData).length === 0) {
@@ -135,10 +136,28 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
             }
         } else if (role === 'user') {
             // NEW LOGIC: Accept and save all new user fields
-            const { companyName, firstName, lastName, email, password, contactNumber, managerEmail, employmentType, designation } = req.body;
-            if (!companyName || !firstName || !lastName || !email || !password || !contactNumber || !managerEmail || !employmentType || !designation) {
-                return res.status(400).json({ error: 'Missing required fields for user: companyName, firstName, lastName, email, password, contactNumber, managerEmail, employmentType, designation' });
+            const { companyName, firstName, lastName, email, password, contactNumber, managerEmail, employmentType, designation, employeeId } = req.body;
+            if (!companyName || !firstName || !lastName || !email || !password || !contactNumber || !managerEmail || !employmentType || !designation || !employeeId) {
+                return res.status(400).json({ error: 'Missing required fields for user: companyName, firstName, lastName, email, password, contactNumber, managerEmail, employmentType, designation, employeeId' });
             }
+            
+            // Uniqueness checks for regular users
+            const queries = [
+                usersCollection.where('employeeId', '==', employeeId).limit(1).get(),
+                usersCollection.where('email', '==', email).limit(1).get(),
+                usersCollection.where('contactNumber', '==', contactNumber).limit(1).get(),
+            ];
+            const [empSnap, emailSnap, contactSnap] = await Promise.all(queries);
+            if (!empSnap.empty) {
+                return res.status(400).json({ error: 'Employee ID already exists.' });
+            }
+            if (!emailSnap.empty) {
+                return res.status(400).json({ error: 'Email already exists.' });
+            }
+            if (!contactSnap.empty) {
+                return res.status(400).json({ error: 'Contact Number already exists.' });
+            }
+            
             try {
                 let userRecord;
                 try {
@@ -158,6 +177,7 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
                     managerEmail,
                     employmentType,
                     designation,
+                    employeeId, // Add employee ID field
                     mustChangePassword: true, // <-- enforce password change on first login
                     isSiteAdmin: false // Always false for users created here
                 };
@@ -260,12 +280,33 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
         }
         const results = [];
         for (const user of users) {
-            const { companyName, firstName, lastName, email, password, contactNumber, managerEmail, employmentType, designation } = user;
+            const { companyName, firstName, lastName, email, password, contactNumber, managerEmail, employmentType, designation, employeeId } = user;
             // Validate required fields
-            if (!companyName || !firstName || !lastName || !email || !password || !contactNumber || !managerEmail || !employmentType || !designation) {
+            if (!companyName || !firstName || !lastName || !email || !password || !contactNumber || !managerEmail || !employmentType || !designation || !employeeId) {
                 results.push({ email, success: false, error: 'Missing required fields.' });
                 continue;
             }
+            
+            // Uniqueness checks for bulk import
+            const queries = [
+                usersCollection.where('employeeId', '==', employeeId).limit(1).get(),
+                usersCollection.where('email', '==', email).limit(1).get(),
+                usersCollection.where('contactNumber', '==', contactNumber).limit(1).get(),
+            ];
+            const [empSnap, emailSnap, contactSnap] = await Promise.all(queries);
+            if (!empSnap.empty) {
+                results.push({ email, success: false, error: 'Employee ID already exists.' });
+                continue;
+            }
+            if (!emailSnap.empty) {
+                results.push({ email, success: false, error: 'Email already exists.' });
+                continue;
+            }
+            if (!contactSnap.empty) {
+                results.push({ email, success: false, error: 'Contact Number already exists.' });
+                continue;
+            }
+            
             try {
                 let userRecord;
                 try {
@@ -286,6 +327,7 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
                     managerEmail,
                     employmentType,
                     designation,
+                    employeeId, // Add employee ID field
                     mustChangePassword: true, // <-- enforce password change on first login
                     isSiteAdmin: false // Always false for users created here
                 };

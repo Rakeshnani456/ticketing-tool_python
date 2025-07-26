@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, MenuItem, Typography, Box, IconButton, Collapse, Alert, InputAdornment } from '@mui/material';
-import { Close as CloseIcon, Business as BusinessIcon, Person as PersonIcon, AdminPanelSettings as AdminIcon, Phone as PhoneIcon, Email as EmailIcon, Language as WebsiteIcon, LocationOn as LocationIcon, Save as SaveIcon, Clear as ClearIcon } from '@mui/icons-material';
-import CheckIcon from '@mui/icons-material/Check';
+import { Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, MenuItem, Typography, Box, IconButton, Collapse, Alert, InputAdornment, Checkbox, FormControlLabel } from '@mui/material';
+import { Close as CloseIcon, Business as BusinessIcon, Person as PersonIcon, AdminPanelSettings as AdminIcon, Phone as PhoneIcon, Email as EmailIcon, Language as WebsiteIcon, LocationOn as LocationIcon, Save as SaveIcon } from '@mui/icons-material';
 import { useForm, Controller } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
+import CheckIcon from '@mui/icons-material/Check';
+import ClearIcon from '@mui/icons-material/Clear';
 
+// Designation options are unchanged
 const designationOptions = [
   { value: '', label: 'Select Designation' },
   { value: 'CEO', label: 'CEO' },
@@ -19,6 +21,7 @@ const designationOptions = [
   { value: 'Other', label: 'Other' },
 ];
 
+// Validation schema is unchanged
 const validationSchema = yup.object().shape({
   companyName: yup.string().required('Company name is required').min(2, 'Minimum 2 characters').max(100, 'Maximum 100 characters'),
   website: yup.string().nullable().transform((value) => (value === '' ? null : value)).url('Invalid URL'),
@@ -58,18 +61,36 @@ const initialState = {
 const ClientInfoModal = ({ isOpen, onClose, onSave, initialData = null }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [sameAsAuth, setSameAsAuth] = useState(false);
 
-  const { handleSubmit, control, reset, formState: { errors, isValid }, clearErrors } = useForm({
+  const { handleSubmit, control, reset, formState: { errors, isValid }, clearErrors, watch } = useForm({
     resolver: yupResolver(validationSchema),
     defaultValues: initialData || initialState,
     mode: 'onChange',
   });
+
+  const { authFirstName, authLastName, authContactNumber, authOfficeEmail, authPersonalEmail, authDesignation } = watch();
+
+  // Auto-fill site admin fields when checkbox is checked or auth fields change
+  useEffect(() => {
+    if (sameAsAuth) {
+      reset({
+        ...watch(),
+        siteFirstName: authFirstName,
+        siteLastName: authLastName,
+        siteContactNumber: authContactNumber,
+        siteEmail: authOfficeEmail,
+        siteDesignation: authDesignation,
+      });
+    }
+  }, [sameAsAuth, authFirstName, authLastName, authContactNumber, authOfficeEmail, authDesignation, reset]);
 
   useEffect(() => {
     if (isOpen) {
       setShowSuccess(false);
       reset(initialData || initialState);
       clearErrors();
+      setSameAsAuth(false); // Reset checkbox state
     }
   }, [isOpen, reset, initialData, clearErrors]);
 
@@ -103,34 +124,47 @@ const ClientInfoModal = ({ isOpen, onClose, onSave, initialData = null }) => {
       onClose={handleClose}
       maxWidth="md"
       fullWidth
-      PaperProps={{ className: 'rounded-2xl bg-gray-50' }}
+      PaperProps={{
+        sx: {
+          borderRadius: 0,
+          boxShadow: '0 8px 30px rgba(0,0,0,0.1)',
+          bgcolor: '#ffffff',
+        }
+      }}
     >
-      <DialogTitle className="flex justify-between items-center bg-gradient-to-r from-blue-600 to-purple-600 text-white p-3 sm:p-4 min-h-[48px]"> {/* Increased padding, min-height */}
-        <Typography variant="h6" component="div" className="font-semibold text-lg sm:text-xl"> {/* Changed to h6, adjusted font size */}
+      <DialogTitle
+        className="flex justify-between items-center text-white px-5 py-4 border-b border-gray-200"
+        sx={{
+          background: '#283149',
+          minHeight: '50px',
+        }}
+      >
+        <Typography variant="h6" component="div" className="font-semibold" sx={{ fontSize: '1rem' }}>
           {initialData ? 'Edit Client Information' : 'Add Client Information'}
         </Typography>
-        <IconButton onClick={handleClose} disabled={isSubmitting} className="text-white">
-          <CloseIcon fontSize="medium" /> {/* Adjusted icon size */}
+        <IconButton onClick={handleClose} disabled={isSubmitting} className="text-white hover:bg-white hover:bg-opacity-10 transition-colors">
+          <CloseIcon fontSize="small" />
         </IconButton>
       </DialogTitle>
 
-      <DialogContent className="p-4 sm:p-6 bg-gray-50"> {/* Adjusted padding */}
+      <DialogContent className="p-4 sm:p-5 bg-gray-50">
         <Collapse in={showSuccess}>
-          <Alert severity="success" className="mb-4 text-sm sm:text-base"> {/* Adjusted font size */}
+          <Alert severity="success" className="mb-4 text-sm" sx={{ borderRadius: 0 }}>
             Client information saved successfully!
           </Alert>
         </Collapse>
 
-        <Box component="form" onSubmit={handleSubmit(onSubmit)} className="space-y-4 sm:space-y-6" autoComplete="off"> {/* Adjusted spacing, disabled autofill */}
+        <Box component="form" onSubmit={handleSubmit(onSubmit)} className="space-y-4" autoComplete="off">
           {/* Hidden password field to trick Chrome autofill */}
           <input type="password" style={{ display: 'none' }} autoComplete="new-password" />
-          {/* Client Information */}
-          <Box className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-            <div className="flex items-center mb-3 sm:mb-4"> {/* Adjusted margin */}
-              <BusinessIcon className="text-blue-500 mr-2" fontSize="medium" /> {/* Adjusted icon size */}
-              <Typography variant="h6" className="font-semibold text-blue-700 text-base sm:text-lg" sx={{ fontSize: '0.95rem' }}>Client Information</Typography> {/* Adjusted font size */}
+
+          {/* Client Information Section */}
+          <Box className="bg-white p-4 border border-gray-200">
+            <div className="flex items-center mb-3">
+              <BusinessIcon className="text-gray-600 mr-2" fontSize="small" />
+              <Typography variant="subtitle1" className="font-semibold text-gray-800" sx={{ fontSize: '0.9rem' }}>Client Information</Typography>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4"> {/* Adjusted gap */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <Controller
                 name="companyName"
                 control={control}
@@ -141,14 +175,13 @@ const ClientInfoModal = ({ isOpen, onClose, onSave, initialData = null }) => {
                     error={!!errors.companyName}
                     helperText={errors.companyName?.message}
                     fullWidth
-                    size="small" // Added size prop
-                    className="bg-gray-50"
+                    size="small"
                     InputProps={{
-                      startAdornment: <InputAdornment position="start"><BusinessIcon className="text-gray-500" fontSize="small" /></InputAdornment>,
+                      startAdornment: <InputAdornment position="start"><BusinessIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
                     }}
-                    InputLabelProps={{ shrink: true, sx: { fontSize: '0.85rem' } }} // Always show label
+                    InputLabelProps={{ shrink: true, sx: { fontSize: '0.8rem' } }}
                     autoComplete="new-password"
-                    sx={{ fontSize: '0.85rem' }}
+                    sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
                   />
                 )}
               />
@@ -162,15 +195,14 @@ const ClientInfoModal = ({ isOpen, onClose, onSave, initialData = null }) => {
                     error={!!errors.website}
                     helperText={errors.website?.message || 'Optional - Include https://'}
                     fullWidth
-                    size="small" // Added size prop
-                    className="bg-gray-50"
+                    size="small"
                     placeholder="https://example.com"
                     InputProps={{
-                      startAdornment: <InputAdornment position="start"><WebsiteIcon className="text-gray-500" fontSize="small" /></InputAdornment>,
+                      startAdornment: <InputAdornment position="start"><WebsiteIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
                     }}
-                    InputLabelProps={{ shrink: true, sx: { fontSize: '0.85rem' } }}
+                    InputLabelProps={{ shrink: true, sx: { fontSize: '0.8rem' } }}
                     autoComplete="new-password"
-                    sx={{ fontSize: '0.85rem' }}
+                    sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
                   />
                 )}
               />
@@ -183,14 +215,13 @@ const ClientInfoModal = ({ isOpen, onClose, onSave, initialData = null }) => {
                     label="Location"
                     helperText="City, State/Country"
                     fullWidth
-                    size="small" // Added size prop
-                    className="bg-gray-50"
+                    size="small"
                     InputProps={{
-                      startAdornment: <InputAdornment position="start"><LocationIcon className="text-gray-500" fontSize="small" /></InputAdornment>,
+                      startAdornment: <InputAdornment position="start"><LocationIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
                     }}
-                    InputLabelProps={{ shrink: true, sx: { fontSize: '0.85rem' } }}
+                    InputLabelProps={{ shrink: true, sx: { fontSize: '0.8rem' } }}
                     autoComplete="new-password"
-                    sx={{ fontSize: '0.85rem' }}
+                    sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
                   />
                 )}
               />
@@ -204,28 +235,27 @@ const ClientInfoModal = ({ isOpen, onClose, onSave, initialData = null }) => {
                     error={!!errors.clientContactNumber}
                     helperText={errors.clientContactNumber?.message}
                     fullWidth
-                    size="small" // Added size prop
-                    className="bg-gray-50"
+                    size="small"
                     placeholder="+1 (555) 123-4567"
                     InputProps={{
-                      startAdornment: <InputAdornment position="start"><PhoneIcon className="text-gray-500" fontSize="small" /></InputAdornment>,
+                      startAdornment: <InputAdornment position="start"><PhoneIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
                     }}
-                    InputLabelProps={{ shrink: true, sx: { fontSize: '0.85rem' } }}
+                    InputLabelProps={{ shrink: true, sx: { fontSize: '0.8rem' } }}
                     autoComplete="new-password"
-                    sx={{ fontSize: '0.85rem' }}
+                    sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
                   />
                 )}
               />
             </div>
           </Box>
 
-          {/* Authorized Person */}
-          <Box className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-            <div className="flex items-center mb-3 sm:mb-4"> {/* Adjusted margin */}
-              <PersonIcon className="text-blue-500 mr-2" fontSize="medium" /> {/* Adjusted icon size */}
-              <Typography variant="h6" className="font-semibold text-blue-700 text-base sm:text-lg" sx={{ fontSize: '0.95rem' }}>Authorized Person</Typography> {/* Adjusted font size */}
+          {/* Authorized Person Section */}
+          <Box className="bg-white p-4 border border-gray-200">
+            <div className="flex items-center mb-3">
+              <PersonIcon className="text-gray-600 mr-2" fontSize="small" />
+              <Typography variant="subtitle1" className="font-semibold text-gray-800" sx={{ fontSize: '0.9rem' }}>Authorized Person</Typography>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4"> {/* Adjusted gap */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <Controller
                 name="authFirstName"
                 control={control}
@@ -237,10 +267,9 @@ const ClientInfoModal = ({ isOpen, onClose, onSave, initialData = null }) => {
                     helperText={errors.authFirstName?.message}
                     fullWidth
                     size="small"
-                    className="bg-gray-50"
-                    InputLabelProps={{ shrink: true, sx: { fontSize: '0.85rem' } }}
+                    InputLabelProps={{ shrink: true, sx: { fontSize: '0.8rem' } }}
                     autoComplete="new-password"
-                    sx={{ fontSize: '0.85rem' }}
+                    sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
                   />
                 )}
               />
@@ -255,10 +284,9 @@ const ClientInfoModal = ({ isOpen, onClose, onSave, initialData = null }) => {
                     helperText={errors.authLastName?.message}
                     fullWidth
                     size="small"
-                    className="bg-gray-50"
-                    InputLabelProps={{ shrink: true, sx: { fontSize: '0.85rem' } }}
+                    InputLabelProps={{ shrink: true, sx: { fontSize: '0.8rem' } }}
                     autoComplete="new-password"
-                    sx={{ fontSize: '0.85rem' }}
+                    sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
                   />
                 )}
               />
@@ -273,14 +301,13 @@ const ClientInfoModal = ({ isOpen, onClose, onSave, initialData = null }) => {
                     helperText={errors.authContactNumber?.message}
                     fullWidth
                     size="small"
-                    className="bg-gray-50"
                     placeholder="+1 (555) 123-4567"
                     InputProps={{
-                      startAdornment: <InputAdornment position="start"><PhoneIcon className="text-gray-500" fontSize="small" /></InputAdornment>,
+                      startAdornment: <InputAdornment position="start"><PhoneIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
                     }}
-                    InputLabelProps={{ shrink: true, sx: { fontSize: '0.85rem' } }}
+                    InputLabelProps={{ shrink: true, sx: { fontSize: '0.8rem' } }}
                     autoComplete="new-password"
-                    sx={{ fontSize: '0.85rem' }}
+                    sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
                   />
                 )}
               />
@@ -294,17 +321,11 @@ const ClientInfoModal = ({ isOpen, onClose, onSave, initialData = null }) => {
                     error={!!errors.authDesignation}
                     helperText={errors.authDesignation?.message}
                     fullWidth
-                    select
                     size="small"
-                    className="bg-gray-50"
-                    InputLabelProps={{ shrink: true, sx: { fontSize: '0.85rem' } }}
+                    InputLabelProps={{ shrink: true, sx: { fontSize: '0.8rem' } }}
                     autoComplete="new-password"
-                    sx={{ fontSize: '0.85rem' }}
-                  >
-                    {designationOptions.map((option) => (
-                      <MenuItem key={option.value} value={option.value} sx={{ fontSize: '0.85rem' }}>{option.label}</MenuItem>
-                    ))}
-                  </TextField>
+                    sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                  />
                 )}
               />
               <Controller
@@ -319,13 +340,12 @@ const ClientInfoModal = ({ isOpen, onClose, onSave, initialData = null }) => {
                     fullWidth
                     type="email"
                     size="small"
-                    className="bg-gray-50"
                     InputProps={{
-                      startAdornment: <InputAdornment position="start"><EmailIcon className="text-gray-500" fontSize="small" /></InputAdornment>,
+                      startAdornment: <InputAdornment position="start"><EmailIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
                     }}
-                    InputLabelProps={{ shrink: true, sx: { fontSize: '0.85rem' } }}
+                    InputLabelProps={{ shrink: true, sx: { fontSize: '0.8rem' } }}
                     autoComplete="new-password"
-                    sx={{ fontSize: '0.85rem' }}
+                    sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
                   />
                 )}
               />
@@ -341,26 +361,25 @@ const ClientInfoModal = ({ isOpen, onClose, onSave, initialData = null }) => {
                     fullWidth
                     type="email"
                     size="small"
-                    className="bg-gray-50"
                     InputProps={{
-                      startAdornment: <InputAdornment position="start"><EmailIcon className="text-gray-500" fontSize="small" /></InputAdornment>,
+                      startAdornment: <InputAdornment position="start"><EmailIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
                     }}
-                    InputLabelProps={{ shrink: true, sx: { fontSize: '0.85rem' } }}
+                    InputLabelProps={{ shrink: true, sx: { fontSize: '0.8rem' } }}
                     autoComplete="new-password"
-                    sx={{ fontSize: '0.85rem' }}
+                    sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
                   />
                 )}
               />
             </div>
           </Box>
 
-          {/* Site Administrator */}
-          <Box className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-            <div className="flex items-center mb-3 sm:mb-4"> {/* Adjusted margin */}
-              <AdminIcon className="text-blue-500 mr-2" fontSize="medium" /> {/* Adjusted icon size */}
-              <Typography variant="h6" className="font-semibold text-blue-700 text-base sm:text-lg" sx={{ fontSize: '0.95rem' }}>Site Administrator</Typography> {/* Adjusted font size */}
+          {/* Site Administrator Section */}
+          <Box className="bg-white p-4 border border-gray-200">
+            <div className="flex items-center mb-3">
+              <AdminIcon className="text-gray-600 mr-2" fontSize="small" />
+              <Typography variant="subtitle1" className="font-semibold text-gray-800" sx={{ fontSize: '0.9rem' }}>Site Administrator</Typography>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4"> {/* Adjusted gap */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <Controller
                 name="siteFirstName"
                 control={control}
@@ -372,10 +391,16 @@ const ClientInfoModal = ({ isOpen, onClose, onSave, initialData = null }) => {
                     helperText={errors.siteFirstName?.message}
                     fullWidth
                     size="small"
-                    className="bg-gray-50"
-                    InputLabelProps={{ shrink: true, sx: { fontSize: '0.85rem' } }}
+                    disabled={sameAsAuth}
+                    InputLabelProps={{ shrink: true, sx: { fontSize: '0.8rem' } }}
                     autoComplete="new-password"
-                    sx={{ fontSize: '0.85rem' }}
+                    sx={{ 
+                      '& .MuiInputBase-input': { fontSize: '0.85rem' },
+                      '& .Mui-disabled': {
+                        backgroundColor: '#f5f5f5',
+                        color: '#666'
+                      }
+                    }}
                   />
                 )}
               />
@@ -390,10 +415,16 @@ const ClientInfoModal = ({ isOpen, onClose, onSave, initialData = null }) => {
                     helperText={errors.siteLastName?.message}
                     fullWidth
                     size="small"
-                    className="bg-gray-50"
-                    InputLabelProps={{ shrink: true, sx: { fontSize: '0.85rem' } }}
+                    disabled={sameAsAuth}
+                    InputLabelProps={{ shrink: true, sx: { fontSize: '0.8rem' } }}
                     autoComplete="new-password"
-                    sx={{ fontSize: '0.85rem' }}
+                    sx={{ 
+                      '& .MuiInputBase-input': { fontSize: '0.85rem' },
+                      '& .Mui-disabled': {
+                        backgroundColor: '#f5f5f5',
+                        color: '#666'
+                      }
+                    }}
                   />
                 )}
               />
@@ -409,13 +440,19 @@ const ClientInfoModal = ({ isOpen, onClose, onSave, initialData = null }) => {
                     fullWidth
                     type="email"
                     size="small"
-                    className="bg-gray-50"
+                    disabled={sameAsAuth}
                     InputProps={{
-                      startAdornment: <InputAdornment position="start"><EmailIcon className="text-gray-500" fontSize="small" /></InputAdornment>,
+                      startAdornment: <InputAdornment position="start"><EmailIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
                     }}
-                    InputLabelProps={{ shrink: true, sx: { fontSize: '0.85rem' } }}
+                    InputLabelProps={{ shrink: true, sx: { fontSize: '0.8rem' } }}
                     autoComplete="new-password"
-                    sx={{ fontSize: '0.85rem' }}
+                    sx={{ 
+                      '& .MuiInputBase-input': { fontSize: '0.85rem' },
+                      '& .Mui-disabled': {
+                        backgroundColor: '#f5f5f5',
+                        color: '#666'
+                      }
+                    }}
                   />
                 )}
               />
@@ -430,14 +467,20 @@ const ClientInfoModal = ({ isOpen, onClose, onSave, initialData = null }) => {
                     helperText={errors.siteContactNumber?.message}
                     fullWidth
                     size="small"
-                    className="bg-gray-50"
+                    disabled={sameAsAuth}
                     placeholder="+1 (555) 123-4567"
                     InputProps={{
-                      startAdornment: <InputAdornment position="start"><PhoneIcon className="text-gray-500" fontSize="small" /></InputAdornment>,
+                      startAdornment: <InputAdornment position="start"><PhoneIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
                     }}
-                    InputLabelProps={{ shrink: true, sx: { fontSize: '0.85rem' } }}
+                    InputLabelProps={{ shrink: true, sx: { fontSize: '0.8rem' } }}
                     autoComplete="new-password"
-                    sx={{ fontSize: '0.85rem' }}
+                    sx={{ 
+                      '& .MuiInputBase-input': { fontSize: '0.85rem' },
+                      '& .Mui-disabled': {
+                        backgroundColor: '#f5f5f5',
+                        color: '#666'
+                      }
+                    }}
                   />
                 )}
               />
@@ -451,32 +494,56 @@ const ClientInfoModal = ({ isOpen, onClose, onSave, initialData = null }) => {
                     error={!!errors.siteDesignation}
                     helperText={errors.siteDesignation?.message}
                     fullWidth
-                    select
                     size="small"
-                    className="bg-gray-50"
-                    InputLabelProps={{ shrink: true, sx: { fontSize: '0.85rem' } }}
+                    disabled={sameAsAuth}
+                    InputLabelProps={{ shrink: true, sx: { fontSize: '0.8rem' } }}
                     autoComplete="new-password"
-                    sx={{ fontSize: '0.85rem' }}
-                  >
-                    {designationOptions.map((option) => (
-                      <MenuItem key={option.value} value={option.value} sx={{ fontSize: '0.85rem' }}>{option.label}</MenuItem>
-                    ))}
-                  </TextField>
+                    sx={{ 
+                      '& .MuiInputBase-input': { fontSize: '0.85rem' },
+                      '& .Mui-disabled': {
+                        backgroundColor: '#f5f5f5',
+                        color: '#666'
+                      }
+                    }}
+                  />
                 )}
               />
             </div>
           </Box>
+
+          {/* Checkbox for Same as Authorized Person */}
+          <Box className="bg-blue-50 p-3 border border-blue-200 rounded">
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={sameAsAuth}
+                  onChange={(e) => setSameAsAuth(e.target.checked)}
+                  name="sameAsAuth"
+                  color="primary"
+                />
+              }
+              label={
+                <Box>
+                  <Typography variant="body2" sx={{ fontWeight: 600, color: '#1976d2' }}>
+                    Same as Authorized Person
+                  </Typography>
+                  <Typography variant="caption" sx={{ color: '#666', display: 'block', mt: 0.5 }}>
+                    Automatically fill site administrator details with authorized person information
+                  </Typography>
+                </Box>
+              }
+            />
+          </Box>
         </Box>
       </DialogContent>
 
-      <DialogActions className="p-4 bg-gray-50 flex justify-end gap-2">
+      <DialogActions className="p-4 flex justify-end gap-3 border-t border-gray-200">
         <Button
           onClick={handleClose}
-          variant="outlined"
-          startIcon={<ClearIcon fontSize="small" />}
+          variant="text"
           disabled={isSubmitting}
-          className="border-gray-300 text-gray-700 hover:bg-gray-100 text-xs px-2 py-1"
-          sx={{ fontSize: '0.75rem', minWidth: 64, height: 28, padding: '2px 10px', fontWeight: 700 }}
+          className="text-gray-600 hover:bg-gray-100"
+          sx={{ fontWeight: 'normal', textTransform: 'none', borderRadius: 0 }}
         >
           Cancel
         </Button>
@@ -484,10 +551,20 @@ const ClientInfoModal = ({ isOpen, onClose, onSave, initialData = null }) => {
           onClick={handleSubmit(onSubmit)}
           variant="outlined"
           color="primary"
-          startIcon={<CheckIcon fontSize="small" />}
+          startIcon={<SaveIcon fontSize="small" />}
           disabled={!isValid || isSubmitting}
-          className="text-xs px-2 py-1"
-          sx={{ fontSize: '0.75rem', minWidth: 64, height: 28, padding: '2px 10px', fontWeight: 600, borderWidth: 2 }}
+          className="hover:bg-blue-50"
+          sx={{
+            fontWeight: 'normal',
+            textTransform: 'none',
+            borderRadius: 0,
+            borderColor: '#283149',
+            color: '#283149',
+            '&:hover': {
+              borderColor: '#283149',
+              bgcolor: '#f1f5f9',
+            },
+          }}
         >
           {isSubmitting ? 'Saving...' : 'Save'}
         </Button>

@@ -29,7 +29,7 @@ const getIconForNotificationType = (type) => {
     }
 };
 
-const NotificationModal = ({ isOpen, onClose, notifications = [], onClearAll, onMarkRead, onViewTicket, isLoading = false, containerRef }) => {
+const NotificationModal = ({ isOpen, onClose, notifications = [], onClearAll, onMarkRead, onViewTicket, isLoading = false, containerRef, className = "" }) => {
     const localRef = useRef(null);
     const modalRef = containerRef || localRef;
 
@@ -73,7 +73,7 @@ const NotificationModal = ({ isOpen, onClose, notifications = [], onClearAll, on
     if (!isOpen) return null;
 
     return (
-        <div ref={modalRef} className="absolute right-2 top-8 z-50 animate-in slide-in-from-top-2 duration-300">
+        <div ref={modalRef} className={`absolute right-2 top-8 z-50 ${className}`}>
             <div 
                 className="w-64 max-h-[70vh] bg-white/95 backdrop-blur-xl rounded border border-gray-200/50 overflow-hidden flex flex-col text-xs"
                 style={{

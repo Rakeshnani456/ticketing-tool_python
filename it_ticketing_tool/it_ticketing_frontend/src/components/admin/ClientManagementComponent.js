@@ -21,17 +21,15 @@ import MoreVertIcon from '@mui/icons-material/MoreVert';
 // Helper to get initials from email or name
 const getInitials = (nameOrEmail) => {
   if (!nameOrEmail) return '';
-  const name = nameOrEmail.split('@')[0];
-  const parts = name.split(/[ ._]/).filter(Boolean);
-  if (parts.length === 1) return parts[0][0].toUpperCase();
-  return (parts[0][0] + parts[1][0]).toUpperCase();
+  const parts = nameOrEmail.split('@')[0].split('.');
+  return parts.map(part => part.charAt(0).toUpperCase()).join('').slice(0, 2);
 };
 
 // Helper to get contract status
-const getContractStatus = (contractEnd) => {
-  if (!contractEnd) return { label: 'Unknown', color: 'default' };
+const getContractStatus = (endDate) => {
+  if (!endDate) return { label: 'No End Date', color: 'default' };
+  const end = new Date(endDate);
   const today = new Date();
-  const end = new Date(contractEnd);
   if (end < today) return { label: 'Expired', color: 'error' };
   const diff = (end - today) / (1000 * 60 * 60 * 24);
   if (diff < 30) return { label: 'Expiring', color: 'warning' };
@@ -82,8 +80,9 @@ const GROUPS = [
   }
 ];
 
-const ClientManagementComponent = () => {
+const ClientManagementComponent = ({ user }) => {
   const [clients, setClients] = useState([]);
+  const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
@@ -99,10 +98,26 @@ const ClientManagementComponent = () => {
 
   const db = getFirestore(app);
 
+  // Calculate user counts per client
+  const userCounts = useMemo(() => {
+    const counts = {};
+    users.forEach(user => {
+      const clientName = user.client_name || user.companyName;
+      if (clientName) {
+        counts[clientName] = (counts[clientName] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [users]);
+
   useEffect(() => {
     setLoading(true);
     setError(null);
+    
     let unsubClients = null;
+    let unsubUsers = null;
+    
+    // Set up Firestore snapshot listeners for both clients and users
     unsubClients = onSnapshot(collection(db, 'clients'), (snapshot) => {
       setClients(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
       setLoading(false);
@@ -111,10 +126,21 @@ const ClientManagementComponent = () => {
       setClients([]);
       setLoading(false);
     });
+
+    // Set up Firestore snapshot listener for users
+    unsubUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
+      const fetchedUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setUsers(fetchedUsers);
+    }, (err) => {
+      console.error('Error fetching users:', err);
+      // Don't set error here as it's not critical for client management
+    });
+    
     return () => {
       if (unsubClients) unsubClients();
+      if (unsubUsers) unsubUsers();
     };
-  }, []);
+  }, [user]);
 
   // Handler for edit
   const handleEditClient = (client) => {
@@ -139,6 +165,34 @@ const ClientManagementComponent = () => {
       setSnackbar({ open: true, message: err.message, severity: 'error' });
     } finally {
       setRemoving(false);
+    }
+  };
+
+  const handleSaveClient = async (data) => {
+    try {
+      if (editClient) {
+        // Update existing client
+        const res = await fetch(`${API_BASE_URL}/api/clients/${editClient.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        });
+        if (!res.ok) throw new Error('Failed to update client');
+        setSnackbar({ open: true, message: 'Client updated successfully.', severity: 'success' });
+      } else {
+        // Create new client
+        const res = await fetch(`${API_BASE_URL}/api/clients`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        });
+        if (!res.ok) throw new Error('Failed to create client');
+        setSnackbar({ open: true, message: 'Client created successfully.', severity: 'success' });
+      }
+      setShowClientModal(false);
+      setEditClient(null);
+    } catch (err) {
+      setSnackbar({ open: true, message: err.message, severity: 'error' });
     }
   };
 
@@ -190,74 +244,61 @@ const ClientManagementComponent = () => {
           {clients.length === 0 ? (
             <Typography variant="body2" sx={{ color: 'text.secondary', mt: 2 }}>No clients found.</Typography>
           ) : (
-            clients.map(client => (
+            clients.map((client, index) => (
               <ClientCard
                 key={client.id}
                 client={client}
+                index={index + 1}
                 onEdit={actionMode === 'edit' ? handleEditClient : undefined}
                 onRemove={actionMode === 'delete' ? handleRemoveClient : undefined}
-                showEdit={actionMode === 'edit'}
-                showRemove={actionMode === 'delete'}
+                showEdit={actionMode === 'edit' && ['admin', 'site_admin', 'super_admin'].includes(user?.role)}
+                showRemove={actionMode === 'delete' && ['admin', 'site_admin', 'super_admin'].includes(user?.role)}
+                userCount={userCounts[client.companyName] || 0}
               />
             ))
           )}
         </Box>
       )}
-      <Snackbar open={snackbar.open} autoHideDuration={3000} onClose={() => setSnackbar({ ...snackbar, open: false })}>
-        <Alert onClose={() => setSnackbar({ ...snackbar, open: false })} severity={snackbar.severity} sx={{ width: '100%' }}>
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
+
       {/* Client Info Modal */}
       <ClientInfoModal
         isOpen={showClientModal}
-        onClose={() => { setShowClientModal(false); setEditClient(null); }}
-        initialData={editClient}
-        onSave={async (data) => {
-          const payload = {
-            companyName: data.companyName,
-            website: data.website,
-            location: data.location,
-            clientContactNumber: data.clientContactNumber,
-            authFirstName: data.authFirstName,
-            authLastName: data.authLastName,
-            authContactNumber: data.authContactNumber,
-            authOfficeEmail: data.authOfficeEmail,
-            authPersonalEmail: data.authPersonalEmail,
-            authDesignation: data.authDesignation,
-            siteFirstName: data.siteFirstName,
-            siteLastName: data.siteLastName,
-            siteEmail: data.siteEmail,
-            siteContactNumber: data.siteContactNumber,
-            siteDesignation: data.siteDesignation,
-          };
-          try {
-            const method = editClient ? 'PUT' : 'POST';
-            const url = editClient ? `${API_BASE_URL}/api/clients/${editClient.id}` : `${API_BASE_URL}/api/clients`;
-            const res = await fetch(url, {
-              method,
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(payload),
-            });
-            if (!res.ok) throw new Error(editClient ? 'Failed to update client' : 'Failed to add client');
-            setSnackbar({ open: true, message: editClient ? 'Client updated successfully.' : 'Client info saved successfully.', severity: 'success' });
-            setShowClientModal(false);
-            setEditClient(null);
-          } catch (err) {
-            setSnackbar({ open: true, message: err.message, severity: 'error' });
-          }
+        onClose={() => {
+          setShowClientModal(false);
+          setEditClient(null);
         }}
+        onSave={handleSaveClient}
+        initialData={editClient}
       />
+
+      {/* Remove Confirmation Dialog */}
       <Dialog open={!!removeClient} onClose={() => setRemoveClient(null)}>
         <DialogTitle>Remove Client</DialogTitle>
         <DialogContent>
-          <Typography>Are you sure you want to remove <b>{removeClient?.companyName}</b>?</Typography>
+          <Typography>
+            Are you sure you want to remove "{removeClient?.companyName}"? This action cannot be undone.
+          </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setRemoveClient(null)} disabled={removing}>Cancel</Button>
-          <Button onClick={confirmRemoveClient} color="error" disabled={removing}>{removing ? 'Removing...' : 'Remove'}</Button>
+          <Button onClick={() => setRemoveClient(null)} disabled={removing}>
+            Cancel
+          </Button>
+          <Button onClick={confirmRemoveClient} color="error" disabled={removing}>
+            {removing ? 'Removing...' : 'Remove'}
+          </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Snackbar */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+      >
+        <Alert onClose={() => setSnackbar({ ...snackbar, open: false })} severity={snackbar.severity}>
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </div>
   );
 };

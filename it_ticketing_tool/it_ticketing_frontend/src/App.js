@@ -21,6 +21,15 @@ import {
     Pin,
     BarChart2,
     ChevronUp,
+    Home,
+    FileText,
+    Settings,
+    HelpCircle,
+    TrendingUp,
+    Briefcase,
+    UserCheck,
+    Building,
+    Zap,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AiOutlineEye } from 'react-icons/ai'; // Or choose another icon library like 'fa' for Font Awesome
@@ -41,6 +50,8 @@ import SecurityIcon from '@mui/icons-material/Security';
 import Menu from '@mui/material/Menu'; // Import Material-UI Menu
 import MenuItem from '@mui/material/MenuItem'; // Import Material-UI MenuItem
 import NotificationModal from './components/common/NotificationModal';
+import { BellRing } from './components/common/BellRing';
+import { createPortal } from 'react-dom';
 
 
 // Import Firebase auth client and dbClient
@@ -53,6 +64,7 @@ import { API_BASE_URL } from './config/constants';
 
 // Import local logo image
 import KriasolLogo from './assets/logo/logo.png';
+import FabLogo from './assets/logo/FabLogo.png';
 
 // SVG imports (ensure these paths are correct and icons exist)
 import { ReactComponent as UsersIconSvg } from './assets/icons/UsersIcon.svg';
@@ -118,6 +130,56 @@ const InsightsComponent = () => (
     </div>
 );
 
+function TooltipBubble({ title, children }) {
+  const [show, setShow] = useState(false);
+  const [coords, setCoords] = useState({ top: 0, left: 0 });
+  const iconRef = useRef(null);
+
+  useEffect(() => {
+    if (show && iconRef.current) {
+      const rect = iconRef.current.getBoundingClientRect();
+      setCoords({
+        top: rect.top - 2, // nudge up by 2px (moved down from -4)
+        left: rect.right + 8, // 8px gap from icon
+      });
+    }
+  }, [show]);
+
+  return (
+    <div
+      style={{ position: 'relative', display: 'inline-block' }}
+      onMouseEnter={() => setShow(true)}
+      onMouseLeave={() => setShow(false)}
+      ref={iconRef}
+    >
+      {children}
+      {show && createPortal(
+        <div
+          className="scale-up-center-normal"
+          style={{
+            position: 'fixed',
+            left: coords.left,
+            top: coords.top,
+            background: '#000000', // black background
+            color: '#ffffff', // white text
+            borderRadius: 8,
+            padding: '3px 8px', // reduced padding
+            fontSize: 11, // smaller font
+            fontWeight: 500,
+            whiteSpace: 'nowrap',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+            zIndex: 9999,
+            pointerEvents: 'none',
+          }}
+        >
+          {title}
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+}
+
 /**
  * Main application component.
  * Manages user authentication state, global navigation, flash messages, and renders
@@ -154,7 +216,7 @@ const App = () => {
     const sidebarMenuRef = useRef(null);
 
     // Add pin state
-    const [isSidebarPinned, setIsSidebarPinned] = useState(true);
+    const [isSidebarPinned, setIsSidebarPinned] = useState(false);
 
     // React Router hooks
     const navigate = useNavigate(); // For programmatic navigation
@@ -207,11 +269,10 @@ const App = () => {
     };
 
     // Define variants for Framer Motion animation for the sidebar
-    // w-56 is 224px, w-16 is 64px
-    // Set the expanded sidebar width to 150px for a more compact look
+    // Set the expanded sidebar width to 200px for a slimmer look
     const sidebarVariants = {
-        expanded: { width: 150, transition: { type: "spring", stiffness: 300, damping: 30, duration: 0.35, ease: "easeInOut" } },
-        collapsed: { width: 52, transition: { type: "spring", stiffness: 300, damping: 30, duration: 0.35, ease: "easeInOut" } }
+        expanded: { width: 200, transition: { type: "spring", stiffness: 300, damping: 30, duration: 0.35, ease: "easeInOut" } },
+        collapsed: { width: 56, transition: { type: "spring", stiffness: 300, damping: 30, duration: 0.35, ease: "easeInOut" } }
     };
 
     // Define variants for Framer Motion animation for the sidebar text
@@ -219,28 +280,28 @@ const App = () => {
         expanded: {
             opacity: 1,
             width: "auto",
-            x: 0, // Text ends at its natural position (0 translation)
+            x: 0,
             transition: {
-                delay: 0.18, // Delay text until width is mostly expanded
-                duration: 0.22,
-                ease: "easeOut" // Use an easing function for smoother motion
+                delay: 0.15,
+                duration: 0.25,
+                ease: "easeOut"
             }
         },
         collapsed: {
             opacity: 0,
             width: 0,
-            x: -20, // Text moves 20px to the left and fades out
+            x: -20,
             transition: {
-                duration: 0.18,
-                ease: "easeIn" // Use an easing function for smoother motion
+                duration: 0.2,
+                ease: "easeIn"
             }
         }
     };
 
     // Define variants for Framer Motion animation for the main content's left margin
     const mainContentVariants = {
-        expanded: { marginLeft: 150, transition: { type: "spring", stiffness: 300, damping: 30 } },
-        collapsed: { marginLeft: 52, transition: { type: "spring", stiffness: 300, damping: 30 } }
+        expanded: { marginLeft: 200, transition: { type: "spring", stiffness: 300, damping: 30 } },
+        collapsed: { marginLeft: 56, transition: { type: "spring", stiffness: 300, damping: 30 } }
     };
 
     // Helper for relative time
@@ -488,6 +549,38 @@ const App = () => {
     //         document.removeEventListener('mousedown', handleClickOutside);
     //     };
     // }, [isNotificationMenuOpen]);
+
+    // Real-time notification polling for live bell animation
+    useEffect(() => {
+        if (!currentUser || !currentUser.firebaseUser) {
+            return;
+        }
+
+        // Initial fetch
+        fetchNotifications(currentUser);
+
+        // Set up polling interval (every 10 seconds)
+        const intervalId = setInterval(() => {
+            fetchNotifications(currentUser);
+        }, 10000);
+
+        // Cleanup interval on unmount or when user changes
+        return () => {
+            clearInterval(intervalId);
+        };
+    }, [currentUser, fetchNotifications]);
+
+    // Animate bell when a new unread notification arrives
+    const prevUnreadCountRef = useRef(0);
+    useEffect(() => {
+        const unreadCount = notifications.filter(n => !n.read).length;
+        if (unreadCount > prevUnreadCountRef.current) {
+            setHasNewNotifications(true);
+            const timeout = setTimeout(() => setHasNewNotifications(false), 1000);
+            return () => clearTimeout(timeout);
+        }
+        prevUnreadCountRef.current = unreadCount;
+    }, [notifications]);
 
 
     /**
@@ -766,131 +859,129 @@ const App = () => {
                 </div>
             )}
             {/* Top Banner Header - make it fixed and full width */}
-            <header className="fixed top-0 left-0 w-full bg-white text-grey flex items-center justify-between shadow-md flex-shrink-0 z-50" style={{height: '48px', minHeight: '48px', padding: '0 12px'}}>
+            <header
+                className="fixed top-0 bg-white text-grey flex items-center justify-between shadow-sm border-b border-gray-200/60 flex-shrink-0 z-50 transition-all duration-300 ease-in-out"
+                style={{
+                    height: '48px',
+                    minHeight: '48px',
+                    padding: '0 16px',
+                    left: currentUser && location.pathname !== '/login' ? (isSidebarExpanded ? 200 : 56) : 0,
+                    width: currentUser && location.pathname !== '/login' ? `calc(100% - ${(isSidebarExpanded ? 200 : 56)}px)` : '100%'
+                }}
+            >
                 {/* Update the logo container to remove extra left margin/padding and align with sidebar menu items */}
-                <div className="flex-shrink-0 flex items-center" style={{ marginLeft: 0, paddingLeft: 8 }}>
-                    <Link to={currentUser ? '/my-tickets' : '/login'}>
-                        <img src={KriasolLogo} alt="Kriasol Logo" className="h-20 w-auto cursor-pointer" />
+                {currentUser && (['admin', 'site_admin', 'super_admin'].includes(currentUser.role)) && (
+                    <Link to="/dashboard" className={`flex items-center px-3 py-1.5 rounded-xl text-sm font-medium transition-all duration-200 hover:bg-blue-50 hover:text-blue-700 ${location.pathname === '/dashboard' ? 'bg-blue-100 text-blue-700 border border-blue-200 shadow-sm' : 'text-gray-700'}`}> 
+                        Dashboard
                     </Link>
-                    {currentUser && (['admin', 'site_admin', 'super_admin'].includes(currentUser.role)) && (
-                        <Link to="/dashboard" className={`ml-2 flex items-center px-2 py-1 rounded-lg text-sm font-medium transition-colors duration-200 hover:bg-blue-100 ${location.pathname === '/dashboard' ? 'bg-blue-100 text-blue-700 font-semibold' : 'text-gray-700'}`}> 
-                            Dashboard
-                        </Link>
-                    )}
-                    {/* Management Dropdown (right of Dashboard) - Now using Material-UI Menu */}
-                    {currentUser && (['super_admin', 'admin'].includes(currentUser.role)) && (
-                        <div className="relative ml-2">
-                            <button
-                                onClick={handleClick} // Use handleClick to open the MUI Menu
-                                className="flex items-center px-2 py-1 rounded-lg text-sm font-medium transition-colors duration-200 hover:bg-blue-100 text-gray-700 cursor-pointer"
-                                aria-controls={managementOpen ? 'management-menu' : undefined} // ARIA attributes
-                                aria-haspopup="true"
-                                aria-expanded={managementOpen ? 'true' : undefined}
-                            >
-                                Manage
-                                {managementOpen ? (
-                                    <ChevronUp className="ml-1 w-4 h-4" />
-                                ) : (
-                                    <ChevronDown className="ml-1 w-4 h-4" />
-                                )}
-                            </button>
-                            <Menu
-                                id="management-menu"
-                                anchorEl={anchorEl}
-                                open={managementOpen}
-                                onClose={handleClose}
-                                MenuListProps={{
-                                    'aria-labelledby': 'manage-button',
-                                }}
-                                anchorOrigin={{
-                                    vertical: 'bottom',
-                                    horizontal: 'center', // Center horizontally with respect to button
-                                }}
-                                transformOrigin={{
-                                    vertical: 'top',
-                                    horizontal: 'center', // Center horizontally with respect to button
-                                }}
-                                disablePortal
-                                PaperProps={{
-                                    elevation: 8, // Adds shadow
-                                    sx: {
-                                        borderRadius: '8px', // Rounded corners
-                                        minWidth: 120,
-                                        width: 'auto',
-                                        fontSize: '0.75rem',
-                                        padding: 0,
-                                        overflow: 'hidden', // Ensures rounded corners are applied to content
-                                        marginTop: 0.5, // Slightly offset menu so it doesn't cover the button
-                                    },
-                                }}
-                            >
-                                {currentUser.role === 'super_admin' && (
-                                    <>
-                                        <MenuItem onClick={() => handleMenuItemClick('/admin-management')} sx={{ fontSize: '0.75rem', minHeight: 22 }}>
-                                            <Users width={16} height={16} className="mr-2" /> Admins
-                                        </MenuItem>
-                                        <MenuItem onClick={() => handleMenuItemClick('/engineer-management')} sx={{ fontSize: '0.75rem', minHeight: 22 }}>
-                                            <PeopleIcon fontSize="small" sx={{ fontSize: 16, marginRight: '8px' }} /> Engineers
-                                        </MenuItem>
-                                        <MenuItem onClick={() => handleMenuItemClick('/user-management')} sx={{ fontSize: '0.75rem', minHeight: 22 }}>
-                                            <User width={16} height={16} className="mr-2" /> Users
-                                        </MenuItem>
-                                        <MenuItem onClick={() => handleMenuItemClick('/siteadmin-management')} sx={{ fontSize: '0.75rem', minHeight: 22 }}>
-                                            <Shield width={16} height={16} className="mr-2" /> Site Admins
-                                        </MenuItem>
-                                    </>
-                                )}
-                                {currentUser.role === 'admin' && (
-                                    <>
-                                        <MenuItem onClick={() => handleMenuItemClick('/engineer-management')} sx={{ fontSize: '0.75rem', minHeight: 22 }}>
-                                            <PeopleIcon fontSize="small" sx={{ fontSize: 16, marginRight: '8px' }} /> Engineers
-                                        </MenuItem>
-                                        <MenuItem onClick={() => handleMenuItemClick('/client-management')} sx={{ fontSize: '0.75rem', minHeight: 22 }}>
-                                            <Users width={16} height={16} className="mr-2" /> Clients
-                                        </MenuItem>
-                                        <MenuItem onClick={() => handleMenuItemClick('/user-management')} sx={{ fontSize: '0.75rem', minHeight: 22 }}>
-                                            <User width={16} height={16} className="mr-2" /> Users
-                                        </MenuItem>
-                                        <MenuItem onClick={() => handleMenuItemClick('/siteadmin-management')} sx={{ fontSize: '0.75rem', minHeight: 22 }}>
-                                            <Shield width={16} height={16} className="mr-2" /> Site Admins
-                                        </MenuItem>
-                                    </>
-                                )}
-                            </Menu>
-                        </div>
-                    )}
-                </div>
+                )}
+                {/* Management Dropdown (right of Dashboard) - Now using Material-UI Menu */}
+                {currentUser && (['super_admin', 'admin'].includes(currentUser.role)) && (
+                    <div className="relative ml-2">
+                        <button
+                            onClick={handleClick} // Use handleClick to open the MUI Menu
+                            className="flex items-center px-3 py-1.5 rounded-xl text-sm font-medium transition-all duration-200 hover:bg-blue-50 hover:text-blue-700 text-gray-700 cursor-pointer"
+                            aria-controls={managementOpen ? 'management-menu' : undefined} // ARIA attributes
+                            aria-haspopup="true"
+                            aria-expanded={managementOpen ? 'true' : undefined}
+                        >
+                            Manage
+                            {managementOpen ? (
+                                <ChevronUp className="ml-1 w-4 h-4" />
+                            ) : (
+                                <ChevronDown className="ml-1 w-4 h-4" />
+                            )}
+                        </button>
+                        <Menu
+                            id="management-menu"
+                            anchorEl={anchorEl}
+                            open={managementOpen}
+                            onClose={handleClose}
+                            MenuListProps={{
+                                'aria-labelledby': 'manage-button',
+                            }}
+                            anchorOrigin={{
+                                vertical: 'bottom',
+                                horizontal: 'center', // Center horizontally with respect to button
+                            }}
+                            transformOrigin={{
+                                vertical: 'top',
+                                horizontal: 'center', // Center horizontally with respect to button
+                            }}
+                            disablePortal
+                            PaperProps={{
+                                elevation: 8, // Adds shadow
+                                sx: {
+                                    borderRadius: '12px', // Rounded corners to match sidebar
+                                    minWidth: 120,
+                                    width: 'auto',
+                                    fontSize: '0.75rem',
+                                    padding: 0,
+                                    overflow: 'hidden', // Ensures rounded corners are applied to content
+                                    marginTop: 0.5, // Slightly offset menu so it doesn't cover the button
+                                },
+                            }}
+                        >
+                            {currentUser.role === 'super_admin' && (
+                                <>
+                                    <MenuItem onClick={() => handleMenuItemClick('/admin-management')} sx={{ fontSize: '0.75rem', minHeight: 22 }}>
+                                        <Users width={16} height={16} className="mr-2" /> Admins
+                                    </MenuItem>
+                                    <MenuItem onClick={() => handleMenuItemClick('/engineer-management')} sx={{ fontSize: '0.75rem', minHeight: 22 }}>
+                                        <PeopleIcon fontSize="small" sx={{ fontSize: 16, marginRight: '8px' }} /> Engineers
+                                    </MenuItem>
+                                    <MenuItem onClick={() => handleMenuItemClick('/user-management')} sx={{ fontSize: '0.75rem', minHeight: 22 }}>
+                                        <User width={16} height={16} className="mr-2" /> Users
+                                    </MenuItem>
+                                </>
+                            )}
+                            {currentUser.role === 'admin' && (
+                                <>
+                                    <MenuItem onClick={() => handleMenuItemClick('/engineer-management')} sx={{ fontSize: '0.75rem', minHeight: 22 }}>
+                                        <PeopleIcon fontSize="small" sx={{ fontSize: 16, marginRight: '8px' }} /> Engineers
+                                    </MenuItem>
+                                    <MenuItem onClick={() => handleMenuItemClick('/client-management')} sx={{ fontSize: '0.75rem', minHeight: 22 }}>
+                                        <Users width={16} height={16} className="mr-2" /> Clients
+                                    </MenuItem>
+                                    <MenuItem onClick={() => handleMenuItemClick('/user-management')} sx={{ fontSize: '0.75rem', minHeight: 22 }}>
+                                        <User width={16} height={16} className="mr-2" /> Users
+                                    </MenuItem>
+                                </>
+                            )}
+                        </Menu>
+                    </div>
+                )}
                 <div className="flex-1" />
                 {/* Move search bar, notification bell, and profile dropdown to the far right */}
                 {currentUser && location.pathname !== '/login' && location.pathname !== '/register' && (
-                    <div className="flex items-center gap-2">
-                        <form onSubmit={handleSearchSubmit} className="flex items-center" style={{ marginLeft: 48, minWidth: 220 }}>
-                            <input
-                                type="text"
-                                value={searchKeyword}
-                                onChange={handleSearchChange}
-                                placeholder="Search..."
-                                className="px-2 text-sm border border-gray-300 rounded-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                style={{ width: 220, height: 32, paddingTop: 0, paddingBottom: 0 }}
-                            />
-                            <button type="submit" className="ml-1 px-2 py-1 border border-gray-300 bg-white rounded-none hover:bg-gray-100 transition-colors flex items-center" style={{ height: 32 }} aria-label="Search">
-                                <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-                                  <circle cx="11" cy="11" r="7" />
-                                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                                </svg>
-                            </button>
+                    <div className="flex items-center gap-3">
+                        <form onSubmit={handleSearchSubmit} className="flex items-center">
+                            <div className="relative">
+                                <input
+                                    type="text"
+                                    value={searchKeyword}
+                                    onChange={handleSearchChange}
+                                    placeholder="Search..."
+                                    className="pl-9 pr-3 py-1.5 text-sm border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                                    style={{ width: 220, minHeight: 36 }}
+                                />
+                                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                            </div>
                         </form>
                         {/* Notification Bell */}
                         <div className="relative inline-block">
-                            <button
-                                className="relative flex items-center p-1 rounded-full hover:bg-gray-100 focus:outline-none text-sm"
+                            <button 
+                                className="p-2 rounded-xl hover:bg-blue-50 transition-all duration-200"
                                 onClick={() => setIsNotificationMenuOpen(open => !open)}
-                                aria-label="Notifications"
                             >
-                                <Bell size={18} className="text-gray-700" />
-                                {hasNewNotifications && (
-                                    <span className="absolute top-0 right-0 block h-2 w-2 rounded-full ring-2 ring-white bg-red-500"></span>
-                                )}
+                                <BellRing
+                                    width={20}
+                                    height={20}
+                                    stroke="#fbbf24"
+                                    strokeWidth={2}
+                                    unreadCount={notifications.filter(n => !n.read).length}
+                                    animateBell={hasNewNotifications}
+                                />
                             </button>
                             <NotificationModal
                                 isOpen={isNotificationMenuOpen}
@@ -904,29 +995,10 @@ const App = () => {
                                 onMarkRead={markNotificationAsRead}
                                 onViewTicket={viewTicket}
                                 containerRef={notificationMenuRef}
+                                className={isNotificationMenuOpen ? "scale-up-tr-normal" : ""}
                             />
                         </div>
-                        {/* Profile Dropdown */}
-                        <div className="relative" ref={profileMenuRef}>
-                            <button
-                                className="flex items-center px-2 py-1 rounded-lg text-sm font-medium transition-colors duration-200 hover:bg-blue-100 text-gray-700"
-                                onClick={() => setIsProfileMenuOpen(open => !open)}
-                                aria-label="Profile"
-                            >
-                                <User className="w-5 h-5" />
-                                <ChevronDown className="ml-1 w-3.5 h-3.5" />
-                            </button>
-                            {isProfileMenuOpen && (
-                                <ul className="absolute right-0 mt-2 w-56 bg-white border border-gray-200 rounded-lg shadow-lg z-50 text-sm">
-                                    <li>
-                                        <Link to="/profile" className="flex items-center px-4 py-2 hover:bg-gray-100">Profile</Link>
-                                    </li>
-                                    <li>
-                                        <button onClick={handleLogout} className="flex items-center px-4 py-2 w-full text-left hover:bg-gray-100">Logout</button>
-                                    </li>
-                                </ul>
-                            )}
-                        </div>
+                        {/* Profile Dropdown removed */}
                     </div>
                 )}
             </header>
@@ -938,252 +1010,328 @@ const App = () => {
                     initial={false}
                     animate={isSidebarExpanded ? "expanded" : "collapsed"}
                     variants={sidebarVariants}
-                    className="sidebar-glass fixed left-0 text-blue-900 flex flex-col p-3 flex-shrink-0 overflow-y-auto h-[calc(100vh-48px)] z-50"
-                    style={{ top: '48px', borderTop: 'none', overflow: 'hidden' }}
-                    onMouseEnter={() => { if (!isSidebarPinned) setIsSidebarExpanded(true); }}
-                    onMouseLeave={() => { if (!isSidebarPinned) setIsSidebarExpanded(false); }}
+                    className="sidebar-glass fixed left-0 text-gray-700 flex flex-col flex-shrink-0 overflow-y-auto h-screen z-50 bg-white/95 backdrop-blur-sm border-r border-gray-200/60"
+                    style={{ top: 0, height: '100vh', overflow: 'hidden' }}
                 >
-                    {/* Pin icon at bottom right when expanded */}
-                    {isSidebarExpanded && (
-                        <button
-                            className="absolute bottom-4 right-2 p-1 rounded hover:bg-gray-200 transition-colors z-50"
-                            title={isSidebarPinned ? 'Unpin sidebar' : 'Pin sidebar'}
-                            onClick={() => {
-                                setIsSidebarPinned(pin => {
-                                    const newPin = !pin;
-                                    setIsSidebarExpanded(newPin);
-                                    return newPin;
-                                });
-                            }}
-                        >
-                            <Pin size={16} className={isSidebarPinned ? 'text-blue-600' : 'text-gray-400'} fill={isSidebarPinned ? 'currentColor' : 'none'} />
-                        </button>
-                    )}
-                    {/* Top Menu Items */}
-                    <ul className="space-y-2">
-                        {(currentUser.role === 'super_admin') ? (
-                            <>
-                                {/* Activity Group */}
-                                {isSidebarExpanded && (
-                                    <motion.div
-                                        variants={textVariants}
-                                        animate={isSidebarExpanded ? "expanded" : "collapsed"}
-                                        className="sidebar-section-header"
-                                        style={{ color: '#f05118' }}
-                                    >
-                                        Activity
-                                    </motion.div>
-                                )}
-                                <li>
-                                    <Link to="/all-tickets" className={`menu-item relative flex items-center w-full px-2 py-1 rounded-lg text-left transition-colors duration-300 text-xs ${location.pathname === '/all-tickets' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
-                                        <MenuIconSvg width={18} height={18} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-1.5' : ''}`} fill="currentColor" />
-                                        <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden">Tickets</motion.span>
-                                    </Link>
-                                </li>
-                                <li>
-                                    <Link to="/my-tickets" className={`menu-item flex items-center w-full px-2 py-1 rounded-lg text-left transition-colors duration-300 text-xs ${location.pathname === '/my-tickets' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
-                                        <AssignedToMeIcon height={18} width={18} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-1.5' : ''}`} />
-                                        <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden">My Tickets</motion.span>
-                                    </Link>
-                                </li>
-                                {/* My org Group */}
-                                {isSidebarExpanded && (
-                                    <motion.div
-                                        variants={textVariants}
-                                        animate={isSidebarExpanded ? "expanded" : "collapsed"}
-                                        className="sidebar-section-header"
-                                        style={{ color: '#f05118' }}
-                                    >
-                                        Organisation
-                                    </motion.div>
-                                )}
-                                <li>
-                                    <Link to="/clients" className={`menu-item flex items-center w-full px-2 py-1 rounded-lg text-left transition-colors duration-300 text-xs ${location.pathname === '/clients' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
-                                        <Users width={15} height={15} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-1.5' : ''}`} />
-                                        <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden">Clients</motion.span>
-                                    </Link>
-                                </li>
-                                <li>
-                                    <Link to="/site-admin-access" className={`menu-item flex items-center w-full px-2 py-1 rounded-lg text-left transition-colors duration-300 text-xs ${location.pathname === '/site-admin-access' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
-                                        <Shield width={15} height={15} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-1.5' : ''}`} />
-                                        <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden">Site Admin</motion.span>
-                                    </Link>
-                                </li>
-                                {/* Planning Group */}
-                                {isSidebarExpanded && (
-                                    <motion.div
-                                        variants={textVariants}
-                                        animate={isSidebarExpanded ? "expanded" : "collapsed"}
-                                        className="sidebar-section-header"
-                                        style={{ color: '#f05118' }}
-                                    >
-                                        Planning
-                                    </motion.div>
-                                )}
-                                <li>
-                                    <Link to="/insights" className={`menu-item flex items-center w-full px-2 py-1 rounded-lg text-left transition-colors duration-300 text-xs ${location.pathname === '/insights' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
-                                        <BarChart2 width={15} height={15} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-1.5' : ''}`} />
-                                        <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden">Insights</motion.span>
-                                    </Link>
-                                </li>
-                                <li>
-                                    <Link to="/reports" className={`menu-item flex items-center w-full px-2 py-1 rounded-lg text-left transition-colors duration-300 text-xs ${location.pathname === '/reports' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
-                                        <Info width={15} height={15} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-1.5' : ''}`} />
-                                        <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden">Reports</motion.span>
-                                    </Link>
-                                </li>
-                            </>
-                        ) : currentUser.role === 'admin' ? (
-                            <>
-                                {/* Admin Sidebar Menu - Only show tickets, reports, insights */}
-                                <li>
-                                    <Link to="/all-tickets" className={`menu-item flex items-center w-full px-2 py-1 rounded-lg text-left transition-colors duration-300 text-xs ${location.pathname === '/all-tickets' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
-                                        <MenuIconSvg width={18} height={18} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-1.5' : ''}`} fill="currentColor" />
-                                        <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden">Tickets</motion.span>
-                                    </Link>
-                                </li>
-                                <li>
-                                    <Link to="/reports" className={`menu-item flex items-center w-full px-2 py-1 rounded-lg text-left transition-colors duration-300 text-xs ${location.pathname === '/reports' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
-                                        <Info width={15} height={15} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-1.5' : ''}`} />
-                                        <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden">Reports</motion.span>
-                                    </Link>
-                                </li>
-                                <li>
-                                    <Link to="/insights" className={`menu-item flex items-center w-full px-2 py-1 rounded-lg text-left transition-colors duration-300 text-xs ${location.pathname === '/insights' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
-                                        <BarChart2 width={15} height={15} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-1.5' : ''}`} />
-                                        <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden">Insights</motion.span>
-                                    </Link>
-                                </li>
-                            </>
-                        ) : currentUser.role === 'site_admin' ? (
-                            <>
-                                <li>
-                                    <Link to="/all-tickets" className={`menu-item flex items-center w-full px-2 py-1 rounded-lg text-left transition-colors duration-300 text-xs ${location.pathname === '/all-tickets' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
-                                        <MenuIconSvg width={18} height={18} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-1.5' : ''}`} fill="currentColor" />
-                                        <motion.span
-                                                variants={textVariants}
-                                                animate={isSidebarExpanded ? "expanded" : "collapsed"}
-                                                className="whitespace-nowrap overflow-hidden"
-                                            >
-                                                All Tickets
-                                            </motion.span>
-                                    </Link>
-                                </li>
-                                <li>
-                                    <Link to="/my-tickets" className={`menu-item flex items-center w-full px-2 py-1 rounded-lg text-left transition-colors duration-300 text-xs ${location.pathname === '/my-tickets' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
-                                        <AssignedToMeIcon height={18} width={18} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-1.5' : ''}`} />
-                                        <motion.span
-                                                variants={textVariants}
-                                                animate={isSidebarExpanded ? "expanded" : "collapsed"}
-                                                className="whitespace-nowrap overflow-hidden"
-                                            >
-                                                My Tickets
-                                            </motion.span>
-                                    </Link>
-                                </li>
-                                <li>
-                                    <Link to="/user-management" className={`menu-item flex items-center w-full px-2 py-1 rounded-lg text-left transition-colors duration-300 text-xs ${location.pathname === '/user-management' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
-                                        <User width={16} height={16} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-1.5' : ''}`} />
-                                        <motion.span
-                                                variants={textVariants}
-                                                animate={isSidebarExpanded ? "expanded" : "collapsed"}
-                                                className="whitespace-nowrap overflow-hidden"
-                                            >
-                                                Users
-                                            </motion.span>
-                                    </Link>
-                                </li>
-                            </>
-                        ) : (
-                            <>
-                            {/* Only show Dashboard in sidebar for support and other non-admin roles */}
-                            {(['support', 'admin', 'site_admin'].includes(currentUser.role)) && (
+                    {/* Logo at the top of the sidebar */}
+                    <div className={`flex ${isSidebarExpanded ? 'justify-start px-3 py-2 border-b border-gray-200' : 'justify-center pt-2 pb-1'}`}>
+                        <Link to={currentUser ? '/my-tickets' : '/login'} className="flex items-center">
+                            <img 
+                                src={isSidebarExpanded ? KriasolLogo : FabLogo} 
+                                alt="Logo" 
+                                className={`transition-all duration-300 ease-in-out ${
+                                    isSidebarExpanded 
+                                        ? 'h-8 w-auto max-w-full' 
+                                        : 'h-8 w-8'
+                                }`}
+                                style={{
+                                    objectFit: 'contain',
+                                    maxHeight: isSidebarExpanded ? '32px' : '32px'
+                                }}
+                            />
+                        </Link>
+                    </div>
+
+                    {/* Navigation Menu */}
+                    <div className="flex-1 px-3 py-1 flex flex-col">
+                        {/* Main Navigation */}
+                        <div className="space-y-1 flex-1">
+                            {(currentUser.role === 'super_admin') ? (
                                 <>
+                                    {/* Activity Group */}
+                                    {isSidebarExpanded && (
+                                        <motion.div
+                                            variants={textVariants}
+                                            animate={isSidebarExpanded ? "expanded" : "collapsed"}
+                                            className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider"
+                                        >
+                                            Activity
+                                        </motion.div>
+                                    )}
                                     
-                                    <li>
-                                        <Link to="/dashboard" className={`menu-item relative flex items-center w-full px-2 py-1 rounded-lg text-left transition-colors duration-300 text-xs ${location.pathname === '/dashboard' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
-                                            <LayoutDashboardIcon width={18} height={18} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-1.5' : ''}`} fill="currentColor" />
-                                            <motion.span
-                                                variants={textVariants}
-                                                animate={isSidebarExpanded ? "expanded" : "collapsed"}
-                                                className="whitespace-nowrap overflow-hidden"
-                                            >
-                                                Dashboard
-                                            </motion.span>
-                                        </Link>
-                                    </li>
-                                    <li>
-                                        <Link to="/all-tickets" className={`menu-item flex items-center w-full px-2 py-1 rounded-lg text-left transition-colors duration-300 text-xs ${location.pathname === '/all-tickets' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
-                                            <MenuIconSvg width={18} height={18} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-1.5' : ''}`} fill="currentColor" />
-                                            <motion.span
-                                                variants={textVariants}
-                                                animate={isSidebarExpanded ? "expanded" : "collapsed"}
-                                                className="whitespace-nowrap overflow-hidden"
-                                            >
-                                                All Tickets
-                                            </motion.span>
-                                        </Link>
-                                    </li>
+                                    <Link to="/all-tickets" className={`group flex items-center px-2 sm:px-3 py-1 rounded-xl text-xs sm:text-sm font-medium transition-all duration-200 hover:bg-blue-50 hover:text-blue-700 ${location.pathname === '/all-tickets' ? 'bg-blue-100 text-blue-700 border border-blue-200 shadow-sm' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                        { !isSidebarExpanded ? (
+                                            <TooltipBubble title="All Tickets">
+                                                <div className="flex items-center justify-center w-5 h-5">
+                                                    <FileText size={18} className="flex-shrink-0" />
+                                                </div>
+                                            </TooltipBubble>
+                                        ) : (
+                                            <div className="flex items-center justify-center w-5 h-5 mr-3">
+                                                <FileText size={18} className="flex-shrink-0" />
+                                            </div>
+                                        )}
+                                        <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">All Tickets</motion.span>
+                                    </Link>
+                                    
+                                    <Link to="/my-tickets" className={`group flex items-center px-3 py-1 rounded-xl text-sm font-medium transition-all duration-200 hover:bg-blue-50 hover:text-blue-700 ${location.pathname === '/my-tickets' ? 'bg-blue-100 text-blue-700 border border-blue-200 shadow-sm' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                        { !isSidebarExpanded ? (
+                                            <TooltipBubble title="My Tickets">
+                                                <div className="flex items-center justify-center w-5 h-5">
+                                                    <UserCheck size={18} className="flex-shrink-0" />
+                                                </div>
+                                            </TooltipBubble>
+                                        ) : (
+                                            <div className="flex items-center justify-center w-5 h-5 mr-3">
+                                                <UserCheck size={18} className="flex-shrink-0" />
+                                            </div>
+                                        )}
+                                        <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">My Tickets</motion.span>
+                                    </Link>
+
+                                    {/* Organisation Group */}
+                                    {isSidebarExpanded && (
+                                        <motion.div
+                                            variants={textVariants}
+                                            animate={isSidebarExpanded ? "expanded" : "collapsed"}
+                                            className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider mt-6"
+                                        >
+                                            Organisation
+                                        </motion.div>
+                                    )}
+                                    
+                                    <Link to="/clients" className={`group flex items-center px-3 py-1 rounded-xl text-sm font-medium transition-all duration-200 hover:bg-blue-50 hover:text-blue-700 ${location.pathname === '/clients' ? 'bg-blue-100 text-blue-700 border border-blue-200 shadow-sm' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                        { !isSidebarExpanded ? (
+                                            <TooltipBubble title="Clients">
+                                                <div className="flex items-center justify-center w-5 h-5">
+                                                    <Building size={18} className="flex-shrink-0" />
+                                                </div>
+                                            </TooltipBubble>
+                                        ) : (
+                                            <div className="flex items-center justify-center w-5 h-5 mr-3">
+                                                <Building size={18} className="flex-shrink-0" />
+                                            </div>
+                                        )}
+                                        <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">Clients</motion.span>
+                                    </Link>
+
+                                    {/* Planning Group */}
+                                    {isSidebarExpanded && (
+                                        <motion.div
+                                            variants={textVariants}
+                                            animate={isSidebarExpanded ? "expanded" : "collapsed"}
+                                            className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider mt-6"
+                                        >
+                                            Planning
+                                        </motion.div>
+                                    )}
+                                    
+                                    <Link to="/insights" className={`group flex items-center px-3 py-1 rounded-xl text-sm font-medium transition-all duration-200 hover:bg-blue-50 hover:text-blue-700 ${location.pathname === '/insights' ? 'bg-blue-100 text-blue-700 border border-blue-200 shadow-sm' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                        { !isSidebarExpanded ? (
+                                            <TooltipBubble title="Insights">
+                                                <div className="flex items-center justify-center w-5 h-5">
+                                                    <TrendingUp size={18} className="flex-shrink-0" />
+                                                </div>
+                                            </TooltipBubble>
+                                        ) : (
+                                            <div className="flex items-center justify-center w-5 h-5 mr-3">
+                                                <TrendingUp size={18} className="flex-shrink-0" />
+                                            </div>
+                                        )}
+                                        <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">Insights</motion.span>
+                                    </Link>
+                                    
+                                    <Link to="/reports" className={`group flex items-center px-3 py-1 rounded-xl text-sm font-medium transition-all duration-200 hover:bg-blue-50 hover:text-blue-700 ${location.pathname === '/reports' ? 'bg-blue-100 text-blue-700 border border-blue-200 shadow-sm' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                        { !isSidebarExpanded ? (
+                                            <TooltipBubble title="Reports">
+                                                <div className="flex items-center justify-center w-5 h-5">
+                                                    <BarChart2 size={18} className="flex-shrink-0" />
+                                                </div>
+                                            </TooltipBubble>
+                                        ) : (
+                                            <div className="flex items-center justify-center w-5 h-5 mr-3">
+                                                <BarChart2 size={18} className="flex-shrink-0" />
+                                            </div>
+                                        )}
+                                        <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">Reports</motion.span>
+                                    </Link>
+                                </>
+                            ) : currentUser.role === 'admin' ? (
+                                <>
+                                    <Link to="/all-tickets" className={`group flex items-center px-3 py-1 rounded-xl text-sm font-medium transition-all duration-200 hover:bg-blue-50 hover:text-blue-700 ${location.pathname === '/all-tickets' ? 'bg-blue-100 text-blue-700 border border-blue-200 shadow-sm' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                        { !isSidebarExpanded ? (
+                                            <TooltipBubble title="All Tickets">
+                                                <div className="flex items-center justify-center w-5 h-5">
+                                                    <FileText size={18} className="flex-shrink-0" />
+                                                </div>
+                                            </TooltipBubble>
+                                        ) : (
+                                            <div className="flex items-center justify-center w-5 h-5 mr-3">
+                                                <FileText size={18} className="flex-shrink-0" />
+                                            </div>
+                                        )}
+                                        <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">All Tickets</motion.span>
+                                    </Link>
+                                    
+                                    <Link to="/reports" className={`group flex items-center px-3 py-1 rounded-xl text-sm font-medium transition-all duration-200 hover:bg-blue-50 hover:text-blue-700 ${location.pathname === '/reports' ? 'bg-blue-100 text-blue-700 border border-blue-200 shadow-sm' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                        <div className={`flex items-center justify-center w-5 h-5 ${isSidebarExpanded ? 'mr-3' : 'mr-0'}`}>
+                                            <BarChart2 size={18} className="flex-shrink-0" />
+                                        </div>
+                                        <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">Reports</motion.span>
+                                    </Link>
+                                    
+                                    <Link to="/insights" className={`group flex items-center px-3 py-1 rounded-xl text-sm font-medium transition-all duration-200 hover:bg-blue-50 hover:text-blue-700 ${location.pathname === '/insights' ? 'bg-blue-100 text-blue-700 border border-blue-200 shadow-sm' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                        <div className={`flex items-center justify-center w-5 h-5 ${isSidebarExpanded ? 'mr-3' : 'mr-0'}`}>
+                                            <TrendingUp size={18} className="flex-shrink-0" />
+                                        </div>
+                                        <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">Insights</motion.span>
+                                    </Link>
+                                </>
+                            ) : currentUser.role === 'site_admin' ? (
+                                <>
+                                    <Link to="/all-tickets" className={`group flex items-center px-3 py-1 rounded-xl text-sm font-medium transition-all duration-200 hover:bg-blue-50 hover:text-blue-700 ${location.pathname === '/all-tickets' ? 'bg-blue-100 text-blue-700 border border-blue-200 shadow-sm' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                        { !isSidebarExpanded ? (
+                                            <TooltipBubble title="All Tickets">
+                                                <div className="flex items-center justify-center w-5 h-5">
+                                                    <FileText size={18} className="flex-shrink-0" />
+                                                </div>
+                                            </TooltipBubble>
+                                        ) : (
+                                            <div className="flex items-center justify-center w-5 h-5 mr-3">
+                                                <FileText size={18} className="flex-shrink-0" />
+                                            </div>
+                                        )}
+                                        <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">All Tickets</motion.span>
+                                    </Link>
+                                    
+                                    <Link to="/my-tickets" className={`group flex items-center px-3 py-1 rounded-xl text-sm font-medium transition-all duration-200 hover:bg-blue-50 hover:text-blue-700 ${location.pathname === '/my-tickets' ? 'bg-blue-100 text-blue-700 border border-blue-200 shadow-sm' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                        <div className={`flex items-center justify-center w-5 h-5 ${isSidebarExpanded ? 'mr-3' : 'mr-0'}`}>
+                                            <UserCheck size={18} className="flex-shrink-0" />
+                                        </div>
+                                        <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">My Tickets</motion.span>
+                                    </Link>
+                                    
+                                    <Link to="/user-management" className={`group flex items-center px-3 py-1 rounded-xl text-sm font-medium transition-all duration-200 hover:bg-blue-50 hover:text-blue-700 ${location.pathname === '/user-management' ? 'bg-blue-100 text-blue-700 border border-blue-200 shadow-sm' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                        <div className={`flex items-center justify-center w-5 h-5 ${isSidebarExpanded ? 'mr-3' : 'mr-0'}`}>
+                                            <Users size={18} className="flex-shrink-0" />
+                                        </div>
+                                        <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">Users</motion.span>
+                                    </Link>
+                                </>
+                            ) : (
+                                <>
+                                    {/* Only show Dashboard in sidebar for support and other non-admin roles */}
+                                    {(['support', 'admin', 'site_admin'].includes(currentUser.role)) && (
+                                        <>
+                                            <Link to="/dashboard" className={`group flex items-center px-3 py-1 rounded-xl text-sm font-medium transition-all duration-200 hover:bg-blue-50 hover:text-blue-700 ${location.pathname === '/dashboard' ? 'bg-blue-100 text-blue-700 border border-blue-200 shadow-sm' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                                <div className={`flex items-center justify-center w-5 h-5 ${isSidebarExpanded ? 'mr-3' : 'mr-0'}`}>
+                                                    <Home size={18} className="flex-shrink-0" />
+                                                </div>
+                                                <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">Dashboard</motion.span>
+                                            </Link>
+                                            
+                                            <Link to="/all-tickets" className={`group flex items-center px-3 py-1 rounded-xl text-sm font-medium transition-all duration-200 hover:bg-blue-50 hover:text-blue-700 ${location.pathname === '/all-tickets' ? 'bg-blue-100 text-blue-700 border border-blue-200 shadow-sm' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                                <div className={`flex items-center justify-center w-5 h-5 ${isSidebarExpanded ? 'mr-3' : 'mr-0'}`}>
+                                                    <FileText size={18} className="flex-shrink-0" />
+                                                </div>
+                                                <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">All Tickets</motion.span>
+                                            </Link>
+                                        </>
+                                    )}
+                                    
+                                    <Link to="/my-tickets" className={`group flex items-center px-3 py-1 rounded-xl text-sm font-medium transition-all duration-200 hover:bg-blue-50 hover:text-blue-700 ${location.pathname === '/my-tickets' ? 'bg-blue-100 text-blue-700 border border-blue-200 shadow-sm' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                        <div className={`flex items-center justify-center w-5 h-5 ${isSidebarExpanded ? 'mr-3' : 'mr-0'}`}>
+                                            <UserCheck size={18} className="flex-shrink-0" />
+                                        </div>
+                                        <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">My Tickets</motion.span>
+                                    </Link>
+                                    
+                                    <Link to="/create-ticket" className={`group flex items-center px-3 py-1 rounded-xl text-sm font-medium transition-all duration-200 hover:bg-green-50 hover:text-green-700 ${location.pathname === '/create-ticket' ? 'bg-green-50 text-green-700 shadow-sm' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                        <div className={`flex items-center justify-center w-5 h-5 ${isSidebarExpanded ? 'mr-3' : 'mr-0'}`}>
+                                            <Zap size={18} className="flex-shrink-0" />
+                                        </div>
+                                        <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">Create Ticket</motion.span>
+                                    </Link>
                                 </>
                             )}
-                        <li>
-                            <Link to="/my-tickets" className={`menu-item flex items-center w-full px-2 py-1 rounded-lg text-left transition-colors duration-300 text-xs ${location.pathname === '/my-tickets' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
-                                <AssignedToMeIcon height={18} width={18} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-1.5' : ''}`} />
-                                <motion.span
-                                    variants={textVariants}
-                                    animate={isSidebarExpanded ? "expanded" : "collapsed"}
-                                    className="whitespace-nowrap overflow-hidden"
-                                >
-                                    My Tickets
-                                </motion.span>
-                            </Link>
-                        </li>
-                        <li>
-                            <Link to="/create-ticket" className={`menu-item flex items-center w-full px-2 py-1 rounded-lg text-left transition-colors duration-300 text-xs ${location.pathname === '/create-ticket' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
-                                <CreateTicketIcon height={18} width={18} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-1.5' : ''}`} />
-                                <motion.span
-                                    variants={textVariants}
-                                    animate={isSidebarExpanded ? "expanded" : "collapsed"}
-                                    className="whitespace-nowrap overflow-hidden"
-                                >
-                                    Create Ticket
-                                </motion.span>
-                            </Link>
-                        </li>
-                        {/* Remove 'Assigned to Me' from sidebar for admin */}
-                        {['admin', 'site_admin'].includes(currentUser.role) && false && (
-                            <li>
-                                <Link to="/user-management" className={`menu-item flex items-center w-full px-2 py-1 rounded-lg text-left transition-colors duration-300 text-xs ${location.pathname === '/user-management' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
-                                    <UsersIconSvg width={15} height={15} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-1.5' : ''}`} fill="currentColor" />
-                                    <motion.span
-                                        variants={textVariants}
-                                        animate={isSidebarExpanded ? "expanded" : "collapsed"}
-                                        className="whitespace-nowrap overflow-hidden"
-                                    >
-                                        User Management
-                                    </motion.span>
+                        </div>
+
+                        {/* Bottom Menu Items */}
+                        <div className={`${isSidebarExpanded ? 'pt-4 border-t border-gray-100' : 'absolute bottom-16 left-0 right-0'}`}>
+                            <div className="space-y-0.5">
+                                <Link to="/knowledge-base" className={`group flex items-center px-3 py-1 rounded-xl text-sm font-medium transition-all duration-200 hover:bg-blue-50 hover:text-blue-700 ${location.pathname === '/knowledge-base' ? 'bg-blue-100 text-blue-700 border border-blue-200 shadow-sm' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                    { !isSidebarExpanded ? (
+                                        <TooltipBubble title="Help & Info">
+                                            <div className="flex items-center justify-center w-5 h-5">
+                                                <HelpCircle size={18} className="flex-shrink-0" />
+                                            </div>
+                                        </TooltipBubble>
+                                    ) : (
+                                        <div className="flex items-center justify-center w-5 h-5 mr-3">
+                                            <HelpCircle size={18} className="flex-shrink-0" />
+                                        </div>
+                                    )}
+                                    <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">Help & Info</motion.span>
                                 </Link>
-                            </li>
+                                
+                                <Link to="/settings" className={`group flex items-center px-3 py-1 rounded-xl text-sm font-medium transition-all duration-200 hover:bg-blue-50 hover:text-blue-700 ${location.pathname === '/settings' ? 'bg-blue-100 text-blue-700 border border-blue-200 shadow-sm' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                    { !isSidebarExpanded ? (
+                                        <TooltipBubble title="Settings">
+                                            <div className="flex items-center justify-center w-5 h-5">
+                                                <Settings size={18} className="flex-shrink-0" />
+                                            </div>
+                                        </TooltipBubble>
+                                    ) : (
+                                        <div className="flex items-center justify-center w-5 h-5 mr-3">
+                                            <Settings size={18} className="flex-shrink-0" />
+                                        </div>
+                                    )}
+                                    <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">Settings</motion.span>
+                                </Link>
+
+                                {/* Expand/Collapse Arrow - Only show when collapsed */}
+                                {!isSidebarExpanded && (
+                                    <div className="flex w-full justify-center">
+                                        <TooltipBubble title="Expand view">
+                                            <button
+                                                onClick={() => setIsSidebarExpanded(true)}
+                                                className="group flex items-center justify-center px-3 py-1 rounded-xl text-sm font-medium transition-all duration-200 hover:bg-blue-50 hover:text-blue-700 text-gray-700"
+                                            >
+                                                <ChevronRight size={18} className="flex-shrink-0" />
+                                            </button>
+                                        </TooltipBubble>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* User Profile Section - Moved to bottom */}
+                        {isSidebarExpanded ? (
+                            <div className="pt-4 border-t border-gray-100">
+                                <div className="flex items-center space-x-2 px-3">
+                                    <Link to="/profile" className="w-6 h-6 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold text-xs flex-shrink-0 hover:bg-gradient-to-br hover:from-blue-600 hover:to-purple-700 transition-all duration-200 cursor-pointer">
+                                        {currentUser.email?.charAt(0).toUpperCase()}
+                                    </Link>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-xs font-medium text-gray-900 truncate">
+                                            {currentUser.email}
+                                        </p>
+                                        <p className="text-xs text-gray-500 capitalize truncate" style={{ fontSize: '0.65rem' }}>
+                                            {currentUser.role?.replace('_', ' ')}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="absolute bottom-2 left-0 right-0 flex justify-center">
+                                <TooltipBubble title="Profile">
+                                    <Link to="/profile" className="w-6 h-6 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold text-xs hover:bg-gradient-to-br hover:from-blue-600 hover:to-purple-700 transition-all duration-200 cursor-pointer">
+                                        {currentUser.email?.charAt(0).toUpperCase()}
+                                    </Link>
+                                </TooltipBubble>
+                            </div>
                         )}
-                            </>
+
+                        {/* Expand/Collapse Arrow - Only show when expanded, positioned at bottom right */}
+                        {isSidebarExpanded && (
+                            <button
+                                onClick={() => setIsSidebarExpanded(false)}
+                                className="absolute bottom-4 right-3 p-2 rounded-full hover:bg-gray-100 transition-all duration-200 z-50 group"
+                                title="Collapse sidebar"
+                            >
+                                <ChevronRight size={16} className="text-gray-400 group-hover:text-gray-600 rotate-180" />
+                            </button>
                         )}
-                    </ul>
-                    {/* Bottom Menu Items */}
-                    <div className="mt-auto pt-4 border-t border-gray-200">
-                        <ul className="space-y-2">
-                            <li>
-                                <Link to="/knowledge-base" className={`menu-item flex items-center w-full px-2 py-1 rounded-lg text-left transition-colors duration-300 text-xs ${location.pathname === '/knowledge-base' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
-                                    <Book size={18} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-1.5' : ''}`} />
-                                    <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden">Information</motion.span>
-                                </Link>
-                            </li>
-                            <li>
-                                <Link to="/settings" className={`menu-item flex items-center w-full px-2 py-1 rounded-lg text-left transition-colors duration-300 text-xs ${location.pathname === '/settings' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
-                                    <SettingsIconSvg width={15} height={15} className={`flex-shrink-0 ${isSidebarExpanded ? 'mr-1.5' : ''}`} fill="currentColor" />
-                                    <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden">Settings</motion.span>
-                                </Link>
-                            </li>
-                        </ul>
                     </div>
                 </motion.nav>
             )}
@@ -1194,8 +1342,8 @@ const App = () => {
                 initial={false}
                 animate={currentUser ? (isSidebarExpanded ? "expanded" : "collapsed") : { marginLeft: 0 }}
                 variants={mainContentVariants}
+                style={currentUser && location.pathname !== '/login' ? { marginLeft: isSidebarExpanded ? 200 : 56, marginTop: 48 } : { marginLeft: 0, marginTop: 0 }}
             >
-                <div style={{height: '48px'}} /> {/* Spacer for fixed header */}
             {/* Main Content Canvas Area */}
             <section className={`flex-1 bg-white flex flex-col min-w-0`}>
                 <Routes> {/* Define your routes here */}
@@ -1262,12 +1410,12 @@ const App = () => {
                                     <AccessDeniedComponent />
                             } />
                             {/* Admin-only routes */}
-                            <Route path="/client-management" element={['admin', 'site_admin', 'super_admin'].includes(currentUser.role) ? <ClientManagementComponent /> : <AccessDeniedComponent />} />
+                            <Route path="/client-management" element={['admin', 'site_admin', 'super_admin'].includes(currentUser.role) ? <ClientManagementComponent user={currentUser} /> : <AccessDeniedComponent />} />
                             <Route path="/siteadmin-management" element={['admin', 'site_admin', 'super_admin'].includes(currentUser.role) ? <SiteAdminManagementComponent /> : <AccessDeniedComponent />} />
                             <Route path="/engineer-management" element={(['admin', 'site_admin', 'super_admin'].includes(currentUser.role)) ? <EngineerManagementComponent user={currentUser} showFlashMessage={showFlashMessage} /> : <AccessDeniedComponent />} />
                             <Route path="/reports" element={['admin', 'site_admin', 'super_admin'].includes(currentUser.role) ? <ReportsComponent /> : <AccessDeniedComponent />} />
                             <Route path="/insights" element={['admin', 'site_admin', 'super_admin'].includes(currentUser.role) ? <InsightsComponent /> : <AccessDeniedComponent />} />
-                            <Route path="/clients" element={currentUser.role === 'super_admin' ? <ClientManagementComponent /> : <AccessDeniedComponent />} />
+                            <Route path="/clients" element={currentUser.role === 'super_admin' ? <ClientManagementComponent user={currentUser} /> : <AccessDeniedComponent />} />
 
                             {/* Catch-all for logged-in users if no other route matches */}
                             {/* This ensures that if they go to an invalid path, they are redirected to their default view */}
@@ -1285,7 +1433,7 @@ const App = () => {
             </section>
 
             {/* Footer */}
-            <footer className={`text-white-500 text-center p-2 w-full shadow-inner text-xs flex-shrink-0`}>
+            <footer className="bg-white text-gray-500 text-center p-2 w-full text-xs flex-shrink-0">
                 <p>&copy; {new Date().getFullYear()} Kriasol. All rights reserved.</p>
             </footer>
         </motion.div>

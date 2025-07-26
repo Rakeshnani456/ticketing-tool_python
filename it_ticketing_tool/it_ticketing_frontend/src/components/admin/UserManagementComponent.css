@@ -1,5 +1,15 @@
+/* Global Arial font for user management */
+.user-management-container {
+  font-family: Arial, sans-serif !important;
+}
+
+.user-management-container * {
+  font-family: Arial, sans-serif !important;
+}
+
 .compact-ui {
   font-size: 70% !important;
+  font-family: Arial, sans-serif !important;
 }
 
 .compact-ui .MuiInputBase-root,
@@ -12,21 +22,151 @@
 .compact-ui .MuiTableCell-root,
 .compact-ui .MuiTableRow-root {
   font-size: 0.7rem !important;
-  min-height: 22px !important;
-  height: 22px !important;
-  padding-top: 2px !important;
-  padding-bottom: 2px !important;
+  font-family: Arial, sans-serif !important;
+  min-height: 18px !important;
+  height: 18px !important;
+  padding-top: 1px !important;
+  padding-bottom: 1px !important;
   padding-left: 6px !important;
   padding-right: 6px !important;
+}
+
+/* Color grading for different field types */
+.compact-ui .MuiTextField-root {
+  background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+  border-radius: 4px;
+  transition: all 0.3s ease;
+}
+
+.compact-ui .MuiTextField-root:hover {
+  background: linear-gradient(135deg, #e9ecef 0%, #f8f9fa 100%);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.compact-ui .MuiTextField-root:focus-within {
+  background: linear-gradient(135deg, #e3f2fd 0%, #f3f4f6 100%);
+  box-shadow: 0 4px 8px rgba(25, 118, 210, 0.15);
+}
+
+/* Different color schemes for different field types */
+.compact-ui .MuiTextField-root[data-field-type="email"] {
+  background: linear-gradient(135deg, #fff3e0 0%, #ffffff 100%);
+}
+
+.compact-ui .MuiTextField-root[data-field-type="email"]:hover {
+  background: linear-gradient(135deg, #ffe0b2 0%, #fff3e0 100%);
+}
+
+.compact-ui .MuiTextField-root[data-field-type="email"]:focus-within {
+  background: linear-gradient(135deg, #ffcc02 0%, #fff3e0 100%);
+}
+
+.compact-ui .MuiTextField-root[data-field-type="password"] {
+  background: linear-gradient(135deg, #f3e5f5 0%, #ffffff 100%);
+}
+
+.compact-ui .MuiTextField-root[data-field-type="password"]:hover {
+  background: linear-gradient(135deg, #e1bee7 0%, #f3e5f5 100%);
+}
+
+.compact-ui .MuiTextField-root[data-field-type="password"]:focus-within {
+  background: linear-gradient(135deg, #ce93d8 0%, #f3e5f5 100%);
+}
+
+.compact-ui .MuiTextField-root[data-field-type="contact"] {
+  background: linear-gradient(135deg, #e8f5e8 0%, #ffffff 100%);
+}
+
+.compact-ui .MuiTextField-root[data-field-type="contact"]:hover {
+  background: linear-gradient(135deg, #c8e6c9 0%, #e8f5e8 100%);
+}
+
+.compact-ui .MuiTextField-root[data-field-type="contact"]:focus-within {
+  background: linear-gradient(135deg, #a5d6a7 0%, #e8f5e8 100%);
+}
+
+.compact-ui .MuiTextField-root[data-field-type="name"] {
+  background: linear-gradient(135deg, #e3f2fd 0%, #ffffff 100%);
+}
+
+.compact-ui .MuiTextField-root[data-field-type="name"]:hover {
+  background: linear-gradient(135deg, #bbdefb 0%, #e3f2fd 100%);
+}
+
+.compact-ui .MuiTextField-root[data-field-type="name"]:focus-within {
+  background: linear-gradient(135deg, #90caf9 0%, #e3f2fd 100%);
+}
+
+.compact-ui .MuiTextField-root[data-field-type="company"] {
+  background: linear-gradient(135deg, #fff8e1 0%, #ffffff 100%);
+}
+
+.compact-ui .MuiTextField-root[data-field-type="company"]:hover {
+  background: linear-gradient(135deg, #ffecb3 0%, #fff8e1 100%);
+}
+
+.compact-ui .MuiTextField-root[data-field-type="company"]:focus-within {
+  background: linear-gradient(135deg, #ffe082 0%, #fff8e1 100%);
+}
+
+/* Table cell color grading */
+.compact-ui .MuiTableCell-root {
+  background: linear-gradient(135deg, #fafafa 0%, #ffffff 100%);
+  border-bottom: 1px solid #e0e0e0;
+  transition: background 0.3s ease;
+}
+
+.compact-ui .MuiTableCell-root:hover {
+  background: linear-gradient(135deg, #f5f5f5 0%, #fafafa 100%);
+}
+
+.compact-ui .MuiTableHead-root .MuiTableCell-root {
+  background: linear-gradient(135deg, #e3f2fd 0%, #f3f4f6 100%);
+  font-weight: 600;
+  color: #1976d2;
+}
+
+.compact-ui .MuiTableHead-root .MuiTableCell-root:hover {
+  background: linear-gradient(135deg, #bbdefb 0%, #e3f2fd 100%);
+}
+
+/* Row alternating colors for better readability */
+.compact-ui .MuiTableRow-root:nth-child(even) .MuiTableCell-root {
+  background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+}
+
+.compact-ui .MuiTableRow-root:nth-child(odd) .MuiTableCell-root {
+  background: linear-gradient(135deg, #ffffff 0%, #fafafa 100%);
+}
+
+.compact-ui .MuiTableRow-root:hover .MuiTableCell-root {
+  background: linear-gradient(135deg, #e3f2fd 0%, #f5f5f5 100%);
 }
 
 .compact-ui .MuiButton-root,
 .compact-ui button {
   font-size: 0.7rem !important;
+  font-family: Arial, sans-serif !important;
   min-height: 22px !important;
   height: 22px !important;
   padding: 2px 8px !important;
   border-radius: 4px !important;
+  background: linear-gradient(135deg, #1976d2 0%, #1565c0 100%);
+  color: white;
+  transition: all 0.3s ease;
+}
+
+.compact-ui .MuiButton-root:hover,
+.compact-ui button:hover {
+  background: linear-gradient(135deg, #1565c0 0%, #0d47a1 100%);
+  box-shadow: 0 2px 4px rgba(25, 118, 210, 0.3);
+  transform: translateY(-1px);
+}
+
+.compact-ui .MuiButton-root:active,
+.compact-ui button:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 2px rgba(25, 118, 210, 0.3);
 }
 
 .compact-ui .MuiSvgIcon-root,
@@ -42,45 +182,76 @@
   min-height: 22px !important;
   height: 22px !important;
   font-size: 0.7rem !important;
+  font-family: Arial, sans-serif !important;
+  background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+}
+
+.compact-ui .react-select__control:hover {
+  background: linear-gradient(135deg, #e9ecef 0%, #f8f9fa 100%);
+}
+
+.compact-ui .react-select__control--is-focused {
+  background: linear-gradient(135deg, #e3f2fd 0%, #f3f4f6 100%);
+  box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.2);
 }
 
 .compact-ui .react-select__single-value,
 .compact-ui .react-select__input,
 .compact-ui .react-select__placeholder {
   font-size: 0.7rem !important;
+  font-family: Arial, sans-serif !important;
 }
 
 .compact-ui .MuiTableCell-root,
 .compact-ui .MuiTableHead-root,
 .compact-ui .MuiTableBody-root {
   font-size: 0.7rem !important;
-  padding: 4px 6px !important;
+  font-family: Arial, sans-serif !important;
+  padding: 2px 6px !important;
 }
 
 .compact-ui .MuiIconButton-root {
   padding: 2px !important;
   font-size: 1rem !important;
+  background: linear-gradient(135deg, #f5f5f5 0%, #ffffff 100%);
+  border-radius: 4px;
+  transition: all 0.3s ease;
+}
+
+.compact-ui .MuiIconButton-root:hover {
+  background: linear-gradient(135deg, #e3f2fd 0%, #f5f5f5 100%);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transform: scale(1.05);
 }
 
 .user-mgmt-title.compact-ui {
   font-size: 1.1rem !important;
+  font-family: Arial, sans-serif !important;
+  font-weight: 600;
   margin-bottom: 0 !important;
   padding-bottom: 0 !important;
+  background: linear-gradient(135deg, #1976d2 0%, #1565c0 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .MuiTableContainer-root,
 .MuiPaper-root {
   margin-top: 0 !important;
   padding-top: 0 !important;
+  font-family: Arial, sans-serif !important;
 }
 
 .compact-ui-placeholder::placeholder {
   font-size: 0.65rem !important;
+  font-family: Arial, sans-serif !important;
   opacity: 0.7;
 }
 
 .email-suffix-adornment {
   font-size: 0.65rem !important;
+  font-family: Arial, sans-serif !important;
   color: #888 !important;
   line-height: 1.2 !important;
   height: 28px !important;
@@ -93,11 +264,94 @@
 /* Compact style for MUI Autocomplete dropdown in User Management */
 .MuiAutocomplete-listbox {
   font-size: 0.65rem !important;
+  font-family: Arial, sans-serif !important;
   max-height: 150px !important;
+  background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
 }
+
 .MuiAutocomplete-option {
   font-size: 0.65rem !important;
+  font-family: Arial, sans-serif !important;
   min-height: auto !important;
   padding: 4px 8px !important;
+  transition: background 0.3s ease;
+}
+
+.MuiAutocomplete-option:hover {
+  background: linear-gradient(135deg, #e3f2fd 0%, #f5f5f5 100%);
+}
+
+.MuiAutocomplete-option[aria-selected="true"] {
+  background: linear-gradient(135deg, #bbdefb 0%, #e3f2fd 100%);
+}
+
+/* Enhanced search field styling */
+.compact-ui .MuiTextField-root[data-field-type="search"] {
+  background: linear-gradient(135deg, #fff3e0 0%, #ffffff 100%);
+  border-radius: 8px;
+}
+
+.compact-ui .MuiTextField-root[data-field-type="search"]:hover {
+  background: linear-gradient(135deg, #ffe0b2 0%, #fff3e0 100%);
+}
+
+.compact-ui .MuiTextField-root[data-field-type="search"]:focus-within {
+  background: linear-gradient(135deg, #ffcc02 0%, #fff3e0 100%);
+  box-shadow: 0 4px 12px rgba(255, 193, 7, 0.2);
+}
+
+/* Dialog and modal styling */
+.MuiDialog-root .MuiDialogTitle-root {
+  font-family: Arial, sans-serif !important;
+  background: linear-gradient(135deg, #e3f2fd 0%, #f3f4f6 100%);
+  color: #1976d2;
+  font-weight: 600;
+}
+
+.MuiDialog-root .MuiDialogContent-root {
+  font-family: Arial, sans-serif !important;
+  background: linear-gradient(135deg, #fafafa 0%, #ffffff 100%);
+}
+
+/* Card styling for mobile view */
+.MuiCard-root {
+  font-family: Arial, sans-serif !important;
+  background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+  border: 1px solid #e0e0e0;
+  transition: all 0.3s ease;
+}
+
+.MuiCard-root:hover {
+  background: linear-gradient(135deg, #f5f5f5 0%, #ffffff 100%);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+}
+
+.MuiCardContent-root {
+  font-family: Arial, sans-serif !important;
+}
+
+/* Typography enhancements */
+.MuiTypography-root {
+  font-family: Arial, sans-serif !important;
+}
+
+/* Alert styling */
+.MuiAlert-root {
+  font-family: Arial, sans-serif !important;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #e8f5e8 0%, #f1f8e9 100%);
+}
+
+.MuiAlert-root.MuiAlert-error {
+  background: linear-gradient(135deg, #ffebee 0%, #fce4ec 100%);
+}
+
+.MuiAlert-root.MuiAlert-warning {
+  background: linear-gradient(135deg, #fff3e0 0%, #fef7e0 100%);
+}
+
+.MuiAlert-root.MuiAlert-info {
+  background: linear-gradient(135deg, #e3f2fd 0%, #f3f4f6 100%);
 } 
 

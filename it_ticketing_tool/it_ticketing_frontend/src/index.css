@@ -137,6 +137,29 @@ textarea.max-w-none.w-full::-webkit-scrollbar-corner {
   }
 }
 
+@keyframes scale-up-tr-normal {
+  0% {
+    transform: scale(0.5);
+    transform-origin: 100% 0%;
+  }
+  100% {
+    transform: scale(1);
+    transform-origin: 100% 0%;
+  }
+}
+
+.scale-up-tr-normal {
+  animation: scale-up-tr-normal 0.4s cubic-bezier(0.390, 0.575, 0.565, 1.000) 0s 1 normal both;
+}
+
+@keyframes scale-up-center-normal {
+  0% { transform: scale(0.5); }
+  100% { transform: scale(1);}
+}
+.scale-up-center-normal { 
+  animation: scale-up-center-normal 0.1s cubic-bezier(0.390, 0.575, 0.565, 1.000) 0s 1 normal both; 
+}
+
 /* --- Glassmorphism Sidebar Styles --- */
 .sidebar-glass {
   background: #f8fafc; /* Offwhite (Tailwind's slate-50) */
