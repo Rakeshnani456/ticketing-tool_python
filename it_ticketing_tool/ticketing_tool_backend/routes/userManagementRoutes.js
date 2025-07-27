@@ -2,30 +2,41 @@
 const express = require('express');
 const router = express.Router();
 
-module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseToken) => {
+module.exports = (supabase, verifySupabaseToken) => {
 
     // GET /api/users - Get users based on role
-    router.get('/', verifyFirebaseToken, async (req, res) => {
+    router.get('/', verifySupabaseToken, async (req, res) => {
         try {
             const userRole = req.user.role;
             const userClientName = req.user.client_name;
             
-            let snapshot;
+            let query;
             if (userRole === 'site_admin' && userClientName) {
                 // For site_admin, get users from their company/client
-                snapshot = await usersCollection.where('client_name', '==', userClientName).get();
+                query = supabase
+                    .from('users')
+                    .select('*')
+                    .eq('client_name', userClientName);
             } else if (userRole === 'support') {
                 // For support role, get all support users
-                snapshot = await usersCollection.where('role', '==', 'support').get();
+                query = supabase
+                    .from('users')
+                    .select('*')
+                    .eq('role', 'support');
             } else if (userRole === 'admin' || userRole === 'super_admin') {
                 // For admin/super_admin, get all users
-                snapshot = await usersCollection.get();
+                query = supabase
+                    .from('users')
+                    .select('*');
             } else {
                 return res.status(403).json({ error: 'Insufficient permissions to view users.' });
             }
             
-            const users = snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() }));
-            return res.status(200).json(users);
+            const { data: users, error } = await query;
+            if (error) throw error;
+
+            const formattedUsers = users.map(user => ({ uid: user.id, ...user }));
+            return res.status(200).json(formattedUsers);
         } catch (err) {
             console.error('Error fetching users:', err);
             return res.status(500).json({ error: err.message || 'Failed to fetch users.' });
@@ -58,13 +69,19 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
         if (employmentType) updateData.employmentType = employmentType;
         if (designation) updateData.designation = designation;
         if (employeeId) updateData.employeeId = employeeId; // Add employee ID to update fields
-        // Optionally handle password update here if needed (not recommended for Firestore, should be done via Auth)
+        // Optionally handle password update here if needed (not recommended for database, should be done via Auth)
 
         if (Object.keys(updateData).length === 0) {
             return res.status(400).json({ error: 'No fields to update.' });
         }
         try {
-            await usersCollection.doc(uid).update(updateData);
+            const { error } = await supabase
+                .from('users')
+                .update(updateData)
+                .eq('id', uid);
+
+            if (error) throw error;
+
             return res.status(200).json({ message: 'User updated successfully.' });
         } catch (err) {
             console.error('Error updating user:', err);
@@ -72,7 +89,7 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
         }
     });
 
-    // POST /api/users - Create a new user (with Auth UID as Firestore doc ID)
+    // POST /api/users - Create a new user (with Auth UID as database doc ID)
     router.post('/', async (req, res) => {
         const { role } = req.body;
         if (!role) {
@@ -84,36 +101,36 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
                 return res.status(400).json({ error: 'Missing required fields for engineer: firstName, lastName, email, contactNumber, managerEmail, employmentType, designation, asset_id, employeeid' });
             }
             // Uniqueness checks
-            const queries = [
-                usersCollection.where('employeeid', '==', employeeid).limit(1).get(),
-                usersCollection.where('asset_id', '==', asset_id).limit(1).get(),
-                usersCollection.where('email', '==', email).limit(1).get(),
-                usersCollection.where('contactNumber', '==', contactNumber).limit(1).get(),
-            ];
-            const [empSnap, assetSnap, emailSnap, contactSnap] = await Promise.all(queries);
-            if (!empSnap.empty) {
+            const [empResult, assetResult, emailResult, contactResult] = await Promise.all([
+                supabase.from('users').select('id').eq('employeeid', employeeid).limit(1),
+                supabase.from('users').select('id').eq('asset_id', asset_id).limit(1),
+                supabase.from('users').select('id').eq('email', email).limit(1),
+                supabase.from('users').select('id').eq('contactNumber', contactNumber).limit(1)
+            ]);
+
+            if (empResult.data && empResult.data.length > 0) {
                 return res.status(400).json({ error: 'Employee ID already exists.' });
             }
-            if (!assetSnap.empty) {
+            if (assetResult.data && assetResult.data.length > 0) {
                 return res.status(400).json({ error: 'Asset ID already exists.' });
             }
-            if (!emailSnap.empty) {
+            if (emailResult.data && emailResult.data.length > 0) {
                 return res.status(400).json({ error: 'Email already exists.' });
             }
-            if (!contactSnap.empty) {
+            if (contactResult.data && contactResult.data.length > 0) {
                 return res.status(400).json({ error: 'Contact Number already exists.' });
             }
             const finalPassword = password && password.length >= 6 ? password : 'Welcome@123';
             try {
                 let userRecord;
                 try {
-                    userRecord = await admin.auth().createUser({ email, password: finalPassword });
+                    userRecord = await supabase.auth.admin.createUser({ email, password: finalPassword });
                 } catch (err) {
                     return res.status(400).json({ error: err.message || 'Failed to create user in Auth.' });
                 }
-                const uid = userRecord.uid;
-                const userRef = usersCollection.doc(uid);
-                const userData = {
+                const uid = userRecord.data.user.id;
+                const { error: insertError } = await supabase.from('users').insert({
+                    id: uid,
                     name: `${firstName} ${lastName}`.trim(),
                     firstName,
                     lastName,
@@ -127,9 +144,9 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
                     role,
                     mustChangePassword: true,
                     isSiteAdmin: false // Always false for users created here
-                };
-                await userRef.set(userData);
-                return res.status(201).json({ message: 'Engineer created in Auth and Firestore.' });
+                });
+                if (insertError) throw insertError;
+                return res.status(201).json({ message: 'Engineer created in Auth and database.' });
             } catch (err) {
                 console.error('Error creating engineer:', err);
                 return res.status(500).json({ error: err.message || 'Failed to create engineer.' });
@@ -142,32 +159,31 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
             }
             
             // Uniqueness checks for regular users
-            const queries = [
-                usersCollection.where('employeeId', '==', employeeId).limit(1).get(),
-                usersCollection.where('email', '==', email).limit(1).get(),
-                usersCollection.where('contactNumber', '==', contactNumber).limit(1).get(),
-            ];
-            const [empSnap, emailSnap, contactSnap] = await Promise.all(queries);
-            if (!empSnap.empty) {
+            const [empSnap, emailSnap, contactSnap] = await Promise.all([
+                supabase.from('users').select('id').eq('employeeId', employeeId).limit(1),
+                supabase.from('users').select('id').eq('email', email).limit(1),
+                supabase.from('users').select('id').eq('contactNumber', contactNumber).limit(1)
+            ]);
+            if (empSnap.data && empSnap.data.length > 0) {
                 return res.status(400).json({ error: 'Employee ID already exists.' });
             }
-            if (!emailSnap.empty) {
+            if (emailSnap.data && emailSnap.data.length > 0) {
                 return res.status(400).json({ error: 'Email already exists.' });
             }
-            if (!contactSnap.empty) {
+            if (contactSnap.data && contactSnap.data.length > 0) {
                 return res.status(400).json({ error: 'Contact Number already exists.' });
             }
             
             try {
                 let userRecord;
                 try {
-                    userRecord = await admin.auth().createUser({ email, password });
+                    userRecord = await supabase.auth.admin.createUser({ email, password });
                 } catch (err) {
                     return res.status(400).json({ error: err.message || 'Failed to create user in Auth.' });
                 }
-                const uid = userRecord.uid;
-                const userRef = usersCollection.doc(uid);
-                const userData = {
+                const uid = userRecord.data.user.id;
+                const userRef = supabase.from('users').insert({
+                    id: uid,
                     client_name: companyName,
                     firstName,
                     lastName,
@@ -180,8 +196,8 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
                     employeeId, // Add employee ID field
                     mustChangePassword: true, // <-- enforce password change on first login
                     isSiteAdmin: false // Always false for users created here
-                };
-                await userRef.set(userData);
+                }).select().single();
+                await userRef;
                 return res.status(201).json({ message: 'User created in Auth and Firestore.' });
             } catch (err) {
                 console.error('Error creating user:', err);
@@ -200,22 +216,28 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
             return res.status(400).json({ error: 'Missing required fields: role, client_name' });
         }
         try {
-            const userQuerySnap = await usersCollection.where('email', '==', email).limit(1).get();
-            if (userQuerySnap.empty) {
+            const { data: user, error } = await supabase
+                .from('users')
+                .select('id, client_name, domain')
+                .eq('email', email)
+                .single();
+
+            if (error || !user) {
                 return res.status(404).json({ error: 'User not found.' });
             }
-            const userDoc = userQuerySnap.docs[0];
-            const userRef = userDoc.ref;
-            const oldUserData = userDoc.data();
-            const oldClientName = oldUserData.client_name;
+            const userData = user;
+            const oldClientName = userData.client_name;
 
-            const newClientSnapshot = await clientsCollection.where('client_name', '==', client_name).limit(1).get();
-            if (newClientSnapshot.empty) {
+            const { data: newClient, error: newClientError } = await supabase
+                .from('clients')
+                .select('domain')
+                .eq('client_name', client_name)
+                .single();
+
+            if (newClientError || !newClient) {
                 return res.status(400).json({ error: 'New client does not exist.' });
             }
-            const newClientDocRef = newClientSnapshot.docs[0].ref;
-            const newClientData = newClientSnapshot.docs[0].data();
-            const newDomain = newClientData.domain;
+            const newDomain = newClient.domain;
 
             const userDomain = email.split('@')[1];
             if (userDomain !== newDomain) {
@@ -224,26 +246,24 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
 
             let oldClientDocRef = null;
             if (oldClientName !== client_name) {
-                const oldClientSnapshot = await clientsCollection.where('client_name', '==', oldClientName).limit(1).get();
-                if (!oldClientSnapshot.empty) {
-                    oldClientDocRef = oldClientSnapshot.docs[0].ref;
+                const { data: oldClient, error: oldClientError } = await supabase
+                    .from('clients')
+                    .select('id')
+                    .eq('client_name', oldClientName)
+                    .single();
+                if (!oldClientError && oldClient) {
+                    oldClientDocRef = oldClient.id;
                 }
             }
 
-            await db.runTransaction(async (t) => {
-                const reads = [t.get(userRef), t.get(newClientDocRef)];
-                if (oldClientDocRef) reads.push(t.get(oldClientDocRef));
-                const [userSnapTx, newClientSnap, oldClientSnap] = await Promise.all(reads);
-
-                t.update(userRef, { role, client_name, domain: newDomain, asset_id });
-                if (oldClientName !== client_name && oldClientDocRef && oldClientSnap) {
-                    const oldCount = oldClientSnap.data().no_of_users || 1;
-                    t.update(oldClientDocRef, { no_of_users: Math.max(0, oldCount - 1) });
-                }
-                if (oldClientName !== client_name) {
-                    const newCount = newClientSnap.data().no_of_users || 0;
-                    t.update(newClientDocRef, { no_of_users: newCount + 1 });
-                }
+            await supabase.rpc('update_user_and_client_counts', {
+                obj: {
+                    user_id: user.id,
+                    new_client_name: client_name,
+                    new_domain: newDomain,
+                    asset_id: asset_id
+                },
+                old_client_id: oldClientDocRef
             });
             return res.status(200).json({ message: 'User updated and client user counts adjusted.' });
         } catch (err) {
@@ -260,10 +280,10 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
             return res.status(400).json({ error: 'Password must be at least 6 characters.' });
         }
         try {
-            await admin.auth().updateUser(uid, { password });
+            await supabase.auth.admin.updateUser(uid, { password });
             // Also update mustChangePassword in Firestore if requested
             if (mustChangePassword) {
-                await usersCollection.doc(uid).update({ mustChangePassword: true });
+                await supabase.from('users').update({ mustChangePassword: true }).eq('id', uid);
             }
             return res.status(200).json({ message: 'Password updated successfully.' });
         } catch (err) {
@@ -288,21 +308,20 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
             }
             
             // Uniqueness checks for bulk import
-            const queries = [
-                usersCollection.where('employeeId', '==', employeeId).limit(1).get(),
-                usersCollection.where('email', '==', email).limit(1).get(),
-                usersCollection.where('contactNumber', '==', contactNumber).limit(1).get(),
-            ];
-            const [empSnap, emailSnap, contactSnap] = await Promise.all(queries);
-            if (!empSnap.empty) {
+            const [empSnap, emailSnap, contactSnap] = await Promise.all([
+                supabase.from('users').select('id').eq('employeeId', employeeId).limit(1),
+                supabase.from('users').select('id').eq('email', email).limit(1),
+                supabase.from('users').select('id').eq('contactNumber', contactNumber).limit(1)
+            ]);
+            if (empSnap.data && empSnap.data.length > 0) {
                 results.push({ email, success: false, error: 'Employee ID already exists.' });
                 continue;
             }
-            if (!emailSnap.empty) {
+            if (emailSnap.data && emailSnap.data.length > 0) {
                 results.push({ email, success: false, error: 'Email already exists.' });
                 continue;
             }
-            if (!contactSnap.empty) {
+            if (contactSnap.data && contactSnap.data.length > 0) {
                 results.push({ email, success: false, error: 'Contact Number already exists.' });
                 continue;
             }
@@ -310,14 +329,14 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
             try {
                 let userRecord;
                 try {
-                    userRecord = await admin.auth().createUser({ email, password });
+                    userRecord = await supabase.auth.admin.createUser({ email, password });
                 } catch (err) {
                     results.push({ email, success: false, error: err.message || 'Failed to create user in Auth.' });
                     continue;
                 }
-                const uid = userRecord.uid;
-                const userRef = usersCollection.doc(uid);
-                const userData = {
+                const uid = userRecord.data.user.id;
+                const { error: insertError } = await supabase.from('users').insert({
+                    id: uid,
                     client_name: companyName,
                     firstName,
                     lastName,
@@ -330,8 +349,8 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
                     employeeId, // Add employee ID field
                     mustChangePassword: true, // <-- enforce password change on first login
                     isSiteAdmin: false // Always false for users created here
-                };
-                await userRef.set(userData);
+                });
+                if (insertError) throw insertError;
                 results.push({ email, success: true });
             } catch (err) {
                 results.push({ email, success: false, error: err.message || 'Failed to create user.' });
@@ -344,36 +363,35 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
         const { uid } = req.params;
 
         try {
-            const userRef = usersCollection.doc(uid);
-            const userSnap = await userRef.get();
+            const { data: user, error } = await supabase
+                .from('users')
+                .select('client_name')
+                .eq('id', uid)
+                .single();
 
-            if (!userSnap.exists) {
-                return res.status(404).json({ error: 'User not found in Firestore.' });
+            if (error || !user) {
+                return res.status(404).json({ error: 'User not found in Supabase.' });
             }
-            const userData = userSnap.data();
+            const userData = user;
             const clientName = userData.client_name;
 
             if (!clientName) {
-                await admin.auth().deleteUser(uid);
-                await userRef.delete();
+                await supabase.auth.admin.deleteUser(uid);
+                await supabase.from('users').delete().eq('id', uid);
                 return res.status(200).json({ message: 'User deleted (no client update needed).' });
             }
 
-            const clientSnapshot = await clientsCollection.where('client_name', '==', clientName).limit(1).get();
-            const clientDocRef = clientSnapshot.empty ? null : clientSnapshot.docs[0].ref;
+            const { data: client, error: clientError } = await supabase
+                .from('clients')
+                .select('id')
+                .eq('client_name', clientName)
+                .single();
+            const clientDocRef = clientError || !client ? null : client.id;
 
-            await db.runTransaction(async (t) => {
-                let clientSnap = null;
-                if (clientDocRef) {
-                    clientSnap = await t.get(clientDocRef);
-                }
-
-                await admin.auth().deleteUser(uid);
-                t.delete(userRef);
-
-                if (clientSnap && clientSnap.exists) {
-                    const prevCount = clientSnap.data().no_of_users || 1;
-                    t.update(clientDocRef, { no_of_users: Math.max(0, prevCount - 1) });
+            await supabase.rpc('delete_user_and_client_counts', {
+                obj: {
+                    user_id: uid,
+                    client_id: clientDocRef
                 }
             });
 
@@ -381,7 +399,7 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
         } catch (err) {
             console.error(`Error deleting user ${uid}:`, err);
             if (err.code && err.code.startsWith('auth/')) {
-                return res.status(500).json({ error: `Firebase Auth error: ${err.message}` });
+                return res.status(500).json({ error: `Supabase Auth error: ${err.message}` });
             }
             return res.status(500).json({ error: err.message || 'Failed to delete user.' });
         }

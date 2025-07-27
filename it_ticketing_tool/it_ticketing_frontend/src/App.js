@@ -54,13 +54,8 @@ import { BellRing } from './components/common/BellRing';
 import { createPortal } from 'react-dom';
 
 
-// Import Firebase auth client and dbClient
-import { authClient, dbClient } from './config/firebase';
-import { onAuthStateChanged, signOut } from 'firebase/auth'; // Firebase authentication methods
-import { collection, query, onSnapshot, where, doc, getDoc } from 'firebase/firestore'; // Firestore imports and 'where'
-
-// Import API Base URL from constants
-import { API_BASE_URL } from './config/constants';
+// Import Supabase client
+import { supabase } from './config/supabase';
 
 // Import local logo image
 import KriasolLogo from './assets/logo/logo.png';
@@ -323,25 +318,26 @@ const App = () => {
      * @returns {void}
      */
     const fetchNotifications = useCallback(async (user) => {
-        if (!user || !user.firebaseUser) {
+        if (!user || !user.supabaseUser) {
             setNotifications([]);
             setHasNewNotifications(false);
             return;
         }
         try {
-            const idToken = await user.firebaseUser.getIdToken();
-            const response = await fetch(`${API_BASE_URL}/notifications/my`, {
-                headers: { 'Authorization': `Bearer ${idToken}` }
-            });
-            if (response.ok) {
-                const data = await response.json();
-                setNotifications(data);
-                setHasNewNotifications(data.some(n => !n.read)); // Check if any unread notifications
-            } else {
-                console.error("Failed to fetch notifications:", await response.json());
+            const { data, error } = await supabase
+                .from('notifications')
+                .select('*')
+                .eq('user_id', user.uid)
+                .order('created_at', { ascending: false });
+
+            if (error) {
+                throw error;
             }
+
+            setNotifications(data || []);
+            setHasNewNotifications((data || []).some(n => !n.read)); // Check if any unread notifications
         } catch (error) {
-            console.error("Network error fetching notifications:", error);
+            console.error("Error fetching notifications:", error);
         }
     }, []);
 
@@ -391,126 +387,101 @@ const App = () => {
         return formatted;
     };
 
-    // Effect hook to listen for Firebase authentication state changes.
-    // This is crucial for maintaining user session and fetching user roles from backend.
+    // Effect hook to listen for Supabase authentication state changes.
+    // This is crucial for maintaining user session and fetching user roles from database.
     useEffect(() => {
-        const unsubscribeAuth = onAuthStateChanged(authClient, async (firebaseUser) => {
-            if (firebaseUser) {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+            if (session?.user) {
                 try {
-                    const idToken = await firebaseUser.getIdToken(); // Get Firebase ID token
-                    // Verify ID token with backend to get user's custom role
-                    const response = await fetch(`${API_BASE_URL}/login`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${idToken}`
-                        },
-                        body: JSON.stringify({ email: firebaseUser.email }),
-                    });
-                    const data = await response.json();
-                    if (response.ok) {
-                        // On successful verification, set currentUser state with Firebase user and role
-                        let userProfile = { firebaseUser, role: data.user.role, email: firebaseUser.email, uid: firebaseUser.uid };
-                        
-                        // For site_admin users, fetch complete profile from Firestore to get client_name
-                        if (data.user.role === 'site_admin') {
-                            try {
-                                const userDocRef = doc(dbClient, 'users', firebaseUser.uid);
-                                const userDoc = await getDoc(userDocRef);
-                                if (userDoc.exists()) {
-                                    const userData = userDoc.data();
-                                    console.log("Site admin user data:", userData);
-                                    userProfile = {
-                                        ...userProfile,
-                                        client_name: userData.client_name || userData.companyName,
-                                        companyName: userData.client_name || userData.companyName
-                                    };
-                                    console.log("Site admin profile after enhancement:", userProfile);
-                                } else {
-                                    console.error("Site admin user document not found in Firestore");
-                                }
-                            } catch (error) {
-                                console.error('Error fetching site admin profile:', error);
-                            }
-                        }
-                        
-                        setCurrentUser(userProfile);
-                        fetchNotifications(userProfile); // Fetch notifications for logged-in user
+                    const supabaseUser = session.user;
+                    
+                    // Get user profile from users table
+                    const { data: profileData, error: profileError } = await supabase
+                        .from('users')
+                        .select('*')
+                        .eq('id', supabaseUser.id)
+                        .single();
 
-                        // Start polling for notifications
-                        if (notificationPollingIntervalRef.current) {
-                            clearInterval(notificationPollingIntervalRef.current);
-                        }
-                        notificationPollingIntervalRef.current = setInterval(() => {
-                            fetchNotifications(userProfile);
-                        }, 30000); // Poll every 30 seconds
-
-                        // NEW: Set up Firestore listener for ticket counts
-                        const ticketsCollectionRef = collection(dbClient, 'tickets');
-                        let ticketsQuery;
-
-                        // Adjust the Firestore query based on user role to match security rules
-                        if (userProfile.role === 'support' || userProfile.role === 'admin' || userProfile.role === 'site_admin') {
-                            // Admins and Support can read all tickets (as per your rules)
-                            ticketsQuery = query(ticketsCollectionRef);
-                        } else {
-                            // Regular users can only read their own tickets
-                            ticketsQuery = query(ticketsCollectionRef, where('reporter_id', '==', userProfile.uid));
-                        }
-
-
-                        const unsubscribeTickets = onSnapshot(ticketsQuery, (snapshot) => {
-                            const fetchedTickets = snapshot.docs.map(doc => ({
-                                id: doc.id,
-                                ...doc.data() // Get raw data; no need to format timestamps for counts
-                            }));
-
-                            // These counts are now based on the tickets the *current user is allowed to see*
-                            const totalTickets = fetchedTickets.length;
-                            const activeTickets = fetchedTickets.filter(t => ['Open', 'In Progress', 'Hold'].includes(t.status)).length;
-                            const assignedToMeTickets = fetchedTickets.filter(t => t.assigned_to_id === userProfile.uid && !['Closed', 'Resolved'].includes(t.status)).length;
-
-                            setTicketCounts({
-                                total_tickets: totalTickets,
-                                active_tickets: activeTickets,
-                                assigned_to_me: assignedToMeTickets
-                            });
-                        }, (err) => {
-                            console.error("Firestore onSnapshot error for ticket counts:", err);
-                            // Optionally show a flash message for count errors
-                        });
-
-                        // Navigate based on user role
-                        // Note: React Router handles the initial page load based on URL.
-                        // This `Maps` call ensures a default route upon successful login if the current path isn't ideal.
-                        if (location.pathname === '/login' || location.pathname === '/register' || location.pathname === '/') {
-                             if (data.user.role === 'support' || data.user.role === 'admin' || data.user.role === 'site_admin') {
-                                 navigate('/dashboard');
-                             } else {
-                                 navigate('/my-tickets');
-                             }
-                        }
-                        return () => { // Cleanup for tickets listener if auth state changes again
-                           unsubscribeTickets();
-                        };
-                    } else {
-                        // If backend verification fails, show error and log out from Firebase
-                        console.error("Backend login verification failed:", data.error);
-                        showFlashMessage(data.error || "Authentication failed during login.", 'error');
-                        authClient.signOut();
-                        setCurrentUser(null);
-                        navigate('/login'); // Redirect to login
+                    if (profileError) {
+                        throw profileError;
                     }
+
+                    // Create user profile object
+                    let userProfile = {
+                        supabaseUser,
+                        role: profileData.role,
+                        email: supabaseUser.email,
+                        uid: supabaseUser.id,
+                        client_name: profileData.client_name,
+                        company_name: profileData.company_name
+                    };
+                    
+                    setCurrentUser(userProfile);
+                    fetchNotifications(userProfile); // Fetch notifications for logged-in user
+
+                    // Start polling for notifications
+                    if (notificationPollingIntervalRef.current) {
+                        clearInterval(notificationPollingIntervalRef.current);
+                    }
+                    notificationPollingIntervalRef.current = setInterval(() => {
+                        fetchNotifications(userProfile);
+                    }, 30000); // Poll every 30 seconds
+
+                    // Set up Supabase real-time subscription for ticket counts
+                    let ticketsQuery = supabase
+                        .from('tickets')
+                        .select('*');
+
+                    // Adjust the query based on user role to match RLS policies
+                    if (userProfile.role === 'support' || userProfile.role === 'admin' || userProfile.role === 'site_admin') {
+                        // Admins and Support can read all tickets
+                        ticketsQuery = supabase.from('tickets').select('*');
+                    } else {
+                        // Regular users can only read their own tickets
+                        ticketsQuery = supabase.from('tickets').select('*').eq('reporter_id', userProfile.uid);
+                    }
+
+                    const ticketsSubscription = ticketsQuery.on('*', (payload) => {
+                        // Fetch updated ticket counts
+                        ticketsQuery.then(({ data: tickets }) => {
+                            if (tickets) {
+                                const totalTickets = tickets.length;
+                                const activeTickets = tickets.filter(t => ['Open', 'In Progress', 'Hold'].includes(t.status)).length;
+                                const assignedToMeTickets = tickets.filter(t => t.assigned_to_id === userProfile.uid && !['Closed', 'Resolved'].includes(t.status)).length;
+
+                                setTicketCounts({
+                                    total_tickets: totalTickets,
+                                    active_tickets: activeTickets,
+                                    assigned_to_me: assignedToMeTickets
+                                });
+                            }
+                        });
+                    });
+
+                    // Navigate based on user role
+                    if (location.pathname === '/login' || location.pathname === '/register' || location.pathname === '/') {
+                        if (userProfile.role === 'support' || userProfile.role === 'admin' || userProfile.role === 'site_admin') {
+                            navigate('/dashboard');
+                        } else {
+                            navigate('/my-tickets');
+                        }
+                    }
+
+                    return () => {
+                        // Cleanup subscription
+                        supabase.removeChannel(ticketsSubscription);
+                    };
+
                 } catch (error) {
-                    // Handle network or other errors during auth state change processing
+                    // Handle errors during auth state change processing
                     console.error("Error during authentication state change:", error);
-                    showFlashMessage("Network error during re-authentication. Please log in again.", 'error');
-                    authClient.signOut();
+                    showFlashMessage("Authentication failed. Please log in again.", 'error');
+                    await supabase.auth.signOut();
                     setCurrentUser(null);
-                    navigate('/login'); // Redirect to login
+                    navigate('/login');
                 }
             } else {
-                // If no Firebase user is logged in, clear currentUser state and go to login page
+                // If no user is logged in, clear currentUser state and go to login page
                 setCurrentUser(null);
                 // Ensure we are on a public route if no user is logged in
                 if (location.pathname !== '/login' && location.pathname !== '/register') {
@@ -524,14 +495,14 @@ const App = () => {
                 }
             }
         });
+
         return () => {
-            unsubscribeAuth(); // Cleanup the auth state listener on component unmount
+            subscription?.unsubscribe(); // Cleanup the auth state listener on component unmount
             if (notificationPollingIntervalRef.current) {
                 clearInterval(notificationPollingIntervalRef.current); // Clear polling on unmount
             }
-            // No need to clean up ticket listener here, it's handled within the if (firebaseUser) block
         };
-    }, [fetchNotifications, navigate, location.pathname]); // Added navigate and location.pathname to dependency array
+    }, [fetchNotifications, navigate, location.pathname]);
 
     // Effect hook to handle clicks outside the notification menu
     // useEffect(() => {
@@ -552,7 +523,7 @@ const App = () => {
 
     // Real-time notification polling for live bell animation
     useEffect(() => {
-        if (!currentUser || !currentUser.firebaseUser) {
+        if (!currentUser || !currentUser.supabaseUser) {
             return;
         }
 
@@ -601,12 +572,12 @@ const App = () => {
 
     /**
      * Handles user logout.
-     * Signs out from Firebase, clears user state, and navigates to the login page.
+     * Signs out from Supabase, clears user state, and navigates to the login page.
      * @returns {void}
      */
     const handleLogout = async () => {
         try {
-            await signOut(authClient); // Sign out from Firebase
+            await supabase.auth.signOut(); // Sign out from Supabase
             setCurrentUser(null); // Clear current user state
             showFlashMessage('Logged out successfully.', 'success');
             navigate('/login'); // Navigate to login page

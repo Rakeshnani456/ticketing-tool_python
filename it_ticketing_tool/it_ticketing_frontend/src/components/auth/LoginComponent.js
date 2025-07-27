@@ -1,7 +1,6 @@
 // src/components/auth/LoginComponent.js
 
 import React, { useState } from 'react';
-import { signInWithEmailAndPassword, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth'; // Firebase authentication method
 import { LogIn } from 'lucide-react'; // Icon for login button
 
 // Import common UI components
@@ -9,15 +8,12 @@ import FormInput from '../common/FormInput';
 import PrimaryButton from '../common/PrimaryButton';
 import LinkButton from '../common/LinkButton';
 
-// Import Firebase auth client from config
-import { authClient, dbClient } from '../../config/firebase'; // Import dbClient
-import { doc, getDoc, updateDoc } from 'firebase/firestore'; // Import Firestore helpers
-// Import API Base URL from constants
-import { API_BASE_URL } from '../../config/constants'; // Corrected syntax
+// Import Supabase client from config
+import { supabase } from '../../config/supabase';
 
 /**
  * Component for user login.
- * Handles email/password authentication and communicates with a backend for role verification.
+ * Handles email/password authentication using Supabase Auth.
  * @param {object} props - Component props.
  * @param {function} props.onLoginSuccess - Callback function on successful login, receives user object.
  * @param {function} props.navigateTo - Function to navigate to different pages in the app.
@@ -38,7 +34,7 @@ const LoginComponent = ({ onLoginSuccess, navigateTo, showFlashMessage }) => {
 
     /**
      * Handles the form submission for login.
-     * Authenticates with Firebase and then verifies user role with the backend.
+     * Authenticates with Supabase and retrieves user profile.
      * @param {Event} e - The form submission event.
      */
     const handleSubmit = async (e) => {
@@ -48,74 +44,83 @@ const LoginComponent = ({ onLoginSuccess, navigateTo, showFlashMessage }) => {
         setLoading(true); // Start loading state
 
         try {
-            // 1. Authenticate with Firebase
-            const userCredential = await signInWithEmailAndPassword(authClient, email, password);
-            const firebaseUser = userCredential.user;
-            const idToken = await firebaseUser.getIdToken(); // Get Firebase ID token
-
-            // 2. Send ID token to backend for verification and user role retrieval
-            const response = await fetch(`${API_BASE_URL}/login`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${idToken}` // Pass ID token in Authorization header
-                },
-                body: JSON.stringify({ email: firebaseUser.email }),
+            // 1. Authenticate with Supabase
+            const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+                email,
+                password
             });
 
-            const data = await response.json(); // Parse backend response
+            if (authError) {
+                throw authError;
+            }
 
-            // 3. Handle backend response
-            if (response.ok) {
-                // If backend verification is successful, call onLoginSuccess with user data
-                onLoginSuccess({ firebaseUser, role: data.user.role, email: firebaseUser.email });
-            } else if (response.status === 403 && data.mustChangePassword) {
-                // Backend requires password change
+            const supabaseUser = authData.user;
+
+            // 2. Get user profile from users table
+            const { data: profileData, error: profileError } = await supabase
+                .from('users')
+                .select('*')
+                .eq('id', supabaseUser.id)
+                .single();
+
+            if (profileError) {
+                throw profileError;
+            }
+
+            // 3. Check if user must change password
+            if (profileData.must_change_password) {
                 setMustChangePassword(true);
-                setUserUidForChange(data.user.id); // Store UID for password change
+                setUserUidForChange(supabaseUser.id);
                 setLoading(false);
                 showFlashMessage('You must change your password before continuing.', 'info');
                 return;
-            } else {
-                // If backend verification fails, set form error and sign out from Firebase
-                setFormError(data.error || 'Login failed after token verification. Please try again.');
-                authClient.signOut(); // Ensure user is signed out if backend rejects
             }
+
+            // 4. Create user object for the app
+            const userProfile = {
+                supabaseUser,
+                role: profileData.role,
+                email: supabaseUser.email,
+                uid: supabaseUser.id,
+                client_name: profileData.client_name,
+                company_name: profileData.company_name
+            };
+
+            // 5. Call onLoginSuccess with user data
+            onLoginSuccess(userProfile);
+
         } catch (error) {
-            // Handle Firebase authentication errors
+            // Handle authentication errors
             console.error('Login error:', error);
             let errorMessage = 'Login failed.';
-            if (error.code) {
-                switch (error.code) {
-                    case 'auth/user-not-found':
-                    case 'auth/wrong-password':
-                    case 'auth/invalid-credential': // Explicitly handle this common error
+            
+            if (error.message) {
+                switch (error.message) {
+                    case 'Invalid login credentials':
                         errorMessage = 'Invalid email or password. Please try again.';
                         setPasswordError(true); // Set password error for visual feedback
                         setPassword(''); // Clear password field for re-entry
                         break;
-                    case 'auth/invalid-email':
-                        errorMessage = 'Invalid email format.';
+                    case 'Email not confirmed':
+                        errorMessage = 'Please verify your email address before logging in.';
                         break;
-                    case 'auth/too-many-requests':
+                    case 'Too many requests':
                         errorMessage = 'Too many failed login attempts. Please try again later.';
                         break;
-                    case 'auth/network-request-failed':
-                        errorMessage = 'Network error. Please check your internet connection.';
-                        break;
                     default:
-                        errorMessage = error.message || 'An unexpected authentication error occurred.'; // Fallback for other Firebase errors
+                        errorMessage = error.message || 'An unexpected authentication error occurred.';
                 }
             } else {
                 errorMessage = 'An unexpected network error occurred or server is unreachable.';
             }
+            
             setFormError(errorMessage); // Display error message inside the form
         } finally {
             setLoading(false); // End loading state
         }
     };
 
-    // Change password logic for forced change (calls backend)
+    // Change password logic for forced change
     const handleChangePassword = async (e) => {
         e.preventDefault();
         setPasswordError('');
@@ -131,31 +136,43 @@ const LoginComponent = ({ onLoginSuccess, navigateTo, showFlashMessage }) => {
         }
         setPasswordChangeLoading(true);
         try {
-            // Call backend to change password and clear mustChangePassword
-            const response = await fetch(`${API_BASE_URL}/change-password`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ uid: userUidForChange, newPassword }),
+            // Update password in Supabase
+            const { error } = await supabase.auth.updateUser({
+                password: newPassword
             });
-            const data = await response.json();
-            if (response.ok) {
-                showFlashMessage('Password updated successfully! Please log in with your new password.', 'success');
-                setMustChangePassword(false);
-                setUserUidForChange(null);
-                setNewPassword('');
-                setConfirmPassword('');
-                setPasswordError('');
-                setPasswordChangeLoading(false);
-                setEmail('');
-                setPassword('');
-                await authClient.signOut();
-            } else {
-                setPasswordError(data.error || 'Failed to update password.');
-                showFlashMessage(data.error || 'Failed to update password.', 'error');
+
+            if (error) {
+                throw error;
             }
-        } catch (err) {
-            setPasswordError('Failed to update password.');
-            showFlashMessage('Failed to update password.', 'error');
+
+            // Update must_change_password in users table
+            const { error: updateError } = await supabase
+                .from('users')
+                .update({ must_change_password: false })
+                .eq('id', userUidForChange);
+
+            if (updateError) {
+                throw updateError;
+            }
+
+            showFlashMessage('Password updated successfully! Please log in with your new password.', 'success');
+            setMustChangePassword(false);
+            setUserUidForChange(null);
+            setNewPassword('');
+            setConfirmPassword('');
+            setPasswordError('');
+            setPasswordChangeLoading(false);
+            setEmail(''); // Clear email for new login
+            setPassword(''); // Clear password for new login
+
+        } catch (error) {
+            console.error('Password change error:', error);
+            let errorMessage = 'Failed to update password.';
+            if (error.message) {
+                errorMessage = error.message;
+            }
+            setPasswordError(errorMessage);
+            showFlashMessage(errorMessage, 'error');
         } finally {
             setPasswordChangeLoading(false);
         }

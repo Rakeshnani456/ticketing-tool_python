@@ -2,34 +2,37 @@
 const express = require('express');
 const router = express.Router();
 
-module.exports = (db, clientsCollection, usersCollection) => {
+module.exports = (supabase) => {
 
     // GET /api/clients - Get all clients
     router.get('/', async (req, res) => {
         try {
-            const clientsSnapshot = await clientsCollection.get();
-            const clients = clientsSnapshot.docs.map(doc => {
-                const data = doc.data();
-                return {
-                    id: doc.id,
-                    companyName: data.companyName || '',
-                    website: data.website || '',
-                    location: data.location || '',
-                    clientContactNumber: data.clientContactNumber || '',
-                    authFirstName: data.authFirstName || '',
-                    authLastName: data.authLastName || '',
-                    authContactNumber: data.authContactNumber || '',
-                    authOfficeEmail: data.authOfficeEmail || '',
-                    authPersonalEmail: data.authPersonalEmail || '',
-                    authDesignation: data.authDesignation || '',
-                    siteFirstName: data.siteFirstName || '',
-                    siteLastName: data.siteLastName || '',
-                    siteEmail: data.siteEmail || '',
-                    siteContactNumber: data.siteContactNumber || '',
-                    siteDesignation: data.siteDesignation || ''
-                };
-            });
-            res.json(clients);
+            const { data: clients, error } = await supabase
+                .from('clients')
+                .select('*');
+
+            if (error) throw error;
+
+            const formattedClients = clients.map(client => ({
+                id: client.id,
+                companyName: client.companyName || '',
+                website: client.website || '',
+                location: client.location || '',
+                clientContactNumber: client.clientContactNumber || '',
+                authFirstName: client.authFirstName || '',
+                authLastName: client.authLastName || '',
+                authContactNumber: client.authContactNumber || '',
+                authOfficeEmail: client.authOfficeEmail || '',
+                authPersonalEmail: client.authPersonalEmail || '',
+                authDesignation: client.authDesignation || '',
+                siteFirstName: client.siteFirstName || '',
+                siteLastName: client.siteLastName || '',
+                siteEmail: client.siteEmail || '',
+                siteContactNumber: client.siteContactNumber || '',
+                siteDesignation: client.siteDesignation || ''
+            }));
+
+            res.json(formattedClients);
         } catch (err) {
             console.error('Error fetching clients:', err);
             res.status(500).json({ error: 'Failed to fetch clients' });
@@ -56,6 +59,7 @@ module.exports = (db, clientsCollection, usersCollection) => {
                 siteContactNumber,
                 siteDesignation
             } = req.body;
+
             const newClient = {
                 companyName,
                 website,
@@ -73,11 +77,16 @@ module.exports = (db, clientsCollection, usersCollection) => {
                 siteContactNumber,
                 siteDesignation
             };
-            const docRef = await clientsCollection.add(newClient);
+
+            const { data: clientData, error: clientError } = await supabase
+                .from('clients')
+                .insert([newClient])
+                .select()
+                .single();
+
+            if (clientError) throw clientError;
 
             // --- Automatically create a user for the site admin ---
-            // Get admin SDK from global require (since not passed in)
-            const admin = require('firebase-admin');
             // Prepare user data
             const userData = {
                 client_name: companyName,
@@ -92,33 +101,48 @@ module.exports = (db, clientsCollection, usersCollection) => {
                 employmentType: '',
                 mustChangePassword: true
             };
-            let userRecord;
-            try {
-                userRecord = await admin.auth().createUser({ email: userData.email, password: userData.password });
-                await usersCollection.doc(userRecord.uid).set({
-                    client_name: userData.client_name,
-                    firstName: userData.firstName,
-                    lastName: userData.lastName,
-                    email: userData.email,
-                    role: userData.role,
-                    contactNumber: userData.contactNumber,
-                    managerEmail: userData.managerEmail,
-                    employmentType: userData.employmentType,
-                    designation: userData.designation,
-                    mustChangePassword: true,
-                    isSiteAdmin: true // <-- Set site admin flag
-                });
-            } catch (userErr) {
-                // Rollback client creation
-                await clientsCollection.doc(docRef.id).delete();
-                console.error('Error creating user for new client:', userErr);
-                return res.status(500).json({ error: 'Client created, but failed to create user: ' + userErr.message });
-            }
 
-            res.status(201).json({ id: docRef.id, ...newClient, userCreated: true });
+            try {
+                // Create user in Supabase Auth
+                const { data: userRecord, error: authError } = await supabase.auth.admin.createUser({ 
+                    email: userData.email, 
+                    password: userData.password 
+                });
+
+                if (authError) throw authError;
+
+                // Create user profile in database
+                const { error: userError } = await supabase
+                    .from('users')
+                    .insert({
+                        id: userRecord.user.id,
+                        client_name: userData.client_name,
+                        firstName: userData.firstName,
+                        lastName: userData.lastName,
+                        email: userData.email,
+                        contactNumber: userData.contactNumber,
+                        designation: userData.designation,
+                        role: userData.role,
+                        managerEmail: userData.managerEmail,
+                        employmentType: userData.employmentType,
+                        mustChangePassword: userData.mustChangePassword
+                    });
+
+                if (userError) throw userError;
+
+                res.status(201).json({ 
+                    message: 'Client and site admin created successfully', 
+                    clientId: clientData.id,
+                    userId: userRecord.user.id 
+                });
+            } catch (userCreationError) {
+                // If user creation fails, we should clean up the client
+                await supabase.from('clients').delete().eq('id', clientData.id);
+                throw userCreationError;
+            }
         } catch (err) {
-            console.error('Error adding client:', err);
-            res.status(500).json({ error: 'Failed to add client' });
+            console.error('Error creating client:', err);
+            res.status(500).json({ error: 'Failed to create client' });
         }
     });
 
@@ -160,7 +184,7 @@ module.exports = (db, clientsCollection, usersCollection) => {
                 siteContactNumber,
                 siteDesignation
             };
-            await clientsCollection.doc(id).update(updateData);
+            await supabase.from('clients').update(updateData).eq('id', id);
             res.status(200).json({ id, ...updateData });
         } catch (err) {
             console.error('Error updating client:', err);
@@ -172,7 +196,7 @@ module.exports = (db, clientsCollection, usersCollection) => {
     router.delete('/:id', async (req, res) => {
         try {
             const { id } = req.params;
-            await clientsCollection.doc(id).delete();
+            await supabase.from('clients').delete().eq('id', id);
             res.status(200).json({ message: 'Client deleted successfully.' });
         } catch (err) {
             console.error('Error deleting client:', err);

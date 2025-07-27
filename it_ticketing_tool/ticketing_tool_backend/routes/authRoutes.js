@@ -2,10 +2,10 @@
 const express = require('express');
 const router = express.Router();
 
-module.exports = (db, admin, usersCollection, verifyFirebaseToken) => {
+module.exports = (supabase, verifySupabaseToken) => {
 
     // @route   POST /register
-    // @desc    Register a new user with Firebase Auth and store role in Firestore
+    // @desc    Register a new user with Supabase Auth and store role in database
     // @access  Public or Protected (RBAC enforced)
     router.post('/register', async (req, res) => {
         const { email, password, role = 'user', isSiteAdmin = false } = req.body;
@@ -14,7 +14,7 @@ module.exports = (db, admin, usersCollection, verifyFirebaseToken) => {
             return res.status(400).json({ error: 'Email and password are required!' });
         }
 
-        const validUserRoles = ['user', 'support', 'admin', 'super_admin', 'site_admin']; // Define or import this
+        const validUserRoles = ['user', 'support', 'admin', 'super_admin', 'site_admin'];
         if (!validUserRoles.includes(role)) {
             return res.status(400).json({ error: 'Invalid role specified.' });
         }
@@ -23,12 +23,19 @@ module.exports = (db, admin, usersCollection, verifyFirebaseToken) => {
         let requesterUid = null;
         if (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
             try {
-                const idToken = req.headers.authorization.split(' ')[1];
-                const decodedToken = await admin.auth().verifyIdToken(idToken);
-                requesterUid = decodedToken.uid;
-                const userDoc = await usersCollection.doc(requesterUid).get();
-                if (userDoc.exists) {
-                    requesterRole = userDoc.data().role;
+                const token = req.headers.authorization.split(' ')[1];
+                const { data: { user }, error } = await supabase.auth.getUser(token);
+                if (error) throw error;
+                
+                requesterUid = user.id;
+                const { data: userData, error: userError } = await supabase
+                    .from('users')
+                    .select('role')
+                    .eq('id', requesterUid)
+                    .single();
+                
+                if (!userError && userData) {
+                    requesterRole = userData.role;
                 }
             } catch (err) {
                 return res.status(401).json({ error: 'Invalid or expired authentication token.' });
@@ -37,7 +44,6 @@ module.exports = (db, admin, usersCollection, verifyFirebaseToken) => {
 
         let finalIsSiteAdmin = false;
         if (typeof isSiteAdmin === 'boolean' && isSiteAdmin === true && requesterRole === null) {
-            // Only allow isSiteAdmin: true if registration is public (e.g., from client creation flow)
             finalIsSiteAdmin = true;
         }
 
@@ -56,23 +62,49 @@ module.exports = (db, admin, usersCollection, verifyFirebaseToken) => {
         }
 
         try {
-            const userRecord = await admin.auth().createUser({
+            // Create user in Supabase Auth
+            const { data: authData, error: authError } = await supabase.auth.signUp({
                 email: email,
                 password: password,
             });
-            await usersCollection.doc(userRecord.uid).set({ email: email, role: role, isSiteAdmin: finalIsSiteAdmin });
-            return res.status(201).json({ message: `User ${email} registered successfully!`, user_id: userRecord.uid });
-        } catch (error) {
-            if (error.code === 'auth/email-already-exists') {
-                return res.status(409).json({ error: 'Email already registered.' });
+
+            if (authError) {
+                if (authError.message.includes('already registered')) {
+                    return res.status(409).json({ error: 'Email already registered.' });
+                }
+                throw authError;
             }
+
+            // Create user profile in database
+            const { error: profileError } = await supabase
+                .from('users')
+                .insert({
+                    id: authData.user.id,
+                    email: email,
+                    role: role,
+                    is_site_admin: finalIsSiteAdmin,
+                    created_at: new Date().toISOString()
+                });
+
+            if (profileError) {
+                // If profile creation fails, we should clean up the auth user
+                // For now, just return the error
+                console.error('Profile creation error:', profileError);
+                return res.status(500).json({ error: 'Error creating user profile.' });
+            }
+
+            return res.status(201).json({ 
+                message: `User ${email} registered successfully!`, 
+                user_id: authData.user.id 
+            });
+        } catch (error) {
             console.error(`Registration error: ${error.message}`);
             return res.status(500).json({ error: `Error registering user: ${error.message}` });
         }
     });
 
     // @route   POST /login
-    // @desc    Verify Firebase ID Token and retrieve user's role from Firestore
+    // @desc    Verify Supabase token and retrieve user's role from database
     // @access  Public
     router.post('/login', async (req, res) => {
         const authHeader = req.headers.authorization;
@@ -80,35 +112,43 @@ module.exports = (db, admin, usersCollection, verifyFirebaseToken) => {
             return res.status(401).json({ error: 'Authorization header with Bearer token is required!' });
         }
 
-        const idToken = authHeader.split(' ')[1];
+        const token = authHeader.split(' ')[1];
 
         try {
-            const decodedToken = await admin.auth().verifyIdToken(idToken);
-            const uid = decodedToken.uid;
-            const emailFromToken = decodedToken.email || '';
+            const { data: { user }, error } = await supabase.auth.getUser(token);
+            if (error) throw error;
 
-            const userDocRef = usersCollection.doc(uid);
-            const userDoc = await userDocRef.get();
+            const uid = user.id;
+            const emailFromToken = user.email || '';
 
-            if (!userDoc.exists) {
+            // Get user profile from database
+            const { data: userData, error: userError } = await supabase
+                .from('users')
+                .select('*')
+                .eq('id', uid)
+                .single();
+
+            if (userError || !userData) {
                 return res.status(404).json({ error: 'User profile not found in database. Please contact support.' });
             }
 
-            const userProfile = userDoc.data();
             const loggedInUser = {
                 id: uid,
                 email: emailFromToken,
-                role: userProfile.role || 'user',
-                mustChangePassword: userProfile.mustChangePassword || false
+                role: userData.role || 'user',
+                mustChangePassword: userData.must_change_password || false
             };
 
-            await userDocRef.update({
-                lastLogin: admin.firestore.FieldValue.serverTimestamp(),
-                loginActivity: admin.firestore.FieldValue.arrayUnion(new Date().toISOString())
-            });
+            // Update last login
+            await supabase
+                .from('users')
+                .update({
+                    last_login: new Date().toISOString(),
+                    login_activity: supabase.sql`array_append(login_activity, ${new Date().toISOString()})`
+                })
+                .eq('id', uid);
 
-            if (userProfile.mustChangePassword) {
-                // Require password change before allowing login
+            if (userData.must_change_password) {
                 return res.status(403).json({
                     error: 'Password change required before login.',
                     mustChangePassword: true,
@@ -118,7 +158,7 @@ module.exports = (db, admin, usersCollection, verifyFirebaseToken) => {
 
             return res.status(200).json({ message: 'Login successful', user: loggedInUser });
         } catch (error) {
-            if (error.code === 'auth/invalid-id-token' || error.code === 'auth/id-token-expired') {
+            if (error.message.includes('invalid') || error.message.includes('expired')) {
                 return res.status(401).json({ error: 'Invalid or expired authentication token. Please log in again.' });
             }
             console.error(`Unexpected login error: ${error.message}`);
@@ -133,8 +173,19 @@ module.exports = (db, admin, usersCollection, verifyFirebaseToken) => {
             return res.status(400).json({ error: 'Valid uid and new password (min 6 chars) required.' });
         }
         try {
-            await admin.auth().updateUser(uid, { password: newPassword });
-            await usersCollection.doc(uid).update({ mustChangePassword: false });
+            // Update password in Supabase Auth
+            const { error: authError } = await supabase.auth.updateUser({
+                password: newPassword
+            });
+
+            if (authError) throw authError;
+
+            // Clear must_change_password flag
+            await supabase
+                .from('users')
+                .update({ must_change_password: false })
+                .eq('id', uid);
+
             return res.status(200).json({ message: 'Password changed successfully. You can now log in.' });
         } catch (err) {
             console.error('Error changing password:', err);
@@ -145,9 +196,9 @@ module.exports = (db, admin, usersCollection, verifyFirebaseToken) => {
     // @route GET /profile/:userId
     // @desc Get user profile details (email, role).
     // @access Private (requires token, self-access or admin role)
-    router.get('/profile/:userId', verifyFirebaseToken, async (req, res) => {
+    router.get('/profile/:userId', verifySupabaseToken, async (req, res) => {
         const requestedUid = req.params.userId;
-        const authenticatedUid = req.user.uid;
+        const authenticatedUid = req.user.id;
         const authenticatedUserRole = req.user.role;
 
         if (requestedUid !== authenticatedUid && authenticatedUserRole !== 'admin') {
@@ -155,23 +206,29 @@ module.exports = (db, admin, usersCollection, verifyFirebaseToken) => {
         }
 
         try {
-            const userDoc = await usersCollection.doc(requestedUid).get();
-            if (!userDoc.exists) {
+            const { data: userData, error } = await supabase
+                .from('users')
+                .select('*')
+                .eq('id', requestedUid)
+                .single();
+
+            if (error || !userData) {
                 return res.status(404).json({ error: 'User profile not found.' });
             }
-            const profileData = userDoc.data();
+
             let fullName = '';
-            if (profileData.firstName || profileData.lastName) {
-                fullName = `${profileData.firstName || ''} ${profileData.lastName || ''}`.trim();
-            } else if (profileData.name) {
-                fullName = profileData.name;
+            if (userData.first_name || userData.last_name) {
+                fullName = `${userData.first_name || ''} ${userData.last_name || ''}`.trim();
+            } else if (userData.name) {
+                fullName = userData.name;
             }
+
             return res.status(200).json({
                 uid: requestedUid,
                 fullName,
-                employeeid: profileData.employeeid || '',
-                email: profileData.email,
-                role: profileData.role
+                employeeid: userData.employeeid || '',
+                email: userData.email,
+                role: userData.role
             });
         } catch (error) {
             console.error(`Error fetching user profile for ${requestedUid}: ${error.message}`);

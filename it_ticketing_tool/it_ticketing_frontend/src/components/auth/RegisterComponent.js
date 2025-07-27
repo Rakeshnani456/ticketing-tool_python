@@ -9,16 +9,17 @@ import FormSelect from '../common/FormSelect';
 import PrimaryButton from '../common/PrimaryButton';
 import LinkButton from '../common/LinkButton';
 
-// Import API Base URL from constants
-import { API_BASE_URL } from '../../config/constants';
+// Import Supabase client from config
+import { supabase } from '../../config/supabase';
 
 /**
  * Component for user registration.
  * Allows new users to create an account with email, password, and select a role.
- * Communicates with a backend API for the registration process.
+ * Uses Supabase Auth for registration and creates user profile.
  * @param {object} props - Component props.
  * @param {function} props.navigateTo - Function to navigate to different pages in the app.
  * @param {function} props.showFlashMessage - Function to display a temporary message to the user.
+ * @param {object} props.currentUser - Current authenticated user (for admin registration).
  * @returns {JSX.Element} The registration form.
  */
 const RegisterComponent = ({ currentUser, navigateTo, showFlashMessage }) => {
@@ -47,7 +48,7 @@ const RegisterComponent = ({ currentUser, navigateTo, showFlashMessage }) => {
 
     /**
      * Handles the form submission for registration.
-     * Sends user data to the backend for account creation.
+     * Creates user account in Supabase Auth and user profile in database.
      * @param {Event} e - The form submission event.
      */
     const handleSubmit = async (e) => {
@@ -55,26 +56,66 @@ const RegisterComponent = ({ currentUser, navigateTo, showFlashMessage }) => {
         setLoading(true); // Start loading state
 
         try {
-            // Send registration data to the backend API
-            const response = await fetch(`${API_BASE_URL}/register`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, password, role }), // Send email, password, and role
+            // 1. Create user in Supabase Auth
+            const { data: authData, error: authError } = await supabase.auth.signUp({
+                email,
+                password,
+                options: {
+                    emailRedirectTo: `${window.location.origin}/login`
+                }
             });
-            const data = await response.json(); // Parse response from backend
 
-            if (response.ok) {
-                // If registration is successful, show success message and navigate to login
-                showFlashMessage(data.message || 'Registration successful! Please log in.', 'success');
-                navigateTo('login');
-            } else {
-                // If registration fails, show error message from backend or a generic one
-                showFlashMessage(data.error || 'Registration failed.', 'error');
+            if (authError) {
+                throw authError;
             }
+
+            // 2. If admin is creating the user, update the user profile with the specified role
+            if (currentUser && (currentUser.role === 'super_admin' || currentUser.role === 'site_admin')) {
+                const { error: profileError } = await supabase
+                    .from('users')
+                    .update({ 
+                        role: role,
+                        active: true,
+                        must_change_password: false
+                    })
+                    .eq('id', authData.user.id);
+
+                if (profileError) {
+                    throw profileError;
+                }
+            }
+
+            // 3. Show success message
+            if (authData.user && !authData.user.email_confirmed_at) {
+                showFlashMessage('Registration successful! Please check your email to verify your account before logging in.', 'success');
+            } else {
+                showFlashMessage('Registration successful! Please log in.', 'success');
+            }
+            
+            navigateTo('login');
+
         } catch (error) {
-            // Handle network errors or issues reaching the server
+            // Handle registration errors
             console.error('Registration error:', error);
-            showFlashMessage('Network error or server unreachable.', 'error');
+            let errorMessage = 'Registration failed.';
+            
+            if (error.message) {
+                switch (error.message) {
+                    case 'User already registered':
+                        errorMessage = 'An account with this email already exists.';
+                        break;
+                    case 'Password should be at least 6 characters':
+                        errorMessage = 'Password must be at least 6 characters long.';
+                        break;
+                    case 'Invalid email':
+                        errorMessage = 'Please enter a valid email address.';
+                        break;
+                    default:
+                        errorMessage = error.message;
+                }
+            }
+            
+            showFlashMessage(errorMessage, 'error');
         } finally {
             setLoading(false); // End loading state
         }

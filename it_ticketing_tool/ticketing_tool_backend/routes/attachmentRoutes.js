@@ -5,20 +5,11 @@ const os = require('os');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 
-module.exports = (admin, verifyFirebaseToken) => {
+module.exports = (supabase, verifySupabaseToken) => {
     const router = express.Router();
 
-    router.post('/', verifyFirebaseToken, async (req, res) => {
-        if (!admin.storage()) {
-            console.error("Firebase Storage not initialized.");
-            if (!res.headersSent) {
-                return res.status(500).json({ error: "Firebase Storage not configured on the server." });
-            }
-            return;
-        }
-
+    router.post('/', verifySupabaseToken, async (req, res) => {
         const busboy = Busboy({ headers: req.headers, limits: { fileSize: 10 * 1024 * 1024 } }); // Max 10MB per file
-        const bucket = admin.storage().bucket();
 
         const uploads = [];
         const filePromises = [];
@@ -59,39 +50,38 @@ module.exports = (admin, verifyFirebaseToken) => {
                 const filepath = path.join(os.tmpdir(), uniqueFilename);
                 const writeStream = fs.createWriteStream(filepath);
                 file.pipe(writeStream);
-                writeStream.on('finish', () => {
+                writeStream.on('finish', async () => {
                     const destination = `attachments/${Date.now()}_${uniqueFilename}`;
-                    bucket.upload(filepath, {
-                        destination: destination,
-                        metadata: {
-                            contentType: mimetype,
-                            metadata: {
-                                firebaseStorageDownloadTokens: uuidv4(),
-                                uploadedBy: req.user.email,
-                                originalFileName: originalFilename
-                            }
-                        }
-                    })
-                    .then(() => {
-                        const fileRef = bucket.file(destination);
-                        return fileRef.makePublic();
-                    })
-                    .then(() => {
-                        const publicUrl = `https://storage.googleapis.com/${bucket.name}/${destination}`;
+                    try {
+                        const { data, error } = await supabase.storage
+                            .from('attachments')
+                            .upload(destination, fs.createReadStream(filepath), {
+                                contentType: mimetype,
+                                metadata: {
+                                    uploadedBy: req.user.email,
+                                    originalFileName: originalFilename
+                                }
+                            });
+
+                        if (error) throw error;
+
+                        const { data: publicUrlData } = supabase.storage
+                            .from('attachments')
+                            .getPublicUrl(destination);
+
                         uploads.push({
                             originalFilename: originalFilename,
-                            url: publicUrl,
+                            url: publicUrlData.publicUrl,
                             mimetype: mimetype,
                             added_at: new Date().toISOString()
                         });
                         fs.unlink(filepath, () => {});
                         resolve();
-                    })
-                    .catch(err => {
-                        console.error("Error uploading file to Firebase Storage:", err);
+                    } catch (err) {
+                        console.error("Error uploading file to Supabase Storage:", err);
                         fs.unlink(filepath, () => {});
                         reject(new Error(`Failed to upload file ${originalFilename}: ${err.message}`));
-                    });
+                    }
                 });
                 writeStream.on('error', (err) => {
                     fs.unlink(filepath, () => {});

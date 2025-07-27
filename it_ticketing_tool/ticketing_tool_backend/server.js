@@ -3,56 +3,30 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const admin = require('firebase-admin');
+const { supabase } = require('./config/supabase');
 const nodemailer = require('nodemailer');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-let db;
-let usersCollection;
-let ticketsCollection;
-let notificationsCollection;
-let clientsCollection;
 let dbConnected = false;
 
-try {
-    if (!admin.apps.length) {
-        const firebaseConfig = {
-            type: process.env.type,
-            project_id: process.env.project_id,
-            private_key_id: process.env.private_key_id,
-            private_key: process.env.private_key ? process.env.private_key.replace(/\\n/g, '\n') : undefined,
-            client_email: process.env.client_email,
-            client_id: process.env.client_id,
-            auth_uri: process.env.auth_uri,
-            token_uri: process.env.token_uri,
-            auth_provider_x509_cert_url: process.env.auth_provider_x509_cert_url,
-            client_x509_cert_url: process.env.client_x509_cert_url,
-            universe_domain: process.env.universe_domain
-        };
-
-        if (!firebaseConfig.project_id || !firebaseConfig.private_key || !firebaseConfig.client_email) {
-            throw new Error('Missing essential Firebase environment variables for Admin SDK initialization.');
+// Initialize Supabase connection
+(async () => {
+    try {
+        // Test Supabase connection
+        const { data, error } = await supabase.from('users').select('count').limit(1);
+        if (error) {
+            throw error;
         }
-
-        admin.initializeApp({
-            credential: admin.credential.cert(firebaseConfig),
-            storageBucket: process.env.FIREBASE_STORAGE_BUCKET
-        });
+        console.log("Connected to Supabase successfully!");
+        dbConnected = true;
+        app.locals.supabase = supabase; // Make supabase available in routes
+    } catch (error) {
+        console.error(`Error connecting to Supabase. Make sure environment variables are correct and accessible: ${error.message}`);
+        dbConnected = false;
     }
-    db = admin.firestore();
-    usersCollection = db.collection('users');
-    ticketsCollection = db.collection('tickets');
-    notificationsCollection = db.collection('notifications');
-    clientsCollection = db.collection('clients');
-    console.log("Connected to Firebase Firestore successfully!");
-    dbConnected = true;
-    app.locals.admin = admin; // Make admin available in routes
-} catch (error) {
-    console.error(`Error connecting to Firebase Firestore. Make sure environment variables are correct and accessible: ${error.message}`);
-    dbConnected = false;
-}
+})();
 
 // Office365 SMTP transporter for sending as TT.Support@kriasol.com via testing@kriasol.com
 const transporter = nodemailer.createTransport({
@@ -137,32 +111,41 @@ const checkDbConnection = (req, res, next) => {
 };
 app.use(checkDbConnection);
 
-// --- Middleware to verify Firebase ID token for protected routes ---
-const verifyFirebaseToken = async (req, res, next) => {
+// --- Middleware to verify Supabase JWT token for protected routes ---
+const verifySupabaseToken = async (req, res, next) => {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
         return res.status(401).json({ error: 'Unauthorized: No token provided or token format is invalid.' });
     }
-    const idToken = authHeader.split(' ')[1];
+    const token = authHeader.split(' ')[1];
     try {
-        const decodedToken = await admin.auth().verifyIdToken(idToken);
-        req.user = decodedToken;
-        const userDoc = await db.collection('users').doc(decodedToken.uid).get();
-        if (!userDoc.exists) {
-            return res.status(403).json({ error: 'Forbidden: User profile not found.' });
-        }
-        const userData = userDoc.data();
-        if (!userData || !userData.role) {
-            return res.status(403).json({ error: 'Forbidden: User role not found.' });
-        }
-        req.user.role = userData.role;
-        req.user.client_name = userData.client_name || userData.companyName;
-        next();
-    } catch (error) {
-        console.error('Error verifying Firebase ID token or fetching user role:', error);
-        if (error.code === 'auth/argument-error' || error.code === 'auth/invalid-credential' || error.code === 'auth/id-token-expired') {
+        // Verify the JWT token with Supabase
+        const { data: { user }, error } = await supabase.auth.getUser(token);
+        
+        if (error || !user) {
             return res.status(401).json({ error: 'Unauthorized: Invalid or expired token. Please log in again.' });
         }
+
+        // Get user profile from users table
+        const { data: userData, error: profileError } = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', user.id)
+            .single();
+
+        if (profileError || !userData) {
+            return res.status(403).json({ error: 'Forbidden: User profile not found.' });
+        }
+
+        req.user = {
+            uid: user.id,
+            email: user.email,
+            role: userData.role,
+            client_name: userData.client_name || userData.company_name
+        };
+        next();
+    } catch (error) {
+        console.error('Error verifying Supabase token or fetching user role:', error);
         return res.status(500).json({ error: 'Failed to authenticate token or retrieve user data.' });
     }
 };
@@ -222,33 +205,48 @@ const attachmentRoutes = require('./routes/attachmentRoutes');
 const adminManagementRouter = require('./routes/adminManagement');
 
 
-app.use('/', authRoutes(db, admin, usersCollection, verifyFirebaseToken));
-app.use('/tickets', ticketRoutes(db, admin, ticketsCollection, usersCollection, notificationsCollection, transporter, verifyFirebaseToken, checkRole, jsonSerializableTicket, jsonSerializableNotification, null, sendEmailAlert));
-app.use('/admin', adminRoutes(db, admin, usersCollection, verifyFirebaseToken, checkRole));
-app.use('/notifications', notificationRoutes(db, notificationsCollection, verifyFirebaseToken, jsonSerializableNotification));
-app.use('/api/clients', clientRoutes(db, clientsCollection, usersCollection));
-app.use('/api/users', userManagementRoutes(db, admin, usersCollection, clientsCollection, verifyFirebaseToken));
-app.use('/dashboard', dashboardRoutes(db, ticketsCollection, clientsCollection, usersCollection, requireSuperAdmin));
-app.use('/upload-attachment', attachmentRoutes(admin, verifyFirebaseToken));
-app.use('/admin-management', adminManagementRouter(db, usersCollection, verifyFirebaseToken, requireSuperAdmin));
+app.use('/', authRoutes(supabase, verifySupabaseToken));
+app.use('/tickets', ticketRoutes(supabase, verifySupabaseToken, checkRole, jsonSerializableTicket, jsonSerializableNotification, sendEmailAlert));
+app.use('/admin', adminRoutes(supabase, verifySupabaseToken, checkRole));
+app.use('/notifications', notificationRoutes(supabase, verifySupabaseToken, jsonSerializableNotification));
+app.use('/api/clients', clientRoutes(supabase));
+app.use('/api/users', userManagementRoutes(supabase, verifySupabaseToken));
+app.use('/dashboard', dashboardRoutes(supabase, requireSuperAdmin));
+app.use('/upload-attachment', attachmentRoutes(supabase, verifySupabaseToken));
+app.use('/admin-management', adminManagementRouter(supabase, verifySupabaseToken, requireSuperAdmin));
 
 
 // Add a dummy client if none exist (for testing) - keep this in server.js or a separate setup file
 (async () => {
     if (dbConnected) {
-        const snapshot = await clientsCollection.limit(1).get();
-        if (snapshot.empty) {
-            await clientsCollection.add({
-                client_name: 'Acme Corp',
-                client_type: 'Enterprise',
-                location: 'New York, USA',
-                domain: 'acme.com',
-                joined_date: '2022-01-15',
-                no_of_users: 120,
-                contract_end: '2025-12-31',
-                site_admin: 'john.doe@acme.com'
-            });
-            console.log('Dummy client added to clients collection.');
+        const { data, error } = await supabase
+            .from('clients')
+            .select('id')
+            .limit(1);
+        
+        if (error) {
+            console.error('Error checking for existing clients:', error);
+            return;
+        }
+        
+        if (!data || data.length === 0) {
+            const { error: insertError } = await supabase
+                .from('clients')
+                .insert({
+                    name: 'Acme Corp',
+                    contact_email: 'admin@acme.com',
+                    contact_phone: '+1-555-0123',
+                    address: 'New York, USA',
+                    contract_start: '2022-01-15',
+                    contract_end: '2025-12-31',
+                    site_admin: 'john.doe@acme.com'
+                });
+            
+            if (insertError) {
+                console.error('Error adding dummy client:', insertError);
+            } else {
+                console.log('Dummy client added to clients table.');
+            }
         }
     }
 })();

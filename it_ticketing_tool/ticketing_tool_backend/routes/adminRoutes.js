@@ -2,31 +2,29 @@
 const express = require('express');
 const router = express.Router();
 
-module.exports = (db, admin, usersCollection, verifyFirebaseToken, checkRole) => {
+module.exports = (supabase, verifySupabaseToken, checkRole) => {
 
     // @route   GET /admin/users
     // @desc    Get all users (admin only)
     // @access  Private (requires admin role)
-    router.get('/users', verifyFirebaseToken, checkRole(['admin', 'super_admin']), async (req, res) => {
+    router.get('/users', verifySupabaseToken, checkRole(['admin', 'super_admin']), async (req, res) => {
         try {
-            const usersSnapshot = await usersCollection.get();
-            const usersList = [];
-            for (const doc of usersSnapshot.docs) {
-                const userData = doc.data();
-                let email = userData.email;
-                let role = userData.role || 'user';
-                let uid = doc.id;
-                let domain = userData.domain || '';
-                let client_name = userData.client_name || '';
-                let asset_id = userData.asset_id || '';
-                try {
-                    let authUser = (await admin.auth().getUser(doc.id)); // Assuming doc.id is UID
-                    email = authUser.email;
-                } catch (e) {
-                    // If not found in Auth, fallback to Firestore data
-                }
-                usersList.push({ uid, email, role, domain, client_name, clientname: client_name, asset_id });
-            }
+            const { data: users, error } = await supabase
+                .from('users')
+                .select('*');
+
+            if (error) throw error;
+
+            const usersList = users.map(user => ({
+                uid: user.id,
+                email: user.email,
+                role: user.role || 'user',
+                domain: user.domain || '',
+                client_name: user.client_name || '',
+                clientname: user.client_name || '',
+                asset_id: user.asset_id || ''
+            }));
+
             return res.status(200).json(usersList);
         } catch (error) {
             console.error('Error fetching all users (admin):', error);
@@ -37,15 +35,24 @@ module.exports = (db, admin, usersCollection, verifyFirebaseToken, checkRole) =>
     // @route   GET /admin/users/:uid
     // @desc    Get details of a specific user.
     // @access  Private (requires admin role)
-    router.get('/users/:uid', verifyFirebaseToken, checkRole(['admin', 'super_admin']), async (req, res) => {
+    router.get('/users/:uid', verifySupabaseToken, checkRole(['admin', 'super_admin']), async (req, res) => {
         const userId = req.params.uid;
         try {
-            const userDoc = await usersCollection.doc(userId).get();
-            if (!userDoc.exists) {
-                return res.status(404).json({ error: 'User not found in Firestore.' });
+            const { data: userData, error } = await supabase
+                .from('users')
+                .select('*')
+                .eq('id', userId)
+                .single();
+
+            if (error || !userData) {
+                return res.status(404).json({ error: 'User not found in database.' });
             }
-            const userData = userDoc.data();
-            return res.status(200).json({ uid: userId, email: userData.email, role: userData.role });
+
+            return res.status(200).json({ 
+                uid: userId, 
+                email: userData.email, 
+                role: userData.role 
+            });
         } catch (error) {
             console.error(`Error fetching user ${userId}: ${error.message}`);
             return res.status(500).json({ error: `Failed to fetch user: ${error.message}` });
@@ -55,22 +62,38 @@ module.exports = (db, admin, usersCollection, verifyFirebaseToken, checkRole) =>
     // @route   PATCH /admin/users/:uid
     // @desc    Update a user's role.
     // @access  Private (requires admin role)
-    router.patch('/users/:uid', verifyFirebaseToken, checkRole(['admin', 'super_admin']), async (req, res) => {
+    router.patch('/users/:uid', verifySupabaseToken, checkRole(['admin', 'super_admin']), async (req, res) => {
         const { uid } = req.params;
         const { role } = req.body;
 
-        const validRoles = ['user', 'support', 'admin', 'super_admin']; // Define or import this
+        const validRoles = ['user', 'support', 'admin', 'super_admin'];
         if (!role || !validRoles.includes(role)) {
             return res.status(400).json({ error: 'Invalid role provided.' });
         }
 
-        if (uid === req.user.uid) {
+        if (uid === req.user.id) {
             return res.status(403).json({ error: 'Forbidden: You cannot change your own role through this interface.' });
         }
 
         try {
-            await usersCollection.doc(uid).update({ role });
-            await admin.auth().setCustomUserClaims(uid, { role });
+            // Update user role in database
+            const { error: updateError } = await supabase
+                .from('users')
+                .update({ role })
+                .eq('id', uid);
+
+            if (updateError) throw updateError;
+
+            // Update user role in Supabase Auth
+            const { error: authError } = await supabase.auth.admin.updateUserById(uid, {
+                user_metadata: { role }
+            });
+
+            if (authError) {
+                console.warn('Failed to update user metadata in auth:', authError);
+                // Don't fail the request if auth update fails
+            }
+
             return res.status(200).json({ message: 'User role updated successfully.' });
         } catch (error) {
             console.error(`Error updating user role for ${uid}:`, error);
@@ -79,77 +102,52 @@ module.exports = (db, admin, usersCollection, verifyFirebaseToken, checkRole) =>
     });
 
     // @route   DELETE /admin/users/:uid
-    // @desc    Delete a user (from Firebase Auth and Firestore).
+    // @desc    Delete a user (from Supabase Auth and database).
     // @access  Private (requires admin role)
-    router.delete('/users/:uid', verifyFirebaseToken, checkRole(['admin', 'super_admin']), async (req, res) => {
+    router.delete('/users/:uid', verifySupabaseToken, checkRole(['admin', 'super_admin']), async (req, res) => {
         const { uid } = req.params;
 
-        if (uid === req.user.uid) {
+        if (uid === req.user.id) {
             return res.status(403).json({ error: 'Forbidden: You cannot delete your own account.' });
         }
 
         try {
-            const userRef = usersCollection.doc(uid);
-            const userSnap = await userRef.get();
+            // Get user data first
+            const { data: userData, error: fetchError } = await supabase
+                .from('users')
+                .select('*')
+                .eq('id', uid)
+                .single();
 
-            if (!userSnap.exists) {
-                return res.status(404).json({ error: 'User not found in Firestore.' });
+            if (fetchError || !userData) {
+                return res.status(404).json({ error: 'User not found in database.' });
             }
-            const userData = userSnap.data();
+
             const clientName = userData.client_name;
 
-            if (!clientName) {
-                await admin.auth().deleteUser(uid);
-                await userRef.delete();
-                return res.status(200).json({ message: 'User deleted (no client update needed).' });
+            // Delete user from database
+            const { error: deleteError } = await supabase
+                .from('users')
+                .delete()
+                .eq('id', uid);
+
+            if (deleteError) throw deleteError;
+
+            // Delete user from Supabase Auth
+            const { error: authError } = await supabase.auth.admin.deleteUser(uid);
+
+            if (authError) {
+                console.warn('Failed to delete user from auth:', authError);
+                // Don't fail the request if auth delete fails
             }
 
-            const clientSnapshot = await db.collection('clients').where('client_name', '==', clientName).limit(1).get();
-            const clientDocRef = clientSnapshot.empty ? null : clientSnapshot.docs[0].ref;
-
-            await db.runTransaction(async (t) => {
-                let clientSnap = null;
-                if (clientDocRef) {
-                    clientSnap = await t.get(clientDocRef);
-                }
-
-                await admin.auth().deleteUser(uid);
-                t.delete(userRef);
-
-                if (clientSnap && clientSnap.exists) {
-                    const prevCount = clientSnap.data().no_of_users || 1;
-                    t.update(clientDocRef, { no_of_users: Math.max(0, prevCount - 1) });
-                }
+            return res.status(200).json({ 
+                message: `User ${userData.email} deleted successfully.`,
+                clientName: clientName 
             });
-
-            return res.status(200).json({ message: 'User deleted and client user count updated (if applicable).' });
-        } catch (err) {
-            console.error(`Error deleting user ${uid}:`, err);
-            if (err.code && err.code.startsWith('auth/')) {
-                return res.status(500).json({ error: `Firebase Auth error: ${err.message}` });
-            }
-            return res.status(500).json({ error: err.message || 'Failed to delete user.' });
-        }
-    });
-
-    // Inline Admin Management Route (can be moved to its own file later if needed)
-    router.get('/', verifyFirebaseToken, checkRole(['super_admin']), async (req, res) => {
-        try {
-            const snapshot = await usersCollection.where('role', '==', 'admin').get();
-            const admins = snapshot.docs.map(doc => {
-                const data = doc.data();
-                let lastLogin = data.lastLogin;
-                if (lastLogin && lastLogin.toDate) {
-                    lastLogin = lastLogin.toDate().toISOString();
-                } else if (lastLogin && lastLogin._seconds) {
-                    lastLogin = new Date(lastLogin._seconds * 1000).toISOString();
-                }
-                return { uid: doc.id, ...data, lastLogin };
-            });
-            res.json({ admins });
         } catch (error) {
-            console.error('Error fetching admins:', error);
-            res.status(500).json({ error: 'Failed to fetch admins.' });
+            console.error(`Error deleting user ${uid}:`, error);
+            return res.status(500).json({ error: 'Failed to delete user.' });
         }
     });
 

@@ -7,7 +7,7 @@ const os = require('os');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 
-module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCollection, transporter, verifyFirebaseToken, checkRole, jsonSerializableTicket, jsonSerializableNotification, generateDisplayId, sendEmailAlert) => {
+module.exports = (supabase, verifySupabaseToken, checkRole, jsonSerializableTicket, jsonSerializableNotification, sendEmailAlert) => {
 
     const validTicketCategories = ['software', 'hardware', 'troubleshoot'];
     const validTicketPriorities = ['Low', 'Medium', 'High', 'Critical'];
@@ -16,10 +16,15 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
     // --- Helper for generating a simple display ID (if not moved to a shared utility) ---
     // Make sure generateDisplayId is accessible, either passed in or in a utility file
     async function generateDisplayIdInternal() {
-        const lastTicketQuery = await ticketsCollection.orderBy('created_at', 'desc').limit(1).get();
+        const { data: lastTicket, error } = await supabase
+            .from('tickets')
+            .select('display_id')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .single();
+
         let nextIdNum = 1;
-        if (!lastTicketQuery.empty) {
-            const lastTicket = lastTicketQuery.docs[0].data();
+        if (!error && lastTicket && lastTicket.display_id) {
             const lastDisplayId = lastTicket.display_id;
             if (lastDisplayId && lastDisplayId.startsWith('TT')) {
                 const numPart = parseInt(lastDisplayId.substring(2));
@@ -32,24 +37,28 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
     }
 
     // --- New Endpoint: Get Ticket Summary Counts ---
-    router.get('/summary-counts', verifyFirebaseToken, async (req, res) => {
-        const authenticatedUid = req.user.uid;
+    router.get('/summary-counts', verifySupabaseToken, async (req, res) => {
+        const authenticatedUid = req.user.id;
 
         try {
-            let activeTicketsQuery = ticketsCollection.where('status', 'in', ['Open', 'In Progress', 'Hold']);
-            let assignedToMeTicketsQuery = ticketsCollection.where('assigned_to_id', '==', authenticatedUid);
-            let totalTicketsQuery = ticketsCollection;
-
-            const [activeSnapshot, assignedSnapshot, totalSnapshot] = await Promise.all([
-                activeTicketsQuery.get(),
-                assignedToMeTicketsQuery.get(),
-                totalTicketsQuery.get()
+            const [activeTickets, assignedTickets, totalTickets] = await Promise.all([
+                supabase
+                    .from('tickets')
+                    .select('id', { count: 'exact' })
+                    .in('status', ['Open', 'In Progress', 'Hold']),
+                supabase
+                    .from('tickets')
+                    .select('id', { count: 'exact' })
+                    .eq('assigned_to_id', authenticatedUid),
+                supabase
+                    .from('tickets')
+                    .select('id', { count: 'exact' })
             ]);
 
             const counts = {
-                active_tickets: activeSnapshot.size,
-                assigned_to_me: assignedSnapshot.size,
-                total_tickets: totalSnapshot.size,
+                active_tickets: activeTickets.count || 0,
+                assigned_to_me: assignedTickets.count || 0,
+                total_tickets: totalTickets.count || 0,
             };
 
             return res.status(200).json(counts);
@@ -61,22 +70,25 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
     });
 
     // --- NEW ENDPOINT: Get Ticket Status Summary ---
-    router.get('/status-summary', verifyFirebaseToken, async (req, res) => {
+    router.get('/status-summary', verifySupabaseToken, async (req, res) => {
         try {
-            const snapshot = await ticketsCollection.get();
-            const statusCounts = {};
+            const { data: tickets, error } = await supabase
+                .from('tickets')
+                .select('status');
 
+            if (error) throw error;
+
+            const statusCounts = {};
             validTicketStatuses.forEach(status => {
                 statusCounts[status] = 0;
             });
 
-            snapshot.forEach(doc => {
-                const ticketData = doc.data();
-                const status = ticketData.status;
+            tickets.forEach(ticket => {
+                const status = ticket.status;
                 if (statusCounts.hasOwnProperty(status)) {
                     statusCounts[status]++;
                 } else {
-                    console.warn(`Ticket ${doc.id} has an unrecognized status: ${status}.`);
+                    console.warn(`Ticket ${ticket.id} has an unrecognized status: ${status}.`);
                 }
             });
 
@@ -88,7 +100,7 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
     });
 
     // --- New Route: Create a new ticket ---
-    router.post('/', verifyFirebaseToken, async (req, res) => {
+    router.post('/', verifySupabaseToken, async (req, res) => {
         const {
             request_for_email,
             category,
@@ -100,7 +112,7 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
             attachments = []
         } = req.body;
 
-        const reporterId = req.user.uid;
+        const reporterId = req.user.id;
         const reporterEmail = req.user.email;
 
         if (!request_for_email || !category || !short_description || !contact_number || !hostname_asset_id) {
@@ -121,27 +133,33 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
             // Look up client_name for reporter_email and request_for_email
             let clientName = null;
             // Try reporter_email first
-            let userSnap = await usersCollection.where('email', '==', reporterEmail).limit(1).get();
-            if (!userSnap.empty) {
-                const userData = userSnap.docs[0].data();
-                clientName = userData.client_name || null;
+            let userSnap = await supabase
+                .from('users')
+                .select('client_name, companyName, role')
+                .eq('email', reporterEmail)
+                .single();
+            if (userSnap.data) {
+                clientName = userSnap.data.client_name || null;
                 console.log("Found user by reporter_email:", {
                     email: reporterEmail,
-                    client_name: userData.client_name,
-                    companyName: userData.companyName,
-                    role: userData.role
+                    client_name: userSnap.data.client_name,
+                    companyName: userSnap.data.companyName,
+                    role: userSnap.data.role
                 });
             } else {
                 // Try request_for_email
-                userSnap = await usersCollection.where('email', '==', request_for_email).limit(1).get();
-                if (!userSnap.empty) {
-                    const userData = userSnap.docs[0].data();
-                    clientName = userData.client_name || null;
+                userSnap = await supabase
+                    .from('users')
+                    .select('client_name, companyName, role')
+                    .eq('email', request_for_email)
+                    .single();
+                if (userSnap.data) {
+                    clientName = userSnap.data.client_name || null;
                     console.log("Found user by request_for_email:", {
                         email: request_for_email,
-                        client_name: userData.client_name,
-                        companyName: userData.companyName,
-                        role: userData.role
+                        client_name: userSnap.data.client_name,
+                        companyName: userSnap.data.companyName,
+                        role: userSnap.data.role
                     });
                 } else {
                     console.warn("No user found for either reporter_email or request_for_email:", {
@@ -167,8 +185,8 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                 priority: priority || 'Low',
                 hostname_asset_id: hostname_asset_id,
                 status: 'Open',
-                created_at: admin.firestore.FieldValue.serverTimestamp(),
-                updated_at: admin.firestore.FieldValue.serverTimestamp(),
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
                 comments: [],
                 attachments: attachments,
                 assigned_to_id: null,
@@ -181,25 +199,33 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                 client_name: clientName,
             };
 
-            const docRef = await ticketsCollection.add(newTicket);
+            const { data: ticketData, error: ticketError } = await supabase
+                .from('tickets')
+                .insert([newTicket])
+                .select()
+                .single();
+
+            if (ticketError) throw ticketError;
 
             const reporterUserRole = req.user.role;
             if (reporterUserRole === 'user') {
-                await notificationsCollection.add({
-                    userId: reporterId,
-                    message: `Your ticket ${newDisplayId} - "${short_description}" has been created.`,
-                    type: 'ticket_created',
-                    read: false,
-                    timestamp: admin.firestore.FieldValue.serverTimestamp(),
-                    ticketId: docRef.id
-                });
+                await supabase
+                    .from('notifications')
+                    .insert([{
+                        userId: reporterId,
+                        message: `Your ticket ${newDisplayId} - "${short_description}" has been created.`,
+                        type: 'ticket_created',
+                        read: false,
+                        timestamp: new Date().toISOString(),
+                        ticketId: ticketData.id
+                    }]);
             }
 
             // Prepare email content before setImmediate
             const emailSubject = `🔔 New IT Support Ticket Logged – ${newDisplayId}: ${short_description}`;
             const emailText = `Dear Team,\n\nA new IT support request has been logged in the Kriasol Helpdesk. Please review the details below and take appropriate action as needed.\n\nTicket ID: ${newDisplayId}\nIssue Summary: ${short_description}\nCategory: ${category}\nPriority: ${priority || 'Low'}\nRequested For: ${request_for_email}\nRequested By: ${reporterEmail}\nContact Number: ${contact_number}\n\nAccess the Kriasol Helpdesk to view, assign, or update the ticket.\n\nThank you for your prompt attention.\n\nBest regards,\nIT Service Desk\nKriasol Technologies`;
             const baseUrl = getBaseUrl(req);
-            const ticketLink = `${baseUrl}/tickets/${docRef.id}`;
+            const ticketLink = `${baseUrl}/tickets/${ticketData.id}`;
             const emailHtml = `
                 <div style=\"font-family: Arial, sans-serif; color: #222;\">
                     <p>Dear Team,</p>
@@ -236,7 +262,7 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                 sendEmailAlert('tt.support@kriasol.com', emailSubject, emailText, emailHtml, ccList.length > 0 ? ccList.join(',') : null);
             });
 
-            return res.status(201).json({ message: 'Ticket created successfully!', id: docRef.id, display_id: newDisplayId });
+            return res.status(201).json({ message: 'Ticket created successfully!', id: ticketData.id, display_id: newDisplayId });
         } catch (error) {
             console.error(`Error creating ticket: ${error.message}`);
             return res.status(500).json({ error: `Error creating ticket: ${error.message}` });
@@ -244,7 +270,7 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
     });
 
     // --- Update an existing ticket ---
-    router.patch('/:ticket_id', verifyFirebaseToken, async (req, res) => {
+    router.patch('/:ticket_id', verifySupabaseToken, async (req, res) => {
         const ticketId = req.params.ticket_id;
         const {
             status,
@@ -259,7 +285,7 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
             category
         } = req.body;
 
-        const authenticatedUid = req.user.uid;
+        const authenticatedUid = req.user.id;
         const authenticatedUserRole = req.user.role;
 
         if (status && !validTicketStatuses.includes(status)) {
@@ -273,11 +299,15 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
         }
 
         try {
-            const ticketDoc = await ticketsCollection.doc(ticketId).get();
-            if (!ticketDoc.exists) {
+            const { data: ticketData, error: ticketError } = await supabase
+                .from('tickets')
+                .select('*')
+                .eq('id', ticketId)
+                .single();
+
+            if (ticketError || !ticketData) {
                 return res.status(404).json({ error: 'Ticket not found.' });
             }
-            const ticketData = ticketDoc.data();
 
             if (["Resolved", "Cancelled"].includes(ticketData.status) && authenticatedUserRole === "user") {
                 return res.status(403).json({ error: "Forbidden: Cannot update a resolved or cancelled ticket as a regular user." });
@@ -295,7 +325,7 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
             }
 
             const updateData = {
-                updated_at: admin.firestore.FieldValue.serverTimestamp()
+                updated_at: new Date().toISOString()
             };
 
             if (priority !== undefined) updateData.priority = priority;
@@ -327,15 +357,15 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                     old_status: ticketData.status,
                     new_status: status,
                     user_email: req.user.email,
-                    timestamp: new Date()
+                    timestamp: new Date().toISOString()
                 };
-                updateData.status_history = admin.firestore.FieldValue.arrayUnion(statusHistoryEntry);
+                updateData.status_history = [...(updateData.status_history || []), statusHistoryEntry];
 
                 if (["Resolved", "Cancelled"].includes(status)) {
-                    updateData.resolved_at = admin.firestore.FieldValue.serverTimestamp();
+                    updateData.resolved_at = new Date().toISOString();
                     updateData.closed_by_email = req.user.email;
-                    if ((time_spent === undefined || time_spent === null || time_spent === "") && ticketData.created_at && ticketData.created_at.toDate) {
-                        const createdAt = ticketData.created_at.toDate();
+                    if ((time_spent === undefined || time_spent === null || time_spent === "") && ticketData.created_at) {
+                        const createdAt = new Date(ticketData.created_at);
                         const resolvedAt = new Date();
                         const timeDiffMillis = resolvedAt.getTime() - createdAt.getTime();
                         const timeSpentMinutes = Math.round(timeDiffMillis / (1000 * 60));
@@ -366,59 +396,67 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                         old_assigned_to: ticketData.assigned_to_email,
                         new_assigned_to: null,
                         user_email: req.user.email,
-                        timestamp: new Date()
+                        timestamp: new Date().toISOString()
                     };
-                    updateData.assigned_to_history = admin.firestore.FieldValue.arrayUnion(assignmentHistoryEntry);
+                    updateData.assigned_to_history = [...(updateData.assigned_to_history || []), assignmentHistoryEntry];
                     if (ticketData.assigned_to_id) {
-                        await notificationsCollection.add({
-                            userId: ticketData.assigned_to_id,
-                            message: `Ticket ${ticketData.display_id} - "${ticketData.short_description}" has been unassigned from you.`,
-                            type: 'ticket_unassigned',
-                            read: false,
-                            timestamp: admin.firestore.FieldValue.serverTimestamp(),
-                            ticketId: ticketId
-                        });
+                        await supabase
+                            .from('notifications')
+                            .insert([{
+                                userId: ticketData.assigned_to_id,
+                                message: `Ticket ${ticketData.display_id} - "${ticketData.short_description}" has been unassigned from you.`,
+                                type: 'ticket_unassigned',
+                                read: false,
+                                timestamp: new Date().toISOString(),
+                                ticketId: ticketId
+                            }]);
                     }
                 } else {
-                    const userQuery = await usersCollection.where('email', '==', assigned_to_email).limit(1).get();
-                    if (userQuery.empty) {
+                    const { data: assignedUser, error: userError } = await supabase
+                        .from('users')
+                        .select('id, email, role')
+                        .eq('email', assigned_to_email)
+                        .single();
+                    if (userError || !assignedUser) {
                         return res.status(404).json({ error: 'Assigned user email not found.' });
                     }
-                    const assignedUserDoc = userQuery.docs[0];
-                    const assignedUserData = assignedUserDoc.data();
-                    if (!['support', 'admin'].includes(assignedUserData.role)) {
+                    if (!['support', 'admin'].includes(assignedUser.role)) {
                         return res.status(400).json({ error: 'User cannot be assigned as they are not a support associate or admin.' });
                     }
-                    updateData.assigned_to_id = assignedUserDoc.id;
+                    updateData.assigned_to_id = assignedUser.id;
                     updateData.assigned_to_email = assigned_to_email;
 
                     const assignmentHistoryEntry = {
                         old_assigned_to: ticketData.assigned_to_email,
                         new_assigned_to: assigned_to_email,
                         user_email: req.user.email,
-                        timestamp: new Date()
+                        timestamp: new Date().toISOString()
                     };
-                    updateData.assigned_to_history = admin.firestore.FieldValue.arrayUnion(assignmentHistoryEntry);
+                    updateData.assigned_to_history = [...(updateData.assigned_to_history || []), assignmentHistoryEntry];
 
-                    if (assignedUserDoc.id !== authenticatedUid) {
-                        await notificationsCollection.add({
-                            userId: assignedUserDoc.id,
-                            message: `Ticket ${ticketData.display_id} - "${ticketData.short_description}" has been assigned to you.`,
-                            type: 'ticket_assigned',
-                            read: false,
-                            timestamp: admin.firestore.FieldValue.serverTimestamp(),
-                            ticketId: ticketId
-                        });
+                    if (assignedUser.id !== authenticatedUid) {
+                        await supabase
+                            .from('notifications')
+                            .insert([{
+                                userId: assignedUser.id,
+                                message: `Ticket ${ticketData.display_id} - "${ticketData.short_description}" has been assigned to you.`,
+                                type: 'ticket_assigned',
+                                read: false,
+                                timestamp: new Date().toISOString(),
+                                ticketId: ticketId
+                            }]);
                     }
-                    if (ticketData.assigned_to_id && ticketData.assigned_to_id !== assignedUserDoc.id) {
-                        await notificationsCollection.add({
-                            userId: ticketData.assigned_to_id,
-                            message: `Ticket ${ticketData.display_id} - "${ticketData.short_description}" has been reassigned from you.`,
-                            type: 'ticket_reassigned_from',
-                            read: false,
-                            timestamp: admin.firestore.FieldValue.serverTimestamp(),
-                            ticketId: ticketId
-                        });
+                    if (ticketData.assigned_to_id && ticketData.assigned_to_id !== assignedUser.id) {
+                        await supabase
+                            .from('notifications')
+                            .insert([{
+                                userId: ticketData.assigned_to_id,
+                                message: `Ticket ${ticketData.display_id} - "${ticketData.short_description}" has been reassigned from you.`,
+                                type: 'ticket_reassigned_from',
+                                read: false,
+                                timestamp: new Date().toISOString(),
+                                ticketId: ticketId
+                            }]);
                     }
 
                     // Send assignment email
@@ -447,9 +485,9 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                     old_priority: ticketData.priority,
                     new_priority: priority,
                     user_email: req.user.email,
-                    timestamp: new Date()
+                    timestamp: new Date().toISOString()
                 };
-                updateData.priority_history = admin.firestore.FieldValue.arrayUnion(priorityHistoryEntry);
+                updateData.priority_history = [...(updateData.priority_history || []), priorityHistoryEntry];
             }
 
             // Category change
@@ -458,12 +496,17 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                     old_category: ticketData.category,
                     new_category: category,
                     user_email: req.user.email,
-                    timestamp: new Date()
+                    timestamp: new Date().toISOString()
                 };
-                updateData.category_history = admin.firestore.FieldValue.arrayUnion(categoryHistoryEntry);
+                updateData.category_history = [...(updateData.category_history || []), categoryHistoryEntry];
             }
 
-            await ticketsCollection.doc(ticketId).update(updateData);
+            const { error: updateError } = await supabase
+                .from('tickets')
+                .update(updateData)
+                .eq('id', ticketId);
+
+            if (updateError) throw updateError;
             return res.status(200).json({ message: 'Ticket updated successfully!' });
         } catch (error) {
             console.error(`Error updating ticket: ${error.message}`);
@@ -472,18 +515,22 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
     });
 
     // NEW API: Cancel a ticket
-    router.patch('/:ticket_id/cancel', verifyFirebaseToken, async (req, res) => {
+    router.patch('/:ticket_id/cancel', verifySupabaseToken, async (req, res) => {
         const ticketId = req.params.ticket_id;
-        const authenticatedUid = req.user.uid;
+        const authenticatedUid = req.user.id;
         const authenticatedUserRole = req.user.role;
         const { closure_notes } = req.body;
 
         try {
-            const ticketDoc = await ticketsCollection.doc(ticketId).get();
-            if (!ticketDoc.exists) {
+            const { data: ticketData, error: ticketError } = await supabase
+                .from('tickets')
+                .select('*')
+                .eq('id', ticketId)
+                .single();
+
+            if (ticketError || !ticketData) {
                 return res.status(404).json({ error: 'Ticket not found.' });
             }
-            const ticketData = ticketDoc.data();
 
             if (['Resolved', 'Cancelled'].includes(ticketData.status)) {
                 return res.status(400).json({ error: `Ticket is already ${ticketData.status.toLowerCase()}. Cannot cancel.` });
@@ -495,8 +542,8 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
 
             const updateData = {
                 status: 'Cancelled',
-                updated_at: admin.firestore.FieldValue.serverTimestamp(),
-                resolved_at: admin.firestore.FieldValue.serverTimestamp(),
+                updated_at: new Date().toISOString(),
+                resolved_at: new Date().toISOString(),
                 closed_by_email: req.user.email,
                 assigned_to_id: null,
                 assigned_to_email: null,
@@ -507,49 +554,58 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                 old_status: ticketData.status,
                 new_status: 'Cancelled',
                 user_email: req.user.email,
-                timestamp: new Date()
+                timestamp: new Date().toISOString()
             };
-            updateData.status_history = admin.firestore.FieldValue.arrayUnion(statusHistoryEntry);
+            updateData.status_history = [...(updateData.status_history || []), statusHistoryEntry];
 
             if (ticketData.assigned_to_email) {
                 const assignmentHistoryEntry = {
                     old_assigned_to: ticketData.assigned_to_email,
                     new_assigned_to: null,
                     user_email: req.user.email,
-                    timestamp: new Date()
+                    timestamp: new Date().toISOString()
                 };
-                updateData.assigned_to_history = admin.firestore.FieldValue.arrayUnion(assignmentHistoryEntry);
+                updateData.assigned_to_history = [...(updateData.assigned_to_history || []), assignmentHistoryEntry];
             }
 
-            if (ticketData.created_at && ticketData.created_at.toDate) {
-                const createdAt = ticketData.created_at.toDate();
+            if (ticketData.created_at) {
+                const createdAt = new Date(ticketData.created_at);
                 const cancelledAt = new Date();
                 const timeDiffMillis = cancelledAt.getTime() - createdAt.getTime();
                 const timeSpentMinutes = Math.round(timeDiffMillis / (1000 * 60));
                 updateData.time_spent_minutes = timeSpentMinutes;
             }
 
-            await ticketsCollection.doc(ticketId).update(updateData);
+            const { error: updateError } = await supabase
+                .from('tickets')
+                .update(updateData)
+                .eq('id', ticketId);
+
+            if (updateError) throw updateError;
 
             if (ticketData.reporter_id !== authenticatedUid) {
-                await notificationsCollection.add({
-                    userId: ticketData.reporter_id,
-                    message: `Your ticket ${ticketData.display_id} - "${ticketData.short_description}" has been cancelled.`,
-                    type: 'ticket_cancelled',
-                    read: false,
-                    timestamp: admin.firestore.FieldValue.serverTimestamp(),
-                    ticketId: ticketId
-                });
+                await supabase
+                    .from('notifications')
+                    .insert([{
+                        userId: ticketData.reporter_id,
+                        message: `Your ticket ${ticketData.display_id} - "${ticketData.short_description}" has been cancelled.`,
+                        type: 'ticket_cancelled',
+                        read: false,
+                        timestamp: new Date().toISOString(),
+                        ticketId: ticketId
+                    }]);
             }
             if (ticketData.assigned_to_id && ticketData.assigned_to_id !== authenticatedUid) {
-                await notificationsCollection.add({
-                    userId: ticketData.assigned_to_id,
-                    message: `Ticket ${ticketData.display_id} - "${ticketData.short_description}" has been cancelled.`,
-                    type: 'ticket_cancelled_assigned',
-                    read: false,
-                    timestamp: admin.firestore.FieldValue.serverTimestamp(),
-                    ticketId: ticketId
-                });
+                await supabase
+                    .from('notifications')
+                    .insert([{
+                        userId: ticketData.assigned_to_id,
+                        message: `Ticket ${ticketData.display_id} - "${ticketData.short_description}" has been cancelled.`,
+                        type: 'ticket_cancelled_assigned',
+                        read: false,
+                        timestamp: new Date().toISOString(),
+                        ticketId: ticketId
+                    }]);
             }
 
             // After cancellation, notify the reporter
@@ -572,7 +628,7 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
     });
 
     // @route   POST /ticket/:ticket_id/add_comment
-    router.post('/:ticket_id/add_comment', verifyFirebaseToken, async (req, res) => {
+    router.post('/:ticket_id/add_comment', verifySupabaseToken, async (req, res) => {
         const ticketId = req.params.ticket_id;
         const { comment_text, commenter_name = req.user.email } = req.body;
 
@@ -581,12 +637,16 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
         }
 
         try {
-            const ticketDoc = await ticketsCollection.doc(ticketId).get();
-            if (!ticketDoc.exists) {
+            const { data: ticketData, error: ticketError } = await supabase
+                .from('tickets')
+                .select('*')
+                .eq('id', ticketId)
+                .single();
+
+            if (ticketError || !ticketData) {
                 return res.status(404).json({ error: 'Ticket not found.' });
             }
 
-            const ticketData = ticketDoc.data();
             if (['Resolved', 'Cancelled'].includes(ticketData.status)) {
                 return res.status(403).json({ error: 'Cannot add comments to a resolved or cancelled ticket.' });
             }
@@ -594,34 +654,43 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
             const newComment = {
                 text: comment_text,
                 commenter: commenter_name,
-                timestamp: new Date()
+                timestamp: new Date().toISOString()
             };
 
-            await ticketsCollection.doc(ticketId).update({
-                comments: admin.firestore.FieldValue.arrayUnion(newComment),
-                updated_at: admin.firestore.FieldValue.serverTimestamp()
-            });
+            const { error: updateError } = await supabase
+                .from('tickets')
+                .update({
+                    comments: [...(ticketData.comments || []), newComment],
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', ticketId);
 
-            if (req.user.uid !== ticketData.reporter_id) {
-                await notificationsCollection.add({
-                    userId: ticketData.reporter_id,
-                    message: `New comment on your ticket ${ticketData.display_id} by ${commenter_name}.`,
-                    type: 'new_comment_on_my_ticket',
-                    read: false,
-                    timestamp: admin.firestore.FieldValue.serverTimestamp(),
-                    ticketId: ticketId
-                });
+            if (updateError) throw updateError;
+
+            if (req.user.id !== ticketData.reporter_id) {
+                await supabase
+                    .from('notifications')
+                    .insert([{
+                        userId: ticketData.reporter_id,
+                        message: `New comment on your ticket ${ticketData.display_id} by ${commenter_name}.`,
+                        type: 'new_comment_on_my_ticket',
+                        read: false,
+                        timestamp: new Date().toISOString(),
+                        ticketId: ticketId
+                    }]);
             }
 
-            if (ticketData.assigned_to_id && req.user.uid !== ticketData.assigned_to_id) {
-                await notificationsCollection.add({
-                    userId: ticketData.assigned_to_id,
-                    message: `New comment on assigned ticket ${ticketData.display_id} by ${commenter_name}.`,
-                    type: 'new_comment_on_assigned_ticket',
-                    read: false,
-                    timestamp: admin.firestore.FieldValue.serverTimestamp(),
-                    ticketId: ticketId
-                });
+            if (ticketData.assigned_to_id && req.user.id !== ticketData.assigned_to_id) {
+                await supabase
+                    .from('notifications')
+                    .insert([{
+                        userId: ticketData.assigned_to_id,
+                        message: `New comment on assigned ticket ${ticketData.display_id} by ${commenter_name}.`,
+                        type: 'new_comment_on_assigned_ticket',
+                        read: false,
+                        timestamp: new Date().toISOString(),
+                        ticketId: ticketId
+                    }]);
             }
 
             const reporterEmail = ticketData.reporter_email;
@@ -647,9 +716,9 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
     });
 
     // --- Get My Tickets ---
-    router.get('/my', verifyFirebaseToken, async (req, res) => {
+    router.get('/my', verifySupabaseToken, async (req, res) => {
         const userId = req.query.userId;
-        const authenticatedUid = req.user.uid;
+        const authenticatedUid = req.user.id;
         const searchKeyword = req.query.keyword ? req.query.keyword.toLowerCase() : '';
 
         if (userId !== authenticatedUid) {
@@ -657,23 +726,31 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
         }
 
         try {
-            let query = ticketsCollection.where('reporter_id', '==', userId);
-            query = query.where('status', 'in', ['Open', 'In Progress', 'Hold']);
+            let query = supabase
+                .from('tickets')
+                .select('*')
+                .eq('reporter_id', userId)
+                .in('status', ['Open', 'In Progress', 'Hold']);
 
             if (searchKeyword) {
                 const exactIdMatch = `TT${searchKeyword.toUpperCase().padStart(5, '0')}`;
-                const exactIdMatchQuery = ticketsCollection
-                    .where('reporter_id', '==', userId)
-                    .where('display_id', '==', exactIdMatch);
-                const exactIdMatchSnapshot = await exactIdMatchQuery.get();
-                if (!exactIdMatchSnapshot.empty) {
-                    return res.status(200).json(exactIdMatchSnapshot.docs.map(doc => jsonSerializableTicket(doc.id, doc.data())));
+                const exactIdMatchQuery = supabase
+                    .from('tickets')
+                    .select('*')
+                    .eq('reporter_id', userId)
+                    .eq('display_id', exactIdMatch);
+                const { data: exactIdMatchData, error: exactIdMatchError } = await exactIdMatchQuery;
+                if (exactIdMatchError || !exactIdMatchData || exactIdMatchData.length === 0) {
+                    return res.status(200).json([]); // Return empty array if no match
                 }
+                return res.status(200).json(exactIdMatchData.map(jsonSerializableTicket));
             }
 
-            const snapshot = await query.orderBy('created_at', 'desc').get();
-            const tickets = snapshot.docs.map(doc => jsonSerializableTicket(doc.id, doc.data()));
-            return res.status(200).json(tickets);
+            const { data: tickets, error: ticketsError } = await query.order('created_at', { ascending: false });
+
+            if (ticketsError) throw ticketsError;
+
+            return res.status(200).json(tickets.map(jsonSerializableTicket));
         } catch (error) {
             console.error(`Error fetching my tickets for ${userId}: ${error.message}`);
             return res.status(500).json({ error: `Failed to fetch your tickets: ${error.message}` });
@@ -681,39 +758,44 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
     });
 
     // --- Get All Tickets (for support and admin users) ---
-    router.get('/all', verifyFirebaseToken, checkRole(['support', 'admin', 'super_admin']), async (req, res) => {
+    router.get('/all', verifySupabaseToken, checkRole(['support', 'admin', 'super_admin']), async (req, res) => {
         const filterStatus = req.query.status;
         const filterAssignment = req.query.assignment;
         const searchKeyword = req.query.keyword ? req.query.keyword.toLowerCase() : '';
 
         try {
-            let query = ticketsCollection;
+            let query = supabase
+                .from('tickets')
+                .select('*');
 
             if (searchKeyword) {
                 const exactIdMatch = `TT${searchKeyword.toUpperCase().padStart(5, '0')}`;
-                const exactIdMatchQuery = ticketsCollection.where('display_id', '==', exactIdMatch);
-                const exactIdMatchSnapshot = await exactIdMatchQuery.get();
-                if (!exactIdMatchSnapshot.empty) {
-                    return res.status(200).json(exactIdMatchSnapshot.docs.map(doc => jsonSerializableTicket(doc.id, doc.data())));
+                const exactIdMatchQuery = supabase.from('tickets').where('display_id', 'eq', exactIdMatch);
+                const { data: exactIdMatchData, error: exactIdMatchError } = await exactIdMatchQuery;
+                if (exactIdMatchError || !exactIdMatchData || exactIdMatchData.length === 0) {
+                    return res.status(200).json([]); // Return empty array if no match
                 }
+                return res.status(200).json(exactIdMatchData.map(jsonSerializableTicket));
             }
 
             if (filterStatus) {
                 if (!validTicketStatuses.includes(filterStatus)) {
                     return res.status(400).json({ error: 'Invalid status filter.' });
                 }
-                query = query.where('status', '==', filterStatus);
+                query = query.where('status', 'eq', filterStatus);
             }
 
             if (filterAssignment === 'unassigned') {
-                query = query.where('assigned_to_email', '==', null);
+                query = query.where('assigned_to_email', 'eq', null);
             } else if (filterAssignment === 'assigned_to_me') {
-                query = query.where('assigned_to_id', '==', req.user.uid);
+                query = query.where('assigned_to_id', 'eq', req.user.id);
             }
 
-            const snapshot = await query.orderBy('created_at', 'desc').get();
-            const tickets = snapshot.docs.map(doc => jsonSerializableTicket(doc.id, doc.data()));
-            return res.status(200).json(tickets);
+            const { data: tickets, error: ticketsError } = await query.order('created_at', { ascending: false });
+
+            if (ticketsError) throw ticketsError;
+
+            return res.status(200).json(tickets.map(jsonSerializableTicket));
         } catch (error) {
             console.error(`Error fetching all tickets: ${error.message}`);
             return res.status(500).json({ error: `Failed to fetch all tickets: ${error.message}` });
@@ -721,25 +803,27 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
     });
 
     // --- New Route: Get Ticket Details ---
-    router.get('/:ticket_id', verifyFirebaseToken, async (req, res) => {
+    router.get('/:ticket_id', verifySupabaseToken, async (req, res) => {
         const ticketId = req.params.ticket_id;
-        const authenticatedUid = req.user.uid;
+        const authenticatedUid = req.user.id;
         const authenticatedUserRole = req.user.role;
 
         try {
-            const ticketDoc = await ticketsCollection.doc(ticketId).get();
+            const { data: ticketData, error: ticketError } = await supabase
+                .from('tickets')
+                .select('*')
+                .eq('id', ticketId)
+                .single();
 
-            if (!ticketDoc.exists) {
+            if (ticketError || !ticketData) {
                 return res.status(404).json({ error: 'Ticket not found.' });
             }
-
-            const ticketData = ticketDoc.data();
 
             if (ticketData.reporter_id !== authenticatedUid && !['support', 'admin', 'super_admin'].includes(authenticatedUserRole)) {
                 return res.status(403).json({ error: 'Forbidden: You do not have permission to view this ticket.' });
             }
 
-            return res.status(200).json(jsonSerializableTicket(ticketDoc.id, ticketData));
+            return res.status(200).json(jsonSerializableTicket(ticketData.id, ticketData));
         } catch (error) {
             console.error(`Error fetching ticket ${ticketId}: ${error.message}`);
             return res.status(500).json({ error: `Failed to fetch ticket details: ${error.message}` });
@@ -747,16 +831,19 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
     });
 
     // --- New Route: Export all tickets to CSV ---
-    router.get('/export', verifyFirebaseToken, checkRole(['support', 'admin', 'super_admin']), async (req, res) => {
+    router.get('/export', verifySupabaseToken, checkRole(['support', 'admin', 'super_admin']), async (req, res) => {
         const { start_date, end_date, status } = req.query;
 
         try {
-            let query = ticketsCollection.orderBy('created_at', 'asc');
+            let query = supabase
+                .from('tickets')
+                .select('*')
+                .order('created_at', { ascending: true });
 
             if (start_date) {
                 const startDateObj = new Date(start_date);
                 if (!isNaN(startDateObj.getTime())) {
-                    query = query.where('created_at', '>=', admin.firestore.Timestamp.fromDate(startDateObj));
+                    query = query.where('created_at', 'gte', startDateObj.toISOString());
                 } else {
                     return res.status(400).json({ error: 'Invalid start_date format.' });
                 }
@@ -765,16 +852,17 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                 const endDateObj = new Date(end_date);
                 if (!isNaN(endDateObj.getTime())) {
                     endDateObj.setHours(23, 59, 59, 999);
-                    query = query.where('created_at', '<=', admin.firestore.Timestamp.fromDate(endDateObj));
+                    query = query.where('created_at', 'lte', endDateObj.toISOString());
                 } else {
                     return res.status(400).json({ error: 'Invalid end_date format.' });
                 }
             }
             if (status && status !== '' && status !== 'All') {
-                query = query.where('status', '==', status);
+                query = query.where('status', 'eq', status);
             }
-            const snapshot = await query.get();
-            const allTickets = snapshot.docs.map(doc => jsonSerializableTicket(doc.id, doc.data()));
+            const { data: allTickets, error: ticketsError } = await query;
+
+            if (ticketsError) throw ticketsError;
 
             const headers = [
                 "Ticket ID",
@@ -830,16 +918,8 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
     });
 
     // --- New Route: Upload Attachment ---
-    router.post('/upload-attachment', verifyFirebaseToken, async (req, res) => {
-        if (!admin.storage()) {
-            if (!res.headersSent) {
-                return res.status(500).json({ error: "Firebase Storage not configured on the server." });
-            }
-            return;
-        }
-
+    router.post('/upload-attachment', verifySupabaseToken, async (req, res) => {
         const busboy = Busboy({ headers: req.headers, limits: { fileSize: 10 * 1024 * 1024 } });
-        const bucket = admin.storage().bucket();
 
         const uploads = [];
         const filePromises = [];
@@ -882,38 +962,37 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
 
                 file.pipe(writeStream);
 
-                writeStream.on('finish', () => {
+                writeStream.on('finish', async () => {
                     const destination = `attachments/${Date.now()}_${uniqueFilename}`;
-                    bucket.upload(filepath, {
-                        destination: destination,
-                        metadata: {
-                            contentType: mimetype,
-                            metadata: {
-                                firebaseStorageDownloadTokens: uuidv4(),
-                                uploadedBy: req.user.email,
-                                originalFileName: originalFilename
-                            }
-                        }
-                    })
-                    .then(() => {
-                        const fileRef = bucket.file(destination);
-                        return fileRef.makePublic();
-                    })
-                    .then(() => {
-                        const publicUrl = `https://storage.googleapis.com/${bucket.name}/${destination}`;
+                    try {
+                        const { data, error } = await supabase.storage
+                            .from('attachments')
+                            .upload(destination, fs.createReadStream(filepath), {
+                                contentType: mimetype,
+                                metadata: {
+                                    uploadedBy: req.user.email,
+                                    originalFileName: originalFilename
+                                }
+                            });
+
+                        if (error) throw error;
+
+                        const { data: publicUrlData } = supabase.storage
+                            .from('attachments')
+                            .getPublicUrl(destination);
+                        
                         uploads.push({
                             originalFilename: originalFilename,
-                            url: publicUrl,
+                            url: publicUrlData.publicUrl,
                             mimetype: mimetype,
                             added_at: new Date().toISOString()
                         });
                         fs.unlink(filepath, () => {});
                         resolve();
-                    })
-                    .catch(err => {
+                    } catch (err) {
                         fs.unlink(filepath, () => {});
                         reject(new Error(`Failed to upload file ${originalFilename}: ${err.message}`));
-                    });
+                    }
                 });
 
                 writeStream.on('error', (err) => {
@@ -960,20 +1039,27 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
     });
 
     // --- Danger: Delete All Tickets Endpoint ---
-    router.delete('/all', verifyFirebaseToken, checkRole(['support', 'admin', 'super_admin']), async (req, res) => {
+    router.delete('/all', verifySupabaseToken, checkRole(['support', 'admin', 'super_admin']), async (req, res) => {
         try {
-            const snapshot = await ticketsCollection.get();
-            const batch = admin.firestore().batch();
-            let count = 0;
-            snapshot.forEach(doc => {
-                batch.delete(doc.ref);
-                count++;
-            });
-            if (count === 0) {
+            const { data: tickets, error: ticketsError } = await supabase
+                .from('tickets')
+                .select('*');
+
+            if (ticketsError) throw ticketsError;
+
+            if (!tickets || tickets.length === 0) {
                 return res.status(200).json({ message: 'No tickets to delete.' });
             }
-            await batch.commit();
-            return res.status(200).json({ message: `Deleted ${count} tickets.` });
+
+            // Delete all tickets
+            const { error: deleteError } = await supabase
+                .from('tickets')
+                .delete()
+                .in('id', tickets.map(ticket => ticket.id));
+
+            if (deleteError) throw deleteError;
+
+            return res.status(200).json({ message: `Deleted ${tickets.length} tickets.` });
         } catch (error) {
             console.error('Error deleting all tickets:', error);
             return res.status(500).json({ error: 'Failed to delete all tickets.' });

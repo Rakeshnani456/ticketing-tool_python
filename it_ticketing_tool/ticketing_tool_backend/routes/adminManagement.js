@@ -1,52 +1,69 @@
 const express = require('express');
 const router = express.Router();
 
-module.exports = (db, usersCollection, verifyFirebaseToken, requireSuperAdmin) => {
+module.exports = (supabase, verifySupabaseToken, requireSuperAdmin) => {
     // List all admins
-    router.get('/', verifyFirebaseToken, requireSuperAdmin, async (req, res) => {
+    router.get('/', verifySupabaseToken, requireSuperAdmin, async (req, res) => {
         try {
-            const snapshot = await usersCollection.where('role', '==', 'admin').get();
-            const admins = snapshot.docs.map(doc => {
-                const data = doc.data();
-                let lastLogin = data.lastLogin;
-                if (lastLogin && lastLogin.toDate) {
-                    lastLogin = lastLogin.toDate().toISOString();
-                } else if (lastLogin && lastLogin._seconds) {
-                    lastLogin = new Date(lastLogin._seconds * 1000).toISOString();
+            const { data: admins, error } = await supabase
+                .from('users')
+                .select('*')
+                .eq('role', 'admin');
+
+            if (error) throw error;
+
+            const formattedAdmins = admins.map(admin => {
+                let lastLogin = admin.lastLogin;
+                if (lastLogin && typeof lastLogin === 'string') {
+                    lastLogin = new Date(lastLogin).toISOString();
                 }
-                return { uid: doc.id, ...data, lastLogin };
+                return { uid: admin.id, ...admin, lastLogin };
             });
-            res.json({ admins });
+
+            res.json({ admins: formattedAdmins });
         } catch (error) {
             res.status(500).json({ error: 'Failed to fetch admins.' });
         }
     });
 
     // Create admin
-    router.post('/', verifyFirebaseToken, requireSuperAdmin, async (req, res) => {
+    router.post('/', verifySupabaseToken, requireSuperAdmin, async (req, res) => {
         const { email, password, role = 'admin' } = req.body;
         if (!email || !password || !['admin', 'read_only_admin', 'super_admin'].includes(role)) {
             return res.status(400).json({ error: 'Invalid input.' });
         }
         try {
-            // Create user in Firebase Auth
-            const userRecord = await req.app.locals.admin.auth().createUser({ email, password });
-            // Add to Firestore
-            await usersCollection.doc(userRecord.uid).set({
-                email,
-                role,
-                active: true,
-                loginActivity: [],
-                isSiteAdmin: false // Always false for users created here
+            // Create user in Supabase Auth with email confirmation bypassed
+            const { data: userRecord, error: authError } = await supabase.auth.admin.createUser({ 
+                email, 
+                password,
+                email_confirm: true // This bypasses email verification
             });
-            res.status(201).json({ message: 'Admin created.', uid: userRecord.uid });
+
+            if (authError) throw authError;
+
+            // Add to database
+            const { error: insertError } = await supabase
+                .from('users')
+                .insert({
+                    id: userRecord.user.id,
+                    email,
+                    role,
+                    active: true,
+                    login_activity: [],
+                    is_site_admin: false // Always false for users created here
+                });
+
+            if (insertError) throw insertError;
+
+            res.status(201).json({ message: 'Admin created.', uid: userRecord.user.id });
         } catch (error) {
             res.status(500).json({ error: 'Failed to create admin.' });
         }
     });
 
     // Edit admin (role, enable/disable)
-    router.put('/:uid', verifyFirebaseToken, requireSuperAdmin, async (req, res) => {
+    router.put('/:uid', verifySupabaseToken, requireSuperAdmin, async (req, res) => {
         const { uid } = req.params;
         const { role, active } = req.body;
         if (!role && typeof active === 'undefined') {
@@ -56,7 +73,14 @@ module.exports = (db, usersCollection, verifyFirebaseToken, requireSuperAdmin) =
             const updateData = {};
             if (role) updateData.role = role;
             if (typeof active !== 'undefined') updateData.active = active;
-            await usersCollection.doc(uid).update(updateData);
+
+            const { error } = await supabase
+                .from('users')
+                .update(updateData)
+                .eq('id', uid);
+
+            if (error) throw error;
+
             res.json({ message: 'Admin updated.' });
         } catch (error) {
             res.status(500).json({ error: 'Failed to update admin.' });
@@ -64,11 +88,25 @@ module.exports = (db, usersCollection, verifyFirebaseToken, requireSuperAdmin) =
     });
 
     // Delete admin
-    router.delete('/:uid', verifyFirebaseToken, requireSuperAdmin, async (req, res) => {
+    router.delete('/:uid', verifySupabaseToken, requireSuperAdmin, async (req, res) => {
         const { uid } = req.params;
         try {
-            await usersCollection.doc(uid).delete();
-            await req.app.locals.admin.auth().deleteUser(uid);
+            // Delete from database
+            const { error: deleteError } = await supabase
+                .from('users')
+                .delete()
+                .eq('id', uid);
+
+            if (deleteError) throw deleteError;
+
+            // Delete from Supabase Auth
+            const { error: authError } = await supabase.auth.admin.deleteUser(uid);
+
+            if (authError) {
+                console.warn('Failed to delete user from auth:', authError);
+                // Don't fail the request if auth delete fails
+            }
+
             res.json({ message: 'Admin deleted.' });
         } catch (error) {
             res.status(500).json({ error: 'Failed to delete admin.' });
@@ -76,10 +114,21 @@ module.exports = (db, usersCollection, verifyFirebaseToken, requireSuperAdmin) =
     });
 
     // Get login activity for all admins
-    router.get('/login-activity', verifyFirebaseToken, requireSuperAdmin, async (req, res) => {
+    router.get('/login-activity', verifySupabaseToken, requireSuperAdmin, async (req, res) => {
         try {
-            const snapshot = await usersCollection.where('role', 'in', ['admin', 'read_only_admin', 'super_admin']).get();
-            const activity = snapshot.docs.map(doc => ({ uid: doc.id, email: doc.data().email, loginActivity: doc.data().loginActivity || [] }));
+            const { data: admins, error } = await supabase
+                .from('users')
+                .select('id, email, login_activity')
+                .in('role', ['admin', 'read_only_admin', 'super_admin']);
+
+            if (error) throw error;
+
+            const activity = admins.map(admin => ({ 
+                uid: admin.id, 
+                email: admin.email, 
+                loginActivity: admin.login_activity || [] 
+            }));
+
             res.json({ activity });
         } catch (error) {
             res.status(500).json({ error: 'Failed to fetch login activity.' });
@@ -96,19 +145,41 @@ module.exports = (db, usersCollection, verifyFirebaseToken, requireSuperAdmin) =
             return res.status(400).json({ error: 'Invalid input.' });
         }
         try {
-            // Create user in Firebase Auth
-            const userRecord = await req.app.locals.admin.auth().createUser({ email, password });
-            // Add to Firestore
-            await usersCollection.doc(userRecord.uid).set({
-                email,
-                role,
-                active: true,
-                loginActivity: [],
-                isSiteAdmin: false // Always false for users created here
+            // Create user in Supabase Auth with email confirmation bypassed
+            const { data: userRecord, error: authError } = await supabase.auth.admin.createUser({ 
+                email, 
+                password,
+                email_confirm: true // This bypasses email verification
             });
-            res.status(201).json({ message: 'Admin created (public endpoint).', uid: userRecord.uid });
+
+            if (authError) throw authError;
+
+            // Add to database
+            const { error: insertError } = await supabase
+                .from('users')
+                .insert({
+                    id: userRecord.user.id,
+                    email,
+                    role,
+                    active: true,
+                    login_activity: [],
+                    is_site_admin: false
+                });
+
+            if (insertError) throw insertError;
+
+            res.status(201).json({ 
+                message: `${role} created successfully.`, 
+                uid: userRecord.user.id,
+                email: userRecord.user.email 
+            });
         } catch (error) {
-            res.status(500).json({ error: 'Failed to create admin.', details: error.message || error.toString() });
+            console.error('Public admin creation error:', error);
+            res.status(500).json({ 
+                error: 'Failed to create admin.',
+                details: error.message,
+                code: error.code
+            });
         }
     });
 

@@ -2,15 +2,20 @@
 const express = require('express');
 const router = express.Router();
 
-module.exports = (db, ticketsCollection, clientsCollection, usersCollection, requireSuperAdmin) => {
+module.exports = (supabase, requireSuperAdmin) => {
 
     // @route   GET /dashboard/clients-count
     // @desc    Get total number of clients
     // @access  Super Admin only
     router.get('/clients-count', requireSuperAdmin, async (req, res) => {
         try {
-            const clientsSnapshot = await clientsCollection.get();
-            return res.status(200).json({ total_clients: clientsSnapshot.size });
+            const { count, error } = await supabase
+                .from('clients')
+                .select('*', { count: 'exact' });
+
+            if (error) throw error;
+
+            return res.status(200).json({ total_clients: count || 0 });
         } catch (error) {
             console.error('Error fetching clients count:', error);
             return res.status(500).json({ error: 'Failed to fetch clients count.' });
@@ -22,8 +27,14 @@ module.exports = (db, ticketsCollection, clientsCollection, usersCollection, req
     // @access  Super Admin only
     router.get('/active-users-count', requireSuperAdmin, async (req, res) => {
         try {
-            const usersSnapshot = await usersCollection.where('active', '==', true).get();
-            return res.status(200).json({ active_users: usersSnapshot.size });
+            const { count, error } = await supabase
+                .from('users')
+                .select('*', { count: 'exact' })
+                .eq('active', true);
+
+            if (error) throw error;
+
+            return res.status(200).json({ active_users: count || 0 });
         } catch (error) {
             console.error('Error fetching active users count:', error);
             return res.status(500).json({ error: 'Failed to fetch active users count.' });
@@ -35,19 +46,25 @@ module.exports = (db, ticketsCollection, clientsCollection, usersCollection, req
     // @access  Super Admin only
     router.get('/top-clients', requireSuperAdmin, async (req, res) => {
         try {
-            const ticketsSnapshot = await ticketsCollection.get();
+            const { data: tickets, error } = await supabase
+                .from('tickets')
+                .select('client_id');
+
+            if (error) throw error;
+
             const clientTicketCounts = {};
-            ticketsSnapshot.forEach(doc => {
-                const data = doc.data();
-                const clientId = data.client_id; // Assuming client_id is present on tickets
+            tickets.forEach(ticket => {
+                const clientId = ticket.client_id; // Assuming client_id is present on tickets
                 if (clientId) {
                     clientTicketCounts[clientId] = (clientTicketCounts[clientId] || 0) + 1;
                 }
             });
+
             const sortedClients = Object.entries(clientTicketCounts)
                 .sort((a, b) => b[1] - a[1])
                 .slice(0, 5)
                 .map(([clientId, count]) => ({ clientId, ticketCount: count }));
+
             return res.status(200).json({ top_clients: sortedClients });
         } catch (error) {
             console.error('Error fetching top clients:', error);
