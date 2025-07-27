@@ -219,21 +219,24 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                     <p style=\"margin-top: 24px;\">Best regards,<br/>IT Service Desk<br/>Kriasol Technologies</p>
                 </div>
             `;
-            // Send email to support, cc both request_for_email and reporterEmail (if different)
+            // Send email to both user and DL email in "To" field
             setImmediate(() => {
-                let ccList = [];
+                let toList = ['tt.support@kriasol.com'];
+                
+                // Add user emails to "To" field
                 if (request_for_email && reporterEmail) {
                     if (request_for_email === reporterEmail) {
-                        ccList = [request_for_email];
+                        toList.push(request_for_email);
                     } else {
-                        ccList = [request_for_email, reporterEmail];
+                        toList.push(request_for_email, reporterEmail);
                     }
                 } else if (request_for_email) {
-                    ccList = [request_for_email];
+                    toList.push(request_for_email);
                 } else if (reporterEmail) {
-                    ccList = [reporterEmail];
+                    toList.push(reporterEmail);
                 }
-                sendEmailAlert('tt.support@kriasol.com', emailSubject, emailText, emailHtml, ccList.length > 0 ? ccList.join(',') : null);
+                
+                sendEmailAlert(toList.join(','), emailSubject, emailText, emailHtml);
             });
 
             return res.status(201).json({ message: 'Ticket created successfully!', id: docRef.id, display_id: newDisplayId });
@@ -343,13 +346,29 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                     }
 
                     const ticketReporterEmail = ticketData.reporter_email;
+                    const requestForEmail = ticketData.request_for_email;
                     const emailSubject = `Ticket ${ticketData.display_id} Status Updated`;
                     const emailText = `The status of your ticket (${ticketData.display_id} - ${ticketData.short_description}) has been updated to: ${status}.\n\nAccess the Ticketing Tool for more details.`;
                     const baseUrl = getBaseUrl(req);
                     const ticketLink = `${baseUrl}/tickets/${ticketId}`;
                     const emailHtml = `<div style=\"font-family: Arial, sans-serif; color: #222;\"><p>The status of your ticket (<a href=\"${ticketLink}\" style=\"color: #2563eb; text-decoration: underline;\" target=\"_blank\"><strong>${ticketData.display_id}</strong></a> - ${ticketData.short_description}) has been updated to: <strong>${status}</strong>.</p><p>Access the Ticketing Tool for more details.</p></div>`;
                     setImmediate(() => {
-                        sendEmailAlert(ticketReporterEmail, emailSubject, emailText, emailHtml, 'tt.support@kriasol.com');
+                        let toList = ['tt.support@kriasol.com'];
+                        
+                        // Add user emails to "To" field
+                        if (requestForEmail && ticketReporterEmail) {
+                            if (requestForEmail === ticketReporterEmail) {
+                                toList.push(requestForEmail);
+                            } else {
+                                toList.push(requestForEmail, ticketReporterEmail);
+                            }
+                        } else if (requestForEmail) {
+                            toList.push(requestForEmail);
+                        } else if (ticketReporterEmail) {
+                            toList.push(ticketReporterEmail);
+                        }
+                        
+                        sendEmailAlert(toList.join(','), emailSubject, emailText, emailHtml);
                     });
                 }
             }
@@ -554,13 +573,29 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
 
             // After cancellation, notify the reporter
             const ticketReporterEmail = ticketData.reporter_email;
+            const requestForEmail = ticketData.request_for_email;
             const emailSubject = `Ticket ${ticketData.display_id} Cancelled`;
             const emailText = `Your ticket (${ticketData.display_id} - ${ticketData.short_description}) has been cancelled.\n\nAccess the Ticketing Tool for more details.`;
             const baseUrl = getBaseUrl(req);
             const ticketLink = `${baseUrl}/tickets/${ticketId}`;
             const emailHtml = `<div style=\"font-family: Arial, sans-serif; color: #222;\"><p>Your ticket (<a href=\"${ticketLink}\" style=\"color: #2563eb; text-decoration: underline;\" target=\"_blank\"><strong>${ticketData.display_id}</strong></a> - ${ticketData.short_description}) has been cancelled.</p><p>Access the Ticketing Tool for more details.</p></div>`;
             setImmediate(() => {
-                sendEmailAlert(ticketReporterEmail, emailSubject, emailText, emailHtml, 'tt.support@kriasol.com');
+                let toList = ['tt.support@kriasol.com'];
+                
+                // Add user emails to "To" field
+                if (requestForEmail && ticketReporterEmail) {
+                    if (requestForEmail === ticketReporterEmail) {
+                        toList.push(requestForEmail);
+                    } else {
+                        toList.push(requestForEmail, ticketReporterEmail);
+                    }
+                } else if (requestForEmail) {
+                    toList.push(requestForEmail);
+                } else if (ticketReporterEmail) {
+                    toList.push(ticketReporterEmail);
+                }
+                
+                sendEmailAlert(toList.join(','), emailSubject, emailText, emailHtml);
             });
 
             return res.status(200).json({ message: 'Ticket cancelled successfully!', id: ticketId });
@@ -625,6 +660,7 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
             }
 
             const reporterEmail = ticketData.reporter_email;
+            const requestForEmail = ticketData.request_for_email;
             const assignedToEmail = ticketData.assigned_to_email;
             const commenterEmail = commenter_name;
             const emailSubject = `New Comment on Ticket ${ticketData.display_id}`;
@@ -632,12 +668,32 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
             const baseUrl = getBaseUrl(req);
             const ticketLink = `${baseUrl}/tickets/${ticketId}`;
             const emailHtml = `<div style=\"font-family: Arial, sans-serif; color: #222;\"><p>A new comment has been added to your ticket (<a href=\"${ticketLink}\" style=\"color: #2563eb; text-decoration: underline;\" target=\"_blank\"><strong>${ticketData.display_id}</strong></a> - ${ticketData.short_description}):</p><blockquote style=\"margin: 8px 0; padding-left: 12px; border-left: 2px solid #ccc;\">${comment_text}</blockquote><p>Access the Ticketing Tool for more details.</p></div>`;
-            // Only send email if assigned to a support engineer
-            if (assignedToEmail) {
-                setImmediate(() => {
-                    sendEmailAlert(assignedToEmail, emailSubject, emailText, emailHtml, 'tt.support@kriasol.com');
-                });
-            }
+            
+            // Send email notification for comments regardless of assignment status
+            setImmediate(() => {
+                let toList = [];
+                
+                // Add user emails to "To" field
+                if (requestForEmail && reporterEmail) {
+                    if (requestForEmail === reporterEmail) {
+                        toList.push(requestForEmail);
+                    } else {
+                        toList.push(requestForEmail, reporterEmail);
+                    }
+                } else if (requestForEmail) {
+                    toList.push(requestForEmail);
+                } else if (reporterEmail) {
+                    toList.push(reporterEmail);
+                }
+                
+                // If no users to send to, send only to tt.support@kriasol.com
+                if (toList.length === 0) {
+                    sendEmailAlert('tt.support@kriasol.com', emailSubject, emailText, emailHtml);
+                } else {
+                    // Send email with tt.support@kriasol.com in CC
+                    sendEmailAlert(toList.join(','), emailSubject, emailText, emailHtml, 'tt.support@kriasol.com');
+                }
+            });
 
             return res.status(200).json({ message: 'Comment added successfully!' });
         } catch (error) {

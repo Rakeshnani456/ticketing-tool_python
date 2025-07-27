@@ -75,12 +75,24 @@ const MyTicketsComponent = ({ user, navigateTo, showFlashMessage, searchKeyword,
         setError(null);
 
         let ticketsRef = collection(db, 'tickets');
-        let q = query(
-            ticketsRef,
-            where('reporter_id', '==', firebaseUser.uid), // Filter by current user's ID
-            where('status', 'in', ['Open', 'In Progress', 'Hold', 'Closed', 'Resolved']), // Default filter: show ALL active and inactive tickets
-            orderBy('created_at', 'desc') // Order by creation date
-        );
+        let q;
+        
+        // If searching, include all tickets including cancelled ones
+        if (searchKeyword) {
+            q = query(
+                ticketsRef,
+                where('reporter_id', '==', firebaseUser.uid), // Filter by current user's ID
+                orderBy('created_at', 'desc') // Order by creation date
+            );
+        } else {
+            // Default filter: show active tickets only (Open, In Progress, Hold)
+            q = query(
+                ticketsRef,
+                where('reporter_id', '==', firebaseUser.uid), // Filter by current user's ID
+                where('status', 'in', ['Open', 'In Progress', 'Hold']), // Default filter: show active tickets only
+                orderBy('created_at', 'desc') // Order by creation date
+            );
+        }
 
         // If there's an exact search keyword that looks like a TICKET-ID,
         // we can try to apply that server-side for an exact match.
@@ -202,7 +214,9 @@ const MyTicketsComponent = ({ user, navigateTo, showFlashMessage, searchKeyword,
         <div className="p-4 bg-white flex-1 overflow-auto">
             {/* Header layout: title and Create Ticket button on the left, pagination on the far right */}
             <div className="flex items-center mb-4 gap-2 flex-wrap">
-                <h2 className="text-xl font-extrabold text-gray-800 mr-2">My Tickets</h2>
+                <h2 className="text-xl font-extrabold text-gray-800 mr-2">
+                    {searchKeyword ? `Search Results for "${searchKeyword}" (including resolved and cancelled tickets)` : 'My Tickets'}
+                </h2>
                 <LinkButton onClick={() => navigateTo('create-ticket')} className="text-sm flex items-center space-x-1 ml-2">
                     <PlusCircle size={16} /> <span>Create Ticket</span>
                 </LinkButton>

@@ -14,17 +14,16 @@ import { useNavigate } from 'react-router-dom';
 import Modal from '../common/Modal';
 
 const initialUserState = {
-  firstName: '',
-  lastName: '',
-  email: '',
-  password: '',
-  contactNumber: '',
-  managerEmail: '',
-  employmentType: '',
-  designation: '',
-  asset_id: '',
-  employeeid: '',
-  role: 'support',
+    firstName: '',
+    lastName: '',
+    email: '',
+    password: '',
+    contactNumber: '',
+    managerEmail: '',
+    employmentType: '',
+    designation: '',
+    employeeid: '',
+    role: 'support',
 };
 
 const EngineerManagementComponent = ({ user, showFlashMessage }) => {
@@ -36,7 +35,7 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
     const [addMode, setAddMode] = useState(false);
     const [addRowData, setAddRowData] = useState(initialUserState);
     const [editRowId, setEditRowId] = useState(null);
-    const [editRowData, setEditRowData] = useState({ firstName: '', lastName: '', email: '', contactNumber: '', managerEmail: '', employmentType: '', designation: '', asset_id: '', employeeid: '', role: 'support' });
+    const [editRowData, setEditRowData] = useState({ firstName: '', lastName: '', email: '', contactNumber: '', managerEmail: '', employmentType: '', designation: '', employeeid: '', role: 'support' });
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
     const navigate = useNavigate();
 
@@ -85,7 +84,7 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
             } catch (err) {
                 console.error('Error fetching engineers:', err);
                 // For testing, you can uncomment the next line to show mock data
-                // setUsers([{ uid: '1', firstName: 'John', lastName: 'Doe', email: 'john.doe@example.com', role: 'support', designation: 'Engineer', employeeid: 'EMP001', asset_id: 'AST001', contactNumber: '1234567890', managerEmail: 'manager@example.com' }]);
+                // setUsers([{ uid: '1', firstName: 'John', lastName: 'Doe', email: 'john.doe@example.com', role: 'support', designation: 'Engineer', employeeid: 'EMP001', contactNumber: '1234567890', managerEmail: 'manager@example.com' }]);
                 setError('Could not load engineers. Please check if the backend server is running and Firebase is configured.');
                 setUsers([]);
                 setLoading(false);
@@ -125,7 +124,7 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
 
     const handleAddSave = async (e) => {
         e.preventDefault();
-        const requiredFields = ['firstName', 'lastName', 'email', 'password', 'contactNumber', 'managerEmail', 'employmentType', 'designation', 'asset_id', 'employeeid'];
+        const requiredFields = ['firstName', 'lastName', 'email', 'password', 'contactNumber', 'managerEmail', 'employmentType', 'designation', 'employeeid'];
         for (const field of requiredFields) {
             if (!addRowData[field]) {
                 setSnackbar({ open: true, message: 'All fields are required.', severity: 'error' });
@@ -137,8 +136,7 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
                 name: `${addRowData.firstName} ${addRowData.lastName}`.trim(),
                 email: addRowData.email,
                 password: addRowData.password,
-                asset_id: addRowData.asset_id,
-                employeeid: addRowData.employeeid,
+                employeeId: addRowData.employeeid,
                 designation: addRowData.designation,
                 contactNumber: addRowData.contactNumber,
                 managerEmail: addRowData.managerEmail,
@@ -204,8 +202,7 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
             managerEmail: userToEdit.managerEmail || '',
             employmentType: userToEdit.employmentType || '',
             designation: userToEdit.designation || '',
-            asset_id: userToEdit.asset_id || '',
-            employeeid: userToEdit.employeeid || '',
+            employeeid: userToEdit.employeeId || userToEdit.employeeid || '',
             role: userToEdit.role || 'support'
         });
     };
@@ -242,11 +239,9 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
             if (editRowData.designation !== (originalUser?.designation || '')) {
                 payload.designation = editRowData.designation;
             }
-            if (editRowData.asset_id !== (originalUser?.asset_id || '')) {
-                payload.asset_id = editRowData.asset_id;
-            }
-            if (editRowData.employeeid !== (originalUser?.employeeid || '')) {
-                payload.employeeid = editRowData.employeeid;
+
+            if (editRowData.employeeid !== (originalUser?.employeeId || originalUser?.employeeid || '')) {
+                payload.employeeId = editRowData.employeeid;
             }
 
             if (Object.keys(payload).length === 0) {
@@ -268,10 +263,14 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
             });
             if (!res.ok) {
                 const errData = await res.json();
+                console.error('Update error response:', errData);
+                if (res.status === 401 || res.status === 403) {
+                    throw new Error('Authentication failed. Please try again.');
+                }
                 throw new Error(errData.error || 'Failed to update engineer');
             }
             setEditRowId(null);
-            setEditRowData({ firstName: '', lastName: '', email: '', contactNumber: '', managerEmail: '', employmentType: '', designation: '', asset_id: '', employeeid: '', role: 'support' });
+            setEditRowData({ firstName: '', lastName: '', email: '', contactNumber: '', managerEmail: '', employmentType: '', designation: '', employeeid: '', role: 'support' });
             setSnackbar({ open: true, message: 'Engineer updated successfully.', severity: 'success' });
             const fetchEngineers = async () => {
                 try {
@@ -284,10 +283,18 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
                             'Content-Type': 'application/json'
                         }
                     });
-                    if (!res.ok) throw new Error('Failed to fetch users');
+                    if (!res.ok) {
+                        const errData = await res.json();
+                        console.error('Fetch error response:', errData);
+                        if (res.status === 401 || res.status === 403) {
+                            throw new Error('Authentication failed. Please try again.');
+                        }
+                        throw new Error('Failed to fetch users');
+                    }
                     const data = await res.json();
                     setUsers(data.filter(u => u.role === 'support'));
                 } catch (err) {
+                    console.error('Error fetching engineers after update:', err);
                     setError('Could not load engineers after update.');
                     setUsers([]);
                 }
@@ -300,7 +307,7 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
 
     const handleEditCancel = () => {
         setEditRowId(null);
-        setEditRowData({ firstName: '', lastName: '', email: '', contactNumber: '', managerEmail: '', employmentType: '', designation: '', asset_id: '', employeeid: '', role: 'support' });
+        setEditRowData({ firstName: '', lastName: '', email: '', contactNumber: '', managerEmail: '', employmentType: '', designation: '', employeeid: '', role: 'support' });
     };
 
     const handleDeleteClick = (event, uid, email) => {
@@ -329,6 +336,10 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
 
             if (!res.ok) {
                 const errData = await res.json();
+                console.error('Delete error response:', errData);
+                if (res.status === 401 || res.status === 403) {
+                    throw new Error('Authentication failed. Please try again.');
+                }
                 throw new Error(errData.error || 'Failed to delete engineer');
             }
             setSnackbar({ open: true, message: 'Engineer deleted successfully.', severity: 'success' });
@@ -418,9 +429,8 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
             u.role === 'support' &&
             (u.email.toLowerCase().includes(search.toLowerCase()) ||
              (u.name && u.name.toLowerCase().includes(search.toLowerCase())) ||
-             (u.employeeid && u.employeeid.toLowerCase().includes(search.toLowerCase())) ||
+             ((u.employeeId || u.employeeid) && (u.employeeId || u.employeeid).toLowerCase().includes(search.toLowerCase())) ||
              (u.designation && u.designation.toLowerCase().includes(search.toLowerCase())) ||
-             (u.asset_id && u.asset_id.toLowerCase().includes(search.toLowerCase())) ||
              (u.joined_date && u.joined_date.toLowerCase().includes(search.toLowerCase())))
         );
     }, [users, search]);
@@ -520,10 +530,7 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
                             InputLabelProps={{ style: { fontSize: '0.75rem' } }}
                             inputProps={{ style: { fontSize: '0.75rem', height: 28, padding: '2px 6px' } }}
                         />
-                        <TextField label="Asset ID" name="asset_id" value={addRowData.asset_id} onChange={handleAddChange} required size="small" fullWidth
-                            InputLabelProps={{ style: { fontSize: '0.75rem' } }}
-                            inputProps={{ style: { fontSize: '0.75rem', height: 28, padding: '2px 6px' } }}
-                        />
+
                         <TextField label="Employee ID" name="employeeid" value={addRowData.employeeid} onChange={handleAddChange} required size="small" fullWidth
                             InputLabelProps={{ style: { fontSize: '0.75rem' } }}
                             inputProps={{ style: { fontSize: '0.75rem', height: 28, padding: '2px 6px' } }}
@@ -575,14 +582,14 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
                                 <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: '1px solid #e0e0e0', width: '10%' }}>Contact Number</TableCell>
                                 <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: '1px solid #e0e0e0', width: '10%' }}>Manager Email</TableCell>
                                 <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: '1px solid #e0e0e0', width: '8%' }}>Role</TableCell>
-                                <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: '1px solid #e0e0e0', width: '10%' }}>Asset ID</TableCell>
+
                                 <TableCell align="right" sx={{ borderBottom: '1px solid #e0e0e0', width: '10%' }}>Actions</TableCell>
                             </TableRow>
                         </TableHead>
                         <TableBody>
                             {filteredUsers.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={11} align="center" sx={{ py: 4, color: 'text.secondary' }}>
+                                    <TableCell colSpan={10} align="center" sx={{ py: 4, color: 'text.secondary' }}>
                                         No engineer profiles found.
                                     </TableCell>
                                 </TableRow>
@@ -592,7 +599,7 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
                                         <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: i === filteredUsers.length - 1 ? '0' : '1px solid #e0e0e0', textAlign: 'center', fontWeight: 500, color: '#888' }}>{i + 1}</TableCell>
                                         <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: i === filteredUsers.length - 1 ? '0' : '1px solid #e0e0e0' }}>{u.firstName || (u.name ? u.name.split(' ')[0] : '')}</TableCell>
                                         <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: i === filteredUsers.length - 1 ? '0' : '1px solid #e0e0e0' }}>{u.lastName || (u.name ? u.name.split(' ').slice(1).join(' ') : '')}</TableCell>
-                                        <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: i === filteredUsers.length - 1 ? '0' : '1px solid #e0e0e0' }}>{u.employeeid}</TableCell>
+                                        <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: i === filteredUsers.length - 1 ? '0' : '1px solid #e0e0e0' }}>{u.employeeId || u.employeeid}</TableCell>
                                         <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: i === filteredUsers.length - 1 ? '0' : '1px solid #e0e0e0' }}>{u.designation}</TableCell>
                                         <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: i === filteredUsers.length - 1 ? '0' : '1px solid #e0e0e0' }}>{u.email}</TableCell>
                                         <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: i === filteredUsers.length - 1 ? '0' : '1px solid #e0e0e0' }}>{u.contactNumber}</TableCell>
@@ -600,7 +607,7 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
                                         <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: i === filteredUsers.length - 1 ? '0' : '1px solid #e0e0e0' }}>
                                             <Chip label={u.role} size="small" color={u.role === 'admin' ? 'primary' : u.role === 'support' ? 'secondary' : 'default'} sx={{ fontSize: '0.7rem', height: 20 }} />
                                         </TableCell>
-                                        <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: i === filteredUsers.length - 1 ? '0' : '1px solid #e0e0e0' }}>{u.asset_id}</TableCell>
+
                                         <TableCell align="right" sx={{ borderBottom: i === filteredUsers.length - 1 ? '0' : '1px solid #e0e0e0' }}>
                                             <IconButton onClick={() => openChangePwdModal(u.uid)} size="small" title="Reset Password"><LockResetIcon sx={{ fontSize: '1rem' }} /></IconButton>
                                             <IconButton onClick={() => handleEditClick(u)} size="small" sx={{ p: 0.5 }}><EditIcon sx={{ fontSize: '1rem' }} /></IconButton>
@@ -654,7 +661,10 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
             </Popover>
             {/* Edit Engineer Modal */}
             <Modal isOpen={editRowId !== null} onClose={handleEditCancel} title="Edit Engineer">
-                <form onSubmit={(e) => handleEditSave(editRowId)}>
+                <form onSubmit={(e) => {
+                    e.preventDefault();
+                    handleEditSave(editRowId);
+                }}>
                     <Box display="grid" gridTemplateColumns={{ xs: '1fr', sm: '1fr 1fr', md: 'repeat(3, 1fr)', lg: 'repeat(4, 1fr)' }} gap={2} p={2}>
                         <TextField label="First Name" name="firstName" value={editRowData.firstName || ''} onChange={handleEditChange} required size="small" fullWidth
                             InputLabelProps={{ style: { fontSize: '0.75rem' } }}
@@ -688,10 +698,7 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
                             InputLabelProps={{ style: { fontSize: '0.75rem' } }}
                             inputProps={{ style: { fontSize: '0.75rem', height: 28, padding: '2px 6px' } }}
                         />
-                        <TextField label="Asset ID" name="asset_id" value={editRowData.asset_id || ''} onChange={handleEditChange} required size="small" fullWidth
-                            InputLabelProps={{ style: { fontSize: '0.75rem' } }}
-                            inputProps={{ style: { fontSize: '0.75rem', height: 28, padding: '2px 6px' } }}
-                        />
+
                         <TextField label="Employee ID" name="employeeid" value={editRowData.employeeid || ''} onChange={handleEditChange} required size="small" fullWidth
                             InputLabelProps={{ style: { fontSize: '0.75rem' } }}
                             inputProps={{ style: { fontSize: '0.75rem', height: 28, padding: '2px 6px' } }}
@@ -709,7 +716,10 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
             </Modal>
             {/* Password Reset Modal */}
             <Modal isOpen={changePwdModalOpen} onClose={closeChangePwdModal} title="Reset Password">
-                <form onSubmit={handleChangePassword}>
+                <form onSubmit={(e) => {
+                    e.preventDefault();
+                    handleChangePassword(e);
+                }}>
                     <Box display="flex" flexDirection="column" gap={2} p={2}>
                         <TextField label="New Password" value={newPassword} onChange={e => setNewPassword(e.target.value)} required size="small" fullWidth
                             InputLabelProps={{ style: { fontSize: '0.75rem' } }}

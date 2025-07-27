@@ -742,8 +742,34 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                 if (actionType === 'close') {
                     setCloseButtonState('success');
                     window.scrollTo({ top: 0, behavior: 'smooth' });
+                    
+                    // Show "ticket resolved" message and navigate after a short delay
+                    showFlashMessage('Ticket resolved successfully!', 'success');
+                    
+                    setTimeout(() => {
+                        // Navigate based on user role
+                        if (user.role === 'user') {
+                            navigateTo('/my-tickets');
+                        } else {
+                            navigateTo('/all-tickets');
+                        }
+                    }, 2000); // Wait 2 seconds before navigating
                 } else {
                     setSaveButtonState('success');
+                    
+                    // Check if ticket was resolved through regular save action
+                    if (payload.status === 'Resolved' && !oldStatusWasTerminal) {
+                        showFlashMessage('Ticket resolved successfully!', 'success');
+                        
+                        setTimeout(() => {
+                            // Navigate based on user role
+                            if (user.role === 'user') {
+                                navigateTo('/my-tickets');
+                            } else {
+                                navigateTo('/all-tickets');
+                            }
+                        }, 2000); // Wait 2 seconds before navigating
+                    }
                 }
                 setError(null);
 

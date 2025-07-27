@@ -33,7 +33,7 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
     });
 
     // PUT /api/users/:uid - Update user fields
-    router.put('/:uid', async (req, res) => {
+    router.put('/:uid', verifyFirebaseToken, async (req, res) => {
         const { uid } = req.params;
         // Accept all possible fields
         const {
@@ -79,23 +79,19 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
             return res.status(400).json({ error: 'Missing required field: role' });
         }
         if (role === 'support') {
-            const { firstName, lastName, email, password, contactNumber, managerEmail, employmentType, designation, asset_id, employeeid } = req.body;
-            if (!firstName || !lastName || !email || !contactNumber || !managerEmail || !employmentType || !designation || !asset_id || !employeeid) {
-                return res.status(400).json({ error: 'Missing required fields for engineer: firstName, lastName, email, contactNumber, managerEmail, employmentType, designation, asset_id, employeeid' });
+            const { firstName, lastName, email, password, contactNumber, managerEmail, employmentType, designation, employeeId } = req.body;
+            if (!firstName || !lastName || !email || !contactNumber || !managerEmail || !employmentType || !designation || !employeeId) {
+                return res.status(400).json({ error: 'Missing required fields for engineer: firstName, lastName, email, contactNumber, managerEmail, employmentType, designation, employeeId' });
             }
             // Uniqueness checks
             const queries = [
-                usersCollection.where('employeeid', '==', employeeid).limit(1).get(),
-                usersCollection.where('asset_id', '==', asset_id).limit(1).get(),
+                usersCollection.where('employeeId', '==', employeeId).limit(1).get(),
                 usersCollection.where('email', '==', email).limit(1).get(),
                 usersCollection.where('contactNumber', '==', contactNumber).limit(1).get(),
             ];
-            const [empSnap, assetSnap, emailSnap, contactSnap] = await Promise.all(queries);
+            const [empSnap, emailSnap, contactSnap] = await Promise.all(queries);
             if (!empSnap.empty) {
                 return res.status(400).json({ error: 'Employee ID already exists.' });
-            }
-            if (!assetSnap.empty) {
-                return res.status(400).json({ error: 'Asset ID already exists.' });
             }
             if (!emailSnap.empty) {
                 return res.status(400).json({ error: 'Email already exists.' });
@@ -122,8 +118,7 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
                     managerEmail,
                     employmentType,
                     designation,
-                    asset_id,
-                    employeeid,
+                    employeeId: employeeId,
                     role,
                     mustChangePassword: true,
                     isSiteAdmin: false // Always false for users created here
@@ -253,7 +248,7 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
     });
 
     // PUT /api/users/:uid/password - Change user password
-    router.put('/:uid/password', async (req, res) => {
+    router.put('/:uid/password', verifyFirebaseToken, async (req, res) => {
         const { uid } = req.params;
         const { password, mustChangePassword } = req.body;
         if (!password || password.length < 6) {
@@ -340,7 +335,7 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
         return res.status(200).json({ results });
     });
 
-    router.delete('/:uid', async (req, res) => {
+    router.delete('/:uid', verifyFirebaseToken, async (req, res) => {
         const { uid } = req.params;
 
         try {

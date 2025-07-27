@@ -216,9 +216,11 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
             }
         }
 
-        // Always filter out 'Closed' and 'Resolved' tickets from being displayed in the grid
-// Always filter out 'Closed', 'Resolved', and 'Cancelled' tickets from being displayed in the grid
-        currentFilteredTickets = currentFilteredTickets.filter(ticket => !['Closed', 'Resolved', 'Cancelled'].includes(ticket.status));
+        // Always filter out 'Closed', 'Resolved', and 'Cancelled' tickets from being displayed in the grid
+        // UNLESS there's a search keyword, in which case include all tickets for search results
+        if (!searchKeyword) {
+            currentFilteredTickets = currentFilteredTickets.filter(ticket => !['Closed', 'Resolved', 'Cancelled'].includes(ticket.status));
+        }
         // Apply status filter based on filterStatus state
         // If filterStatus is an empty string, no status filter is applied, showing all statuses
         if (filterBy === 'status' && filterStatus) {
@@ -465,22 +467,27 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
     };
 
     // Calculate counts based on the *allTickets* array, which now contains the full dataset
-const counts = {
-        // 'All' button now shows count of ALL active tickets (Open, In Progress, Hold)
-        total_tickets: allTickets.filter(t => ['Open', 'In Progress', 'Hold'].includes(t.status)).length,
+    // When searching, include all tickets including resolved and cancelled
+    const counts = {
+        // 'All' button shows count of active tickets (Open, In Progress, Hold) or all tickets when searching
+        total_tickets: searchKeyword 
+            ? allTickets.length 
+            : allTickets.filter(t => ['Open', 'In Progress', 'Hold'].includes(t.status)).length,
         open_tickets: allTickets.filter(t => t.status === 'Open').length,
         in_progress_tickets: allTickets.filter(t => t.status === 'In Progress').length,
         hold_tickets: allTickets.filter(t => t.status === 'Hold').length,
         // This count still shows Closed/Resolved for potential future use or specific filter button
         closed_resolved_tickets: allTickets.filter(t => ['Closed', 'Resolved'].includes(t.status)).length,
-        // Exclude Closed, Resolved, and Cancelled from unassigned count for consistency
-        unassigned: allTickets.filter(t => !t.assigned_to_email && !['Closed', 'Resolved', 'Cancelled'].includes(t.status)).length,
+        // Exclude Closed, Resolved, and Cancelled from unassigned count for consistency, unless searching
+        unassigned: searchKeyword 
+            ? allTickets.filter(t => !t.assigned_to_email).length
+            : allTickets.filter(t => !t.assigned_to_email && !['Closed', 'Resolved', 'Cancelled'].includes(t.status)).length,
         // Removed assigned_to_me count as the button is being removed
     };
     // Function to determine the page heading based on active filters
     const getPageHeading = useCallback(() => {
         if (searchKeyword) {
-            return `Search Results for "${searchKeyword}"`;
+            return `Search Results for "${searchKeyword}" (including resolved and cancelled tickets)`;
         }
         if (filterAssignment === 'assigned_to_me') {
             return 'Tickets Assigned To Me';
