@@ -1,8 +1,9 @@
 {
   "files": {
-    "main.css": "/static/css/main.f6b1230f.css",
-    "main.js": "/static/js/main.86ac58b0.js",
-    "static/media/logo.png": "/static/media/logo.a6f6a1126de7c85c4310.png",
+    "main.css": "/static/css/main.e30f9397.css",
+    "main.js": "/static/js/main.5fd3efa7.js",
+    "static/media/logo.png": "/static/media/logo.7dcbab7c96baeae9c2f2.png",
+    "static/media/FabLogo.png": "/static/media/FabLogo.2ed07dc92117ab32b1c7.png",
     "static/media/OutlookIcon.svg": "/static/media/OutlookIcon.8aa969bd975697efa862d228956ad96b.svg",
     "static/media/TeamsLogo.svg": "/static/media/TeamsLogo.bf8c2490bc0532f9f6df1220eda1387e.svg",
     "static/media/LayoutDashboardIcon.svg": "/static/media/LayoutDashboardIcon.887c45802865f904b9ec73beac43728e.svg",
@@ -21,11 +22,11 @@
     "static/media/JpgIcon.svg": "/static/media/JpgIcon.3b0a99884ec1bb78aab6d82e54c14cc5.svg",
     "static/media/PngIcon.svg": "/static/media/PngIcon.e4c19c070b68b25d550cf062d1c8e0d5.svg",
     "static/media/FilterIcon.svg": "/static/media/FilterIcon.e392822388d476c678496d34744ab6b1.svg",
-    "main.f6b1230f.css.map": "/static/css/main.f6b1230f.css.map",
-    "main.86ac58b0.js.map": "/static/js/main.86ac58b0.js.map"
+    "main.e30f9397.css.map": "/static/css/main.e30f9397.css.map",
+    "main.5fd3efa7.js.map": "/static/js/main.5fd3efa7.js.map"
   },
   "entrypoints": [
-    "static/css/main.f6b1230f.css",
-    "static/js/main.86ac58b0.js"
+    "static/css/main.e30f9397.css",
+    "static/js/main.5fd3efa7.js"
   ]
 }
