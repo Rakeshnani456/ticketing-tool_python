@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- Document outline with folded corner -->
+  <path fill="#ffffff" stroke="#c0c0c0" stroke-width="2"
+    d="M16 0h64l32 32v96a8 8 0 0 1-8 8H16a8 8 0 0 1-8-8V8a8 8 0 0 1 8-8z"/>
+  <polyline fill="#f0f0f0" stroke="#c0c0c0" stroke-width="2"
+    points="80,0 112,32 80,32 80,0"/>
+  <!-- Text-like lines -->
+  <line x1="32" y1="56" x2="96" y2="56" stroke="#c0c0c0" stroke-width="2"/>
+  <line x1="32" y1="72" x2="96" y2="72" stroke="#c0c0c0" stroke-width="2"/>
+  <line x1="32" y1="88" x2="80" y2="88" stroke="#c0c0c0" stroke-width="2"/>
+</svg>
