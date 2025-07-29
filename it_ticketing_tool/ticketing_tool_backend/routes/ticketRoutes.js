@@ -6,6 +6,14 @@ const path = require('path');
 const os = require('os');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
+const { 
+    logTicketCreated, 
+    logTicketAssigned, 
+    logStatusChange, 
+    logCommentAdded, 
+    logTicketResolved, 
+    logAttachmentUploaded 
+} = require('../utils/activityLogger');
 
 module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCollection, transporter, verifyFirebaseToken, checkRole, jsonSerializableTicket, jsonSerializableNotification, generateDisplayId, sendEmailAlert) => {
 
@@ -155,10 +163,25 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
 
             const newDisplayId = await generateDisplayIdInternal();
 
+            // Get user data for storing name information
+            const userDoc = await usersCollection.doc(reporterId).get();
+            const userData = userDoc.exists ? userDoc.data() : {};
+            let reporterName = reporterEmail;
+            if (userData.firstName || userData.lastName) {
+                reporterName = `${userData.firstName || ''} ${userData.lastName || ''}`.trim();
+            } else if (userData.name) {
+                reporterName = userData.name;
+            } else if (userData.client_name) {
+                reporterName = userData.client_name;
+            }
+
             const newTicket = {
                 display_id: newDisplayId,
                 reporter_id: reporterId,
                 reporter_email: reporterEmail,
+                reporter_name: reporterName,
+                reporter_firstName: userData.firstName || null,
+                reporter_lastName: userData.lastName || null,
                 request_for_email: request_for_email,
                 category: category,
                 short_description: short_description,
@@ -182,6 +205,13 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
             };
 
             const docRef = await ticketsCollection.add(newTicket);
+
+            // Log ticket creation activity with enhanced context
+            await logTicketCreated(db, docRef.id, reporterName, reporterEmail, { 
+                ...newTicket, 
+                ticket_display_id: newDisplayId,
+                client_name: clientName 
+            });
 
             const reporterUserRole = req.user.role;
             if (reporterUserRole === 'user') {
@@ -286,14 +316,14 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                 return res.status(403).json({ error: "Forbidden: Cannot update a resolved or cancelled ticket as a regular user." });
             }
 
-            if (authenticatedUserRole === "user" && ticketData.reporter_id !== authenticatedUid) {
+            if (ticketData.reporter_id !== authenticatedUid) {
                 return res.status(403).json({ error: "Forbidden: You can only update your own tickets." });
             }
 
-            // Restrict status and priority updates to only the assigned engineer
+            // Restrict status and priority updates to only the assigned engineer or the ticket reporter
             if ((status !== undefined && status !== ticketData.status) || (priority !== undefined && priority !== ticketData.priority)) {
-                if (ticketData.assigned_to_id !== authenticatedUid) {
-                    return res.status(403).json({ error: "Only the assigned engineer can update status or priority." });
+                if (ticketData.assigned_to_id !== authenticatedUid && ticketData.reporter_id !== authenticatedUid) {
+                    return res.status(403).json({ error: "Only the assigned engineer or ticket reporter can update status or priority." });
                 }
             }
 
@@ -321,6 +351,28 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                     added_at: att.added_at || now
                 }));
                 updateData.attachments = [...existingAttachments, ...attachmentsWithTimestamp];
+                
+                // Log attachment upload activity with enhanced context
+                const userDoc = await usersCollection.doc(authenticatedUid).get();
+                const userData = userDoc.exists ? userDoc.data() : {};
+                let userName = req.user.email;
+                if (userData.firstName || userData.lastName) {
+                    userName = `${userData.firstName || ''} ${userData.lastName || ''}`.trim();
+                } else if (userData.name) {
+                    userName = userData.name;
+                } else if (userData.client_name) {
+                    userName = userData.client_name;
+                }
+                for (const attachment of attachments) {
+                    const filename = attachment.originalFilename || attachment.filename || 'Unknown file';
+                    const attachmentDetails = {
+                        file_size: attachment.size || null,
+                        file_type: attachment.mimetype || null,
+                        short_description: ticketData.short_description,
+                        status: ticketData.status
+                    };
+                    await logAttachmentUploaded(db, ticketId, userName, filename, req.user.email, { ...attachmentDetails, ticket_display_id: ticketData.display_id });
+                }
             }
 
             // Status change logic
@@ -333,6 +385,24 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                     timestamp: new Date()
                 };
                 updateData.status_history = admin.firestore.FieldValue.arrayUnion(statusHistoryEntry);
+                
+                // Log status change activity with enhanced context
+                const userDoc = await usersCollection.doc(authenticatedUid).get();
+                const userData = userDoc.exists ? userDoc.data() : {};
+                let userName = req.user.email;
+                if (userData.firstName || userData.lastName) {
+                    userName = `${userData.firstName || ''} ${userData.lastName || ''}`.trim();
+                } else if (userData.name) {
+                    userName = userData.name;
+                } else if (userData.client_name) {
+                    userName = userData.client_name;
+                }
+                await logStatusChange(db, ticketId, userName, ticketData.status, status, req.user.email, { ...ticketData, ticket_display_id: ticketData.display_id });
+                
+                // Log resolution activity if status is Resolved
+                if (status === 'Resolved') {
+                    await logTicketResolved(db, ticketId, userName, req.user.email, { ...ticketData, ticket_display_id: ticketData.display_id });
+                }
 
                 if (["Resolved", "Cancelled"].includes(status)) {
                     updateData.resolved_at = admin.firestore.FieldValue.serverTimestamp();
@@ -418,6 +488,19 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                         timestamp: new Date()
                     };
                     updateData.assigned_to_history = admin.firestore.FieldValue.arrayUnion(assignmentHistoryEntry);
+                    
+                    // Log assignment activity with enhanced context
+                    const userDoc = await usersCollection.doc(authenticatedUid).get();
+                    const userData = userDoc.exists ? userDoc.data() : {};
+                    let userName = req.user.email;
+                    if (userData.firstName || userData.lastName) {
+                        userName = `${userData.firstName || ''} ${userData.lastName || ''}`.trim();
+                    } else if (userData.name) {
+                        userName = userData.name;
+                    } else if (userData.client_name) {
+                        userName = userData.client_name;
+                    }
+                    await logTicketAssigned(db, ticketId, userName, assigned_to_email, req.user.email, { ...ticketData, ticket_display_id: ticketData.display_id });
 
                     if (assignedUserDoc.id !== authenticatedUid) {
                         await notificationsCollection.add({
@@ -469,6 +552,19 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                     timestamp: new Date()
                 };
                 updateData.priority_history = admin.firestore.FieldValue.arrayUnion(priorityHistoryEntry);
+                
+                // Log priority change activity with enhanced context
+                const userDoc = await usersCollection.doc(authenticatedUid).get();
+                const userData = userDoc.exists ? userDoc.data() : {};
+                let userName = req.user.email;
+                if (userData.firstName || userData.lastName) {
+                    userName = `${userData.firstName || ''} ${userData.lastName || ''}`.trim();
+                } else if (userData.name) {
+                    userName = userData.name;
+                } else if (userData.client_name) {
+                    userName = userData.client_name;
+                }
+                await logPriorityChange(db, ticketId, userName, ticketData.priority, priority, req.user.email, { ...ticketData, ticket_display_id: ticketData.display_id });
             }
 
             // Category change
@@ -549,6 +645,23 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
             }
 
             await ticketsCollection.doc(ticketId).update(updateData);
+
+            // Log cancellation activity with enhanced context
+            const userDoc = await usersCollection.doc(authenticatedUid).get();
+            const userData = userDoc.exists ? userDoc.data() : {};
+            let userName = req.user.email;
+            if (userData.firstName || userData.lastName) {
+                userName = `${userData.firstName || ''} ${userData.lastName || ''}`.trim();
+            } else if (userData.name) {
+                userName = userData.name;
+            } else if (userData.client_name) {
+                userName = userData.client_name;
+            }
+            const cancellationDetails = {
+                short_description: ticketData.short_description,
+                cancellation_reason: closure_notes || null
+            };
+            await logTicketCancelled(db, ticketId, userName, req.user.email, { ...cancellationDetails, ticket_display_id: ticketData.display_id });
 
             if (ticketData.reporter_id !== authenticatedUid) {
                 await notificationsCollection.add({
@@ -636,6 +749,19 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                 comments: admin.firestore.FieldValue.arrayUnion(newComment),
                 updated_at: admin.firestore.FieldValue.serverTimestamp()
             });
+            
+            // Log comment addition activity with enhanced context
+            const userDoc = await usersCollection.doc(req.user.uid).get();
+            const userData = userDoc.exists ? userDoc.data() : {};
+            let userName = req.user.email;
+            if (userData.firstName || userData.lastName) {
+                userName = `${userData.firstName || ''} ${userData.lastName || ''}`.trim();
+            } else if (userData.name) {
+                userName = userData.name;
+            } else if (userData.client_name) {
+                userName = userData.client_name;
+            }
+            await logCommentAdded(db, ticketId, userName, req.user.email, comment_text, { ...ticketData, ticket_display_id: ticketData.display_id });
 
             if (req.user.uid !== ticketData.reporter_id) {
                 await notificationsCollection.add({
@@ -736,8 +862,8 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
         }
     });
 
-    // --- Get All Tickets (for support and admin users) ---
-    router.get('/all', verifyFirebaseToken, checkRole(['support', 'admin', 'super_admin']), async (req, res) => {
+    // --- Get All Tickets (for support, admin, super_admin, and site_admin users) ---
+    router.get('/all', verifyFirebaseToken, checkRole(['support', 'admin', 'super_admin', 'site_admin']), async (req, res) => {
         const filterStatus = req.query.status;
         const filterAssignment = req.query.assignment;
         const searchKeyword = req.query.keyword ? req.query.keyword.toLowerCase() : '';
@@ -745,9 +871,20 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
         try {
             let query = ticketsCollection;
 
+            // Apply company filtering for site admin users
+            if (req.user.role === 'site_admin' && req.user.client_name) {
+                query = query.where('client_name', '==', req.user.client_name);
+            }
+
             if (searchKeyword) {
                 const exactIdMatch = `TT${searchKeyword.toUpperCase().padStart(5, '0')}`;
-                const exactIdMatchQuery = ticketsCollection.where('display_id', '==', exactIdMatch);
+                let exactIdMatchQuery = ticketsCollection.where('display_id', '==', exactIdMatch);
+                
+                // Apply company filtering for site admin users in exact match query
+                if (req.user.role === 'site_admin' && req.user.client_name) {
+                    exactIdMatchQuery = exactIdMatchQuery.where('client_name', '==', req.user.client_name);
+                }
+                
                 const exactIdMatchSnapshot = await exactIdMatchQuery.get();
                 if (!exactIdMatchSnapshot.empty) {
                     return res.status(200).json(exactIdMatchSnapshot.docs.map(doc => jsonSerializableTicket(doc.id, doc.data())));
@@ -783,7 +920,15 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
         const authenticatedUserRole = req.user.role;
 
         try {
-            const ticketDoc = await ticketsCollection.doc(ticketId).get();
+            let ticketDoc = await ticketsCollection.doc(ticketId).get();
+
+            // If not found by document ID, try to find by display_id
+            if (!ticketDoc.exists && ticketId.startsWith('TT')) {
+                const displayIdQuery = await ticketsCollection.where('display_id', '==', ticketId).limit(1).get();
+                if (!displayIdQuery.empty) {
+                    ticketDoc = displayIdQuery.docs[0];
+                }
+            }
 
             if (!ticketDoc.exists) {
                 return res.status(404).json({ error: 'Ticket not found.' });
@@ -791,7 +936,12 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
 
             const ticketData = ticketDoc.data();
 
-            if (ticketData.reporter_id !== authenticatedUid && !['support', 'admin', 'super_admin'].includes(authenticatedUserRole)) {
+            // For site admin users, check if they can access this ticket based on company
+            if (authenticatedUserRole === 'site_admin') {
+                if (req.user.client_name && ticketData.client_name !== req.user.client_name) {
+                    return res.status(403).json({ error: 'Forbidden: You do not have permission to view tickets from other companies.' });
+                }
+            } else if (ticketData.reporter_id !== authenticatedUid && !['support', 'admin', 'super_admin'].includes(authenticatedUserRole)) {
                 return res.status(403).json({ error: 'Forbidden: You do not have permission to view this ticket.' });
             }
 
@@ -803,11 +953,16 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
     });
 
     // --- New Route: Export all tickets to CSV ---
-    router.get('/export', verifyFirebaseToken, checkRole(['support', 'admin', 'super_admin']), async (req, res) => {
+    router.get('/export', verifyFirebaseToken, checkRole(['support', 'admin', 'super_admin', 'site_admin']), async (req, res) => {
         const { start_date, end_date, status } = req.query;
 
         try {
             let query = ticketsCollection.orderBy('created_at', 'asc');
+
+            // Apply company filtering for site admin users
+            if (req.user.role === 'site_admin' && req.user.client_name) {
+                query = query.where('client_name', '==', req.user.client_name);
+            }
 
             if (start_date) {
                 const startDateObj = new Date(start_date);

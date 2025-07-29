@@ -47,6 +47,8 @@ import PeopleIcon from '@mui/icons-material/People';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import PersonIcon from '@mui/icons-material/Person';
 import SecurityIcon from '@mui/icons-material/Security';
+import PhoneIcon from '@mui/icons-material/Phone';
+import EmailIcon from '@mui/icons-material/Email';
 import Menu from '@mui/material/Menu'; // Import Material-UI Menu
 import MenuItem from '@mui/material/MenuItem'; // Import Material-UI MenuItem
 import NotificationModal from './components/common/NotificationModal';
@@ -231,6 +233,9 @@ const App = () => {
     const [anchorEl, setAnchorEl] = useState(null);
     const managementOpen = Boolean(anchorEl); // Material-UI's Menu uses a boolean for its 'open' prop
 
+    // NEW: Add loading state for authentication
+    const [isAuthLoading, setIsAuthLoading] = useState(true);
+
     // Handlers for Material-UI "Manage" dropdown
     const handleClick = (event) => {
         setAnchorEl(event.currentTarget);
@@ -269,9 +274,9 @@ const App = () => {
     };
 
     // Define variants for Framer Motion animation for the sidebar
-    // Set the expanded sidebar width to 200px for a slimmer look
+    // Set the expanded sidebar width to 184px for a slimmer look (reduced by 8% total)
     const sidebarVariants = {
-        expanded: { width: 200, transition: { type: "spring", stiffness: 300, damping: 30, duration: 0.35, ease: "easeInOut" } },
+        expanded: { width: 184, transition: { type: "spring", stiffness: 300, damping: 30, duration: 0.35, ease: "easeInOut" } },
         collapsed: { width: 56, transition: { type: "spring", stiffness: 300, damping: 30, duration: 0.35, ease: "easeInOut" } }
     };
 
@@ -298,10 +303,10 @@ const App = () => {
         }
     };
 
-    // Define variants for Framer Motion animation for the main content's left margin
+    // Define variants for Framer Motion animation for the main content's width
     const mainContentVariants = {
-        expanded: { marginLeft: 200, transition: { type: "spring", stiffness: 300, damping: 30 } },
-        collapsed: { marginLeft: 56, transition: { type: "spring", stiffness: 300, damping: 30 } }
+        expanded: { width: 'calc(100% - 184px)', transition: { type: "spring", stiffness: 300, damping: 30 } },
+        collapsed: { width: 'calc(100% - 56px)', transition: { type: "spring", stiffness: 300, damping: 30 } }
     };
 
     // Helper for relative time
@@ -450,7 +455,7 @@ const App = () => {
                         let ticketsQuery;
 
                         // Adjust the Firestore query based on user role to match security rules
-                        if (userProfile.role === 'support' || userProfile.role === 'admin' || userProfile.role === 'site_admin') {
+                        if (userProfile.role === 'support' || userProfile.role === 'admin' || userProfile.role === 'super_admin' || userProfile.role === 'site_admin') {
                             // Admins and Support can read all tickets (as per your rules)
                             ticketsQuery = query(ticketsCollectionRef);
                         } else {
@@ -484,12 +489,16 @@ const App = () => {
                         // Note: React Router handles the initial page load based on URL.
                         // This `Maps` call ensures a default route upon successful login if the current path isn't ideal.
                         if (location.pathname === '/login' || location.pathname === '/register' || location.pathname === '/') {
-                             if (data.user.role === 'support' || data.user.role === 'admin' || data.user.role === 'site_admin') {
+                             if (data.user.role === 'support' || data.user.role === 'admin' || data.user.role === 'super_admin' || data.user.role === 'site_admin') {
                                  navigate('/dashboard');
                              } else {
                                  navigate('/my-tickets');
                              }
                         }
+                        
+                        // Set loading to false after successful authentication
+                        setIsAuthLoading(false);
+                        
                         return () => { // Cleanup for tickets listener if auth state changes again
                            unsubscribeTickets();
                         };
@@ -499,6 +508,7 @@ const App = () => {
                         showFlashMessage(data.error || "Authentication failed during login.", 'error');
                         authClient.signOut();
                         setCurrentUser(null);
+                        setIsAuthLoading(false);
                         navigate('/login'); // Redirect to login
                     }
                 } catch (error) {
@@ -507,11 +517,13 @@ const App = () => {
                     showFlashMessage("Network error during re-authentication. Please log in again.", 'error');
                     authClient.signOut();
                     setCurrentUser(null);
+                    setIsAuthLoading(false);
                     navigate('/login'); // Redirect to login
                 }
             } else {
                 // If no Firebase user is logged in, clear currentUser state and go to login page
                 setCurrentUser(null);
+                setIsAuthLoading(false);
                 // Ensure we are on a public route if no user is logged in
                 if (location.pathname !== '/login' && location.pathname !== '/register') {
                     navigate('/login');
@@ -591,8 +603,9 @@ const App = () => {
      */
     const handleLoginSuccess = (user) => {
         setCurrentUser(user);
+        setIsAuthLoading(false);
         fetchNotifications(user); // Fetch notifications on login
-        if (user.role === 'support' || user.role === 'admin' || user.role === 'site_admin') {
+        if (user.role === 'support' || user.role === 'admin' || user.role === 'super_admin' || user.role === 'site_admin') {
             navigate('/dashboard'); // Use navigate hook
         } else {
             navigate('/my-tickets'); // Use navigate hook
@@ -608,6 +621,7 @@ const App = () => {
         try {
             await signOut(authClient); // Sign out from Firebase
             setCurrentUser(null); // Clear current user state
+            setIsAuthLoading(false);
             showFlashMessage('Logged out successfully.', 'success');
             navigate('/login'); // Navigate to login page
         } catch (error) {
@@ -865,13 +879,13 @@ const App = () => {
                     height: '48px',
                     minHeight: '48px',
                     padding: '0 16px',
-                    left: currentUser && location.pathname !== '/login' ? (isSidebarExpanded ? 200 : 56) : 0,
-                    width: currentUser && location.pathname !== '/login' ? `calc(100% - ${(isSidebarExpanded ? 200 : 56)}px)` : '100%'
+                    left: currentUser && !isAuthLoading && location.pathname !== '/login' ? (isSidebarExpanded ? 184 : 56) : 0,
+                    width: currentUser && !isAuthLoading && location.pathname !== '/login' ? `calc(100% - ${(isSidebarExpanded ? 184 : 56)}px)` : '100%'
                 }}
             >
                 {/* Update the logo container to remove extra left margin/padding and align with sidebar menu items */}
                 {currentUser && (['admin', 'site_admin', 'super_admin'].includes(currentUser.role)) && (
-                    <Link to="/dashboard" className={`flex items-center px-3 py-1.5 rounded-xl text-sm font-medium transition-all duration-200 hover:bg-blue-50 hover:text-blue-700 ${location.pathname === '/dashboard' ? 'bg-blue-100 text-blue-700 border border-blue-200 shadow-sm' : 'text-gray-700'}`}> 
+                    <Link to="/dashboard" className={`flex items-center px-3 py-1.5 text-sm font-medium transition-all duration-200 hover:bg-gray-100 hover:text-gray-800 ${location.pathname === '/dashboard' ? 'bg-gray-200 text-gray-800' : 'text-gray-700'}`}> 
                         Dashboard
                     </Link>
                 )}
@@ -880,7 +894,7 @@ const App = () => {
                     <div className="relative ml-2">
                         <button
                             onClick={handleClick} // Use handleClick to open the MUI Menu
-                            className="flex items-center px-3 py-1.5 rounded-xl text-sm font-medium transition-all duration-200 hover:bg-blue-50 hover:text-blue-700 text-gray-700 cursor-pointer"
+                            className="flex items-center px-3 py-1.5 text-sm font-medium transition-all duration-200 hover:bg-gray-100 hover:text-gray-800 text-gray-700 cursor-pointer"
                             aria-controls={managementOpen ? 'management-menu' : undefined} // ARIA attributes
                             aria-haspopup="true"
                             aria-expanded={managementOpen ? 'true' : undefined}
@@ -952,8 +966,23 @@ const App = () => {
                     </div>
                 )}
                 <div className="flex-1" />
+                {/* Display mobile number and email for user and site_admin roles */}
+                {currentUser && !isAuthLoading && location.pathname !== '/login' && location.pathname !== '/register' && (currentUser.role === 'user' || currentUser.role === 'site_admin') && (
+                    <div className="flex items-center gap-4 mr-4">
+                        <div className="flex items-center gap-3 text-sm">
+                            <div className="flex items-center gap-1">
+                                <PhoneIcon sx={{ fontSize: '1.2rem', color: '#000000' }} />
+                                <span className=" text-black">{'+91 9391930393'}</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                                <EmailIcon sx={{ fontSize: '1.2rem', color: '#000000' }} />
+                                <span className="text-black">{'raju.k@finstackk.com'}</span>
+                            </div>
+                        </div>
+                    </div>
+                )}
                 {/* Move search bar, notification bell, and profile dropdown to the far right */}
-                {currentUser && location.pathname !== '/login' && location.pathname !== '/register' && (
+                {currentUser && !isAuthLoading && location.pathname !== '/login' && location.pathname !== '/register' && (
                     <div className="flex items-center gap-3">
                         <form onSubmit={handleSearchSubmit} className="flex items-center">
                             <div className="relative">
@@ -962,8 +991,8 @@ const App = () => {
                                     value={searchKeyword}
                                     onChange={handleSearchChange}
                                     placeholder="Search..."
-                                    className="pl-9 pr-3 py-1.5 text-sm border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
-                                    style={{ width: 220, minHeight: 36 }}
+                                    className="pl-9 pr-3 py-1 text-sm border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                                    style={{ width: 220, minHeight: 28 }}
                                 />
                                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
                             </div>
@@ -971,13 +1000,13 @@ const App = () => {
                         {/* Notification Bell */}
                         <div className="relative inline-block">
                             <button 
-                                className="p-2 rounded-xl hover:bg-blue-50 transition-all duration-200"
+                                className="p-2  hover:bg-blue-50 transition-all duration-200"
                                 onClick={() => setIsNotificationMenuOpen(open => !open)}
                             >
                                 <BellRing
                                     width={20}
                                     height={20}
-                                    stroke="#fbbf24"
+                                    stroke="#000000"
                                     strokeWidth={2}
                                     unreadCount={notifications.filter(n => !n.read).length}
                                     animateBell={hasNewNotifications}
@@ -998,13 +1027,50 @@ const App = () => {
                                 className={isNotificationMenuOpen ? "scale-up-tr-normal" : ""}
                             />
                         </div>
-                        {/* Profile Dropdown removed */}
+                        {/* Profile Section */}
+                        <div className="relative" ref={profileMenuRef}>
+                            <button
+                                onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
+                                className="flex items-center gap-2 p-2  hover:bg-blue-50 transition-all duration-200"
+                            >
+                                <div className="w-6 h-6 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold text-xs">
+                                    {currentUser.email?.charAt(0).toUpperCase()}
+                                </div>
+                                <div className="hidden sm:block text-left">
+                                    <p className="text-xs font-medium text-gray-900 truncate">
+                                        {currentUser.email}
+                                    </p>
+                                    <p className="text-xs text-gray-500 capitalize truncate" style={{ fontSize: '0.65rem' }}>
+                                        {currentUser.role?.replace('_', ' ')}
+                                    </p>
+                                </div>
+                            </button>
+                            {isProfileMenuOpen && (
+                                <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                                    <Link
+                                        to="/profile"
+                                        className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                                        onClick={() => setIsProfileMenuOpen(false)}
+                                    >
+                                        <User className="w-4 h-4 inline mr-2" />
+                                        Profile
+                                    </Link>
+                                    <button
+                                        onClick={handleLogout}
+                                        className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                                    >
+                                        <LogOut className="w-4 h-4 inline mr-2" />
+                                        Logout
+                                    </button>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 )}
             </header>
 
             {/* Left Side Menu (always visible when logged in) */}
-            {currentUser && location.pathname !== '/login' && (
+            {currentUser && !isAuthLoading && location.pathname !== '/login' && (
                 <motion.nav
                     ref={sidebarMenuRef}
                     initial={false}
@@ -1049,11 +1115,11 @@ const App = () => {
                                         </motion.div>
                                     )}
                                     
-                                    <Link to="/all-tickets" className={`group flex items-center px-2 sm:px-3 py-1 rounded-xl text-xs sm:text-sm font-medium transition-all duration-200 hover:bg-blue-50 hover:text-blue-700 ${location.pathname === '/all-tickets' ? 'bg-blue-100 text-blue-700 border border-blue-200 shadow-sm' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                    <Link to="/all-tickets" className={`group flex items-center px-3 py-1  text-sm font-medium transition-all duration-200 hover:bg-gray-100 hover:text-gray-800 ${location.pathname === '/all-tickets' ? 'bg-gray-200 text-gray-800' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                         { !isSidebarExpanded ? (
                                             <TooltipBubble title="All Tickets">
-                                                <div className="flex items-center justify-center w-5 h-5">
-                                                    <FileText size={18} className="flex-shrink-0" />
+                                                <div className="flex items-center justify-center w-6 h-6">
+                                                    <FileText size={20} className="flex-shrink-0" />
                                                 </div>
                                             </TooltipBubble>
                                         ) : (
@@ -1064,11 +1130,11 @@ const App = () => {
                                         <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">All Tickets</motion.span>
                                     </Link>
                                     
-                                    <Link to="/my-tickets" className={`group flex items-center px-3 py-1 rounded-xl text-sm font-medium transition-all duration-200 hover:bg-blue-50 hover:text-blue-700 ${location.pathname === '/my-tickets' ? 'bg-blue-100 text-blue-700 border border-blue-200 shadow-sm' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                    <Link to="/my-tickets" className={`group flex items-center px-3 py-1  text-sm font-medium transition-all duration-200 hover:bg-gray-100 hover:text-gray-800 ${location.pathname === '/my-tickets' ? 'bg-gray-200 text-gray-800' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                         { !isSidebarExpanded ? (
                                             <TooltipBubble title="My Tickets">
-                                                <div className="flex items-center justify-center w-5 h-5">
-                                                    <UserCheck size={18} className="flex-shrink-0" />
+                                                <div className="flex items-center justify-center w-6 h-6">
+                                                    <UserCheck size={20} className="flex-shrink-0" />
                                                 </div>
                                             </TooltipBubble>
                                         ) : (
@@ -1090,11 +1156,11 @@ const App = () => {
                                         </motion.div>
                                     )}
                                     
-                                    <Link to="/clients" className={`group flex items-center px-3 py-1 rounded-xl text-sm font-medium transition-all duration-200 hover:bg-blue-50 hover:text-blue-700 ${location.pathname === '/clients' ? 'bg-blue-100 text-blue-700 border border-blue-200 shadow-sm' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                    <Link to="/clients" className={`group flex items-center px-3 py-1  text-sm font-medium transition-all duration-200 hover:bg-gray-100 hover:text-gray-800 ${location.pathname === '/clients' ? 'bg-gray-200 text-gray-800' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                         { !isSidebarExpanded ? (
                                             <TooltipBubble title="Clients">
-                                                <div className="flex items-center justify-center w-5 h-5">
-                                                    <Building size={18} className="flex-shrink-0" />
+                                                <div className="flex items-center justify-center w-6 h-6">
+                                                    <Building size={20} className="flex-shrink-0" />
                                                 </div>
                                             </TooltipBubble>
                                         ) : (
@@ -1116,11 +1182,11 @@ const App = () => {
                                         </motion.div>
                                     )}
                                     
-                                    <Link to="/insights" className={`group flex items-center px-3 py-1 rounded-xl text-sm font-medium transition-all duration-200 hover:bg-blue-50 hover:text-blue-700 ${location.pathname === '/insights' ? 'bg-blue-100 text-blue-700 border border-blue-200 shadow-sm' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                    <Link to="/insights" className={`group flex items-center px-3 py-1  text-sm font-medium transition-all duration-200 hover:bg-gray-100 hover:text-gray-800 ${location.pathname === '/insights' ? 'bg-gray-200 text-gray-800' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                         { !isSidebarExpanded ? (
                                             <TooltipBubble title="Insights">
-                                                <div className="flex items-center justify-center w-5 h-5">
-                                                    <TrendingUp size={18} className="flex-shrink-0" />
+                                                <div className="flex items-center justify-center w-6 h-6">
+                                                    <TrendingUp size={20} className="flex-shrink-0" />
                                                 </div>
                                             </TooltipBubble>
                                         ) : (
@@ -1131,11 +1197,11 @@ const App = () => {
                                         <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">Insights</motion.span>
                                     </Link>
                                     
-                                    <Link to="/reports" className={`group flex items-center px-3 py-1 rounded-xl text-sm font-medium transition-all duration-200 hover:bg-blue-50 hover:text-blue-700 ${location.pathname === '/reports' ? 'bg-blue-100 text-blue-700 border border-blue-200 shadow-sm' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                    <Link to="/reports" className={`group flex items-center px-3 py-1  text-sm font-medium transition-all duration-200 hover:bg-gray-100 hover:text-gray-800 ${location.pathname === '/reports' ? 'bg-gray-200 text-gray-800' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                         { !isSidebarExpanded ? (
                                             <TooltipBubble title="Reports">
-                                                <div className="flex items-center justify-center w-5 h-5">
-                                                    <BarChart2 size={18} className="flex-shrink-0" />
+                                                <div className="flex items-center justify-center w-6 h-6">
+                                                    <BarChart2 size={20} className="flex-shrink-0" />
                                                 </div>
                                             </TooltipBubble>
                                         ) : (
@@ -1148,11 +1214,11 @@ const App = () => {
                                 </>
                             ) : currentUser.role === 'admin' ? (
                                 <>
-                                    <Link to="/all-tickets" className={`group flex items-center px-3 py-1 rounded-xl text-sm font-medium transition-all duration-200 hover:bg-blue-50 hover:text-blue-700 ${location.pathname === '/all-tickets' ? 'bg-blue-100 text-blue-700 border border-blue-200 shadow-sm' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                    <Link to="/all-tickets" className={`group flex items-center px-3 py-1  text-sm font-medium transition-all duration-200 hover:bg-gray-100 hover:text-gray-800 ${location.pathname === '/all-tickets' ? 'bg-gray-200 text-gray-800' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                         { !isSidebarExpanded ? (
                                             <TooltipBubble title="All Tickets">
-                                                <div className="flex items-center justify-center w-5 h-5">
-                                                    <FileText size={18} className="flex-shrink-0" />
+                                                <div className="flex items-center justify-center w-6 h-6">
+                                                    <FileText size={20} className="flex-shrink-0" />
                                                 </div>
                                             </TooltipBubble>
                                         ) : (
@@ -1163,27 +1229,43 @@ const App = () => {
                                         <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">All Tickets</motion.span>
                                     </Link>
                                     
-                                    <Link to="/reports" className={`group flex items-center px-3 py-1 rounded-xl text-sm font-medium transition-all duration-200 hover:bg-blue-50 hover:text-blue-700 ${location.pathname === '/reports' ? 'bg-blue-100 text-blue-700 border border-blue-200 shadow-sm' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
-                                        <div className={`flex items-center justify-center w-5 h-5 ${isSidebarExpanded ? 'mr-3' : 'mr-0'}`}>
-                                            <BarChart2 size={18} className="flex-shrink-0" />
-                                        </div>
+                                    <Link to="/reports" className={`group flex items-center px-3 py-1  text-sm font-medium transition-all duration-200 hover:bg-gray-100 hover:text-gray-800 ${location.pathname === '/reports' ? 'bg-gray-200 text-gray-800' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                        { !isSidebarExpanded ? (
+                                            <TooltipBubble title="Reports">
+                                                <div className="flex items-center justify-center w-6 h-6">
+                                                    <BarChart2 size={20} className="flex-shrink-0" />
+                                                </div>
+                                            </TooltipBubble>
+                                        ) : (
+                                            <div className="flex items-center justify-center w-5 h-5 mr-3">
+                                                <BarChart2 size={18} className="flex-shrink-0" />
+                                            </div>
+                                        )}
                                         <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">Reports</motion.span>
                                     </Link>
                                     
-                                    <Link to="/insights" className={`group flex items-center px-3 py-1 rounded-xl text-sm font-medium transition-all duration-200 hover:bg-blue-50 hover:text-blue-700 ${location.pathname === '/insights' ? 'bg-blue-100 text-blue-700 border border-blue-200 shadow-sm' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
-                                        <div className={`flex items-center justify-center w-5 h-5 ${isSidebarExpanded ? 'mr-3' : 'mr-0'}`}>
-                                            <TrendingUp size={18} className="flex-shrink-0" />
-                                        </div>
+                                    <Link to="/insights" className={`group flex items-center px-3 py-1  text-sm font-medium transition-all duration-200 hover:bg-gray-100 hover:text-gray-800 ${location.pathname === '/insights' ? 'bg-gray-200 text-gray-800' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                        { !isSidebarExpanded ? (
+                                            <TooltipBubble title="Insights">
+                                                <div className="flex items-center justify-center w-6 h-6">
+                                                    <TrendingUp size={20} className="flex-shrink-0" />
+                                                </div>
+                                            </TooltipBubble>
+                                        ) : (
+                                            <div className="flex items-center justify-center w-5 h-5 mr-3">
+                                                <TrendingUp size={18} className="flex-shrink-0" />
+                                            </div>
+                                        )}
                                         <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">Insights</motion.span>
                                     </Link>
                                 </>
                             ) : currentUser.role === 'site_admin' ? (
                                 <>
-                                    <Link to="/all-tickets" className={`group flex items-center px-3 py-1 rounded-xl text-sm font-medium transition-all duration-200 hover:bg-blue-50 hover:text-blue-700 ${location.pathname === '/all-tickets' ? 'bg-blue-100 text-blue-700 border border-blue-200 shadow-sm' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                    <Link to="/all-tickets" className={`group flex items-center px-3 py-1  text-sm font-medium transition-all duration-200 hover:bg-gray-100 hover:text-gray-800 ${location.pathname === '/all-tickets' ? 'bg-gray-200 text-gray-800' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
                                         { !isSidebarExpanded ? (
                                             <TooltipBubble title="All Tickets">
-                                                <div className="flex items-center justify-center w-5 h-5">
-                                                    <FileText size={18} className="flex-shrink-0" />
+                                                <div className="flex items-center justify-center w-6 h-6">
+                                                    <FileText size={20} className="flex-shrink-0" />
                                                 </div>
                                             </TooltipBubble>
                                         ) : (
@@ -1194,17 +1276,33 @@ const App = () => {
                                         <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">All Tickets</motion.span>
                                     </Link>
                                     
-                                    <Link to="/my-tickets" className={`group flex items-center px-3 py-1 rounded-xl text-sm font-medium transition-all duration-200 hover:bg-blue-50 hover:text-blue-700 ${location.pathname === '/my-tickets' ? 'bg-blue-100 text-blue-700 border border-blue-200 shadow-sm' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
-                                        <div className={`flex items-center justify-center w-5 h-5 ${isSidebarExpanded ? 'mr-3' : 'mr-0'}`}>
-                                            <UserCheck size={18} className="flex-shrink-0" />
-                                        </div>
+                                    <Link to="/my-tickets" className={`group flex items-center px-3 py-1  text-sm font-medium transition-all duration-200 hover:bg-gray-100 hover:text-gray-800 ${location.pathname === '/my-tickets' ? 'bg-gray-200 text-gray-800' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                        { !isSidebarExpanded ? (
+                                            <TooltipBubble title="My Tickets">
+                                                <div className="flex items-center justify-center w-6 h-6">
+                                                    <UserCheck size={20} className="flex-shrink-0" />
+                                                </div>
+                                            </TooltipBubble>
+                                        ) : (
+                                            <div className="flex items-center justify-center w-5 h-5 mr-3">
+                                                <UserCheck size={18} className="flex-shrink-0" />
+                                            </div>
+                                        )}
                                         <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">My Tickets</motion.span>
                                     </Link>
                                     
-                                    <Link to="/user-management" className={`group flex items-center px-3 py-1 rounded-xl text-sm font-medium transition-all duration-200 hover:bg-blue-50 hover:text-blue-700 ${location.pathname === '/user-management' ? 'bg-blue-100 text-blue-700 border border-blue-200 shadow-sm' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
-                                        <div className={`flex items-center justify-center w-5 h-5 ${isSidebarExpanded ? 'mr-3' : 'mr-0'}`}>
-                                            <Users size={18} className="flex-shrink-0" />
-                                        </div>
+                                    <Link to="/user-management" className={`group flex items-center px-3 py-1  text-sm font-medium transition-all duration-200 hover:bg-gray-100 hover:text-gray-800 ${location.pathname === '/user-management' ? 'bg-gray-200 text-gray-800' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                        { !isSidebarExpanded ? (
+                                            <TooltipBubble title="Users">
+                                                <div className="flex items-center justify-center w-6 h-6">
+                                                    <Users size={20} className="flex-shrink-0" />
+                                                </div>
+                                            </TooltipBubble>
+                                        ) : (
+                                            <div className="flex items-center justify-center w-5 h-5 mr-3">
+                                                <Users size={18} className="flex-shrink-0" />
+                                            </div>
+                                        )}
                                         <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">Users</motion.span>
                                     </Link>
                                 </>
@@ -1213,33 +1311,65 @@ const App = () => {
                                     {/* Only show Dashboard in sidebar for support and other non-admin roles */}
                                     {(['support', 'admin', 'site_admin'].includes(currentUser.role)) && (
                                         <>
-                                            <Link to="/dashboard" className={`group flex items-center px-3 py-1 rounded-xl text-sm font-medium transition-all duration-200 hover:bg-blue-50 hover:text-blue-700 ${location.pathname === '/dashboard' ? 'bg-blue-100 text-blue-700 border border-blue-200 shadow-sm' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
-                                                <div className={`flex items-center justify-center w-5 h-5 ${isSidebarExpanded ? 'mr-3' : 'mr-0'}`}>
-                                                    <Home size={18} className="flex-shrink-0" />
-                                                </div>
+                                            <Link to="/dashboard" className={`group flex items-center px-3 py-1  text-sm font-medium transition-all duration-200 hover:bg-gray-100 hover:text-gray-800 ${location.pathname === '/dashboard' ? 'bg-gray-200 text-gray-800' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                                { !isSidebarExpanded ? (
+                                                    <TooltipBubble title="Dashboard">
+                                                        <div className="flex items-center justify-center w-6 h-6">
+                                                            <Home size={20} className="flex-shrink-0" />
+                                                        </div>
+                                                    </TooltipBubble>
+                                                ) : (
+                                                    <div className="flex items-center justify-center w-5 h-5 mr-3">
+                                                        <Home size={18} className="flex-shrink-0" />
+                                                    </div>
+                                                )}
                                                 <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">Dashboard</motion.span>
                                             </Link>
                                             
-                                            <Link to="/all-tickets" className={`group flex items-center px-3 py-1 rounded-xl text-sm font-medium transition-all duration-200 hover:bg-blue-50 hover:text-blue-700 ${location.pathname === '/all-tickets' ? 'bg-blue-100 text-blue-700 border border-blue-200 shadow-sm' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
-                                                <div className={`flex items-center justify-center w-5 h-5 ${isSidebarExpanded ? 'mr-3' : 'mr-0'}`}>
-                                                    <FileText size={18} className="flex-shrink-0" />
-                                                </div>
+                                            <Link to="/all-tickets" className={`group flex items-center px-3 py-1  text-sm font-medium transition-all duration-200 hover:bg-gray-100 hover:text-gray-800 ${location.pathname === '/all-tickets' ? 'bg-gray-200 text-gray-800' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                                { !isSidebarExpanded ? (
+                                                    <TooltipBubble title="All Tickets">
+                                                        <div className="flex items-center justify-center w-6 h-6">
+                                                            <FileText size={20} className="flex-shrink-0" />
+                                                        </div>
+                                                    </TooltipBubble>
+                                                ) : (
+                                                    <div className="flex items-center justify-center w-5 h-5 mr-3">
+                                                        <FileText size={18} className="flex-shrink-0" />
+                                                    </div>
+                                                )}
                                                 <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">All Tickets</motion.span>
                                             </Link>
                                         </>
                                     )}
                                     
-                                    <Link to="/my-tickets" className={`group flex items-center px-3 py-1 rounded-xl text-sm font-medium transition-all duration-200 hover:bg-blue-50 hover:text-blue-700 ${location.pathname === '/my-tickets' ? 'bg-blue-100 text-blue-700 border border-blue-200 shadow-sm' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
-                                        <div className={`flex items-center justify-center w-5 h-5 ${isSidebarExpanded ? 'mr-3' : 'mr-0'}`}>
-                                            <UserCheck size={18} className="flex-shrink-0" />
-                                        </div>
+                                    <Link to="/my-tickets" className={`group flex items-center px-3 py-1  text-sm font-medium transition-all duration-200 hover:bg-gray-100 hover:text-gray-800 ${location.pathname === '/my-tickets' ? 'bg-gray-200 text-gray-800' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                        { !isSidebarExpanded ? (
+                                            <TooltipBubble title="My Tickets">
+                                                <div className="flex items-center justify-center w-6 h-6">
+                                                    <UserCheck size={20} className="flex-shrink-0" />
+                                                </div>
+                                            </TooltipBubble>
+                                        ) : (
+                                            <div className="flex items-center justify-center w-5 h-5 mr-3">
+                                                <UserCheck size={18} className="flex-shrink-0" />
+                                            </div>
+                                        )}
                                         <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">My Tickets</motion.span>
                                     </Link>
                                     
-                                    <Link to="/create-ticket" className={`group flex items-center px-3 py-1 rounded-xl text-sm font-medium transition-all duration-200 hover:bg-green-50 hover:text-green-700 ${location.pathname === '/create-ticket' ? 'bg-green-50 text-green-700 shadow-sm' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
-                                        <div className={`flex items-center justify-center w-5 h-5 ${isSidebarExpanded ? 'mr-3' : 'mr-0'}`}>
-                                            <Zap size={18} className="flex-shrink-0" />
-                                        </div>
+                                    <Link to="/create-ticket" className={`group flex items-center px-3 py-1  text-sm font-medium transition-all duration-200 hover:bg-green-50 hover:text-green-700 ${location.pathname === '/create-ticket' ? 'bg-green-50 text-green-700 shadow-sm' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                        { !isSidebarExpanded ? (
+                                            <TooltipBubble title="Create Ticket">
+                                                <div className="flex items-center justify-center w-6 h-6">
+                                                    <Zap size={20} className="flex-shrink-0" />
+                                                </div>
+                                            </TooltipBubble>
+                                        ) : (
+                                            <div className="flex items-center justify-center w-5 h-5 mr-3">
+                                                <Zap size={18} className="flex-shrink-0" />
+                                            </div>
+                                        )}
                                         <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">Create Ticket</motion.span>
                                     </Link>
                                 </>
@@ -1247,13 +1377,13 @@ const App = () => {
                         </div>
 
                         {/* Bottom Menu Items */}
-                        <div className={`${isSidebarExpanded ? 'pt-4 border-t border-gray-100' : 'absolute bottom-16 left-0 right-0'}`}>
+                        <div className={`${isSidebarExpanded ? 'pt-4 border-t border-gray-100' : 'absolute bottom-0 left-0 right-0'}`}>
                             <div className="space-y-0.5">
-                                <Link to="/knowledge-base" className={`group flex items-center px-3 py-1 rounded-xl text-sm font-medium transition-all duration-200 hover:bg-blue-50 hover:text-blue-700 ${location.pathname === '/knowledge-base' ? 'bg-blue-100 text-blue-700 border border-blue-200 shadow-sm' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                <Link to="/knowledge-base" className={`group flex items-center px-3 py-1  text-sm font-medium transition-all duration-200 hover:bg-gray-100 hover:text-gray-800 ${location.pathname === '/knowledge-base' ? 'bg-gray-200 text-gray-800' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                     { !isSidebarExpanded ? (
                                         <TooltipBubble title="Help & Info">
-                                            <div className="flex items-center justify-center w-5 h-5">
-                                                <HelpCircle size={18} className="flex-shrink-0" />
+                                            <div className="flex items-center justify-center w-6 h-6">
+                                                <HelpCircle size={20} className="flex-shrink-0" />
                                             </div>
                                         </TooltipBubble>
                                     ) : (
@@ -1264,11 +1394,11 @@ const App = () => {
                                     <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">Help & Info</motion.span>
                                 </Link>
                                 
-                                <Link to="/settings" className={`group flex items-center px-3 py-1 rounded-xl text-sm font-medium transition-all duration-200 hover:bg-blue-50 hover:text-blue-700 ${location.pathname === '/settings' ? 'bg-blue-100 text-blue-700 border border-blue-200 shadow-sm' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                <Link to="/settings" className={`group flex items-center px-3 py-1  text-sm font-medium transition-all duration-200 hover:bg-gray-100 hover:text-gray-800 ${location.pathname === '/settings' ? 'bg-gray-200 text-gray-800' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                     { !isSidebarExpanded ? (
                                         <TooltipBubble title="Settings">
-                                            <div className="flex items-center justify-center w-5 h-5">
-                                                <Settings size={18} className="flex-shrink-0" />
+                                            <div className="flex items-center justify-center w-6 h-6">
+                                                <Settings size={20} className="flex-shrink-0" />
                                             </div>
                                         </TooltipBubble>
                                     ) : (
@@ -1285,9 +1415,9 @@ const App = () => {
                                         <TooltipBubble title="Expand view">
                                             <button
                                                 onClick={() => setIsSidebarExpanded(true)}
-                                                className="group flex items-center justify-center px-3 py-1 rounded-xl text-sm font-medium transition-all duration-200 hover:bg-blue-50 hover:text-blue-700 text-gray-700"
+                                                className="group flex items-center justify-center px-3 py-1  text-sm font-medium transition-all duration-200 hover:bg-gray-100 hover:text-gray-800 text-gray-700"
                                             >
-                                                <ChevronRight size={18} className="flex-shrink-0" />
+                                                <ChevronRight size={20} className="flex-shrink-0" />
                                             </button>
                                         </TooltipBubble>
                                     </div>
@@ -1295,32 +1425,7 @@ const App = () => {
                             </div>
                         </div>
 
-                        {/* User Profile Section - Moved to bottom */}
-                        {isSidebarExpanded ? (
-                            <div className="pt-4 border-t border-gray-100">
-                                <div className="flex items-center space-x-2 px-3">
-                                    <Link to="/profile" className="w-6 h-6 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold text-xs flex-shrink-0 hover:bg-gradient-to-br hover:from-blue-600 hover:to-purple-700 transition-all duration-200 cursor-pointer">
-                                        {currentUser.email?.charAt(0).toUpperCase()}
-                                    </Link>
-                                    <div className="flex-1 min-w-0">
-                                        <p className="text-xs font-medium text-gray-900 truncate">
-                                            {currentUser.email}
-                                        </p>
-                                        <p className="text-xs text-gray-500 capitalize truncate" style={{ fontSize: '0.65rem' }}>
-                                            {currentUser.role?.replace('_', ' ')}
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="absolute bottom-2 left-0 right-0 flex justify-center">
-                                <TooltipBubble title="Profile">
-                                    <Link to="/profile" className="w-6 h-6 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold text-xs hover:bg-gradient-to-br hover:from-blue-600 hover:to-purple-700 transition-all duration-200 cursor-pointer">
-                                        {currentUser.email?.charAt(0).toUpperCase()}
-                                    </Link>
-                                </TooltipBubble>
-                            </div>
-                        )}
+
 
                         {/* Expand/Collapse Arrow - Only show when expanded, positioned at bottom right */}
                         {isSidebarExpanded && (
@@ -1340,96 +1445,118 @@ const App = () => {
             <motion.div
                 className={`flex flex-col flex-1`}
                 initial={false}
-                animate={currentUser ? (isSidebarExpanded ? "expanded" : "collapsed") : { marginLeft: 0 }}
+                animate={currentUser && !isAuthLoading ? (isSidebarExpanded ? "expanded" : "collapsed") : { width: '100%' }}
                 variants={mainContentVariants}
-                style={currentUser && location.pathname !== '/login' ? { marginLeft: isSidebarExpanded ? 200 : 56, marginTop: 48 } : { marginLeft: 0, marginTop: 0 }}
+                style={currentUser && !isAuthLoading && location.pathname !== '/login' ? { 
+                    left: isSidebarExpanded ? 184 : 56, 
+                    position: 'fixed',
+                    top: 48,
+                    height: 'calc(100vh - 48px)',
+                    overflowY: 'auto',
+                    zIndex: 40
+                } : { 
+                    left: 0, 
+                    position: 'relative',
+                    marginTop: 0,
+                    width: '100%'
+                }}
             >
             {/* Main Content Canvas Area */}
-            <section className={`flex-1 bg-white flex flex-col min-w-0`}>
-                <Routes> {/* Define your routes here */}
-                    {/* Public Routes (Login/Register) */}
-                    <Route path="/login" element={<LoginComponent onLoginSuccess={handleLoginSuccess} navigateTo={navigateTo} showFlashMessage={showFlashMessage} />} />
-                                <Route path="/register" element={<RegisterComponent currentUser={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} />} />
+            <section className={`flex-1 bg-white flex flex-col min-w-0 w-full`}>
+                {isAuthLoading ? (
+                    // Show loading spinner while checking authentication
+                    <div className="flex items-center justify-center min-h-screen">
+                        <div className="flex flex-col items-center space-y-4">
+                            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+                            <p className="text-gray-600 text-sm">Loading...</p>
+                        </div>
+                    </div>
+                ) : (
+                    <Routes> {/* Define your routes here */}
+                        {/* Public Routes (Login/Register) */}
+                        <Route path="/login" element={<LoginComponent onLoginSuccess={handleLoginSuccess} navigateTo={navigateTo} showFlashMessage={showFlashMessage} />} />
+                        <Route path="/register" element={<RegisterComponent currentUser={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} />} />
 
-                    {/* Protected Routes (require currentUser) */}
-                    {currentUser ? (
-                        <>
-                            {/* Default route for logged-in users, redirect based on role */}
-                            <Route path="/" element={
-                                ['support', 'admin', 'site_admin', 'super_admin'].includes(currentUser.role) ?
-                                    <DashboardComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} /> :
-                                    <MyTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} isSidebarExpanded={isSidebarExpanded} />
-                            } />
+                        {/* Protected Routes (require currentUser) */}
+                        {currentUser ? (
+                            <>
+                                {/* Default route for logged-in users, redirect based on role */}
+                                <Route path="/" element={
+                                    ['support', 'admin', 'site_admin', 'super_admin'].includes(currentUser.role) ?
+                                        <DashboardComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} /> :
+                                        <MyTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} isSidebarExpanded={isSidebarExpanded} />
+                                } />
 
-                            <Route path="/dashboard" element={
-                                (['support', 'admin', 'site_admin', 'super_admin'].includes(currentUser.role)) ?
-                                    <DashboardComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} /> :
-                                    <AccessDeniedComponent />
-                            } />
-                            <Route path="/all-tickets" element={
-                                (['support', 'admin', 'site_admin', 'super_admin'].includes(currentUser.role)) ?
-                                    <AllTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} showFilters={true} isSidebarExpanded={isSidebarExpanded} /> :
-                                    <AccessDeniedComponent />
-                            } />
-                            <Route path="/assigned-to-me" element={
-                                (['support', 'admin', 'site_admin', 'super_admin'].includes(currentUser.role)) ?
-                                    <AllTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} initialFilterAssignment="assigned_to_me" showFilters={false} isSidebarExpanded={isSidebarExpanded} /> :
-                                    <AccessDeniedComponent />
-                            } />
-                            <Route path="/my-tickets" element={<MyTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} isSidebarExpanded={isSidebarExpanded} />} />
-                            <Route path="/create-ticket" element={
-                                <Modal
-                                    isOpen={true}
-                                    onClose={() => navigate(-1)}
-                                    title="Create Ticket"
-                                >
-                                    <CreateTicketComponent
-                                        user={currentUser}
-                                        showFlashMessage={showFlashMessage}
-                                        onTicketCreated={handleTicketCreated}
-                                        navigateTo={navigateTo}
+                                <Route path="/dashboard" element={
+                                    (['support', 'admin', 'site_admin', 'super_admin'].includes(currentUser.role)) ?
+                                        <DashboardComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} /> :
+                                        <AccessDeniedComponent />
+                                } />
+                                <Route path="/all-tickets" element={
+                                    (['support', 'admin', 'site_admin', 'super_admin'].includes(currentUser.role)) ?
+                                        <AllTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} showFilters={true} isSidebarExpanded={isSidebarExpanded} /> :
+                                        <AccessDeniedComponent />
+                                } />
+                                <Route path="/assigned-to-me" element={
+                                    (['support', 'admin', 'site_admin', 'super_admin'].includes(currentUser.role)) ?
+                                        <AllTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} initialFilterAssignment="assigned_to_me" showFilters={false} isSidebarExpanded={isSidebarExpanded} /> :
+                                        <AccessDeniedComponent />
+                                } />
+                                <Route path="/my-tickets" element={<MyTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} isSidebarExpanded={isSidebarExpanded} />} />
+                                <Route path="/create-ticket" element={
+                                    <Modal
+                                        isOpen={true}
                                         onClose={() => navigate(-1)}
-                                    />
-                                </Modal>
-                            } />
-                            {/* Dynamic route for Ticket Detail */}
-                            <Route path="/tickets/:ticketId" element={<TicketDetailComponent navigateTo={navigateTo} user={currentUser} showFlashMessage={showFlashMessage} />} />
+                                        title="Create Ticket"
+                                    >
+                                        <CreateTicketComponent
+                                            user={currentUser}
+                                            showFlashMessage={showFlashMessage}
+                                            onTicketCreated={handleTicketCreated}
+                                            navigateTo={navigateTo}
+                                            onClose={() => navigate(-1)}
+                                        />
+                                    </Modal>
+                                } />
+                                {/* Dynamic route for Ticket Detail */}
+                                <Route path="/tickets/:ticketId" element={<TicketDetailComponent navigateTo={navigateTo} user={currentUser} showFlashMessage={showFlashMessage} />} />
 
-                            <Route path="/profile" element={<ProfileComponent user={currentUser} showFlashMessage={showFlashMessage} navigateTo={navigateTo} handleLogout={handleLogout} />} />
-                            <Route path="/change-password" element={<ChangePasswordComponent user={currentUser} showFlashMessage={showFlashMessage} navigateTo={navigateTo} />} />
-                            <Route path="/user-management" element={
-                                (['admin', 'site_admin', 'super_admin'].includes(currentUser.role)) ?
-                                    <UserManagementComponent user={currentUser} showFlashMessage={showFlashMessage} navigateTo={navigateTo} /> :
-                                    <AccessDeniedComponent />
-                            } />
-                            <Route path="/settings" element={<SettingsComponent />} />
-                            <Route path="/knowledge-base" element={<KnowledgeBaseComponent />} />
-                            <Route path="/admin-management" element={
-                                currentUser.role === 'super_admin' ?
-                                    <AdminManagementComponent currentUser={currentUser} showFlashMessage={showFlashMessage} /> :
-                                    <AccessDeniedComponent />
-                            } />
-                            {/* Admin-only routes */}
-                            <Route path="/client-management" element={['admin', 'site_admin', 'super_admin'].includes(currentUser.role) ? <ClientManagementComponent user={currentUser} /> : <AccessDeniedComponent />} />
-                            <Route path="/siteadmin-management" element={['admin', 'site_admin', 'super_admin'].includes(currentUser.role) ? <SiteAdminManagementComponent /> : <AccessDeniedComponent />} />
-                            <Route path="/engineer-management" element={(['admin', 'site_admin', 'super_admin'].includes(currentUser.role)) ? <EngineerManagementComponent user={currentUser} showFlashMessage={showFlashMessage} /> : <AccessDeniedComponent />} />
-                            <Route path="/reports" element={['admin', 'site_admin', 'super_admin'].includes(currentUser.role) ? <ReportsComponent /> : <AccessDeniedComponent />} />
-                            <Route path="/insights" element={['admin', 'site_admin', 'super_admin'].includes(currentUser.role) ? <InsightsComponent /> : <AccessDeniedComponent />} />
-                            <Route path="/clients" element={currentUser.role === 'super_admin' ? <ClientManagementComponent user={currentUser} /> : <AccessDeniedComponent />} />
+                                <Route path="/profile" element={<ProfileComponent user={currentUser} showFlashMessage={showFlashMessage} navigateTo={navigateTo} handleLogout={handleLogout} />} />
+                                <Route path="/change-password" element={<ChangePasswordComponent user={currentUser} showFlashMessage={showFlashMessage} navigateTo={navigateTo} />} />
+                                <Route path="/user-management" element={
+                                    (['admin', 'site_admin', 'super_admin'].includes(currentUser.role)) ?
+                                        <UserManagementComponent user={currentUser} showFlashMessage={showFlashMessage} navigateTo={navigateTo} /> :
+                                        <AccessDeniedComponent />
+                                } />
+                                <Route path="/settings" element={<SettingsComponent />} />
+                                <Route path="/knowledge-base" element={<KnowledgeBaseComponent />} />
+                                <Route path="/admin-management" element={
+                                    currentUser.role === 'super_admin' ?
+                                        <AdminManagementComponent currentUser={currentUser} showFlashMessage={showFlashMessage} /> :
+                                        <AccessDeniedComponent />
+                                } />
+                                {/* Admin-only routes */}
+                                <Route path="/client-management" element={['admin', 'site_admin', 'super_admin'].includes(currentUser.role) ? <ClientManagementComponent user={currentUser} /> : <AccessDeniedComponent />} />
+                                <Route path="/siteadmin-management" element={['admin', 'site_admin', 'super_admin'].includes(currentUser.role) ? <SiteAdminManagementComponent /> : <AccessDeniedComponent />} />
+                                <Route path="/engineer-management" element={(['admin', 'site_admin', 'super_admin'].includes(currentUser.role)) ? <EngineerManagementComponent user={currentUser} showFlashMessage={showFlashMessage} /> : <AccessDeniedComponent />} />
+                                <Route path="/reports" element={['admin', 'site_admin', 'super_admin'].includes(currentUser.role) ? <ReportsComponent /> : <AccessDeniedComponent />} />
+                                <Route path="/insights" element={['admin', 'site_admin', 'super_admin'].includes(currentUser.role) ? <InsightsComponent /> : <AccessDeniedComponent />} />
+                                <Route path="/clients" element={currentUser.role === 'super_admin' ? <ClientManagementComponent user={currentUser} /> : <AccessDeniedComponent />} />
 
-                            {/* Catch-all for logged-in users if no other route matches */}
-                            {/* This ensures that if they go to an invalid path, they are redirected to their default view */}
-                            <Route path="*" element={
-                                ['support', 'admin', 'site_admin', 'super_admin'].includes(currentUser.role) ?
-                                    <DashboardComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} /> :
-                                    <MyTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} isSidebarExpanded={isSidebarExpanded} />
-                            } />
-                        </>
-                    ) : (
-                        // If not logged in, redirect any unmatched route to login
-                        <Route path="*" element={<LoginComponent onLoginSuccess={handleLoginSuccess} navigateTo={navigateTo} showFlashMessage={showFlashMessage} />} />
-                    )}
-                </Routes>
+                                {/* Catch-all for logged-in users if no other route matches */}
+                                {/* This ensures that if they go to an invalid path, they are redirected to their default view */}
+                                <Route path="*" element={
+                                    ['support', 'admin', 'site_admin', 'super_admin'].includes(currentUser.role) ?
+                                        <DashboardComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} /> :
+                                        <MyTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} isSidebarExpanded={isSidebarExpanded} />
+                                } />
+                            </>
+                        ) : (
+                            // If not logged in, redirect any unmatched route to login
+                            <Route path="*" element={<LoginComponent onLoginSuccess={handleLoginSuccess} navigateTo={navigateTo} showFlashMessage={showFlashMessage} />} />
+                        )}
+                    </Routes>
+                )}
             </section>
 
             {/* Footer */}

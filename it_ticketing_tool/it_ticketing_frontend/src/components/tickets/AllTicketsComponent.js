@@ -1,6 +1,7 @@
 // src/components/tickets/AllTicketsComponent.js
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Loader2, XCircle, ListFilter, Download, User, CheckCircle, ChevronLeft, ChevronRight, ChevronUp } from 'lucide-react';
 import { collection, query, onSnapshot, where, orderBy, getFirestore } from 'firebase/firestore';
 
@@ -76,6 +77,33 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
 
     // Initialize Firestore DB client. This will be the same instance as exported from firebase.js.
     const db = dbClient; // Use the already initialized dbClient
+
+    // Get location for URL parameters
+    const location = useLocation();
+
+    // Read URL parameters for initial filtering
+    useEffect(() => {
+        const urlParams = new URLSearchParams(location.search);
+        const statusParam = urlParams.get('status');
+        const assignmentParam = urlParams.get('assignment');
+        
+        console.log('URL Parameters detected:', {
+            statusParam,
+            assignmentParam,
+            fullSearch: location.search
+        });
+        
+        if (statusParam) {
+            console.log('Setting filter status from URL:', statusParam);
+            setFilterStatus(statusParam);
+            setFilterBy('status');
+        }
+        
+        if (assignmentParam) {
+            console.log('Setting filter assignment from URL:', assignmentParam);
+            setFilterAssignment(assignmentParam);
+        }
+    }, [location.search]);
 
     /**
      * Helper function to convert Firestore Timestamp to ISO string or Date object.
@@ -184,6 +212,13 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
      * whenever `allTickets` (the raw data from Firestore) or filter states change.
      */
     useEffect(() => {
+        console.log('Filtering effect triggered with:', {
+            filterStatus,
+            filterBy,
+            filterAssignment,
+            totalTickets: allTickets.length
+        });
+        
         let currentFilteredTickets = [...allTickets]; // Start with all tickets fetched by Firestore
 
         // If user is a site_admin, filter tickets by their company/client
@@ -224,7 +259,10 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
         // Apply status filter based on filterStatus state
         // If filterStatus is an empty string, no status filter is applied, showing all statuses
         if (filterBy === 'status' && filterStatus) {
+            console.log('Applying status filter:', filterStatus);
+            const beforeCount = currentFilteredTickets.length;
             currentFilteredTickets = currentFilteredTickets.filter(ticket => ticket.status === filterStatus);
+            console.log(`Status filter applied: ${beforeCount} -> ${currentFilteredTickets.length} tickets`);
         }
 
         // Apply assignment filter
@@ -270,12 +308,20 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
 
     // Effect hook to measure message box height and set up auto-hide timer
     useEffect(() => {
-        // Reset filter states based on initialFilterAssignment
-        setFilterAssignment(initialFilterAssignment);
-        if (!initialFilterAssignment && filterStatus !== '') { // Only reset to 'Open' if no assignment filter AND filterStatus is not already empty
-            setFilterStatus('Open'); // Re-default to Open if no assignment filter is active
-        } else {
-            setFilterStatus(''); // Clear status filter if an assignment filter is explicitly set
+        // Check if there are URL parameters first
+        const urlParams = new URLSearchParams(location.search);
+        const statusParam = urlParams.get('status');
+        const assignmentParam = urlParams.get('assignment');
+        
+        // Only reset filter states if there are no URL parameters
+        if (!statusParam && !assignmentParam) {
+            // Reset filter states based on initialFilterAssignment
+            setFilterAssignment(initialFilterAssignment);
+            if (!initialFilterAssignment && filterStatus !== '') { // Only reset to 'Open' if no assignment filter AND filterStatus is not already empty
+                setFilterStatus('Open'); // Re-default to Open if no assignment filter is active
+            } else {
+                setFilterStatus(''); // Clear status filter if an assignment filter is explicitly set
+            }
         }
 
         // Reset message visibility and animation states
@@ -300,7 +346,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
 
         // Cleanup the timer if the component unmounts or dependencies change before it fires
         return () => clearTimeout(timer);
-    }, [initialFilterAssignment]);
+    }, [initialFilterAssignment, location.search]);
 
 
     // Effect hook to handle clicks outside the export popup to close it

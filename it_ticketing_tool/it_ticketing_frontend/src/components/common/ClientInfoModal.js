@@ -24,19 +24,22 @@ const designationOptions = [
 // Validation schema is unchanged
 const validationSchema = yup.object().shape({
   companyName: yup.string().required('Company name is required').min(2, 'Minimum 2 characters').max(100, 'Maximum 100 characters'),
-  website: yup.string().nullable().transform((value) => (value === '' ? null : value)).url('Invalid URL'),
+  website: yup.string().nullable().transform((value) => (value === '' ? null : value)),
   location: yup.string().nullable().max(100, 'Maximum 100 characters'),
-  clientContactNumber: yup.string().required('Contact number is required').matches(/^[\+]?[0-9\s\-\(\)]{10,15}$/, 'Invalid phone number'),
+  clientContactCountryCode: yup.string().required('Country code is required').matches(/^[\+]?[0-9]{1,4}$/, 'Invalid country code'),
+  clientContactNumber: yup.string().required('Contact number is required').matches(/^[0-9\s\-\(\)]{7,15}$/, 'Invalid phone number'),
   authFirstName: yup.string().required('First name is required').min(2, 'Minimum 2 characters').max(50, 'Maximum 50 characters'),
   authLastName: yup.string().required('Last name is required').min(2, 'Minimum 2 characters').max(50, 'Maximum 50 characters'),
-  authContactNumber: yup.string().required('Contact number is required').matches(/^[\+]?[0-9\s\-\(\)]{10,15}$/, 'Invalid phone number'),
+  authContactCountryCode: yup.string().required('Country code is required').matches(/^[\+]?[0-9]{1,4}$/, 'Invalid country code'),
+  authContactNumber: yup.string().required('Contact number is required').matches(/^[0-9\s\-\(\)]{7,15}$/, 'Invalid phone number'),
   authOfficeEmail: yup.string().email('Invalid email').required('Office email is required').max(100, 'Maximum 100 characters'),
   authPersonalEmail: yup.string().nullable().transform((value) => (value === '' ? null : value)).email('Invalid email').max(100, 'Maximum 100 characters'),
   authDesignation: yup.string().required('Designation is required'),
   siteFirstName: yup.string().required('First name is required').min(2, 'Minimum 2 characters').max(50, 'Maximum 50 characters'),
   siteLastName: yup.string().required('Last name is required').min(2, 'Minimum 2 characters').max(50, 'Maximum 50 characters'),
   siteEmail: yup.string().email('Invalid email').required('Email is required').max(100, 'Maximum 100 characters'),
-  siteContactNumber: yup.string().required('Contact number is required').matches(/^[\+]?[0-9\s\-\(\)]{10,15}$/, 'Invalid phone number'),
+  siteContactCountryCode: yup.string().required('Country code is required').matches(/^[\+]?[0-9]{1,4}$/, 'Invalid country code'),
+  siteContactNumber: yup.string().required('Contact number is required').matches(/^[0-9\s\-\(\)]{7,15}$/, 'Invalid phone number'),
   siteDesignation: yup.string().required('Designation is required'),
 });
 
@@ -44,9 +47,11 @@ const initialState = {
   companyName: '',
   website: '',
   location: '',
+  clientContactCountryCode: '+91',
   clientContactNumber: '',
   authFirstName: '',
   authLastName: '',
+  authContactCountryCode: '+91',
   authContactNumber: '',
   authOfficeEmail: '',
   authPersonalEmail: '',
@@ -54,6 +59,7 @@ const initialState = {
   siteFirstName: '',
   siteLastName: '',
   siteEmail: '',
+  siteContactCountryCode: '+91',
   siteContactNumber: '',
   siteDesignation: '',
 };
@@ -69,7 +75,7 @@ const ClientInfoModal = ({ isOpen, onClose, onSave, initialData = null }) => {
     mode: 'onChange',
   });
 
-  const { authFirstName, authLastName, authContactNumber, authOfficeEmail, authPersonalEmail, authDesignation } = watch();
+  const { authFirstName, authLastName, authContactCountryCode, authContactNumber, authOfficeEmail, authPersonalEmail, authDesignation } = watch();
 
   // Auto-fill site admin fields when checkbox is checked or auth fields change
   useEffect(() => {
@@ -78,12 +84,13 @@ const ClientInfoModal = ({ isOpen, onClose, onSave, initialData = null }) => {
         ...watch(),
         siteFirstName: authFirstName,
         siteLastName: authLastName,
+        siteContactCountryCode: authContactCountryCode,
         siteContactNumber: authContactNumber,
         siteEmail: authOfficeEmail,
         siteDesignation: authDesignation,
       });
     }
-  }, [sameAsAuth, authFirstName, authLastName, authContactNumber, authOfficeEmail, authDesignation, reset]);
+  }, [sameAsAuth, authFirstName, authLastName, authContactCountryCode, authContactNumber, authOfficeEmail, authDesignation, reset]);
 
   useEffect(() => {
     if (isOpen) {
@@ -193,10 +200,9 @@ const ClientInfoModal = ({ isOpen, onClose, onSave, initialData = null }) => {
                     {...field}
                     label="Website"
                     error={!!errors.website}
-                    helperText={errors.website?.message || 'Optional - Include https://'}
+                    helperText={errors.website?.message}
                     fullWidth
                     size="small"
-                    placeholder="https://example.com"
                     InputProps={{
                       startAdornment: <InputAdornment position="start"><WebsiteIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
                     }}
@@ -225,27 +231,50 @@ const ClientInfoModal = ({ isOpen, onClose, onSave, initialData = null }) => {
                   />
                 )}
               />
-              <Controller
-                name="clientContactNumber"
-                control={control}
-                render={({ field }) => (
-                  <TextField
-                    {...field}
-                    label="Contact Number *"
-                    error={!!errors.clientContactNumber}
-                    helperText={errors.clientContactNumber?.message}
-                    fullWidth
-                    size="small"
-                    placeholder="+1 (555) 123-4567"
-                    InputProps={{
-                      startAdornment: <InputAdornment position="start"><PhoneIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
-                    }}
-                    InputLabelProps={{ shrink: true, sx: { fontSize: '0.8rem' } }}
-                    autoComplete="new-password"
-                    sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
-                  />
-                )}
-              />
+              <div className="flex gap-2">
+                <Controller
+                  name="clientContactCountryCode"
+                  control={control}
+                  render={({ field }) => (
+                    <TextField
+                      {...field}
+                      label="Code *"
+                      error={!!errors.clientContactCountryCode}
+                      helperText={errors.clientContactCountryCode?.message}
+                      size="small"
+                      placeholder="+91"
+                      InputProps={{
+                        startAdornment: <InputAdornment position="start"><PhoneIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
+                      }}
+                      InputLabelProps={{ shrink: true, sx: { fontSize: '0.7rem' } }}
+                      autoComplete="new-password"
+                      sx={{ 
+                        '& .MuiInputBase-input': { fontSize: '0.85rem' },
+                        minWidth: '80px',
+                        maxWidth: '80px',
+                        flexShrink: 0
+                      }}
+                    />
+                  )}
+                />
+                <Controller
+                  name="clientContactNumber"
+                  control={control}
+                  render={({ field }) => (
+                    <TextField
+                      {...field}
+                      label="Contact Number *"
+                      error={!!errors.clientContactNumber}
+                      helperText={errors.clientContactNumber?.message}
+                      fullWidth
+                      size="small"
+                      InputLabelProps={{ shrink: true, sx: { fontSize: '0.8rem' } }}
+                      autoComplete="new-password"
+                      sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                    />
+                  )}
+                />
+              </div>
             </div>
           </Box>
 
@@ -290,27 +319,50 @@ const ClientInfoModal = ({ isOpen, onClose, onSave, initialData = null }) => {
                   />
                 )}
               />
-              <Controller
-                name="authContactNumber"
-                control={control}
-                render={({ field }) => (
-                  <TextField
-                    {...field}
-                    label="Contact Number *"
-                    error={!!errors.authContactNumber}
-                    helperText={errors.authContactNumber?.message}
-                    fullWidth
-                    size="small"
-                    placeholder="+1 (555) 123-4567"
-                    InputProps={{
-                      startAdornment: <InputAdornment position="start"><PhoneIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
-                    }}
-                    InputLabelProps={{ shrink: true, sx: { fontSize: '0.8rem' } }}
-                    autoComplete="new-password"
-                    sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
-                  />
-                )}
-              />
+              <div className="flex gap-2">
+                <Controller
+                  name="authContactCountryCode"
+                  control={control}
+                  render={({ field }) => (
+                    <TextField
+                      {...field}
+                      label="Code *"
+                      error={!!errors.authContactCountryCode}
+                      helperText={errors.authContactCountryCode?.message}
+                      size="small"
+                      placeholder="+91"
+                      InputProps={{
+                        startAdornment: <InputAdornment position="start"><PhoneIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
+                      }}
+                      InputLabelProps={{ shrink: true, sx: { fontSize: '0.7rem' } }}
+                      autoComplete="new-password"
+                      sx={{ 
+                        '& .MuiInputBase-input': { fontSize: '0.85rem' },
+                        minWidth: '80px',
+                        maxWidth: '80px',
+                        flexShrink: 0
+                      }}
+                    />
+                  )}
+                />
+                <Controller
+                  name="authContactNumber"
+                  control={control}
+                  render={({ field }) => (
+                    <TextField
+                      {...field}
+                      label="Contact Number *"
+                      error={!!errors.authContactNumber}
+                      helperText={errors.authContactNumber?.message}
+                      fullWidth
+                      size="small"
+                      InputLabelProps={{ shrink: true, sx: { fontSize: '0.8rem' } }}
+                      autoComplete="new-password"
+                      sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                    />
+                  )}
+                />
+              </div>
               <Controller
                 name="authDesignation"
                 control={control}
@@ -379,6 +431,27 @@ const ClientInfoModal = ({ isOpen, onClose, onSave, initialData = null }) => {
               <AdminIcon className="text-gray-600 mr-2" fontSize="small" />
               <Typography variant="subtitle1" className="font-semibold text-gray-800" sx={{ fontSize: '0.9rem' }}>Site Administrator</Typography>
             </div>
+            
+            {/* Checkbox for Same as Authorized Person - Inside Site Administrator box */}
+            <Box className="mb-3">
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={sameAsAuth}
+                    onChange={(e) => setSameAsAuth(e.target.checked)}
+                    name="sameAsAuth"
+                    color="primary"
+                    size="small"
+                  />
+                }
+                label={
+                  <Typography variant="caption" sx={{ color: '#1976d2', fontSize: '0.75rem' }}>
+                    Same as Authorized Person
+                  </Typography>
+                }
+              />
+            </Box>
+            
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <Controller
                 name="siteFirstName"
@@ -456,34 +529,62 @@ const ClientInfoModal = ({ isOpen, onClose, onSave, initialData = null }) => {
                   />
                 )}
               />
-              <Controller
-                name="siteContactNumber"
-                control={control}
-                render={({ field }) => (
-                  <TextField
-                    {...field}
-                    label="Contact Number *"
-                    error={!!errors.siteContactNumber}
-                    helperText={errors.siteContactNumber?.message}
-                    fullWidth
-                    size="small"
-                    disabled={sameAsAuth}
-                    placeholder="+1 (555) 123-4567"
-                    InputProps={{
-                      startAdornment: <InputAdornment position="start"><PhoneIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
-                    }}
-                    InputLabelProps={{ shrink: true, sx: { fontSize: '0.8rem' } }}
-                    autoComplete="new-password"
-                    sx={{ 
-                      '& .MuiInputBase-input': { fontSize: '0.85rem' },
-                      '& .Mui-disabled': {
-                        backgroundColor: '#f5f5f5',
-                        color: '#666'
-                      }
-                    }}
-                  />
-                )}
-              />
+              <div className="flex gap-2">
+                <Controller
+                  name="siteContactCountryCode"
+                  control={control}
+                  render={({ field }) => (
+                    <TextField
+                      {...field}
+                      label="Code *"
+                      error={!!errors.siteContactCountryCode}
+                      helperText={errors.siteContactCountryCode?.message}
+                      size="small"
+                      disabled={sameAsAuth}
+                      placeholder="+91"
+                      InputProps={{
+                        startAdornment: <InputAdornment position="start"><PhoneIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
+                      }}
+                      InputLabelProps={{ shrink: true, sx: { fontSize: '0.7rem' } }}
+                      autoComplete="new-password"
+                      sx={{ 
+                        '& .MuiInputBase-input': { fontSize: '0.85rem' },
+                        minWidth: '80px',
+                        maxWidth: '80px',
+                        flexShrink: 0,
+                        '& .Mui-disabled': {
+                          backgroundColor: '#f5f5f5',
+                          color: '#666'
+                        }
+                      }}
+                    />
+                  )}
+                />
+                <Controller
+                  name="siteContactNumber"
+                  control={control}
+                  render={({ field }) => (
+                    <TextField
+                      {...field}
+                      label="Contact Number *"
+                      error={!!errors.siteContactNumber}
+                      helperText={errors.siteContactNumber?.message}
+                      fullWidth
+                      size="small"
+                      disabled={sameAsAuth}
+                      InputLabelProps={{ shrink: true, sx: { fontSize: '0.8rem' } }}
+                      autoComplete="new-password"
+                      sx={{ 
+                        '& .MuiInputBase-input': { fontSize: '0.85rem' },
+                        '& .Mui-disabled': {
+                          backgroundColor: '#f5f5f5',
+                          color: '#666'
+                        }
+                      }}
+                    />
+                  )}
+                />
+              </div>
               <Controller
                 name="siteDesignation"
                 control={control}
@@ -509,30 +610,6 @@ const ClientInfoModal = ({ isOpen, onClose, onSave, initialData = null }) => {
                 )}
               />
             </div>
-          </Box>
-
-          {/* Checkbox for Same as Authorized Person */}
-          <Box className="bg-blue-50 p-3 border border-blue-200 rounded">
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={sameAsAuth}
-                  onChange={(e) => setSameAsAuth(e.target.checked)}
-                  name="sameAsAuth"
-                  color="primary"
-                />
-              }
-              label={
-                <Box>
-                  <Typography variant="body2" sx={{ fontWeight: 600, color: '#1976d2' }}>
-                    Same as Authorized Person
-                  </Typography>
-                  <Typography variant="caption" sx={{ color: '#666', display: 'block', mt: 0.5 }}>
-                    Automatically fill site administrator details with authorized person information
-                  </Typography>
-                </Box>
-              }
-            />
           </Box>
         </Box>
       </DialogContent>

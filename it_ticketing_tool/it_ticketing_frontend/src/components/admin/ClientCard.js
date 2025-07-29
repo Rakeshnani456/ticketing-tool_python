@@ -262,7 +262,7 @@ const ClientCard = ({ client, index, onEdit, onRemove, showEdit, showRemove, use
         <Box display="flex" alignItems="center" gap={1} flex={1} justifyContent="flex-start" flexWrap="wrap" sx={{ ml: 2, minWidth: 0, width: '100%' }}>
           <InfoRow icon={<LocationOnIcon fontSize="small" sx={{ color: 'text.secondary', fontSize: '1rem' }} />} label="Location" value={client.location} />
           <InfoRow icon={<PhoneIcon fontSize="small" sx={{ color: 'text.secondary', fontSize: '1rem' }} />} label="Contact" value={client.clientContactNumber} />
-          <InfoRow icon={<LanguageIcon fontSize="small" sx={{ color: 'text.secondary', fontSize: '1rem' }} />} label="Website" value={client.website} link={client.website ? (client.website.startsWith('http') ? client.website : `https://${client.website}`) : undefined} />
+          <InfoRow icon={<LanguageIcon fontSize="small" sx={{ color: 'text.secondary', fontSize: '1rem' }} />} label="Website" value={client.website} />
           <InfoRow icon={<EmailIcon fontSize="small" sx={{ color: 'text.secondary', fontSize: '1rem' }} />} label="Site Email" value={client.siteEmail} />
           
           {/* User Count Badge */}
@@ -333,19 +333,16 @@ const ClientCard = ({ client, index, onEdit, onRemove, showEdit, showRemove, use
                   icon={<ContactMailIcon fontSize="small" />}
                   label="Office Email"
                   value={client.authOfficeEmail}
-                  isEmail={true}
                 />
                 <ContactInfoItem 
                   icon={<ContactMailIcon fontSize="small" />}
                   label="Personal Email"
                   value={client.authPersonalEmail}
-                  isEmail={true}
                 />
                 <ContactInfoItem 
                   icon={<ContactPhoneIcon fontSize="small" />}
                   label="Contact Number"
                   value={client.authContactNumber}
-                  isPhone={true}
                 />
               </ContactCard>
             </Grid>
@@ -371,13 +368,11 @@ const ClientCard = ({ client, index, onEdit, onRemove, showEdit, showRemove, use
                   icon={<ContactMailIcon fontSize="small" />}
                   label="Email"
                   value={client.siteEmail}
-                  isEmail={true}
                 />
                 <ContactInfoItem 
                   icon={<ContactPhoneIcon fontSize="small" />}
                   label="Contact Number"
                   value={client.siteContactNumber}
-                  isPhone={true}
                 />
               </ContactCard>
             </Grid>
