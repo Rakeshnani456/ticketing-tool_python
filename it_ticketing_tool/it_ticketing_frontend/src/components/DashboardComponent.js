@@ -296,29 +296,27 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
     const openTickets = statusCounts['Open'] || 0;
     const inProgressTickets = statusCounts['In Progress'] || 0;
     
-    // Calculate assigned tickets for current engineer
-    const assignedToMe = user?.role === 'engineer' ? 
+    // Calculate assigned tickets for current engineer or support
+    const assignedToMe = (user?.role === 'engineer' || user?.role === 'support') ? 
       tickets.filter(ticket => 
         ticket.assigned_to_email === user.email && 
         ['Open', 'In Progress', 'Hold'].includes(ticket.status)
       ).length : 0;
     
-    // Calculate average resolution time (only for admin/super admin)
+    // Calculate average resolution time based on time_spent field (only for admin/super admin)
     let avgResolutionTime = 0;
     if (user?.role === 'admin' || user?.role === 'super_admin') {
       const resolvedTickets = tickets.filter(ticket => 
-        ticket.status === 'Resolved' || ticket.status === 'Closed'
+        (ticket.status === 'Resolved' || ticket.status === 'Closed') && 
+        ticket.time_spent !== undefined && 
+        ticket.time_spent !== null && 
+        ticket.time_spent > 0
       );
       
       if (resolvedTickets.length > 0) {
         const totalResolutionTime = resolvedTickets.reduce((total, ticket) => {
-          if (ticket.resolved_at && ticket.created_at) {
-            const created = ticket.created_at;
-            const resolved = ticket.resolved_at;
-            const diffInMinutes = (resolved - created) / (1000 * 60);
-            return total + diffInMinutes;
-          }
-          return total;
+          // time_spent is stored in minutes, so we can use it directly
+          return total + (ticket.time_spent || 0);
         }, 0);
         
         avgResolutionTime = Math.round(totalResolutionTime / resolvedTickets.length);
@@ -400,31 +398,20 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
             <p className="mt-1 opacity-75 text-sm">Real-time ticket management</p>
           </div>
           
-          <div className="flex space-x-2">
-            <div className={`flex items-center px-2 py-1 rounded-md ${darkMode ? 'bg-gray-700' : 'bg-gray-100'}`}>
-              <Filter className="mr-1" size={14} />
-              <select 
-                value={timeRange}
-                onChange={(e) => setTimeRange(e.target.value)}
-                className={`bg-transparent text-sm ${darkMode ? 'text-white' : 'text-gray-900'}`}
-              >
-                <option value="week">Last Week</option>
-                <option value="month">Last Month</option>
-                <option value="all">All Time</option>
-              </select>
+          {(user?.role === 'admin' || user?.role === 'super_admin') && (
+            <div className="text-right">
+              <p className="text-sm opacity-75">
+                For detailed analytics, visit{' '}
+                <button
+                  onClick={() => navigateTo('/reports')}
+                  className="text-blue-500 hover:text-blue-700 underline cursor-pointer transition-colors"
+                >
+                  Reports
+                </button>{' '}
+                page
+              </p>
             </div>
-            
-            <button 
-              onClick={() => setDarkMode(!darkMode)}
-              className={`p-2 rounded-full ${darkMode ? 'bg-yellow-400 text-gray-900' : 'bg-gray-800 text-white'}`}
-            >
-              {darkMode ? <Sun size={16} /> : <Moon size={16} />}
-            </button>
-            
-            <button className={`p-2 rounded-md ${darkMode ? 'bg-gray-700' : 'bg-gray-100'}`}>
-              <Settings size={16} />
-            </button>
-          </div>
+          )}
         </div>
       </header>
 
@@ -456,18 +443,10 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
           </div>
         )}
         
-        {/* Debug info for site admin - Company users count */}
-        {user && user.role === 'site_admin' && user.client_name && (
-          <div className="mb-4 p-2 bg-gray-100 border border-gray-300 text-gray-700 rounded-md text-xs">
-            <div className="flex items-center justify-between">
-              <span>Company Users: {companyUsers.length} | Activities: {activities.length} | Original: {originalActivities.length}</span>
-              <span>Company: {user.client_name}</span>
-            </div>
-          </div>
-        )}
+
         
         {/* Stats Overview */}
-        <div className={`grid grid-cols-1 md:grid-cols-${user?.role === 'engineer' ? '4' : user?.role === 'admin' || user?.role === 'super_admin' ? '4' : '3'} gap-3 mb-4`}>
+        <div className={`grid grid-cols-1 md:grid-cols-${(user?.role === 'engineer' || user?.role === 'support') ? '4' : user?.role === 'admin' || user?.role === 'super_admin' ? '4' : '3'} gap-3 mb-4`}>
           {/* Total Active Tickets - All roles can see */}
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
@@ -534,8 +513,8 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
             </div>
           </motion.div>
           
-          {/* Assigned to Me - Only Engineers */}
-          {user?.role === 'engineer' && (
+          {/* Assigned to Me - Only Engineers and Support */}
+          {(user?.role === 'engineer' || user?.role === 'support') && (
             <motion.div 
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -563,7 +542,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
             <motion.div 
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: user?.role === 'engineer' ? 0.5 : 0.4 }}
+              transition={{ delay: (user?.role === 'engineer' || user?.role === 'support') ? 0.5 : 0.4 }}
               className={`${cardClass} rounded-lg p-3 shadow-lg border`}
             >
               <div className="flex justify-between items-start">
@@ -592,7 +571,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
             className={`${cardClass} rounded-lg p-3 shadow-lg border lg:col-span-2`}
           >
             <div className="flex justify-between items-center mb-3">
-              <h2 className="text-lg font-bold">Recent Updates</h2>
+              <h2 className="text-lg font-bold">Updates</h2>
               <div className="flex space-x-1">
                 <button 
                   onClick={() => setActiveTab('activity')}
@@ -681,8 +660,10 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                             <div className="flex-1 min-w-0">
                               {/* New format: User full name • TicketID : Subjectline */}
                               <div className="mb-1">
-                                <h3 className="font-bold text-sm">
-                                  {activity.user_name || activity.user || 'System'} •{' '}
+                                <div className="text-sm font-normal" style={{ fontFamily: 'Arial, sans-serif' }}>
+                                  <span className="text-[#0000FF] dark:text-[#0000FF]">
+                                    {activity.user_name || activity.user || 'System'}
+                                  </span> •{' '}
                                   <button
                                     onClick={() => {
                                       // Get the ticket ID for navigation
@@ -698,7 +679,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                                       
                                       navigateTo(`/tickets/${ticketIdForNavigation}`);
                                     }}
-                                    className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 underline cursor-pointer transition-colors"
+                                    className="text-[#0000FF] hover:text-[#0000FF]/80 dark:text-[#0000FF] dark:hover:text-[#0000FF]/80 underline cursor-pointer transition-colors"
                                   >
                                     {activity.ticket_display_id || 
                                      (activity.ticket_id && activity.ticket_id.startsWith('TT') ? activity.ticket_id : null) || 
@@ -708,7 +689,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                                      'Unknown Ticket'}
                                   </button>
                                   {' '}: {activity.ticket_title || 'No title'}
-                                </h3>
+                                </div>
                               </div>
                               
                               {/* Action description */}
@@ -805,7 +786,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                               {formatTimeAgo(activity.timestamp)}
                             </p>
                             <p className="text-xs opacity-50 mt-1">
-                              {new Date(activity.timestamp).toLocaleTimeString([], { 
+                              {new Date(activity.timestamp).toLocaleDateString()} at {new Date(activity.timestamp).toLocaleTimeString([], { 
                                 hour: '2-digit', 
                                 minute: '2-digit' 
                               })}

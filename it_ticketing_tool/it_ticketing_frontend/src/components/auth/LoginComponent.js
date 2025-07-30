@@ -1,8 +1,8 @@
 // src/components/auth/LoginComponent.js
 
-import React, { useState } from 'react';
-import { signInWithEmailAndPassword, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth'; // Firebase authentication method
-import { LogIn } from 'lucide-react'; // Icon for login button
+import React, { useState, useEffect } from 'react';
+import { signInWithEmailAndPassword, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
+import { LogIn, AlertCircle, CheckCircle, Eye, EyeOff, Wifi, WifiOff } from 'lucide-react';
 
 // Import common UI components
 import FormInput from '../common/FormInput';
@@ -10,301 +10,603 @@ import PrimaryButton from '../common/PrimaryButton';
 import LinkButton from '../common/LinkButton';
 
 // Import Firebase auth client from config
-import { authClient, dbClient } from '../../config/firebase'; // Import dbClient
-import { doc, getDoc, updateDoc } from 'firebase/firestore'; // Import Firestore helpers
-// Import API Base URL from constants
-import { API_BASE_URL } from '../../config/constants'; // Corrected syntax
+import { authClient, dbClient } from '../../config/firebase';
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { API_BASE_URL } from '../../config/constants';
 
 /**
- * Component for user login.
- * Handles email/password authentication and communicates with a backend for role verification.
- * @param {object} props - Component props.
- * @param {function} props.onLoginSuccess - Callback function on successful login, receives user object.
- * @param {function} props.navigateTo - Function to navigate to different pages in the app.
- * @param {function} props.showFlashMessage - Function to display a temporary message to the user.
- * @returns {JSX.Element} The login form.
+ * Enhanced Toast Component for better user feedback
+ */
+const Toast = ({ message, type, isVisible, onClose }) => {
+    useEffect(() => {
+        if (isVisible) {
+            const timer = setTimeout(() => {
+                onClose();
+            }, 5000);
+            return () => clearTimeout(timer);
+        }
+    }, [isVisible, onClose]);
+
+    if (!isVisible) return null;
+
+    const getToastStyles = () => {
+        const baseStyles = "fixed top-4 right-4 z-50 max-w-sm w-full bg-white border-l-4 rounded-lg shadow-lg transform transition-all duration-300 ease-in-out";
+        switch (type) {
+            case 'success':
+                return `${baseStyles} border-green-500`;
+            case 'error':
+                return `${baseStyles} border-red-500`;
+            case 'warning':
+                return `${baseStyles} border-yellow-500`;
+            case 'info':
+                return `${baseStyles} border-blue-500`;
+            default:
+                return `${baseStyles} border-gray-500`;
+        }
+    };
+
+    const getIcon = () => {
+        switch (type) {
+            case 'success':
+                return <CheckCircle className="w-5 h-5 text-green-500" />;
+            case 'error':
+                return <AlertCircle className="w-5 h-5 text-red-500" />;
+            case 'warning':
+                return <AlertCircle className="w-5 h-5 text-yellow-500" />;
+            case 'info':
+                return <AlertCircle className="w-5 h-5 text-blue-500" />;
+            default:
+                return <AlertCircle className="w-5 h-5 text-gray-500" />;
+        }
+    };
+
+    return (
+        <div className={getToastStyles()}>
+            <div className="flex items-start p-4">
+                <div className="flex-shrink-0">
+                    {getIcon()}
+                </div>
+                <div className="ml-3 flex-1">
+                    <p className="text-sm font-medium text-gray-900">{message}</p>
+                </div>
+                <button
+                    onClick={onClose}
+                    className="ml-3 flex-shrink-0 text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                    <span className="sr-only">Close</span>
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                    </svg>
+                </button>
+            </div>
+        </div>
+    );
+};
+
+/**
+ * Enhanced Error Display Component
+ */
+const ErrorAlert = ({ error, onDismiss }) => {
+    if (!error) return null;
+
+    return (
+        <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg relative animate-pulse-once" role="alert">
+            <div className="flex items-start">
+                <AlertCircle className="w-4 h-4 text-red-500 mt-0.5 mr-2 flex-shrink-0" />
+                <div className="flex-1">
+                    <span className="block text-sm font-medium">{error}</span>
+                </div>
+                {onDismiss && (
+                    <button
+                        onClick={onDismiss}
+                        className="ml-2 text-red-400 hover:text-red-600 transition-colors"
+                    >
+                        <span className="sr-only">Dismiss</span>
+                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                        </svg>
+                    </button>
+                )}
+            </div>
+        </div>
+    );
+};
+
+/**
+ * Network Status Indicator
+ */
+const NetworkStatus = ({ isOnline }) => {
+    if (isOnline) return null;
+
+    return (
+        <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-2 rounded-lg mb-4">
+            <div className="flex items-center">
+                <WifiOff className="w-4 h-4 text-yellow-500 mr-2" />
+                <span className="text-sm">You appear to be offline. Please check your connection.</span>
+            </div>
+        </div>
+    );
+};
+
+/**
+ * Enhanced Login Component with improved error handling and user feedback
  */
 const LoginComponent = ({ onLoginSuccess, navigateTo, showFlashMessage }) => {
+    // Form state
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
+    
+    // Password change state
     const [mustChangePassword, setMustChangePassword] = useState(false);
-    const [userUidForChange, setUserUidForChange] = useState(null); // Store UID for password change
+    const [userUidForChange, setUserUidForChange] = useState(null);
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [passwordChangeLoading, setPasswordChangeLoading] = useState(false);
-    const [passwordError, setPasswordError] = useState(false); // State to indicate password error for styling
-    const [formError, setFormError] = useState(''); // State for general form error message
+    
+    // Error and feedback state
+    const [formError, setFormError] = useState('');
+    const [fieldErrors, setFieldErrors] = useState({});
+    const [toast, setToast] = useState({ message: '', type: '', isVisible: false });
+    const [isOnline, setIsOnline] = useState(navigator.onLine);
+    const [attemptCount, setAttemptCount] = useState(0);
+    
+    // Password validation state
+    const [passwordStrength, setPasswordStrength] = useState({ score: 0, feedback: '' });
+
+    // Network status monitoring
+    useEffect(() => {
+        const handleOnline = () => setIsOnline(true);
+        const handleOffline = () => setIsOnline(false);
+
+        window.addEventListener('online', handleOnline);
+        window.addEventListener('offline', handleOffline);
+
+        return () => {
+            window.removeEventListener('online', handleOnline);
+            window.removeEventListener('offline', handleOffline);
+        };
+    }, []);
 
     /**
-     * Handles the form submission for login.
-     * Authenticates with Firebase and then verifies user role with the backend.
-     * @param {Event} e - The form submission event.
+     * Enhanced toast display function
+     */
+    const showToast = (message, type = 'info') => {
+        setToast({ message, type, isVisible: true });
+    };
+
+    const hideToast = () => {
+        setToast(prev => ({ ...prev, isVisible: false }));
+    };
+
+    /**
+     * Clear all errors
+     */
+    const clearErrors = () => {
+        setFormError('');
+        setFieldErrors({});
+    };
+
+    /**
+     * Validate password strength for new passwords
+     */
+    const validatePasswordStrength = (password) => {
+        if (!password) return { score: 0, feedback: '' };
+
+        let score = 0;
+        let feedback = [];
+
+        if (password.length >= 8) score += 1;
+        else feedback.push('at least 8 characters');
+
+        if (/[A-Z]/.test(password)) score += 1;
+        else feedback.push('an uppercase letter');
+
+        if (/[a-z]/.test(password)) score += 1;
+        else feedback.push('a lowercase letter');
+
+        if (/\d/.test(password)) score += 1;
+        else feedback.push('a number');
+
+        if (/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) score += 1;
+        else feedback.push('a special character');
+
+        const strengthText = score < 2 ? 'Weak' : score < 4 ? 'Fair' : score < 5 ? 'Good' : 'Strong';
+        const feedbackText = feedback.length > 0 ? `Add ${feedback.join(', ')}` : 'Strong password!';
+
+        return { score, feedback: feedbackText, strength: strengthText };
+    };
+
+    /**
+     * Enhanced error message mapping
+     */
+    const getFirebaseErrorMessage = (errorCode) => {
+        const errorMessages = {
+            'auth/user-not-found': 'No account found with this email address.',
+            'auth/wrong-password': 'Incorrect password. Please try again.',
+            'auth/invalid-credential': 'Invalid email or password. Please check your credentials.',
+            'auth/invalid-email': 'Please enter a valid email address.',
+            'auth/user-disabled': 'This account has been disabled. Contact support for assistance.',
+            'auth/too-many-requests': 'Too many failed attempts. Please try again in a few minutes.',
+            'auth/network-request-failed': 'Network error. Please check your internet connection.',
+            'auth/operation-not-allowed': 'Email/password sign-in is not enabled. Contact support.',
+            'auth/weak-password': 'Password is too weak. Please choose a stronger password.',
+            'auth/email-already-in-use': 'An account with this email already exists.',
+            'auth/requires-recent-login': 'Please log out and log back in to perform this action.',
+        };
+
+        return errorMessages[errorCode] || 'An unexpected error occurred. Please try again.';
+    };
+
+    /**
+     * Enhanced form submission with better error handling
      */
     const handleSubmit = async (e) => {
-        e.preventDefault(); // Prevent default form submission behavior
-        setPasswordError(false); // Reset password error on new submission attempt
-        setFormError(''); // Clear any previous general form errors
-        setLoading(true); // Start loading state
+        e.preventDefault();
+        clearErrors();
+
+        // Client-side validation
+        if (!email.trim()) {
+            setFieldErrors({ email: 'Email is required' });
+            return;
+        }
+
+        if (!password) {
+            setFieldErrors({ password: 'Password is required' });
+            return;
+        }
+
+        if (!isOnline) {
+            showToast('Please check your internet connection and try again.', 'error');
+            return;
+        }
+
+        setLoading(true);
+        setAttemptCount(prev => prev + 1);
 
         try {
             // 1. Authenticate with Firebase
             const userCredential = await signInWithEmailAndPassword(authClient, email, password);
             const firebaseUser = userCredential.user;
-            const idToken = await firebaseUser.getIdToken(); // Get Firebase ID token
+            const idToken = await firebaseUser.getIdToken();
 
-            // 2. Send ID token to backend for verification and user role retrieval
+            // 2. Backend verification with timeout
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+
             const response = await fetch(`${API_BASE_URL}/login`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${idToken}` // Pass ID token in Authorization header
+                    'Authorization': `Bearer ${idToken}`
                 },
                 body: JSON.stringify({ email: firebaseUser.email }),
+                signal: controller.signal
             });
 
-            const data = await response.json(); // Parse backend response
+            clearTimeout(timeoutId);
+            const data = await response.json();
 
-            // 3. Handle backend response
+            // 3. Handle response
             if (response.ok) {
-                // If backend verification is successful, call onLoginSuccess with user data
-                onLoginSuccess({ firebaseUser, role: data.user.role, email: firebaseUser.email });
+                showToast('Login successful! Welcome back.', 'success');
+                setTimeout(() => {
+                    onLoginSuccess({ 
+                        firebaseUser, 
+                        role: data.user.role, 
+                        email: firebaseUser.email 
+                    });
+                }, 1000);
             } else if (response.status === 403 && data.mustChangePassword) {
-                // Backend requires password change
                 setMustChangePassword(true);
-                setUserUidForChange(data.user.id); // Store UID for password change
-                setLoading(false);
-                showFlashMessage('You must change your password before continuing.', 'info');
-                return;
+                setUserUidForChange(data.user.id);
+                showToast('Password change required for security.', 'warning');
             } else {
-                // If backend verification fails, set form error and sign out from Firebase
-                setFormError(data.error || 'Login failed after token verification. Please try again.');
-                authClient.signOut(); // Ensure user is signed out if backend rejects
+                const errorMsg = data.error || 'Login verification failed. Please try again.';
+                setFormError(errorMsg);
+                await authClient.signOut();
+                
+                if (attemptCount >= 2) {
+                    showToast('Having trouble? Try resetting your password.', 'info');
+                }
             }
+
         } catch (error) {
-            // Handle Firebase authentication errors
             console.error('Login error:', error);
-            let errorMessage = 'Login failed.';
-            if (error.code) {
-                switch (error.code) {
-                    case 'auth/user-not-found':
-                    case 'auth/wrong-password':
-                    case 'auth/invalid-credential': // Explicitly handle this common error
-                        errorMessage = 'Invalid email or password. Please try again.';
-                        setPasswordError(true); // Set password error for visual feedback
-                        setPassword(''); // Clear password field for re-entry
-                        break;
-                    case 'auth/invalid-email':
-                        errorMessage = 'Invalid email format.';
-                        break;
-                    case 'auth/too-many-requests':
-                        errorMessage = 'Too many failed login attempts. Please try again later.';
-                        break;
-                    case 'auth/network-request-failed':
-                        errorMessage = 'Network error. Please check your internet connection.';
-                        break;
-                    default:
-                        errorMessage = error.message || 'An unexpected authentication error occurred.'; // Fallback for other Firebase errors
+            
+            if (error.name === 'AbortError') {
+                setFormError('Request timed out. Please try again.');
+                showToast('Connection timeout. Please try again.', 'error');
+            } else if (error.code) {
+                const errorMessage = getFirebaseErrorMessage(error.code);
+                setFormError(errorMessage);
+                
+                if (['auth/wrong-password', 'auth/invalid-credential'].includes(error.code)) {
+                    setFieldErrors({ password: 'Incorrect password' });
+                    setPassword('');
+                }
+                
+                if (error.code === 'auth/too-many-requests') {
+                    showToast('Account temporarily locked due to multiple failed attempts.', 'warning');
                 }
             } else {
-                errorMessage = 'An unexpected network error occurred or server is unreachable.';
+                setFormError('Unable to connect to our servers. Please try again.');
+                showToast('Connection failed. Please check your internet connection.', 'error');
             }
-            setFormError(errorMessage); // Display error message inside the form
         } finally {
-            setLoading(false); // End loading state
+            setLoading(false);
         }
     };
 
-    // Change password logic for forced change (calls backend)
+    /**
+     * Enhanced password change handler
+     */
     const handleChangePassword = async (e) => {
         e.preventDefault();
-        setPasswordError('');
+        clearErrors();
+
+        // Validation
         if (newPassword !== confirmPassword) {
-            setPasswordError('New password and confirm password do not match.');
-            showFlashMessage('New password and confirm password do not match.', 'error');
+            setFieldErrors({ confirmPassword: 'Passwords do not match' });
+            showToast('Passwords do not match. Please try again.', 'error');
             return;
         }
-        if (newPassword.length < 6) {
-            setPasswordError('Password must be at least 6 characters long.');
-            showFlashMessage('Password must be at least 6 characters long.', 'error');
+
+        const strength = validatePasswordStrength(newPassword);
+        if (strength.score < 3) {
+            setFieldErrors({ newPassword: 'Password is too weak' });
+            showToast(`Password too weak. ${strength.feedback}`, 'error');
             return;
         }
+
         setPasswordChangeLoading(true);
+
         try {
-            // Call backend to change password and clear mustChangePassword
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 15000);
+
             const response = await fetch(`${API_BASE_URL}/change-password`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ uid: userUidForChange, newPassword }),
+                signal: controller.signal
             });
+
+            clearTimeout(timeoutId);
             const data = await response.json();
+
             if (response.ok) {
-                showFlashMessage('Password updated successfully! Please log in with your new password.', 'success');
+                showToast('Password updated successfully! Please log in with your new password.', 'success');
+                
+                // Reset all states
                 setMustChangePassword(false);
                 setUserUidForChange(null);
                 setNewPassword('');
                 setConfirmPassword('');
-                setPasswordError('');
-                setPasswordChangeLoading(false);
                 setEmail('');
                 setPassword('');
+                clearErrors();
+                
                 await authClient.signOut();
             } else {
-                setPasswordError(data.error || 'Failed to update password.');
-                showFlashMessage(data.error || 'Failed to update password.', 'error');
+                const errorMsg = data.error || 'Failed to update password. Please try again.';
+                setFormError(errorMsg);
+                showToast(errorMsg, 'error');
             }
-        } catch (err) {
-            setPasswordError('Failed to update password.');
-            showFlashMessage('Failed to update password.', 'error');
+        } catch (error) {
+            console.error('Password change error:', error);
+            const errorMsg = error.name === 'AbortError' 
+                ? 'Request timed out. Please try again.'
+                : 'Failed to update password. Please try again.';
+            
+            setFormError(errorMsg);
+            showToast(errorMsg, 'error');
         } finally {
             setPasswordChangeLoading(false);
         }
     };
 
     /**
-     * Resets password error state and clears general form error when the password input is focused.
+     * Handle input focus events
      */
-    const handlePasswordFocus = () => {
-        setPasswordError(false);
-        setFormError(''); // Clear general form error when user focuses on password
+    const handleInputFocus = (fieldName) => {
+        setFieldErrors(prev => ({ ...prev, [fieldName]: '' }));
+        if (Object.keys(fieldErrors).length <= 1) {
+            setFormError('');
+        }
     };
 
     /**
-     * Resets general form error when the email input is focused.
+     * Handle password input for strength checking
      */
-    const handleEmailFocus = () => {
-        setFormError(''); // Clear general form error when user focuses on email
+    const handleNewPasswordChange = (e) => {
+        const value = e.target.value;
+        setNewPassword(value);
+        setPasswordStrength(validatePasswordStrength(value));
     };
 
-    if (mustChangePassword) {
+    /**
+     * Password strength indicator component
+     */
+    const PasswordStrengthIndicator = ({ strength }) => {
+        if (!strength.score) return null;
+
+        const getStrengthColor = (score) => {
+            if (score < 2) return 'bg-red-500';
+            if (score < 4) return 'bg-yellow-500';
+            return 'bg-green-500';
+        };
+
         return (
-            <div className="flex flex-col items-center justify-center min-h-[calc(100vh-4rem)] bg-gradient-to-br from-gray-50 to-blue-100 p-4">
-                <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md border border-gray-100 animate-fade-in">
-                    <div className="flex flex-col items-center mb-6">
-                        <img src={require('../../assets/logo/logo.png')} alt="Company Logo" className="h-20 mb-2" />
-                        <h2 className="text-2xl font-bold text-gray-800 mb-1 tracking-tight">Set New Password</h2>
-                        <p className="text-gray-500 text-sm">You must set a new password before continuing.</p>
-                    </div>
-                    <form onSubmit={handleChangePassword} className="space-y-4">
-                        <FormInput
-                            id="newPassword"
-                            label="New Password"
-                            type="password"
-                            value={newPassword}
-                            onChange={(e) => setNewPassword(e.target.value)}
-                            required
-                            showPasswordToggle={true}
+            <div className="mt-2">
+                <div className="flex space-x-1">
+                    {[1, 2, 3, 4, 5].map((level) => (
+                        <div
+                            key={level}
+                            className={`h-1 flex-1 rounded ${
+                                level <= strength.score 
+                                    ? getStrengthColor(strength.score)
+                                    : 'bg-gray-200'
+                            }`}
                         />
-                        <FormInput
-                            id="confirmPassword"
-                            label="Re-enter New Password"
-                            type="password"
-                            value={confirmPassword}
-                            onChange={(e) => setConfirmPassword(e.target.value)}
-                            required
-                            showPasswordToggle={true}
-                            error={!!passwordError}
-                        />
-                        {passwordError && <p className="text-red-500 text-xs mt-1">{passwordError}</p>}
-                        <div className="flex items-center justify-center">
-                            <PrimaryButton type="submit" loading={passwordChangeLoading ? "Changing..." : null} Icon={LogIn} className="w-40 whitespace-nowrap">
-                                {passwordChangeLoading ? "Changing..." : "Change Password"}
-                            </PrimaryButton>
-                        </div>
-                    </form>
+                    ))}
                 </div>
+                <p className="text-xs text-gray-600 mt-1">
+                    {strength.strength}: {strength.feedback}
+                </p>
             </div>
         );
-    }
+    };
 
-    return (
-        <div className="flex flex-col items-center justify-center min-h-[calc(100vh-4rem)] bg-gradient-to-br from-gray-50 to-blue-100 p-4">
-            <div className={`flip-container ${mustChangePassword ? 'flipped' : ''} bg-white rounded-2xl shadow-2xl w-full max-w-md border border-gray-100 animate-fade-in`}>
-                <div className="flipper">
-                    {/* Front: Login Form */}
-                    <div className="front">
-                        <div className="p-8">
-                            <div className="flex flex-col items-center mb-6">
-                                <img src={require('../../assets/logo/logo.png')} alt="Company Logo" className="h-20 mb-2" />
-                                <h2 className="text-2xl font-bold text-gray-800 mb-1 tracking-tight">Sign in to your account</h2>
-                                <p className="text-gray-500 text-sm">Enter your credentials to continue</p>
-                            </div>
-                            <form onSubmit={handleSubmit} className="space-y-4">
-                                {formError && (
-                                    <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-2 rounded relative text-sm" role="alert">
-                                        <span className="block sm:inline">{formError}</span>
-                                    </div>
-                                )}
-                                <FormInput
-                                    id="email"
-                                    label="Email Address"
-                                    type="email"
-                                    value={email}
-                                    onChange={(e) => setEmail(e.target.value)}
-                                    onFocus={handleEmailFocus}
-                                    required
-                                    autoComplete="username"
-                                />
-                                <FormInput
-                                    id="password"
-                                    label="Password"
-                                    type="password"
-                                    value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
-                                    onFocus={handlePasswordFocus}
-                                    required
-                                    error={passwordError}
-                                    showPasswordToggle={true}
-                                    autoComplete="current-password"
-                                />
-                                <div className="flex items-center justify-center">
-                                    <PrimaryButton type="submit" loading={loading ? "Logging In..." : null} Icon={LogIn} className="w-40 whitespace-nowrap">
-                                        {loading ? "Logging In..." : "Log In"}
-                                    </PrimaryButton>
-                                </div>
-                            </form>
+    // Password change form
+    if (mustChangePassword) {
+        return (
+            <>
+                <Toast {...toast} onClose={hideToast} />
+                <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-gray-50 to-blue-100 p-4">
+                    <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md border border-gray-100 animate-fade-in">
+                        <div className="flex flex-col items-center mb-6">
+                            <img src={require('../../assets/logo/logo.png')} alt="Company Logo" className="h-10 mb-2" />
+                            <h2 className="text-2xl font-bold text-gray-800 mb-1 tracking-tight">Set New Password</h2>
+                            <p className="text-gray-500 text-sm text-center">
+                                For your security, please create a new strong password.
+                            </p>
                         </div>
-                    </div>
-                    {/* Back: Password Change Form */}
-                    <div className="back">
-                        <div className="p-8">
-                            <div className="flex flex-col items-center mb-6">
-                                <img src={require('../../assets/logo/logo.png')} alt="Company Logo" className="h-20 mb-2" />
-                                <h2 className="text-2xl font-bold text-gray-800 mb-1 tracking-tight">Set New Password</h2>
-                                <p className="text-gray-500 text-sm">You must set a new password before continuing.</p>
-                            </div>
-                            <form onSubmit={handleChangePassword} className="space-y-4">
+
+                        <NetworkStatus isOnline={isOnline} />
+                        <ErrorAlert error={formError} onDismiss={() => setFormError('')} />
+
+                        <form onSubmit={handleChangePassword} className="space-y-4">
+                            <div>
                                 <FormInput
                                     id="newPassword"
                                     label="New Password"
                                     type="password"
                                     value={newPassword}
-                                    onChange={(e) => setNewPassword(e.target.value)}
+                                    onChange={handleNewPasswordChange}
+                                    onFocus={() => handleInputFocus('newPassword')}
                                     required
                                     showPasswordToggle={true}
+                                    error={!!fieldErrors.newPassword}
                                 />
+                                {fieldErrors.newPassword && (
+                                    <p className="text-red-500 text-xs mt-1">{fieldErrors.newPassword}</p>
+                                )}
+                                <PasswordStrengthIndicator strength={passwordStrength} />
+                            </div>
+
+                            <div>
                                 <FormInput
                                     id="confirmPassword"
-                                    label="Re-enter New Password"
+                                    label="Confirm New Password"
                                     type="password"
                                     value={confirmPassword}
                                     onChange={(e) => setConfirmPassword(e.target.value)}
+                                    onFocus={() => handleInputFocus('confirmPassword')}
                                     required
                                     showPasswordToggle={true}
-                                    error={!!passwordError}
+                                    error={!!fieldErrors.confirmPassword}
                                 />
-                                {passwordError && <p className="text-red-500 text-xs mt-1">{passwordError}</p>}
-                                <div className="flex items-center justify-center">
-                                    <PrimaryButton type="submit" loading={passwordChangeLoading ? "Changing..." : null} Icon={LogIn} className="w-40 whitespace-nowrap">
-                                        {passwordChangeLoading ? "Changing..." : "Change Password"}
-                                    </PrimaryButton>
-                                </div>
-                            </form>
-                        </div>
+                                {fieldErrors.confirmPassword && (
+                                    <p className="text-red-500 text-xs mt-1">{fieldErrors.confirmPassword}</p>
+                                )}
+                            </div>
+
+                            <div className="flex items-center justify-center pt-4">
+                                <PrimaryButton 
+                                    type="submit" 
+                                    loading={passwordChangeLoading} 
+                                    Icon={LogIn} 
+                                    className="w-full"
+                                    disabled={!isOnline || passwordStrength.score < 3}
+                                >
+                                    {passwordChangeLoading ? "Updating Password..." : "Update Password"}
+                                </PrimaryButton>
+                            </div>
+                        </form>
                     </div>
                 </div>
+            </>
+        );
+    }
+
+    // Main login form
+    return (
+        <>
+            <Toast {...toast} onClose={hideToast} />
+            <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-gray-50 to-blue-100 p-4">
+                <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md border border-gray-100 animate-fade-in">
+                    <div className="flex flex-col items-center mb-6">
+                        <img src={require('../../assets/logo/logo.png')} alt="Company Logo" className="h-20 mb-2" />
+                        <h2 className="text-2xl font-bold text-gray-800 mb-1 tracking-tight">Welcome Back</h2>
+                        <p className="text-gray-500 text-sm">Sign in to continue to your account</p>
+                    </div>
+
+                    <NetworkStatus isOnline={isOnline} />
+                    <ErrorAlert error={formError} onDismiss={() => setFormError('')} />
+
+                    <form onSubmit={handleSubmit} className="space-y-4">
+                        <div>
+                            <FormInput
+                                id="email"
+                                label="Email Address"
+                                type="email"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                onFocus={() => handleInputFocus('email')}
+                                required
+                                autoComplete="username"
+                                error={!!fieldErrors.email}
+                            />
+                            {fieldErrors.email && (
+                                <p className="text-red-500 text-xs mt-1">{fieldErrors.email}</p>
+                            )}
+                        </div>
+
+                        <div>
+                            <FormInput
+                                id="password"
+                                label="Password"
+                                type="password"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                onFocus={() => handleInputFocus('password')}
+                                required
+                                error={!!fieldErrors.password}
+                                showPasswordToggle={true}
+                                autoComplete="current-password"
+                            />
+                            {fieldErrors.password && (
+                                <p className="text-red-500 text-xs mt-1">{fieldErrors.password}</p>
+                            )}
+                        </div>
+
+                        <div className="flex items-center justify-center pt-4">
+                            <PrimaryButton 
+                                type="submit" 
+                                loading={loading} 
+                                Icon={LogIn} 
+                                className="w-full"
+                                disabled={!isOnline}
+                            >
+                                {loading ? "Signing In..." : "Sign In"}
+                            </PrimaryButton>
+                        </div>
+
+                        {attemptCount >= 3 && (
+                            <div className="text-center mt-4">
+                                <LinkButton 
+                                    onClick={() => navigateTo('forgot-password')}
+                                    className="text-sm text-blue-600 hover:text-blue-800"
+                                >
+                                    Forgot your password?
+                                </LinkButton>
+                            </div>
+                        )}
+                    </form>
+                </div>
             </div>
-        </div>
+        </>
     );
 };
 

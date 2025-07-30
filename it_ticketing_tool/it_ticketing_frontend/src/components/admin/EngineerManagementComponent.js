@@ -1,743 +1,1599 @@
 // src/components/admin/EngineerManagementComponent.js
-
-import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import {
-    Button, Chip, TextField, Box, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
-    IconButton, Snackbar, Alert, Typography, Popover,
-    MenuItem
+  Button, Chip, TextField, Box, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
+  IconButton, Snackbar, Alert, Typography, Popover, MenuItem, Tooltip, TablePagination, InputAdornment, Dialog, DialogTitle, DialogContent, DialogActions
 } from '@mui/material';
-import { Edit as EditIcon, Delete as DeleteIcon, Add as AddIcon, Clear as ClearIcon, LockReset as LockResetIcon } from '@mui/icons-material';
-import SearchIcon from '@mui/icons-material/Search';
+import { 
+  Edit as EditIcon, 
+  Delete as DeleteIcon, 
+  Add as AddIcon, 
+  Clear as ClearIcon, 
+  LockReset as LockResetIcon, 
+  Search as SearchIcon,
+  Person as PersonIcon,
+  Email as EmailIcon,
+  Lock as LockIcon,
+  Phone as PhoneIcon,
+  SupervisorAccount as SupervisorAccountIcon,
+  Work as WorkIcon,
+  Badge as BadgeIcon,
+  AdminPanelSettings as AdminIcon,
+  Close as CloseIcon
+} from '@mui/icons-material';
 import { API_BASE_URL } from '../../config/constants';
-import './UserManagementComponent.css'; // Keep existing CSS if it doesn't conflict
 import { useNavigate } from 'react-router-dom';
-import Modal from '../common/Modal';
 
 const initialUserState = {
-    firstName: '',
-    lastName: '',
-    email: '',
-    password: '',
-    contactNumber: '',
-    managerEmail: '',
-    employmentType: '',
-    designation: '',
-    employeeid: '',
-    role: 'support',
+  firstName: '',
+  lastName: '',
+  email: '',
+  password: '',
+  contactNumber: '',
+  managerEmail: '',
+  employmentType: '',
+  designation: '',
+  employeeid: '',
+  role: 'support',
 };
 
 const EngineerManagementComponent = ({ user, showFlashMessage }) => {
-    const [users, setUsers] = useState([]);
-    const [clients, setClients] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
-    const [search, setSearch] = useState('');
-    const [addMode, setAddMode] = useState(false);
-    const [addRowData, setAddRowData] = useState(initialUserState);
-    const [editRowId, setEditRowId] = useState(null);
-    const [editRowData, setEditRowData] = useState({ firstName: '', lastName: '', email: '', contactNumber: '', managerEmail: '', employmentType: '', designation: '', employeeid: '', role: 'support' });
-    const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
-    const navigate = useNavigate();
+  const [users, setUsers] = useState([]);
+  const [clients, setClients] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [search, setSearch] = useState('');
+  const [addMode, setAddMode] = useState(false);
+  const [addRowData, setAddRowData] = useState(initialUserState);
+  const [editRowId, setEditRowId] = useState(null);
+  const [editRowData, setEditRowData] = useState({ 
+    firstName: '', 
+    lastName: '', 
+    email: '', 
+    contactNumber: '', 
+    managerEmail: '', 
+    employmentType: '', 
+    designation: '', 
+    employeeid: '', 
+    role: 'support' 
+  });
+  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+  const navigate = useNavigate();
+  const [openConfirmPopover, setOpenConfirmPopover] = useState(false);
+  const [currentUserEmailToDelete, setCurrentUserEmailToDelete] = useState('');
+  const [userToDeleteUid, setUserToDeleteUid] = useState(null);
+  const anchorEl = useRef(null);
+  const [pwdUserId, setPwdUserId] = useState(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [changePwdModalOpen, setChangePwdModalOpen] = useState(false);
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [passwordChangeNotifications, setPasswordChangeNotifications] = useState({});
 
-    const [openConfirmPopover, setOpenConfirmPopover] = useState(false);
-    const [currentUserEmailToDelete, setCurrentUserEmailToDelete] = useState('');
-    const userToDeleteUidRef = useRef(null);
-    const anchorEl = useRef(null);
-
-    // Add state for password reset modal
-    const [pwdUserId, setPwdUserId] = useState(null);
-    const [newPassword, setNewPassword] = useState('');
-    const [changePwdModalOpen, setChangePwdModalOpen] = useState(false);
-
-    const fetchClients = useCallback(async () => {
-        try {
-            const res = await fetch(`${API_BASE_URL}/api/clients`);
-            if (!res.ok) throw new Error('Failed to fetch clients');
-            const data = await res.json();
-            if (JSON.stringify(clients) !== JSON.stringify(data)) {
-                setClients(data);
-            }
-        } catch (err) {
-            console.error("Error fetching clients:", err);
-        }
-    }, [clients]);
-
-    useEffect(() => {
-        setLoading(true);
-        setError(null);
-        fetchClients();
-        const fetchEngineers = async () => {
-            try {
-                // Get user's ID token for authentication
-                const idToken = await user.firebaseUser.getIdToken();
-                
-                const res = await fetch(`${API_BASE_URL}/api/users`, {
-                    headers: {
-                        'Authorization': `Bearer ${idToken}`,
-                        'Content-Type': 'application/json'
-                    }
-                });
-                if (!res.ok) throw new Error('Failed to fetch users');
-                const data = await res.json();
-                setUsers(data.filter(u => u.role === 'support'));
-                setLoading(false);
-            } catch (err) {
-                console.error('Error fetching engineers:', err);
-                // For testing, you can uncomment the next line to show mock data
-                // setUsers([{ uid: '1', firstName: 'John', lastName: 'Doe', email: 'john.doe@example.com', role: 'support', designation: 'Engineer', employeeid: 'EMP001', contactNumber: '1234567890', managerEmail: 'manager@example.com' }]);
-                setError('Could not load engineers. Please check if the backend server is running and Firebase is configured.');
-                setUsers([]);
-                setLoading(false);
-            }
-        };
-        fetchEngineers();
-    }, [fetchClients, user]);
-
-    function generatePassword(length = 10) {
-        const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*';
-        let password = '';
-        for (let i = 0; i < length; i++) {
-            password += chars.charAt(Math.floor(Math.random() * chars.length));
-        }
-        return password;
+  const fetchClients = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/clients`);
+      if (!res.ok) throw new Error('Failed to fetch clients');
+      const data = await res.json();
+      if (JSON.stringify(clients) !== JSON.stringify(data)) {
+        setClients(data);
+      }
+    } catch (err) {
+      console.error("Error fetching clients:", err);
     }
+  }, [clients]);
 
-    const handleAdd = () => {
-        setAddMode(true);
-        setAddRowData({ ...initialUserState, password: generatePassword() });
-        setEditRowId(null);
-    };
-
-    const handleAddClientChange = (event, value) => {
-        const selectedClient = clients.find(c => c['Client name'] === value);
-        setAddRowData(prev => ({
-            ...prev,
-            clientname: value || '',
-            domain: selectedClient ? selectedClient.Domain : '',
-        }));
-    };
-
-    const handleAddChange = (e) => {
-        const { name, value } = e.target;
-        setAddRowData(prev => ({ ...prev, [name]: value }));
-    };
-
-    const handleAddSave = async (e) => {
-        e.preventDefault();
-        const requiredFields = ['firstName', 'lastName', 'email', 'password', 'contactNumber', 'managerEmail', 'employmentType', 'designation', 'employeeid'];
-        for (const field of requiredFields) {
-            if (!addRowData[field]) {
-                setSnackbar({ open: true, message: 'All fields are required.', severity: 'error' });
-                return;
-            }
-        }
-        try {
-            const payload = {
-                name: `${addRowData.firstName} ${addRowData.lastName}`.trim(),
-                email: addRowData.email,
-                password: addRowData.password,
-                employeeId: addRowData.employeeid,
-                designation: addRowData.designation,
-                contactNumber: addRowData.contactNumber,
-                managerEmail: addRowData.managerEmail,
-                employmentType: addRowData.employmentType,
-                firstName: addRowData.firstName,
-                lastName: addRowData.lastName,
-                role: 'support',
-            };
-            // Get user's ID token for authentication
-            const idToken = await user.firebaseUser.getIdToken();
-            
-            const res = await fetch(`${API_BASE_URL}/api/users`, {
-                method: 'POST',
-                headers: { 
-                    'Authorization': `Bearer ${idToken}`,
-                    'Content-Type': 'application/json' 
-                },
-                body: JSON.stringify(payload),
-            });
-            if (!res.ok) {
-                const errData = await res.json();
-                throw new Error(errData.error || 'Failed to add engineer');
-            }
-            setAddMode(false);
-            setSnackbar({ open: true, message: 'Engineer added successfully.', severity: 'success' });
-            const fetchEngineers = async () => {
-                try {
-                    // Get user's ID token for authentication
-                    const idToken = await user.firebaseUser.getIdToken();
-                    
-                    const res = await fetch(`${API_BASE_URL}/api/users`, {
-                        headers: {
-                            'Authorization': `Bearer ${idToken}`,
-                            'Content-Type': 'application/json'
-                        }
-                    });
-                    if (!res.ok) throw new Error('Failed to fetch users');
-                    const data = await res.json();
-                    setUsers(data.filter(u => u.role === 'support'));
-                } catch (err) {
-                    setError('Could not load engineers after add.');
-                    setUsers([]);
-                }
-            };
-            fetchEngineers();
-        } catch (err) {
-            setSnackbar({ open: true, message: err.message, severity: 'error' });
-        }
-    };
-
-    const handleAddCancel = () => {
-        setAddMode(false);
-        setAddRowData(initialUserState);
-    };
-
-    const handleEditClick = (userToEdit) => {
-        setEditRowId(userToEdit.uid);
-        setEditRowData({
-            firstName: userToEdit.firstName || (userToEdit.name ? userToEdit.name.split(' ')[0] : ''),
-            lastName: userToEdit.lastName || (userToEdit.name ? userToEdit.name.split(' ').slice(1).join(' ') : ''),
-            email: userToEdit.email || '',
-            contactNumber: userToEdit.contactNumber || '',
-            managerEmail: userToEdit.managerEmail || '',
-            employmentType: userToEdit.employmentType || '',
-            designation: userToEdit.designation || '',
-            employeeid: userToEdit.employeeId || userToEdit.employeeid || '',
-            role: userToEdit.role || 'support'
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
+    fetchClients();
+    
+    const fetchEngineers = async () => {
+      try {
+        const idToken = await user.firebaseUser.getIdToken();
+        
+        const res = await fetch(`${API_BASE_URL}/api/users`, {
+          headers: {
+            'Authorization': `Bearer ${idToken}`,
+            'Content-Type': 'application/json'
+          }
         });
+        
+        if (!res.ok) throw new Error('Failed to fetch users');
+        const data = await res.json();
+        setUsers(data.filter(u => u.role === 'support'));
+        setLoading(false);
+      } catch (err) {
+        console.error('Error fetching engineers:', err);
+        setError('Could not load engineers. Please check if the backend server is running and Firebase is configured.');
+        setUsers([]);
+        setLoading(false);
+      }
     };
+    
+    fetchEngineers();
+  }, [fetchClients, user]);
 
-    const handleEditChange = (e) => {
-        const { name, value } = e.target;
-        setEditRowData(prev => ({ ...prev, [name]: value }));
-    };
+  function generatePassword(length = 10) {
+    const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*';
+    let password = '';
+    for (let i = 0; i < length; i++) {
+      password += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return password;
+  }
 
-    const handleEditSave = async (uid) => {
+  const handleAdd = () => {
+    setAddMode(true);
+    setAddRowData({ ...initialUserState, password: generatePassword() });
+    setEditRowId(null);
+  };
+
+  const handleAddChange = (e) => {
+    const { name, value } = e.target;
+    setAddRowData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleAddSave = async (e) => {
+    e.preventDefault();
+    const requiredFields = ['firstName', 'lastName', 'email', 'password', 'contactNumber', 'managerEmail', 'employmentType', 'designation', 'employeeid'];
+    
+    for (const field of requiredFields) {
+      if (!addRowData[field]) {
+        setSnackbar({ open: true, message: 'All fields are required.', severity: 'error' });
+        return;
+      }
+    }
+    
+    try {
+      const payload = {
+        name: `${addRowData.firstName} ${addRowData.lastName}`.trim(),
+        email: addRowData.email,
+        password: addRowData.password,
+        employeeId: addRowData.employeeid,
+        designation: addRowData.designation,
+        contactNumber: addRowData.contactNumber,
+        managerEmail: addRowData.managerEmail,
+        employmentType: addRowData.employmentType,
+        firstName: addRowData.firstName,
+        lastName: addRowData.lastName,
+        role: 'support',
+      };
+      
+      const idToken = await user.firebaseUser.getIdToken();
+      
+      const res = await fetch(`${API_BASE_URL}/api/users`, {
+        method: 'POST',
+        headers: { 
+          'Authorization': `Bearer ${idToken}`,
+          'Content-Type': 'application/json' 
+        },
+        body: JSON.stringify(payload),
+      });
+      
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Failed to add engineer');
+      }
+      
+      setAddMode(false);
+      setSnackbar({ open: true, message: 'Engineer added successfully.', severity: 'success' });
+      
+      // Refresh engineers list
+      const fetchEngineers = async () => {
         try {
-            const payload = {};
-            const originalUser = users.find(u => u.uid === uid);
-
-            // Check for changes in each field
-            if (editRowData.firstName !== (originalUser?.firstName || '')) {
-                payload.firstName = editRowData.firstName;
+          const idToken = await user.firebaseUser.getIdToken();
+          
+          const res = await fetch(`${API_BASE_URL}/api/users`, {
+            headers: {
+              'Authorization': `Bearer ${idToken}`,
+              'Content-Type': 'application/json'
             }
-            if (editRowData.lastName !== (originalUser?.lastName || '')) {
-                payload.lastName = editRowData.lastName;
-            }
-            if (editRowData.email !== (originalUser?.email || '')) {
-                payload.email = editRowData.email;
-            }
-            if (editRowData.contactNumber !== (originalUser?.contactNumber || '')) {
-                payload.contactNumber = editRowData.contactNumber;
-            }
-            if (editRowData.managerEmail !== (originalUser?.managerEmail || '')) {
-                payload.managerEmail = editRowData.managerEmail;
-            }
-            if (editRowData.employmentType !== (originalUser?.employmentType || '')) {
-                payload.employmentType = editRowData.employmentType;
-            }
-            if (editRowData.designation !== (originalUser?.designation || '')) {
-                payload.designation = editRowData.designation;
-            }
-
-            if (editRowData.employeeid !== (originalUser?.employeeId || originalUser?.employeeid || '')) {
-                payload.employeeId = editRowData.employeeid;
-            }
-
-            if (Object.keys(payload).length === 0) {
-                setEditRowId(null);
-                setSnackbar({ open: true, message: 'No changes to save.', severity: 'info' });
-                return;
-            }
-
-            // Get user's ID token for authentication
-            const idToken = await user.firebaseUser.getIdToken();
-            
-            const res = await fetch(`${API_BASE_URL}/api/users/${uid}`, {
-                method: 'PUT',
-                headers: { 
-                    'Authorization': `Bearer ${idToken}`,
-                    'Content-Type': 'application/json' 
-                },
-                body: JSON.stringify(payload),
-            });
-            if (!res.ok) {
-                const errData = await res.json();
-                console.error('Update error response:', errData);
-                if (res.status === 401 || res.status === 403) {
-                    throw new Error('Authentication failed. Please try again.');
-                }
-                throw new Error(errData.error || 'Failed to update engineer');
-            }
-            setEditRowId(null);
-            setEditRowData({ firstName: '', lastName: '', email: '', contactNumber: '', managerEmail: '', employmentType: '', designation: '', employeeid: '', role: 'support' });
-            setSnackbar({ open: true, message: 'Engineer updated successfully.', severity: 'success' });
-            const fetchEngineers = async () => {
-                try {
-                    // Get user's ID token for authentication
-                    const idToken = await user.firebaseUser.getIdToken();
-                    
-                    const res = await fetch(`${API_BASE_URL}/api/users`, {
-                        headers: {
-                            'Authorization': `Bearer ${idToken}`,
-                            'Content-Type': 'application/json'
-                        }
-                    });
-                    if (!res.ok) {
-                        const errData = await res.json();
-                        console.error('Fetch error response:', errData);
-                        if (res.status === 401 || res.status === 403) {
-                            throw new Error('Authentication failed. Please try again.');
-                        }
-                        throw new Error('Failed to fetch users');
-                    }
-                    const data = await res.json();
-                    setUsers(data.filter(u => u.role === 'support'));
-                } catch (err) {
-                    console.error('Error fetching engineers after update:', err);
-                    setError('Could not load engineers after update.');
-                    setUsers([]);
-                }
-            };
-            fetchEngineers();
+          });
+          
+          if (!res.ok) throw new Error('Failed to fetch users');
+          const data = await res.json();
+          setUsers(data.filter(u => u.role === 'support'));
         } catch (err) {
-            setSnackbar({ open: true, message: err.message, severity: 'error' });
+          setError('Could not load engineers after add.');
+          setUsers([]);
         }
-    };
+      };
+      
+      fetchEngineers();
+    } catch (err) {
+      setSnackbar({ open: true, message: err.message, severity: 'error' });
+    }
+  };
 
-    const handleEditCancel = () => {
+  const handleAddCancel = () => {
+    setAddMode(false);
+    setAddRowData(initialUserState);
+  };
+
+  const handleEditClick = (userToEdit) => {
+    setEditRowId(userToEdit.uid);
+    setEditRowData({
+      firstName: userToEdit.firstName || (userToEdit.name ? userToEdit.name.split(' ')[0] : ''),
+      lastName: userToEdit.lastName || (userToEdit.name ? userToEdit.name.split(' ').slice(1).join(' ') : ''),
+      email: userToEdit.email || '',
+      contactNumber: userToEdit.contactNumber || '',
+      managerEmail: userToEdit.managerEmail || '',
+      employmentType: userToEdit.employmentType || '',
+      designation: userToEdit.designation || '',
+      employeeid: userToEdit.employeeId || userToEdit.employeeid || '',
+      role: userToEdit.role || 'support'
+    });
+  };
+
+  const handleEditChange = (e) => {
+    const { name, value } = e.target;
+    setEditRowData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleEditSave = async (uid) => {
+    try {
+      const payload = {};
+      const originalUser = users.find(u => u.uid === uid);
+      
+      // Check for changes in each field
+      if (editRowData.firstName !== (originalUser?.firstName || '')) {
+        payload.firstName = editRowData.firstName;
+      }
+      if (editRowData.lastName !== (originalUser?.lastName || '')) {
+        payload.lastName = editRowData.lastName;
+      }
+      if (editRowData.email !== (originalUser?.email || '')) {
+        payload.email = editRowData.email;
+      }
+      if (editRowData.contactNumber !== (originalUser?.contactNumber || '')) {
+        payload.contactNumber = editRowData.contactNumber;
+      }
+      if (editRowData.managerEmail !== (originalUser?.managerEmail || '')) {
+        payload.managerEmail = editRowData.managerEmail;
+      }
+      if (editRowData.employmentType !== (originalUser?.employmentType || '')) {
+        payload.employmentType = editRowData.employmentType;
+      }
+      if (editRowData.designation !== (originalUser?.designation || '')) {
+        payload.designation = editRowData.designation;
+      }
+      if (editRowData.employeeid !== (originalUser?.employeeId || originalUser?.employeeid || '')) {
+        payload.employeeId = editRowData.employeeid;
+      }
+      
+      if (Object.keys(payload).length === 0) {
         setEditRowId(null);
-        setEditRowData({ firstName: '', lastName: '', email: '', contactNumber: '', managerEmail: '', employmentType: '', designation: '', employeeid: '', role: 'support' });
-    };
-
-    const handleDeleteClick = (event, uid, email) => {
-        userToDeleteUidRef.current = uid;
-        setCurrentUserEmailToDelete(email);
-        anchorEl.current = event.currentTarget;
-        setOpenConfirmPopover(true);
-    };
-
-    const handleConfirmDelete = async () => {
-        setOpenConfirmPopover(false);
-        const uid = userToDeleteUidRef.current;
-        if (!uid) return;
-
+        setSnackbar({ open: true, message: 'No changes to save.', severity: 'info' });
+        return;
+      }
+      
+      const idToken = await user.firebaseUser.getIdToken();
+      
+      const res = await fetch(`${API_BASE_URL}/api/users/${uid}`, {
+        method: 'PUT',
+        headers: { 
+          'Authorization': `Bearer ${idToken}`,
+          'Content-Type': 'application/json' 
+        },
+        body: JSON.stringify(payload),
+      });
+      
+      if (!res.ok) {
+        const errData = await res.json();
+        if (res.status === 401 || res.status === 403) {
+          throw new Error('Authentication failed. Please try again.');
+        }
+        throw new Error(errData.error || 'Failed to update engineer');
+      }
+      
+      setEditRowId(null);
+      setEditRowData({ 
+        firstName: '', 
+        lastName: '', 
+        email: '', 
+        contactNumber: '', 
+        managerEmail: '', 
+        employmentType: '', 
+        designation: '', 
+        employeeid: '', 
+        role: 'support' 
+      });
+      
+      // Show inline notification for this specific user
+      setPasswordChangeNotifications(prev => ({
+        ...prev,
+        [uid]: {
+          message: 'edit-success',
+          timestamp: Date.now()
+        }
+      }));
+      
+      // Auto-hide the notification after 5 seconds
+      setTimeout(() => {
+        setPasswordChangeNotifications(prev => {
+          const newState = { ...prev };
+          delete newState[uid];
+          return newState;
+        });
+      }, 5000);
+      
+      // Refresh engineers list
+      const fetchEngineers = async () => {
         try {
-            // Get user's ID token for authentication
-            const idToken = await user.firebaseUser.getIdToken();
-            
-            const res = await fetch(`${API_BASE_URL}/api/users/${uid}`, {
-                method: 'DELETE',
-                headers: {
-                    'Authorization': `Bearer ${idToken}`,
-                    'Content-Type': 'application/json'
-                }
-            });
-
-            if (!res.ok) {
-                const errData = await res.json();
-                console.error('Delete error response:', errData);
-                if (res.status === 401 || res.status === 403) {
-                    throw new Error('Authentication failed. Please try again.');
-                }
-                throw new Error(errData.error || 'Failed to delete engineer');
+          const idToken = await user.firebaseUser.getIdToken();
+          
+          const res = await fetch(`${API_BASE_URL}/api/users`, {
+            headers: {
+              'Authorization': `Bearer ${idToken}`,
+              'Content-Type': 'application/json'
             }
-            setSnackbar({ open: true, message: 'Engineer deleted successfully.', severity: 'success' });
-            userToDeleteUidRef.current = null;
-            setCurrentUserEmailToDelete('');
-            const fetchEngineers = async () => {
-                try {
-                    // Get user's ID token for authentication
-                    const idToken = await user.firebaseUser.getIdToken();
-                    
-                    const res = await fetch(`${API_BASE_URL}/api/users`, {
-                        headers: {
-                            'Authorization': `Bearer ${idToken}`,
-                            'Content-Type': 'application/json'
-                        }
-                    });
-                    if (!res.ok) throw new Error('Failed to fetch users');
-                    const data = await res.json();
-                    setUsers(data.filter(u => u.role === 'support'));
-                } catch (err) {
-                    setError('Could not load engineers after deletion.');
-                    setUsers([]);
-                }
-            };
-            fetchEngineers();
+          });
+          
+          if (!res.ok) {
+            const errData = await res.json();
+            if (res.status === 401 || res.status === 403) {
+              throw new Error('Authentication failed. Please try again.');
+            }
+            throw new Error('Failed to fetch users');
+          }
+          
+          const data = await res.json();
+          setUsers(data.filter(u => u.role === 'support'));
         } catch (err) {
-            setSnackbar({ open: true, message: err.message, severity: 'error' });
+          setError('Could not load engineers after update.');
+          setUsers([]);
         }
-    };
+      };
+      
+      fetchEngineers();
+    } catch (err) {
+      setSnackbar({ open: true, message: err.message, severity: 'error' });
+    }
+  };
 
-    const handleCancelDelete = () => {
-        setOpenConfirmPopover(false);
-        userToDeleteUidRef.current = null;
-        setCurrentUserEmailToDelete('');
-    };
+  const handleEditCancel = () => {
+    setEditRowId(null);
+    setEditRowData({ 
+      firstName: '', 
+      lastName: '', 
+      email: '', 
+      contactNumber: '', 
+      managerEmail: '', 
+      employmentType: '', 
+      designation: '', 
+      employeeid: '', 
+      role: 'support' 
+    });
+  };
 
-    const handleGoToClientPage = (type, value) => {
-        if (type === 'domain') {
-            navigate(`/admin/clients?domain=${encodeURIComponent(value)}`);
-        } else if (type === 'client') {
-            navigate(`/admin/clients?client=${encodeURIComponent(value)}`);
+  const handleDeleteClick = (event, uid, email) => {
+    setUserToDeleteUid(uid);
+    setCurrentUserEmailToDelete(email);
+    anchorEl.current = event.currentTarget;
+    setOpenConfirmPopover(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    setOpenConfirmPopover(false);
+    const uid = userToDeleteUid;
+    
+    if (!uid) return;
+    
+    try {
+      const idToken = await user.firebaseUser.getIdToken();
+      
+      const res = await fetch(`${API_BASE_URL}/api/users/${uid}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${idToken}`,
+          'Content-Type': 'application/json'
         }
-    };
-
-    const openChangePwdModal = (uid) => {
-        setPwdUserId(uid);
-        const generated = generatePassword();
-        setNewPassword(generated);
-        setChangePwdModalOpen(true);
-    };
-    const closeChangePwdModal = () => {
-        setChangePwdModalOpen(false);
-        setPwdUserId(null);
-        setNewPassword('');
-    };
-    const handleChangePassword = async (e) => {
-        e.preventDefault();
-        if (!newPassword || newPassword.length < 6) {
-            setSnackbar({ open: true, message: 'Password must be at least 6 characters.', severity: 'error' });
-            return;
+      });
+      
+      if (!res.ok) {
+        const errData = await res.json();
+        if (res.status === 401 || res.status === 403) {
+          throw new Error('Authentication failed. Please try again.');
         }
+        throw new Error(errData.error || 'Failed to delete engineer');
+      }
+      
+      // Show inline notification for this specific user
+      setPasswordChangeNotifications(prev => ({
+        ...prev,
+        [uid]: {
+          message: 'delete-success',
+          timestamp: Date.now()
+        }
+      }));
+      
+      // Auto-hide the notification after 5 seconds
+      setTimeout(() => {
+        setPasswordChangeNotifications(prev => {
+          const newState = { ...prev };
+          delete newState[uid];
+          return newState;
+        });
+      }, 5000);
+      setUserToDeleteUid(null);
+      setCurrentUserEmailToDelete('');
+      
+      // Refresh engineers list
+      const fetchEngineers = async () => {
         try {
-            // Get user's ID token for authentication
-            const idToken = await user.firebaseUser.getIdToken();
-            
-            const res = await fetch(`${API_BASE_URL}/api/users/${pwdUserId}/password`, {
-                method: 'PUT',
-                headers: { 
-                    'Authorization': `Bearer ${idToken}`,
-                    'Content-Type': 'application/json' 
-                },
-                body: JSON.stringify({ password: newPassword, mustChangePassword: true }),
-            });
-            if (!res.ok) {
-                const errData = await res.json();
-                throw new Error(errData.error || 'Failed to change password');
+          const idToken = await user.firebaseUser.getIdToken();
+          
+          const res = await fetch(`${API_BASE_URL}/api/users`, {
+            headers: {
+              'Authorization': `Bearer ${idToken}`,
+              'Content-Type': 'application/json'
             }
-            setSnackbar({ open: true, message: 'Password updated successfully.', severity: 'success' });
-            closeChangePwdModal();
+          });
+          
+          if (!res.ok) throw new Error('Failed to fetch users');
+          const data = await res.json();
+          setUsers(data.filter(u => u.role === 'support'));
         } catch (err) {
-            setSnackbar({ open: true, message: err.message, severity: 'error' });
+          setError('Could not load engineers after deletion.');
+          setUsers([]);
         }
-    };
+      };
+      
+      fetchEngineers();
+    } catch (err) {
+      setSnackbar({ open: true, message: err.message, severity: 'error' });
+    }
+  };
 
-    const filteredUsers = useMemo(() => {
-        return users.filter(u =>
-            u.role === 'support' &&
-            (u.email.toLowerCase().includes(search.toLowerCase()) ||
-             (u.name && u.name.toLowerCase().includes(search.toLowerCase())) ||
-             ((u.employeeId || u.employeeid) && (u.employeeId || u.employeeid).toLowerCase().includes(search.toLowerCase())) ||
-             (u.designation && u.designation.toLowerCase().includes(search.toLowerCase())) ||
-             (u.joined_date && u.joined_date.toLowerCase().includes(search.toLowerCase())))
-        );
-    }, [users, search]);
+  const handleCancelDelete = () => {
+    setOpenConfirmPopover(false);
+    setUserToDeleteUid(null);
+    setCurrentUserEmailToDelete('');
+  };
 
-    return (
-        <div className="w-full h-full rounded-lg animate-fade-in" style={{ width: '100%', boxSizing: 'border-box' }}>
-            <h2 className="user-mgmt-title compact-ui">Engineer Management</h2>
-            
-            {loading && (
-                <Typography variant="body1" color="textSecondary" align="center" sx={{ mt: 4 }}>
-                    Loading engineers...
-                </Typography>
-            )}
-            
-            {error && (
-                <Typography variant="body1" color="error" align="center" sx={{ mt: 4 }}>
-                    {error}
-                </Typography>
-            )}
-            <Box display="flex" alignItems="center" justifyContent="space-between" mt={1} mb={2} px={2}>
-                <Box>
-                    <TextField
-                        className="compact-ui"
-                        value={search}
-                        onChange={e => setSearch(e.target.value)}
-                        placeholder="Search engineers..."
-                        size="small"
-                        sx={{ width: 260, minWidth: 180, minHeight: 24 }}
-                        InputProps={{
-                            endAdornment: (
-                                <>
-                                    <IconButton size="small" onClick={() => {}} sx={{ fontSize: 16, p: 0.25 }}>
-                                        <SearchIcon fontSize="inherit" />
-                                    </IconButton>
-                                    {search ? (
-                                        <IconButton size="small" onClick={() => setSearch('')} sx={{ fontSize: 16, p: 0.25 }}>
-                                            <ClearIcon fontSize="inherit" />
-                                        </IconButton>
-                                    ) : null}
-                                </>
-                            ),
-                            style: { height: 32, display: 'flex', alignItems: 'center', minHeight: 24, lineHeight: 1, fontSize: '0.65rem' },
-                            inputProps: { style: { height: 24, padding: '0 8px', display: 'flex', alignItems: 'center', minHeight: 24, lineHeight: 1, fontSize: '0.65rem' } }
-                        }}
-                    />
-                </Box>
-                <Box>
-                    <Button
-                        className="compact-ui"
-                        variant="contained"
-                        color="primary"
-                        startIcon={<AddIcon />}
-                        onClick={handleAdd}
-                        size="small"
-                        sx={{ fontSize: '0.65rem', minHeight: 24, px: 1, borderRadius: 1, lineHeight: 1, minWidth: 90 }}
-                    >
-                        Add Engineer
-                    </Button>
-                </Box>
-            </Box>
-            <Modal isOpen={addMode} onClose={handleAddCancel} title="Add Engineer">
-                <form onSubmit={handleAddSave}>
-                    <Box display="grid" gridTemplateColumns={{ xs: '1fr', sm: '1fr 1fr', md: 'repeat(3, 1fr)', lg: 'repeat(4, 1fr)' }} gap={2} p={2}>
-                        <TextField label="First Name" name="firstName" value={addRowData.firstName} onChange={handleAddChange} required size="small" fullWidth
-                            InputLabelProps={{ style: { fontSize: '0.75rem' } }}
-                            inputProps={{ style: { fontSize: '0.75rem', height: 28, padding: '2px 6px' } }}
-                        />
-                        <TextField label="Last Name" name="lastName" value={addRowData.lastName} onChange={handleAddChange} required size="small" fullWidth
-                            InputLabelProps={{ style: { fontSize: '0.75rem' } }}
-                            inputProps={{ style: { fontSize: '0.75rem', height: 28, padding: '2px 6px' } }}
-                        />
-                        <TextField label="Email" name="email" value={addRowData.email} onChange={handleAddChange} required size="small" fullWidth
-                            InputLabelProps={{ style: { fontSize: '0.75rem' } }}
-                            inputProps={{ style: { fontSize: '0.75rem', height: 28, padding: '2px 6px' } }}
-                        />
-                        <TextField label="Password" name="password" value={addRowData.password} InputProps={{ readOnly: true }} required size="small" fullWidth
-                            InputLabelProps={{ style: { fontSize: '0.75rem' } }}
-                            inputProps={{ style: { fontSize: '0.75rem', height: 28, padding: '2px 6px' } }}
-                        />
-                        <TextField label="Contact Number" name="contactNumber" value={addRowData.contactNumber} onChange={handleAddChange} required size="small" fullWidth
-                            InputLabelProps={{ style: { fontSize: '0.75rem' } }}
-                            inputProps={{ style: { fontSize: '0.75rem', height: 28, padding: '2px 6px' } }}
-                        />
-                        <TextField label="Manager Email" name="managerEmail" value={addRowData.managerEmail} onChange={handleAddChange} required size="small" fullWidth
-                            InputLabelProps={{ style: { fontSize: '0.75rem' } }}
-                            inputProps={{ style: { fontSize: '0.75rem', height: 28, padding: '2px 6px' } }}
-                        />
-                        <TextField select label="Employment Type" name="employmentType" value={addRowData.employmentType} onChange={handleAddChange} required size="small" fullWidth
-                            InputLabelProps={{ style: { fontSize: '0.75rem' } }}
-                            inputProps={{ style: { fontSize: '0.75rem', height: 28, padding: '2px 6px' } }}
-                        >
-                            <MenuItem value="contract">Contract</MenuItem>
-                            <MenuItem value="permanent">Permanent</MenuItem>
-                            <MenuItem value="intern">Intern</MenuItem>
-                        </TextField>
-                        <TextField label="Designation" name="designation" value={addRowData.designation} onChange={handleAddChange} required size="small" fullWidth
-                            InputLabelProps={{ style: { fontSize: '0.75rem' } }}
-                            inputProps={{ style: { fontSize: '0.75rem', height: 28, padding: '2px 6px' } }}
-                        />
+  const openChangePwdModal = (uid) => {
+    setPwdUserId(uid);
+    const generated = generatePassword();
+    setNewPassword(generated);
+    setChangePwdModalOpen(true);
+  };
 
-                        <TextField label="Employee ID" name="employeeid" value={addRowData.employeeid} onChange={handleAddChange} required size="small" fullWidth
-                            InputLabelProps={{ style: { fontSize: '0.75rem' } }}
-                            inputProps={{ style: { fontSize: '0.75rem', height: 28, padding: '2px 6px' } }}
-                        />
-                    </Box>
-                    <Box display="flex" justifyContent="flex-end" gap={1} p={2}>
-                        <Button onClick={handleAddCancel} color="inherit" size="small" variant="text" sx={{ fontSize: '0.75rem' }}>
-                            Cancel
-                        </Button>
-                        <Button type="submit" variant="contained" color="primary" size="small" sx={{ fontSize: '0.75rem' }}>
-                            Save
-                        </Button>
-                    </Box>
-                </form>
-            </Modal>
-            {!loading && !error && (
-                <TableContainer
-                    component={Paper}
-                    sx={{
-                        border: '1px solid #e0e0e0',
-                        borderRadius: 2,
-                        boxShadow: 'none',
-                        my: 2,
-                        mx: 'auto',
-                        width: 'calc(100% - 32px)', // Adjusted width for better spacing
-                        maxWidth: '1200px',
-                        overflowX: 'auto',
-                    }}
-                >
-                    <Table
-                        size="small"
-                        sx={{
-                            '& .MuiTableCell-root': { fontSize: '0.75rem', padding: '6px 8px', height: 32 },
-                            '& .MuiTableRow-root': { height: 32 },
-                            borderCollapse: 'separate',
-                            borderSpacing: 0,
-                            tableLayout: 'auto',
-                            minWidth: '800px',
-                        }}
-                    >
-                        <TableHead>
-                            <TableRow sx={{ backgroundColor: '#f5f5f5' }}>
-                                <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: '1px solid #e0e0e0', textAlign: 'center', width: '4%' }}>#</TableCell>
-                                <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: '1px solid #e0e0e0', width: '10%' }}>First Name</TableCell>
-                                <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: '1px solid #e0e0e0', width: '10%' }}>Last Name</TableCell>
-                                <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: '1px solid #e0e0e0', width: '10%' }}>Employee ID</TableCell>
-                                <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: '1px solid #e0e0e0', width: '12%' }}>Designation</TableCell>
-                                <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: '1px solid #e0e0e0', width: '20%' }}>Email</TableCell>
-                                <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: '1px solid #e0e0e0', width: '10%' }}>Contact Number</TableCell>
-                                <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: '1px solid #e0e0e0', width: '10%' }}>Manager Email</TableCell>
-                                <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: '1px solid #e0e0e0', width: '8%' }}>Role</TableCell>
+  const closeChangePwdModal = () => {
+    setChangePwdModalOpen(false);
+    setPwdUserId(null);
+    setNewPassword('');
+  };
 
-                                <TableCell align="right" sx={{ borderBottom: '1px solid #e0e0e0', width: '10%' }}>Actions</TableCell>
-                            </TableRow>
-                        </TableHead>
-                        <TableBody>
-                            {filteredUsers.length === 0 ? (
-                                <TableRow>
-                                    <TableCell colSpan={10} align="center" sx={{ py: 4, color: 'text.secondary' }}>
-                                        No engineer profiles found.
-                                    </TableCell>
-                                </TableRow>
-                            ) : (
-                                filteredUsers.sort((a, b) => a.email.localeCompare(b.email)).map((u, i) => (
-                                    <TableRow key={u.id || u.uid} sx={{ '&:last-child td, &:last-child th': { borderBottom: 0 } }}>
-                                        <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: i === filteredUsers.length - 1 ? '0' : '1px solid #e0e0e0', textAlign: 'center', fontWeight: 500, color: '#888' }}>{i + 1}</TableCell>
-                                        <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: i === filteredUsers.length - 1 ? '0' : '1px solid #e0e0e0' }}>{u.firstName || (u.name ? u.name.split(' ')[0] : '')}</TableCell>
-                                        <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: i === filteredUsers.length - 1 ? '0' : '1px solid #e0e0e0' }}>{u.lastName || (u.name ? u.name.split(' ').slice(1).join(' ') : '')}</TableCell>
-                                        <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: i === filteredUsers.length - 1 ? '0' : '1px solid #e0e0e0' }}>{u.employeeId || u.employeeid}</TableCell>
-                                        <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: i === filteredUsers.length - 1 ? '0' : '1px solid #e0e0e0' }}>{u.designation}</TableCell>
-                                        <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: i === filteredUsers.length - 1 ? '0' : '1px solid #e0e0e0' }}>{u.email}</TableCell>
-                                        <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: i === filteredUsers.length - 1 ? '0' : '1px solid #e0e0e0' }}>{u.contactNumber}</TableCell>
-                                        <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: i === filteredUsers.length - 1 ? '0' : '1px solid #e0e0e0' }}>{u.managerEmail}</TableCell>
-                                        <TableCell sx={{ borderRight: '1px solid #e0e0e0', borderBottom: i === filteredUsers.length - 1 ? '0' : '1px solid #e0e0e0' }}>
-                                            <Chip label={u.role} size="small" color={u.role === 'admin' ? 'primary' : u.role === 'support' ? 'secondary' : 'default'} sx={{ fontSize: '0.7rem', height: 20 }} />
-                                        </TableCell>
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    
+    if (!newPassword || newPassword.length < 6) {
+      setSnackbar({ open: true, message: 'Password must be at least 6 characters.', severity: 'error' });
+      return;
+    }
+    
+    try {
+      const idToken = await user.firebaseUser.getIdToken();
+      
+      const res = await fetch(`${API_BASE_URL}/api/users/${pwdUserId}/password`, {
+        method: 'PUT',
+        headers: { 
+          'Authorization': `Bearer ${idToken}`,
+          'Content-Type': 'application/json' 
+        },
+        body: JSON.stringify({ password: newPassword, mustChangePassword: true }),
+      });
+      
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Failed to change password');
+      }
+      
+      // Show inline notification for this specific user
+      setPasswordChangeNotifications(prev => ({
+        ...prev,
+        [pwdUserId]: {
+          message: 'password reset-success',
+          timestamp: Date.now()
+        }
+      }));
+      
+      // Auto-hide the notification after 5 seconds
+      setTimeout(() => {
+        setPasswordChangeNotifications(prev => {
+          const newState = { ...prev };
+          delete newState[pwdUserId];
+          return newState;
+        });
+      }, 5000);
+      
+      closeChangePwdModal();
+    } catch (err) {
+      setSnackbar({ open: true, message: err.message, severity: 'error' });
+    }
+  };
 
-                                        <TableCell align="right" sx={{ borderBottom: i === filteredUsers.length - 1 ? '0' : '1px solid #e0e0e0' }}>
-                                            <IconButton onClick={() => openChangePwdModal(u.uid)} size="small" title="Reset Password"><LockResetIcon sx={{ fontSize: '1rem' }} /></IconButton>
-                                            <IconButton onClick={() => handleEditClick(u)} size="small" sx={{ p: 0.5 }}><EditIcon sx={{ fontSize: '1rem' }} /></IconButton>
-                                            <IconButton onClick={(event) => handleDeleteClick(event, u.id || u.uid, u.email)} size="small" sx={{ p: 0.5 }}><DeleteIcon sx={{ fontSize: '1rem' }} /></IconButton>
-                                        </TableCell>
-                                    </TableRow>
-                                ))
-                            )}
-                        </TableBody>
-                    </Table>
-                </TableContainer>
-            )}
-            <Snackbar open={snackbar.open} autoHideDuration={3000} onClose={() => setSnackbar({ ...snackbar, open: false })}>
-                <Alert onClose={() => setSnackbar({ ...snackbar, open: false })} severity={snackbar.severity} sx={{ width: '100%' }}>
-                    {snackbar.message}
-                </Alert>
-            </Snackbar>
-            <Popover
-                open={openConfirmPopover}
-                anchorEl={anchorEl.current}
-                onClose={handleCancelDelete}
-                anchorOrigin={{
-                    vertical: 'bottom',
-                    horizontal: 'left',
-                }}
-                transformOrigin={{
-                    vertical: 'top',
-                    horizontal: 'left',
-                }}
-                PaperProps={{
-                    sx: {
-                        p: 1,
-                        minWidth: 180,
-                        maxWidth: 240,
-                        boxShadow: 3,
-                        borderRadius: 1,
-                    }
-                }}
-            >
-                <Typography variant="body2" sx={{ mb: 1 }}>
-                    Delete "<strong>{currentUserEmailToDelete}</strong>"? This cannot be undone.
-                </Typography>
-                <Box display="flex" justifyContent="flex-end" gap={1}>
-                    <Button onClick={handleCancelDelete} size="small" variant="outlined" color="inherit" sx={{ fontSize: '0.7rem' }}>
-                        No
-                    </Button>
-                    <Button onClick={handleConfirmDelete} size="small" variant="contained" color="primary" autoFocus sx={{ fontSize: '0.7rem' }}>
-                        Yes
-                    </Button>
-                </Box>
-            </Popover>
-            {/* Edit Engineer Modal */}
-            <Modal isOpen={editRowId !== null} onClose={handleEditCancel} title="Edit Engineer">
-                <form onSubmit={(e) => {
-                    e.preventDefault();
-                    handleEditSave(editRowId);
-                }}>
-                    <Box display="grid" gridTemplateColumns={{ xs: '1fr', sm: '1fr 1fr', md: 'repeat(3, 1fr)', lg: 'repeat(4, 1fr)' }} gap={2} p={2}>
-                        <TextField label="First Name" name="firstName" value={editRowData.firstName || ''} onChange={handleEditChange} required size="small" fullWidth
-                            InputLabelProps={{ style: { fontSize: '0.75rem' } }}
-                            inputProps={{ style: { fontSize: '0.75rem', height: 28, padding: '2px 6px' } }}
-                        />
-                        <TextField label="Last Name" name="lastName" value={editRowData.lastName || ''} onChange={handleEditChange} required size="small" fullWidth
-                            InputLabelProps={{ style: { fontSize: '0.75rem' } }}
-                            inputProps={{ style: { fontSize: '0.75rem', height: 28, padding: '2px 6px' } }}
-                        />
-                        <TextField label="Email" name="email" value={editRowData.email || ''} onChange={handleEditChange} required size="small" fullWidth
-                            InputLabelProps={{ style: { fontSize: '0.75rem' } }}
-                            inputProps={{ style: { fontSize: '0.75rem', height: 28, padding: '2px 6px' } }}
-                        />
-                        <TextField label="Contact Number" name="contactNumber" value={editRowData.contactNumber || ''} onChange={handleEditChange} required size="small" fullWidth
-                            InputLabelProps={{ style: { fontSize: '0.75rem' } }}
-                            inputProps={{ style: { fontSize: '0.75rem', height: 28, padding: '2px 6px' } }}
-                        />
-                        <TextField label="Manager Email" name="managerEmail" value={editRowData.managerEmail || ''} onChange={handleEditChange} required size="small" fullWidth
-                            InputLabelProps={{ style: { fontSize: '0.75rem' } }}
-                            inputProps={{ style: { fontSize: '0.75rem', height: 28, padding: '2px 6px' } }}
-                        />
-                        <TextField select label="Employment Type" name="employmentType" value={editRowData.employmentType || ''} onChange={handleEditChange} required size="small" fullWidth
-                            InputLabelProps={{ style: { fontSize: '0.75rem' } }}
-                            inputProps={{ style: { fontSize: '0.75rem', height: 28, padding: '2px 6px' } }}
-                        >
-                            <MenuItem value="contract">Contract</MenuItem>
-                            <MenuItem value="permanent">Permanent</MenuItem>
-                            <MenuItem value="intern">Intern</MenuItem>
-                        </TextField>
-                        <TextField label="Designation" name="designation" value={editRowData.designation || ''} onChange={handleEditChange} required size="small" fullWidth
-                            InputLabelProps={{ style: { fontSize: '0.75rem' } }}
-                            inputProps={{ style: { fontSize: '0.75rem', height: 28, padding: '2px 6px' } }}
-                        />
-
-                        <TextField label="Employee ID" name="employeeid" value={editRowData.employeeid || ''} onChange={handleEditChange} required size="small" fullWidth
-                            InputLabelProps={{ style: { fontSize: '0.75rem' } }}
-                            inputProps={{ style: { fontSize: '0.75rem', height: 28, padding: '2px 6px' } }}
-                        />
-                    </Box>
-                    <Box display="flex" justifyContent="flex-end" gap={1} p={2}>
-                        <Button onClick={handleEditCancel} color="inherit" size="small" variant="text" sx={{ fontSize: '0.75rem' }}>
-                            Cancel
-                        </Button>
-                        <Button type="submit" variant="contained" color="primary" size="small" sx={{ fontSize: '0.75rem' }}>
-                            Save
-                        </Button>
-                    </Box>
-                </form>
-            </Modal>
-            {/* Password Reset Modal */}
-            <Modal isOpen={changePwdModalOpen} onClose={closeChangePwdModal} title="Reset Password">
-                <form onSubmit={(e) => {
-                    e.preventDefault();
-                    handleChangePassword(e);
-                }}>
-                    <Box display="flex" flexDirection="column" gap={2} p={2}>
-                        <TextField label="New Password" value={newPassword} onChange={e => setNewPassword(e.target.value)} required size="small" fullWidth
-                            InputLabelProps={{ style: { fontSize: '0.75rem' } }}
-                            inputProps={{ style: { fontSize: '0.75rem', height: 28, padding: '2px 6px' } }}
-                        />
-                        <Box display="flex" justifyContent="flex-end" gap={1}>
-                            <Button onClick={closeChangePwdModal} color="inherit" size="small" variant="text" sx={{ fontSize: '0.75rem' }}>
-                                Cancel
-                            </Button>
-                            <Button type="submit" variant="contained" color="primary" size="small" sx={{ fontSize: '0.75rem' }}>
-                                Save
-                            </Button>
-                        </Box>
-                    </Box>
-                </form>
-            </Modal>
-        </div>
+  const filteredUsers = useMemo(() => {
+    return users.filter(u =>
+      u.role === 'support' &&
+      (u.email.toLowerCase().includes(search.toLowerCase()) ||
+       (u.name && u.name.toLowerCase().includes(search.toLowerCase())) ||
+       ((u.employeeId || u.employeeid) && (u.employeeId || u.employeeid).toLowerCase().includes(search.toLowerCase())) ||
+       (u.designation && u.designation.toLowerCase().includes(search.toLowerCase())))
     );
+  }, [users, search]);
+
+  const handleChangePage = (event, newPage) => {
+    setPage(newPage);
+  };
+
+  const handleChangeRowsPerPage = (event) => {
+    setRowsPerPage(parseInt(event.target.value, 10));
+    setPage(0);
+  };
+
+  return (
+    <div className="engineer-management" style={{ width: '100%', maxWidth: '1200px', margin: '0 auto', padding: '16px' }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+                 <Typography variant="h6" component="h1" sx={{ fontWeight: 500, color: '#2c3e50' }}>
+           Engineer Management
+         </Typography>
+        
+        <Button
+          variant="contained"
+          startIcon={<AddIcon />}
+          onClick={handleAdd}
+          size="small"
+          sx={{
+            borderRadius: '6px',
+            textTransform: 'none',
+            boxShadow: 'none',
+            fontSize: '0.75rem',
+            px: 1.5,
+            py: 0.5
+          }}
+        >
+          Add Engineer
+        </Button>
+      </Box>
+      
+      <Box sx={{ mb: 3, display: 'flex', alignItems: 'center' }}>
+        <TextField
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search engineers..."
+          size="small"
+          sx={{
+            width: 300,
+            '& .MuiOutlinedInput-root': {
+              borderRadius: '6px',
+              '& fieldset': { borderColor: '#e0e0e0' },
+              '&:hover fieldset': { borderColor: '#bdbdbd' },
+              '&.Mui-focused fieldset': { borderColor: '#90caf9' },
+            },
+            '& .MuiInputBase-input': { py: 1, fontSize: '0.85rem' }
+          }}
+          InputProps={{
+            startAdornment: (
+              <SearchIcon sx={{ color: '#9e9e9e', mr: 1, fontSize: '1.1rem' }} />
+            ),
+            endAdornment: search && (
+              <IconButton 
+                size="small" 
+                onClick={() => setSearch('')} 
+                sx={{ p: 0.3, mr: 0.5 }}
+              >
+                <ClearIcon fontSize="small" />
+              </IconButton>
+            )
+          }}
+        />
+      </Box>
+      
+      {loading && (
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+          <Typography variant="body2" color="textSecondary">
+            Loading engineers...
+          </Typography>
+        </Box>
+      )}
+      
+      {error && (
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+          <Typography variant="body2" color="error">
+            {error}
+          </Typography>
+        </Box>
+      )}
+      
+      {!loading && !error && (
+        <Paper 
+          elevation={0} 
+          sx={{ 
+            borderRadius: '8px', 
+            overflow: 'hidden',
+            border: '1px solid #e0e0e0'
+          }}
+        >
+                     <TableContainer>
+             <Table size="small" sx={{ minWidth: 700, borderCollapse: 'collapse' }}>
+              <TableHead sx={{ bgcolor: '#f5f7fa' }}>
+                <TableRow>
+                                     <TableCell sx={{ py: 0.4, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
+                     #
+                   </TableCell>
+                   <TableCell sx={{ py: 0.4, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
+                     Name
+                   </TableCell>
+                   <TableCell sx={{ py: 0.4, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
+                     Employee ID
+                   </TableCell>
+                   <TableCell sx={{ py: 0.4, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
+                     Designation
+                   </TableCell>
+                   <TableCell sx={{ py: 0.4, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
+                     Email
+                   </TableCell>
+                   <TableCell sx={{ py: 0.4, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
+                     Contact
+                   </TableCell>
+                   <TableCell sx={{ py: 0.4, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
+                     Manager
+                   </TableCell>
+                   <TableCell sx={{ py: 0.4, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
+                     Role
+                   </TableCell>
+                   <TableCell align="right" sx={{ py: 0.4, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem' }}>
+                     Actions
+                   </TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {filteredUsers.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={9} align="center" sx={{ py: 4 }}>
+                      <Typography variant="body2" color="textSecondary">
+                        No engineer profiles found.
+                      </Typography>
+                    </TableCell>
+                  </TableRow>
+                                 ) : (
+                   filteredUsers
+                     .slice(filteredUsers.length > 10 ? page * rowsPerPage : 0, filteredUsers.length > 10 ? page * rowsPerPage + rowsPerPage : filteredUsers.length)
+                     .sort((a, b) => a.email.localeCompare(b.email))
+                     .map((u, i) => (
+                      <TableRow 
+                        key={u.id || u.uid} 
+                        hover
+                        sx={{ 
+                          '&:nth-of-type(odd)': { bgcolor: '#fafbfc' },
+                          '&:hover': { bgcolor: '#f1f5f9' }
+                        }}
+                      >
+                                                 <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
+                           {filteredUsers.length > 10 ? page * rowsPerPage + i + 1 : i + 1}
+                         </TableCell>
+                         <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
+                           <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+                             <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                               {u.firstName || (u.name ? u.name.split(' ')[0] : '')}
+                             </Typography>
+                             <Typography variant="body2" color="textSecondary">
+                               {u.lastName || (u.name ? u.name.split(' ').slice(1).join(' ') : '')}
+                             </Typography>
+                           </Box>
+                         </TableCell>
+                         <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
+                           {u.employeeId || u.employeeid}
+                         </TableCell>
+                         <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
+                           {u.designation}
+                         </TableCell>
+                         <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
+                           {u.email}
+                         </TableCell>
+                         <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
+                           {u.contactNumber}
+                         </TableCell>
+                         <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
+                           {u.managerEmail}
+                         </TableCell>
+                         <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
+                           <Chip 
+                             label={u.role} 
+                             size="small" 
+                             color={u.role === 'admin' ? 'primary' : u.role === 'support' ? 'secondary' : 'default'} 
+                             sx={{ 
+                               fontSize: '0.7rem', 
+                               height: 22,
+                               fontWeight: 500,
+                               '&.MuiChip-colorPrimary': { bgcolor: '#e3f2fd', color: '#1976d2' },
+                               '&.MuiChip-colorSecondary': { bgcolor: '#e8f5e9', color: '#388e3c' }
+                             }} 
+                           />
+                         </TableCell>
+                         <TableCell align="right" sx={{ py: 0.4, px: 2 }}>
+                          {passwordChangeNotifications[u.uid] ? (
+                            <Typography 
+                              variant="body2" 
+                              sx={{ 
+                                fontSize: '0.7rem',
+                                color: passwordChangeNotifications[u.uid].message.includes('success') ? '#2e7d32' : '#d32f2f',
+                                fontWeight: 500,
+                                textAlign: 'right',
+                                py: 0.5
+                              }}
+                            >
+                              {passwordChangeNotifications[u.uid].message}
+                            </Typography>
+                          ) : (
+                            <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+                              <Tooltip title="Reset Password">
+                                <IconButton 
+                                  onClick={() => openChangePwdModal(u.uid)} 
+                                  size="small" 
+                                  sx={{ 
+                                    p: 0.7,
+                                    color: '#607d8b',
+                                    '&:hover': { color: '#455a64', bgcolor: 'rgba(96, 125, 139, 0.1)' }
+                                  }}
+                                >
+                                  <LockResetIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                              <Tooltip title="Edit">
+                                <IconButton 
+                                  onClick={() => handleEditClick(u)} 
+                                  size="small" 
+                                  sx={{ 
+                                    p: 0.7,
+                                    color: '#607d8b',
+                                    '&:hover': { color: '#455a64', bgcolor: 'rgba(96, 125, 139, 0.1)' }
+                                  }}
+                                >
+                                  <EditIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                              <Tooltip title="Delete">
+                                <IconButton 
+                                  onClick={(event) => handleDeleteClick(event, u.id || u.uid, u.email)} 
+                                  size="small" 
+                                  sx={{ 
+                                    p: 0.7,
+                                    color: '#e57373',
+                                    '&:hover': { color: '#f44336', bgcolor: 'rgba(244, 67, 54, 0.1)' }
+                                  }}
+                                >
+                                  <DeleteIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                            </Box>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                )}
+              </TableBody>
+            </Table>
+          </TableContainer>
+          
+                     {filteredUsers.length > 10 && (
+             <TablePagination
+               rowsPerPageOptions={[5, 10, 25]}
+               component="div"
+               count={filteredUsers.length}
+               rowsPerPage={rowsPerPage}
+               page={page}
+               onPageChange={handleChangePage}
+               onRowsPerPageChange={handleChangeRowsPerPage}
+               sx={{
+                 '.MuiTablePagination-selectLabel, .MuiTablePagination-displayedRows': {
+                   fontSize: '0.8rem'
+                 },
+                 '.MuiTablePagination-toolbar': {
+                   minHeight: '40px'
+                 }
+               }}
+             />
+           )}
+        </Paper>
+      )}
+      
+      {/* Add Engineer Modal */}
+      <Dialog
+        open={addMode}
+        onClose={handleAddCancel}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 0,
+            boxShadow: '0 8px 30px rgba(0,0,0,0.1)',
+            bgcolor: '#ffffff',
+          }
+        }}
+      >
+        <DialogTitle
+          className="flex justify-between items-center text-white px-5 py-4 border-b border-gray-200"
+          sx={{
+            background: '#283149',
+            minHeight: '50px',
+          }}
+        >
+          <Typography variant="h6" component="div" className="font-semibold" sx={{ fontSize: '1rem' }}>
+            Add Engineer
+          </Typography>
+          <IconButton onClick={handleAddCancel} className="text-white hover:bg-white hover:bg-opacity-10 transition-colors">
+            <CloseIcon fontSize="small" />
+          </IconButton>
+        </DialogTitle>
+
+        <DialogContent className="p-4 sm:p-5 bg-gray-50">
+          <Box component="form" onSubmit={handleAddSave} className="space-y-4" autoComplete="off">
+            {/* Hidden password field to trick Chrome autofill */}
+            <input type="password" style={{ display: 'none' }} autoComplete="new-password" />
+
+            {/* Engineer Information Section */}
+            <Box className="bg-white p-4 border border-gray-200">
+              <div className="flex items-center mb-3">
+                <PersonIcon className="text-gray-600 mr-2" fontSize="small" />
+                <Typography variant="subtitle1" className="font-semibold text-gray-800" sx={{ fontSize: '0.9rem' }}>Engineer Information</Typography>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <TextField 
+                  label="Employee ID *" 
+                  name="employeeid" 
+                  value={addRowData.employeeid} 
+                  onChange={handleAddChange} 
+                  required 
+                  size="small"
+                  fullWidth
+                  InputProps={{
+                    startAdornment: <InputAdornment position="start"><BadgeIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
+                  }}
+                  InputLabelProps={{ 
+                    shrink: true, 
+                    sx: { 
+                      fontSize: '1rem',
+                      color: '#1976d2',
+                      fontWeight: 600,
+                      '&.Mui-focused': {
+                        color: '#1565c0'
+                      }
+                    } 
+                  }}
+                  sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                />
+                
+                <TextField 
+                  label="First Name *" 
+                  name="firstName" 
+                  value={addRowData.firstName} 
+                  onChange={handleAddChange} 
+                  required 
+                  size="small"
+                  fullWidth
+                  InputLabelProps={{ 
+                    shrink: true, 
+                    sx: { 
+                      fontSize: '1rem',
+                      color: '#1976d2',
+                      fontWeight: 600,
+                      '&.Mui-focused': {
+                        color: '#1565c0'
+                      }
+                    } 
+                  }}
+                  sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                />
+                
+                <TextField 
+                  label="Last Name *" 
+                  name="lastName" 
+                  value={addRowData.lastName} 
+                  onChange={handleAddChange} 
+                  required 
+                  size="small"
+                  fullWidth
+                  InputLabelProps={{ 
+                    shrink: true, 
+                    sx: { 
+                      fontSize: '1rem',
+                      color: '#1976d2',
+                      fontWeight: 600,
+                      '&.Mui-focused': {
+                        color: '#1565c0'
+                      }
+                    } 
+                  }}
+                  sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                />
+                
+                <TextField 
+                  label="Email *" 
+                  name="email" 
+                  value={addRowData.email} 
+                  onChange={handleAddChange} 
+                  required 
+                  size="small"
+                  fullWidth
+                  InputProps={{
+                    startAdornment: <InputAdornment position="start"><EmailIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
+                  }}
+                  InputLabelProps={{ 
+                    shrink: true, 
+                    sx: { 
+                      fontSize: '1rem',
+                      color: '#1976d2',
+                      fontWeight: 600,
+                      '&.Mui-focused': {
+                        color: '#1565c0'
+                      }
+                    } 
+                  }}
+                  sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                />
+                
+                <TextField 
+                  label="Password *" 
+                  name="password" 
+                  value={addRowData.password} 
+                  InputProps={{ 
+                    readOnly: true,
+                    startAdornment: <InputAdornment position="start"><LockIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
+                  }} 
+                  required 
+                  size="small"
+                  fullWidth
+                  helperText="Auto-generated password"
+                  InputLabelProps={{ 
+                    shrink: true, 
+                    sx: { 
+                      fontSize: '1rem',
+                      color: '#1976d2',
+                      fontWeight: 600,
+                      '&.Mui-focused': {
+                        color: '#1565c0'
+                      }
+                    } 
+                  }}
+                  sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                />
+                
+                <TextField 
+                  label="Contact Number *" 
+                  name="contactNumber" 
+                  value={addRowData.contactNumber} 
+                  onChange={handleAddChange} 
+                  required 
+                  size="small"
+                  fullWidth
+                  InputProps={{
+                    startAdornment: <InputAdornment position="start"><PhoneIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
+                  }}
+                  InputLabelProps={{ 
+                    shrink: true, 
+                    sx: { 
+                      fontSize: '1rem',
+                      color: '#1976d2',
+                      fontWeight: 600,
+                      '&.Mui-focused': {
+                        color: '#1565c0'
+                      }
+                    } 
+                  }}
+                  sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                />
+                
+                <TextField 
+                  label="Manager Email *" 
+                  name="managerEmail" 
+                  value={addRowData.managerEmail} 
+                  onChange={handleAddChange} 
+                  required 
+                  size="small"
+                  fullWidth
+                  InputProps={{
+                    startAdornment: <InputAdornment position="start"><SupervisorAccountIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
+                  }}
+                  InputLabelProps={{ 
+                    shrink: true, 
+                    sx: { 
+                      fontSize: '1rem',
+                      color: '#1976d2',
+                      fontWeight: 600,
+                      '&.Mui-focused': {
+                        color: '#1565c0'
+                      }
+                    } 
+                  }}
+                  sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                />
+                
+                <TextField 
+                  select 
+                  label="Employment Type *" 
+                  name="employmentType" 
+                  value={addRowData.employmentType} 
+                  onChange={handleAddChange} 
+                  required 
+                  size="small"
+                  fullWidth
+                  InputProps={{
+                    startAdornment: <InputAdornment position="start"><WorkIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
+                  }}
+                  InputLabelProps={{ 
+                    shrink: true, 
+                    sx: { 
+                      fontSize: '1rem',
+                      color: '#1976d2',
+                      fontWeight: 600,
+                      '&.Mui-focused': {
+                        color: '#1565c0'
+                      }
+                    } 
+                  }}
+                  sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                >
+                  <MenuItem value="contract" sx={{ fontSize: '0.85rem' }}>Contract</MenuItem>
+                  <MenuItem value="permanent" sx={{ fontSize: '0.85rem' }}>Permanent</MenuItem>
+                  <MenuItem value="intern" sx={{ fontSize: '0.85rem' }}>Intern</MenuItem>
+                </TextField>
+                
+                <TextField 
+                  label="Designation *" 
+                  name="designation" 
+                  value={addRowData.designation} 
+                  onChange={handleAddChange} 
+                  required 
+                  size="small"
+                  fullWidth
+                  InputProps={{
+                    startAdornment: <InputAdornment position="start"><AdminIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
+                  }}
+                  InputLabelProps={{ 
+                    shrink: true, 
+                    sx: { 
+                      fontSize: '1rem',
+                      color: '#1976d2',
+                      fontWeight: 600,
+                      '&.Mui-focused': {
+                        color: '#1565c0'
+                      }
+                    } 
+                  }}
+                  sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                />
+              </div>
+            </Box>
+          </Box>
+        </DialogContent>
+        
+        <DialogActions sx={{ py: 2, px: 3, bgcolor: '#f8f9fa', borderTop: '1px solid #e0e0e0' }}>
+          <Button 
+            onClick={handleAddCancel} 
+            variant="outlined" 
+            size="small"
+            sx={{ 
+              textTransform: 'none', 
+              fontSize: '0.85rem',
+              borderRadius: 1,
+              px: 2
+            }}
+          >
+            Cancel
+          </Button>
+          <Button 
+            type="submit" 
+            variant="contained" 
+            color="primary" 
+            size="small"
+            onClick={handleAddSave}
+            sx={{ 
+              textTransform: 'none', 
+              fontSize: '0.85rem',
+              borderRadius: 1,
+              px: 2,
+              boxShadow: 'none',
+              '&:hover': {
+                boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+              }
+            }}
+          >
+            Add Engineer
+          </Button>
+        </DialogActions>
+      </Dialog>
+      
+      {/* Edit Engineer Modal */}
+      <Dialog
+        open={editRowId !== null}
+        onClose={handleEditCancel}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 0,
+            boxShadow: '0 8px 30px rgba(0,0,0,0.1)',
+            bgcolor: '#ffffff',
+          }
+        }}
+      >
+        <DialogTitle
+          className="flex justify-between items-center text-white px-5 py-4 border-b border-gray-200"
+          sx={{
+            background: '#283149',
+            minHeight: '50px',
+          }}
+        >
+          <Typography variant="h6" component="div" className="font-semibold" sx={{ fontSize: '1rem' }}>
+            Edit Engineer
+          </Typography>
+          <IconButton onClick={handleEditCancel} className="text-white hover:bg-white hover:bg-opacity-10 transition-colors">
+            <CloseIcon fontSize="small" />
+          </IconButton>
+        </DialogTitle>
+
+        <DialogContent className="p-4 sm:p-5 bg-gray-50">
+          <Box component="form" onSubmit={(e) => {
+            e.preventDefault();
+            handleEditSave(editRowId);
+          }} className="space-y-4" autoComplete="off">
+            {/* Engineer Information Section */}
+            <Box className="bg-white p-4 border border-gray-200">
+              <div className="flex items-center mb-3">
+                <PersonIcon className="text-gray-600 mr-2" fontSize="small" />
+                <Typography variant="subtitle1" className="font-semibold text-gray-800" sx={{ fontSize: '0.9rem' }}>Engineer Information</Typography>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <TextField 
+                  label="Employee ID *" 
+                  name="employeeid" 
+                  value={editRowData.employeeid || ''} 
+                  onChange={handleEditChange} 
+                  required 
+                  size="small"
+                  fullWidth
+                  InputProps={{
+                    startAdornment: <InputAdornment position="start"><BadgeIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
+                  }}
+                  InputLabelProps={{ 
+                    shrink: true, 
+                    sx: { 
+                      fontSize: '1rem',
+                      color: '#1976d2',
+                      fontWeight: 600,
+                      '&.Mui-focused': {
+                        color: '#1565c0'
+                      }
+                    } 
+                  }}
+                  sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                />
+                
+                <TextField 
+                  label="First Name *" 
+                  name="firstName" 
+                  value={editRowData.firstName || ''} 
+                  onChange={handleEditChange} 
+                  required 
+                  size="small"
+                  fullWidth
+                  InputLabelProps={{ 
+                    shrink: true, 
+                    sx: { 
+                      fontSize: '1rem',
+                      color: '#1976d2',
+                      fontWeight: 600,
+                      '&.Mui-focused': {
+                        color: '#1565c0'
+                      }
+                    } 
+                  }}
+                  sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                />
+                
+                <TextField 
+                  label="Last Name *" 
+                  name="lastName" 
+                  value={editRowData.lastName || ''} 
+                  onChange={handleEditChange} 
+                  required 
+                  size="small"
+                  fullWidth
+                  InputLabelProps={{ 
+                    shrink: true, 
+                    sx: { 
+                      fontSize: '1rem',
+                      color: '#1976d2',
+                      fontWeight: 600,
+                      '&.Mui-focused': {
+                        color: '#1565c0'
+                      }
+                    } 
+                  }}
+                  sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                />
+                
+                <TextField 
+                  label="Email *" 
+                  name="email" 
+                  value={editRowData.email || ''} 
+                  onChange={handleEditChange} 
+                  required 
+                  size="small"
+                  fullWidth
+                  InputProps={{
+                    startAdornment: <InputAdornment position="start"><EmailIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
+                  }}
+                  InputLabelProps={{ 
+                    shrink: true, 
+                    sx: { 
+                      fontSize: '1rem',
+                      color: '#1976d2',
+                      fontWeight: 600,
+                      '&.Mui-focused': {
+                        color: '#1565c0'
+                      }
+                    } 
+                  }}
+                  sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                />
+                
+                <TextField 
+                  label="Contact Number *" 
+                  name="contactNumber" 
+                  value={editRowData.contactNumber || ''} 
+                  onChange={handleEditChange} 
+                  required 
+                  size="small"
+                  fullWidth
+                  InputProps={{
+                    startAdornment: <InputAdornment position="start"><PhoneIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
+                  }}
+                  InputLabelProps={{ 
+                    shrink: true, 
+                    sx: { 
+                      fontSize: '1rem',
+                      color: '#1976d2',
+                      fontWeight: 600,
+                      '&.Mui-focused': {
+                        color: '#1565c0'
+                      }
+                    } 
+                  }}
+                  sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                />
+                
+                <TextField 
+                  label="Manager Email *" 
+                  name="managerEmail" 
+                  value={editRowData.managerEmail || ''} 
+                  onChange={handleEditChange} 
+                  required 
+                  size="small"
+                  fullWidth
+                  InputProps={{
+                    startAdornment: <InputAdornment position="start"><SupervisorAccountIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
+                  }}
+                  InputLabelProps={{ 
+                    shrink: true, 
+                    sx: { 
+                      fontSize: '1rem',
+                      color: '#1976d2',
+                      fontWeight: 600,
+                      '&.Mui-focused': {
+                        color: '#1565c0'
+                      }
+                    } 
+                  }}
+                  sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                />
+                
+                <TextField 
+                  select 
+                  label="Employment Type *" 
+                  name="employmentType" 
+                  value={editRowData.employmentType || ''} 
+                  onChange={handleEditChange} 
+                  required 
+                  size="small"
+                  fullWidth
+                  InputProps={{
+                    startAdornment: <InputAdornment position="start"><WorkIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
+                  }}
+                  InputLabelProps={{ 
+                    shrink: true, 
+                    sx: { 
+                      fontSize: '1rem',
+                      color: '#1976d2',
+                      fontWeight: 600,
+                      '&.Mui-focused': {
+                        color: '#1565c0'
+                      }
+                    } 
+                  }}
+                  sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                >
+                  <MenuItem value="contract" sx={{ fontSize: '0.85rem' }}>Contract</MenuItem>
+                  <MenuItem value="permanent" sx={{ fontSize: '0.85rem' }}>Permanent</MenuItem>
+                  <MenuItem value="intern" sx={{ fontSize: '0.85rem' }}>Intern</MenuItem>
+                </TextField>
+                
+                <TextField 
+                  label="Designation *" 
+                  name="designation" 
+                  value={editRowData.designation || ''} 
+                  onChange={handleEditChange} 
+                  required 
+                  size="small"
+                  fullWidth
+                  InputProps={{
+                    startAdornment: <InputAdornment position="start"><AdminIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
+                  }}
+                  InputLabelProps={{ 
+                    shrink: true, 
+                    sx: { 
+                      fontSize: '1rem',
+                      color: '#1976d2',
+                      fontWeight: 600,
+                      '&.Mui-focused': {
+                        color: '#1565c0'
+                      }
+                    } 
+                  }}
+                  sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                />
+              </div>
+            </Box>
+          </Box>
+        </DialogContent>
+        
+        <DialogActions sx={{ py: 2, px: 3, bgcolor: '#f8f9fa', borderTop: '1px solid #e0e0e0' }}>
+          <Button 
+            onClick={handleEditCancel} 
+            variant="outlined" 
+            size="small"
+            sx={{ 
+              textTransform: 'none', 
+              fontSize: '0.85rem',
+              borderRadius: 1,
+              px: 2
+            }}
+          >
+            Cancel
+          </Button>
+          <Button 
+            type="submit" 
+            variant="contained" 
+            color="primary" 
+            size="small"
+            onClick={(e) => {
+              e.preventDefault();
+              handleEditSave(editRowId);
+            }}
+            sx={{ 
+              textTransform: 'none', 
+              fontSize: '0.85rem',
+              borderRadius: 1,
+              px: 2,
+              boxShadow: 'none',
+              '&:hover': {
+                boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+              }
+            }}
+          >
+            Save Changes
+          </Button>
+        </DialogActions>
+      </Dialog>
+      
+      {/* Password Reset Modal */}
+      <Dialog
+        open={changePwdModalOpen}
+        onClose={closeChangePwdModal}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 0,
+            boxShadow: '0 8px 30px rgba(0,0,0,0.1)',
+            bgcolor: '#ffffff',
+          }
+        }}
+      >
+        <DialogTitle
+          className="flex justify-between items-center text-white px-5 py-4 border-b border-gray-200"
+          sx={{
+            background: '#283149',
+            minHeight: '50px',
+          }}
+        >
+          <Typography variant="h6" component="div" className="font-semibold" sx={{ fontSize: '1rem' }}>
+            Reset Password
+          </Typography>
+          <IconButton onClick={closeChangePwdModal} className="text-white hover:bg-white hover:bg-opacity-10 transition-colors">
+            <CloseIcon fontSize="small" />
+          </IconButton>
+        </DialogTitle>
+
+        <DialogContent className="p-4 sm:p-5 bg-gray-50">
+          <Box component="form" onSubmit={(e) => {
+            e.preventDefault();
+            handleChangePassword(e);
+          }} className="space-y-4" autoComplete="off">
+            {/* Password Reset Section */}
+            <Box className="bg-white p-4 border border-gray-200">
+              <div className="flex items-center mb-3">
+                <LockIcon className="text-gray-600 mr-2" fontSize="small" />
+                <Typography variant="subtitle1" className="font-semibold text-gray-800" sx={{ fontSize: '0.9rem' }}>New Password</Typography>
+              </div>
+              <TextField 
+                label="New Password *" 
+                value={newPassword} 
+                onChange={e => setNewPassword(e.target.value)} 
+                required 
+                size="small"
+                fullWidth
+                InputProps={{
+                  startAdornment: <InputAdornment position="start"><LockIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
+                }}
+                InputLabelProps={{ 
+                  shrink: true, 
+                  sx: { 
+                    fontSize: '0.8rem',
+                    color: '#1976d2',
+                    fontWeight: 600,
+                    '&.Mui-focused': {
+                      color: '#1565c0'
+                    }
+                  } 
+                }}
+                sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+              />
+            </Box>
+          </Box>
+        </DialogContent>
+        
+        <DialogActions sx={{ py: 2, px: 3, bgcolor: '#f8f9fa', borderTop: '1px solid #e0e0e0' }}>
+          <Button 
+            onClick={closeChangePwdModal} 
+            variant="outlined" 
+            size="small"
+            sx={{ 
+              textTransform: 'none', 
+              fontSize: '0.85rem',
+              borderRadius: 1,
+              px: 2
+            }}
+          >
+            Cancel
+          </Button>
+          <Button 
+            type="submit" 
+            variant="contained" 
+            color="primary" 
+            size="small"
+            onClick={(e) => {
+              e.preventDefault();
+              handleChangePassword(e);
+            }}
+            sx={{ 
+              textTransform: 'none', 
+              fontSize: '0.85rem',
+              borderRadius: 1,
+              px: 2,
+              boxShadow: 'none',
+              '&:hover': {
+                boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+              }
+            }}
+          >
+            Reset Password
+          </Button>
+        </DialogActions>
+      </Dialog>
+      
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={openConfirmPopover}
+        onClose={handleCancelDelete}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 0,
+            boxShadow: '0 8px 30px rgba(0,0,0,0.1)',
+            bgcolor: '#ffffff',
+          }
+        }}
+      >
+        <DialogTitle
+          className="flex justify-between items-center text-white px-5 py-4 border-b border-gray-200"
+          sx={{
+            background: '#d32f2f',
+            minHeight: '50px',
+          }}
+        >
+          <Typography variant="h6" component="div" className="font-semibold" sx={{ fontSize: '1rem' }}>
+            ⚠️ Delete Engineer
+          </Typography>
+          <IconButton onClick={handleCancelDelete} className="text-white hover:bg-white hover:bg-opacity-10 transition-colors">
+            <CloseIcon fontSize="small" />
+          </IconButton>
+        </DialogTitle>
+
+        <DialogContent className="p-4 sm:p-5 bg-gray-50">
+          <Box className="bg-white p-4 border border-gray-200">
+            <div className="flex items-center mb-3">
+              <Typography variant="subtitle1" className="font-semibold text-gray-800" sx={{ fontSize: '0.9rem' }}>
+                Confirm Deletion
+              </Typography>
+            </div>
+            <Typography variant="body2" sx={{ mb: 2, fontSize: '0.85rem', lineHeight: 1.5 }}>
+              Are you sure you want to delete <strong>{currentUserEmailToDelete}</strong>? 
+            </Typography>
+            <Typography variant="body2" sx={{ fontSize: '0.8rem', color: '#d32f2f', fontWeight: 500 }}>
+              ⚠️ This action cannot be undone and will permanently remove the engineer from the system.
+            </Typography>
+          </Box>
+        </DialogContent>
+        
+        <DialogActions sx={{ py: 2, px: 3, bgcolor: '#f8f9fa', borderTop: '1px solid #e0e0e0' }}>
+          <Button 
+            onClick={handleCancelDelete} 
+            variant="outlined" 
+            size="small"
+            sx={{ 
+              textTransform: 'none', 
+              fontSize: '0.85rem',
+              borderRadius: 1,
+              px: 2
+            }}
+          >
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleConfirmDelete} 
+            variant="contained" 
+            color="error" 
+            size="small"
+            autoFocus
+            sx={{ 
+              textTransform: 'none', 
+              fontSize: '0.85rem',
+              borderRadius: 1,
+              px: 2,
+              boxShadow: 'none',
+              '&:hover': {
+                boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+              }
+            }}
+          >
+            Delete Engineer
+          </Button>
+        </DialogActions>
+      </Dialog>
+      
+      {/* Snackbar for notifications */}
+      <Snackbar 
+        open={snackbar.open} 
+        autoHideDuration={3000} 
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Alert 
+          onClose={() => setSnackbar({ ...snackbar, open: false })} 
+          severity={snackbar.severity} 
+          sx={{ width: '100%', fontSize: '0.85rem' }}
+          variant="filled"
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
+    </div>
+  );
 };
 
 export default EngineerManagementComponent;

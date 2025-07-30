@@ -447,25 +447,25 @@ const TicketProgressSection = ({
                     </div>
                 )}
 
-                {/* Resolved Date */}
-                <div className="w-full min-w-0 max-w-full overflow-x-hidden">
-                    <label className="block text-xs font-bold mb-1.5">
-                        Resolved Date:
-                    </label>
-                    <FieldBox className="w-full min-w-0 max-w-full overflow-x-hidden" isDisplayOnly={true}>
-                        <Calendar className="w-3 h-3 text-gray-400 mr-1.5 shrink-0" />
-                        <span className="text-xs text-wrap overflow-hidden flex-1 min-w-0 max-w-full">
-                            {(isEditing ? editableFields.status : ticket.status) === 'Resolved' ||
-                                (isEditing ? editableFields.status : ticket.status) === 'Cancelled'
-                                  ? (isEditing && editableFields.resolved_at
-                                      ? new Date(editableFields.resolved_at).toLocaleString()
-                                      : ticket.resolved_at
-                                          ? new Date(ticket.resolved_at).toLocaleString()
-                                          : <span className="">N/A</span>)
-                                  : <span className="">N/A</span>}
-                        </span>
-                    </FieldBox>
-                </div>
+                {/* Resolved Date - Only show when ticket is resolved or cancelled */}
+                {((isEditing ? editableFields.status : ticket.status) === 'Resolved' ||
+                  (isEditing ? editableFields.status : ticket.status) === 'Cancelled') && (
+                    <div className="w-full min-w-0 max-w-full overflow-x-hidden">
+                        <label className="block text-xs font-bold mb-1.5">
+                            Resolved Date:
+                        </label>
+                        <FieldBox className="w-full min-w-0 max-w-full overflow-x-hidden" isDisplayOnly={true}>
+                            <Calendar className="w-3 h-3 text-gray-400 mr-1.5 shrink-0" />
+                            <span className="text-xs text-wrap overflow-hidden flex-1 min-w-0 max-w-full">
+                                {(isEditing && editableFields.resolved_at
+                                    ? new Date(editableFields.resolved_at).toLocaleString()
+                                    : ticket.resolved_at
+                                        ? new Date(ticket.resolved_at).toLocaleString()
+                                        : <span className="">N/A</span>)}
+                            </span>
+                        </FieldBox>
+                    </div>
+                )}
 
                 {/* Time Spent - Only for support/admin and when status is Resolved or closing or already resolved/cancelled */}
                 {isSupportUser && (

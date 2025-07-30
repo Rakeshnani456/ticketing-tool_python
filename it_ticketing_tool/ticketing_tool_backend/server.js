@@ -68,6 +68,15 @@ const transporter = nodemailer.createTransport({
 app.use(cors());
 app.use(express.json());
 
+// Health check endpoint for Docker
+app.get('/health', (req, res) => {
+    res.status(200).json({ 
+        status: 'OK', 
+        timestamp: new Date().toISOString(),
+        database: dbConnected ? 'connected' : 'disconnected'
+    });
+});
+
 // --- Constants for Ticket Fields (can be moved to a constants.js file) ---
 const validUserRoles = ['user', 'support', 'admin', 'super_admin', 'site_admin'];
 
@@ -209,6 +218,28 @@ async function sendEmailAlert(toEmail, subject, text, html, cc = null) {
     }
 }
 
+// Helper function to generate display ID for tickets
+async function generateDisplayId() {
+    try {
+        const lastTicketQuery = await ticketsCollection.orderBy('created_at', 'desc').limit(1).get();
+        let nextIdNum = 1;
+        if (!lastTicketQuery.empty) {
+            const lastTicket = lastTicketQuery.docs[0].data();
+            const lastDisplayId = lastTicket.display_id;
+            if (lastDisplayId && lastDisplayId.startsWith('TT')) {
+                const numPart = parseInt(lastDisplayId.substring(2));
+                if (!isNaN(numPart)) {
+                    nextIdNum = numPart + 1;
+                }
+            }
+        }
+        return `TT${String(nextIdNum).padStart(6, '0')}`;
+    } catch (error) {
+        console.error('Error generating display ID:', error);
+        throw new Error('Failed to generate ticket display ID');
+    }
+}
+
 
 // --- Import and Use Routes ---
 const authRoutes = require('./routes/authRoutes');
@@ -223,7 +254,7 @@ const adminManagementRouter = require('./routes/adminManagement');
 
 
 app.use('/', authRoutes(db, admin, usersCollection, verifyFirebaseToken));
-app.use('/tickets', ticketRoutes(db, admin, ticketsCollection, usersCollection, notificationsCollection, transporter, verifyFirebaseToken, checkRole, jsonSerializableTicket, jsonSerializableNotification, null, sendEmailAlert));
+app.use('/tickets', ticketRoutes(db, admin, ticketsCollection, usersCollection, notificationsCollection, transporter, verifyFirebaseToken, checkRole, jsonSerializableTicket, jsonSerializableNotification, generateDisplayId, sendEmailAlert));
 app.use('/admin', adminRoutes(db, admin, usersCollection, verifyFirebaseToken, checkRole));
 app.use('/notifications', notificationRoutes(db, notificationsCollection, verifyFirebaseToken, jsonSerializableNotification));
 app.use('/api/clients', clientRoutes(db, clientsCollection, usersCollection));

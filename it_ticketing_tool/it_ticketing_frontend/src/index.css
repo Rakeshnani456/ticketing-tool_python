@@ -1,5 +1,49 @@
 /* --- Global Scrollbar Styles (apply to all scrollable elements) --- */
 @import url('https://fonts.googleapis.com/css2?family=Source+Sans+3:ital,wght@0,200..900;1,200..900&display=swap');
+
+/* --- Fast Popup Animations --- */
+@keyframes fastZoomIn {
+    0% {
+        opacity: 0;
+        transform: scale(0.8);
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+@keyframes fastFadeIn {
+    0% {
+        opacity: 0;
+    }
+    100% {
+        opacity: 1;
+    }
+}
+
+@keyframes fastZoomOut {
+    0% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    100% {
+        opacity: 0;
+        transform: scale(0.8);
+    }
+}
+
+.fast-zoom-in {
+    animation: fastZoomIn 0.2s ease-out;
+}
+
+.fast-fade-in {
+    animation: fastFadeIn 0.15s ease-out;
+}
+
+.fast-zoom-out {
+    animation: fastZoomOut 0.15s ease-out;
+}
 /* Or if self-hosting: */
 /* @font-face {
   font-family: 'MyCustomFont';

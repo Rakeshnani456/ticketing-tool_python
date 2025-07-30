@@ -73,15 +73,12 @@ const NotificationModal = ({ isOpen, onClose, notifications = [], onClearAll, on
     if (!isOpen) return null;
 
     return (
-        <div ref={modalRef} className={`absolute right-2 top-8 z-50 ${className}`}>
+        <div ref={modalRef} className={`absolute right-8 top-8 z-50 ${className}`}>
             <div 
-                className="w-64 max-h-[70vh] bg-white/95 backdrop-blur-xl rounded border border-gray-200/50 overflow-hidden flex flex-col text-xs"
-                style={{
-                    boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.5)'
-                }}
+                className="w-64 max-h-[70vh] bg-gray-100 rounded border-2 border-gray-400 overflow-hidden flex flex-col text-xs"
             >
-                {/* Gradient Header */}
-                <div className="px-6 py-2 text-xs" style={{ background: '#ffb366' }}>
+                {/* Header */}
+                <div className="px-6 py-2 text-xs bg-gray-600">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
                             <div className="relative">

@@ -506,7 +506,8 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
     }, [isEditing, isSupportUser, user]);
 
     const isTicketClosedOrResolved = ticket && ['Resolved', 'Cancelled'].includes(ticket.status);
-    const canEdit = !isTicketClosedOrResolved && (ticket && ticket.reporter_id === user?.firebaseUser.uid);
+    const canEdit = !isTicketClosedOrResolved && 
+                   ['support'].includes(user?.role);
     const canAddComments = !isTicketClosedOrResolved;
     const canAddAttachments = !isTicketClosedOrResolved;
 

@@ -334,7 +334,7 @@ npm test
 ```bash
 cd it_ticketing_tool/it_ticketing_frontend
 npm run build
-firebase deploy
+firebase deploy --only hosting
 ```
 
 ### Backend Deployment

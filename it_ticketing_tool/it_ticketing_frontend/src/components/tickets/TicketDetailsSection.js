@@ -255,7 +255,7 @@ const TicketDetailsSection = ({
             </div>
 
             {/* Attachments section */}
-            <div className="bg-white p-3 sm:p-4 w-full min-w-0 max-w-full overflow-x-hidden">
+            <div className="w-full min-w-0 max-w-full overflow-x-hidden">
                 <div className="flex flex-col sm:flex-row sm:items-center mb-2 sm:mb-3 justify-between gap-2 sm:gap-0 w-full min-w-0 max-w-full overflow-x-hidden">
                     <div className="flex items-center gap-2 py-1">
                         <div className="w-1 h-5 bg-gradient-to-b from-green-600 to-green-800 rounded-full"></div>

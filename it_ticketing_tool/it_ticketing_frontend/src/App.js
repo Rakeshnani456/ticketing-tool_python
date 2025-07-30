@@ -30,6 +30,7 @@ import {
     UserCheck,
     Building,
     Zap,
+    Loader2,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AiOutlineEye } from 'react-icons/ai'; // Or choose another icon library like 'fa' for Font Awesome
@@ -94,6 +95,7 @@ import Modal from './components/common/Modal';
 import AdminManagementComponent from './components/admin/AdminManagementComponent';
 import ClientManagementComponent from './components/admin/ClientManagementComponent';
 import EngineerManagementComponent from './components/admin/EngineerManagementComponent';
+import ReportsPage from './components/ReportsPage';
 
 
 // Placeholder components for new pages mentioned in sidebar
@@ -119,18 +121,8 @@ const SiteAdminManagementComponent = () => (
     </div>
 );
 
-const ReportsComponent = () => (
-    <div className="p-6">
-        <h2 className="text-2xl font-bold mb-4">Reports (Placeholder)</h2>
-        <p>Reports content goes here.</p>
-    </div>
-);
-const InsightsComponent = () => (
-    <div className="p-6">
-        <h2 className="text-2xl font-bold mb-4">Insights (Placeholder)</h2>
-        <p>Insights content goes here.</p>
-    </div>
-);
+
+
 
 function TooltipBubble({ title, children }) {
   const [show, setShow] = useState(false);
@@ -235,6 +227,10 @@ const App = () => {
 
     // NEW: Add loading state for authentication
     const [isAuthLoading, setIsAuthLoading] = useState(true);
+
+    // State for ticket creation success popup
+    const [ticketSubmissionStatus, setTicketSubmissionStatus] = useState('idle'); // 'idle', 'submitting', 'success', 'error'
+    const [createdTicketInfo, setCreatedTicketInfo] = useState(null);
 
     // Handlers for Material-UI "Manage" dropdown
     const handleClick = (event) => {
@@ -694,6 +690,41 @@ const App = () => {
         }
     };
 
+    const handleTicketSuccessStateChange = (isSuccess, ticketInfo = null) => {
+        if (isSuccess && ticketInfo) {
+            setCreatedTicketInfo(ticketInfo);
+            setTicketSubmissionStatus('success');
+        }
+    };
+
+    const handleTicketSubmissionStart = () => {
+        setTicketSubmissionStatus('submitting');
+    };
+
+    const handleTicketSubmissionError = (error) => {
+        setTicketSubmissionStatus('error');
+        showFlashMessage(error || 'Failed to create ticket', 'error');
+    };
+
+    const handleCloseTicketPopup = () => {
+        setTicketSubmissionStatus('idle');
+        setCreatedTicketInfo(null);
+    };
+
+    const handleViewCreatedTicket = () => {
+        if (createdTicketInfo) {
+            setTicketSubmissionStatus('idle');
+            setCreatedTicketInfo(null);
+            navigateTo(`/tickets/${createdTicketInfo.id}`);
+        }
+    };
+
+    const handleGoToMyTickets = () => {
+        setTicketSubmissionStatus('idle');
+        setCreatedTicketInfo(null);
+        navigateTo('myTickets');
+    };
+
     /**
      * Handles changes in the global search input.
      * @param {Event} e - The change event.
@@ -863,6 +894,9 @@ const App = () => {
         };
     }
 
+    // Define ReportsComponent inside App component to access currentUser
+    const ReportsComponent = () => <ReportsPage user={currentUser} />;
+
     return (
         <div className="flex min-h-screen bg-white font-inter"> {/* Main flex container (row) */}
             {/* Global Flash Message */}
@@ -872,17 +906,81 @@ const App = () => {
                     {flashMessage}
                 </div>
             )}
+
+            {/* Create Ticket Modal - Rendered at root level */}
+            {currentUser && location.pathname === '/create-ticket' && (
+                <Modal
+                    isOpen={true}
+                    onClose={() => navigate(-1)}
+                    title="Create Ticket"
+                >
+                    <CreateTicketComponent
+                        user={currentUser}
+                        showFlashMessage={showFlashMessage}
+                        onTicketCreated={handleTicketCreated}
+                        navigateTo={navigateTo}
+                        onClose={() => navigate(-1)}
+                        onSuccessStateChange={handleTicketSuccessStateChange}
+                        onTicketSubmissionStart={handleTicketSubmissionStart}
+                        onTicketSubmissionError={handleTicketSubmissionError}
+                        onCloseTicketPopup={handleCloseTicketPopup}
+                        onViewCreatedTicket={handleViewCreatedTicket}
+                        onGoToMyTickets={handleGoToMyTickets}
+                    />
+                </Modal>
+            )}
+
+            {/* Ticket Status Popup - Shows both submission and success states */}
+            {(ticketSubmissionStatus === 'submitting' || ticketSubmissionStatus === 'success') && (
+                <div className="fixed inset-0 bg-gray-800 bg-opacity-60 backdrop-blur-md flex items-center justify-center p-4 z-[99999] fast-fade-in">
+                    <div className={`bg-white rounded-lg shadow-lg w-full text-center p-6 fast-zoom-in ${
+                        ticketSubmissionStatus === 'submitting' 
+                            ? 'max-w-sm border border-blue-200' 
+                            : 'max-w-md border border-green-200'
+                    }`}>
+                        {ticketSubmissionStatus === 'submitting' ? (
+                            <>
+                                <Loader2 className="text-blue-600 mx-auto mb-4 animate-spin" size={48} />
+                                <h2 className="text-xl font-bold text-blue-800 mb-3">Submitting Ticket...</h2>
+                                <p className="text-base text-gray-600">Please wait while your ticket is being submitted.</p>
+                            </>
+                        ) : (
+                            <>
+                                <CheckCircle className="text-green-600 mx-auto mb-4" size={48} />
+                                <h2 className="text-xl font-bold text-green-800 mb-3">Ticket Created Successfully!</h2>
+                                <p className="mb-6 text-base">Your ticket <span className="font-mono font-semibold text-blue-700">{createdTicketInfo?.display_id}</span> has been submitted successfully!</p>
+                                <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                                    <button
+                                        className="px-6 py-2 bg-green-600 text-white rounded-md text-sm font-semibold hover:bg-green-700 transition w-full sm:w-auto"
+                                        onClick={handleViewCreatedTicket}
+                                    >
+                                        View Ticket
+                                    </button>
+                                    <button
+                                        className="px-6 py-2 bg-gray-200 text-gray-800 rounded-md text-sm font-semibold hover:bg-gray-300 transition w-full sm:w-auto"
+                                        onClick={handleGoToMyTickets}
+                                    >
+                                        Close
+                                    </button>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                </div>
+            )}
+
             {/* Top Banner Header - make it fixed and full width */}
-            <header
-                className="fixed top-0 bg-white text-grey flex items-center justify-between shadow-sm border-b border-gray-200/60 flex-shrink-0 z-50 transition-all duration-300 ease-in-out"
-                style={{
-                    height: '48px',
-                    minHeight: '48px',
-                    padding: '0 16px',
-                    left: currentUser && !isAuthLoading && location.pathname !== '/login' ? (isSidebarExpanded ? 184 : 56) : 0,
-                    width: currentUser && !isAuthLoading && location.pathname !== '/login' ? `calc(100% - ${(isSidebarExpanded ? 184 : 56)}px)` : '100%'
-                }}
-            >
+            {currentUser && !isAuthLoading && location.pathname !== '/login' && location.pathname !== '/register' && (
+                <header
+                    className="fixed top-0 bg-white text-grey flex items-center justify-between shadow-sm border-b border-gray-200/60 flex-shrink-0 z-50 transition-all duration-300 ease-in-out"
+                    style={{
+                        height: '48px',
+                        minHeight: '48px',
+                        padding: '0 16px',
+                        left: isSidebarExpanded ? 184 : 56,
+                        width: `calc(100% - ${(isSidebarExpanded ? 184 : 56)}px)`
+                    }}
+                >
                 {/* Update the logo container to remove extra left margin/padding and align with sidebar menu items */}
                 {currentUser && (['admin', 'site_admin', 'super_admin'].includes(currentUser.role)) && (
                     <Link to="/dashboard" className={`flex items-center px-3 py-1.5 text-sm font-medium transition-all duration-200 hover:bg-gray-100 hover:text-gray-800 ${location.pathname === '/dashboard' ? 'bg-gray-200 text-gray-800' : 'text-gray-700'}`}> 
@@ -1001,7 +1099,7 @@ const App = () => {
                         <div className="relative inline-block">
                             <button 
                                 className="p-2  hover:bg-blue-50 transition-all duration-200"
-                                onClick={() => setIsNotificationMenuOpen(open => !open)}
+                                onClick={() => setIsNotificationMenuOpen(true)}
                             >
                                 <BellRing
                                     width={20}
@@ -1068,6 +1166,7 @@ const App = () => {
                     </div>
                 )}
             </header>
+            )}
 
             {/* Left Side Menu (always visible when logged in) */}
             {currentUser && !isAuthLoading && location.pathname !== '/login' && (
@@ -1182,21 +1281,6 @@ const App = () => {
                                         </motion.div>
                                     )}
                                     
-                                    <Link to="/insights" className={`group flex items-center px-3 py-1  text-sm font-medium transition-all duration-200 hover:bg-gray-100 hover:text-gray-800 ${location.pathname === '/insights' ? 'bg-gray-200 text-gray-800' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
-                                        { !isSidebarExpanded ? (
-                                            <TooltipBubble title="Insights">
-                                                <div className="flex items-center justify-center w-6 h-6">
-                                                    <TrendingUp size={20} className="flex-shrink-0" />
-                                                </div>
-                                            </TooltipBubble>
-                                        ) : (
-                                            <div className="flex items-center justify-center w-5 h-5 mr-3">
-                                                <TrendingUp size={18} className="flex-shrink-0" />
-                                            </div>
-                                        )}
-                                        <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">Insights</motion.span>
-                                    </Link>
-                                    
                                     <Link to="/reports" className={`group flex items-center px-3 py-1  text-sm font-medium transition-all duration-200 hover:bg-gray-100 hover:text-gray-800 ${location.pathname === '/reports' ? 'bg-gray-200 text-gray-800' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                         { !isSidebarExpanded ? (
                                             <TooltipBubble title="Reports">
@@ -1242,21 +1326,6 @@ const App = () => {
                                             </div>
                                         )}
                                         <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">Reports</motion.span>
-                                    </Link>
-                                    
-                                    <Link to="/insights" className={`group flex items-center px-3 py-1  text-sm font-medium transition-all duration-200 hover:bg-gray-100 hover:text-gray-800 ${location.pathname === '/insights' ? 'bg-gray-200 text-gray-800' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
-                                        { !isSidebarExpanded ? (
-                                            <TooltipBubble title="Insights">
-                                                <div className="flex items-center justify-center w-6 h-6">
-                                                    <TrendingUp size={20} className="flex-shrink-0" />
-                                                </div>
-                                            </TooltipBubble>
-                                        ) : (
-                                            <div className="flex items-center justify-center w-5 h-5 mr-3">
-                                                <TrendingUp size={18} className="flex-shrink-0" />
-                                            </div>
-                                        )}
-                                        <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">Insights</motion.span>
                                     </Link>
                                 </>
                             ) : currentUser.role === 'site_admin' ? (
@@ -1447,7 +1516,7 @@ const App = () => {
                 initial={false}
                 animate={currentUser && !isAuthLoading ? (isSidebarExpanded ? "expanded" : "collapsed") : { width: '100%' }}
                 variants={mainContentVariants}
-                style={currentUser && !isAuthLoading && location.pathname !== '/login' ? { 
+                style={currentUser && !isAuthLoading && location.pathname !== '/login' && location.pathname !== '/register' ? { 
                     left: isSidebarExpanded ? 184 : 56, 
                     position: 'fixed',
                     top: 48,
@@ -1498,25 +1567,16 @@ const App = () => {
                                         <AccessDeniedComponent />
                                 } />
                                 <Route path="/assigned-to-me" element={
-                                    (['support', 'admin', 'site_admin', 'super_admin'].includes(currentUser.role)) ?
+                                    (['engineer', 'support', 'admin', 'site_admin', 'super_admin'].includes(currentUser.role)) ?
                                         <AllTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} initialFilterAssignment="assigned_to_me" showFilters={false} isSidebarExpanded={isSidebarExpanded} /> :
                                         <AccessDeniedComponent />
                                 } />
                                 <Route path="/my-tickets" element={<MyTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} isSidebarExpanded={isSidebarExpanded} />} />
                                 <Route path="/create-ticket" element={
-                                    <Modal
-                                        isOpen={true}
-                                        onClose={() => navigate(-1)}
-                                        title="Create Ticket"
-                                    >
-                                        <CreateTicketComponent
-                                            user={currentUser}
-                                            showFlashMessage={showFlashMessage}
-                                            onTicketCreated={handleTicketCreated}
-                                            navigateTo={navigateTo}
-                                            onClose={() => navigate(-1)}
-                                        />
-                                    </Modal>
+                                    // Modal is now rendered at root level, so just show a placeholder
+                                    <div className="flex items-center justify-center h-full">
+                                        <div className="text-gray-500">Loading create ticket form...</div>
+                                    </div>
                                 } />
                                 {/* Dynamic route for Ticket Detail */}
                                 <Route path="/tickets/:ticketId" element={<TicketDetailComponent navigateTo={navigateTo} user={currentUser} showFlashMessage={showFlashMessage} />} />
@@ -1540,7 +1600,6 @@ const App = () => {
                                 <Route path="/siteadmin-management" element={['admin', 'site_admin', 'super_admin'].includes(currentUser.role) ? <SiteAdminManagementComponent /> : <AccessDeniedComponent />} />
                                 <Route path="/engineer-management" element={(['admin', 'site_admin', 'super_admin'].includes(currentUser.role)) ? <EngineerManagementComponent user={currentUser} showFlashMessage={showFlashMessage} /> : <AccessDeniedComponent />} />
                                 <Route path="/reports" element={['admin', 'site_admin', 'super_admin'].includes(currentUser.role) ? <ReportsComponent /> : <AccessDeniedComponent />} />
-                                <Route path="/insights" element={['admin', 'site_admin', 'super_admin'].includes(currentUser.role) ? <InsightsComponent /> : <AccessDeniedComponent />} />
                                 <Route path="/clients" element={currentUser.role === 'super_admin' ? <ClientManagementComponent user={currentUser} /> : <AccessDeniedComponent />} />
 
                                 {/* Catch-all for logged-in users if no other route matches */}
@@ -1560,9 +1619,11 @@ const App = () => {
             </section>
 
             {/* Footer */}
-            <footer className="bg-white text-gray-500 text-center p-2 w-full text-xs flex-shrink-0">
-                <p>&copy; {new Date().getFullYear()} Kriasol. All rights reserved.</p>
-            </footer>
+            {currentUser && !isAuthLoading && location.pathname !== '/login' && location.pathname !== '/register' && (
+                <footer className="bg-white text-gray-500 text-center p-2 w-full text-xs flex-shrink-0">
+                    <p>&copy; {new Date().getFullYear()} Kriasol. All rights reserved.</p>
+                </footer>
+            )}
         </motion.div>
     </div>
 );

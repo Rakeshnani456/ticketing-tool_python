@@ -22,9 +22,12 @@ import { app, dbClient } from '../../config/firebase';
  * @param {function} props.showFlashMessage - Function to display a temporary message to the user.
  * @param {function} props.onTicketCreated - Callback function to notify parent after successful ticket creation.
  * @param {function} props.navigateTo - Function to navigate to different pages in the app.
+ * @param {function} props.onSuccessStateChange - Function to notify parent about success state changes.
+ * @param {function} props.onTicketSubmissionStart - Function to notify parent when ticket submission starts.
+ * @param {function} props.onTicketSubmissionError - Function to notify parent when ticket submission fails.
  * @returns {JSX.Element} The ticket creation form.
  */
-const CreateTicketComponent = ({ user, onClose, showFlashMessage, onTicketCreated, navigateTo }) => {
+const CreateTicketComponent = ({ user, onClose, showFlashMessage, onTicketCreated, navigateTo, onSuccessStateChange, onTicketSubmissionStart, onTicketSubmissionError }) => {
     const [formData, setFormData] = useState({
         request_for_email: user?.email || '',
         category: 'troubleshoot',
@@ -39,10 +42,7 @@ const CreateTicketComponent = ({ user, onClose, showFlashMessage, onTicketCreate
     const [attachmentFiles, setAttachmentFiles] = useState([]);
     const [uploadingAttachments, setUploadingAttachments] = useState(false);
     const [submissionStatus, setSubmissionStatus] = useState('idle');
-    const [createdTicketId, setCreatedTicketId] = useState(null);
-    const [createdTicketDisplayId, setCreatedTicketDisplayId] = useState(null);
     const [errorMessage, setErrorMessage] = useState('');
-    const [showSuccessPopup, setShowSuccessPopup] = useState(false);
     const fileInputRef = useRef();
 
     const categories = [
@@ -118,18 +118,15 @@ const CreateTicketComponent = ({ user, onClose, showFlashMessage, onTicketCreate
                 });
 
                 const data = await response.json();
-                console.log('Upload response:', data); // <-- Add this line
+                console.log('Upload response:', data);
                 if (response.ok && data.files && data.files.length > 0) {
                     uploadedAttachmentData.push({ url: data.files[0].url, fileName: data.files[0].originalFilename });
-                    // Optionally set a success state here if you have one
                 } else {
                     showFlashMessage(`Failed to upload ${file.name}: ${data.error || 'Server error'}`, 'error');
-                    // Optionally set an error state here if you have one
                 }
             } catch (error) {
                 console.error('Attachment upload error:', error);
                 showFlashMessage(`Network error during upload for ${file.name}.`, 'error');
-                // Optionally set an error state here if you have one
             }
         }
         setUploadingAttachments(false);
@@ -142,11 +139,19 @@ const CreateTicketComponent = ({ user, onClose, showFlashMessage, onTicketCreate
         setSubmissionStatus('creating');
         setErrorMessage('');
 
+        // Close the modal immediately and notify parent that submission is starting
+        onClose();
+        if (onTicketSubmissionStart) {
+            onTicketSubmissionStart();
+        }
+
         try {
             const uploadedAttachmentData = await uploadAttachments();
 
             if (attachmentFiles.length > 0 && uploadedAttachmentData.length === 0) {
-                setErrorMessage('No attachments were uploaded successfully.');
+                if (onTicketSubmissionError) {
+                    onTicketSubmissionError('No attachments were uploaded successfully.');
+                }
                 setSubmissionStatus('error');
                 setLoading(false);
                 return;
@@ -173,10 +178,14 @@ const CreateTicketComponent = ({ user, onClose, showFlashMessage, onTicketCreate
             const data = await response.json();
             if (response.ok) {
                 setSubmissionStatus('success');
-                setCreatedTicketId(data.id);
-                setCreatedTicketDisplayId(data.display_id);
-                showFlashMessage('Ticket created successfully!', 'success');
-                setShowSuccessPopup(true);
+                
+                // Notify parent about success
+                onTicketCreated();
+                if (onSuccessStateChange) {
+                    onSuccessStateChange(true, { id: data.id, display_id: data.display_id });
+                }
+                
+                // Reset form
                 setFormData({
                     request_for_email: user?.email || '',
                     category: 'troubleshoot',
@@ -188,28 +197,23 @@ const CreateTicketComponent = ({ user, onClose, showFlashMessage, onTicketCreate
                     attachments: []
                 });
                 setAttachmentFiles([]);
-                onTicketCreated();
             } else {
                 setSubmissionStatus('error');
-                setErrorMessage(data.error || 'Failed to create ticket.');
+                const errorMsg = data.error || 'Failed to create ticket.';
+                if (onTicketSubmissionError) {
+                    onTicketSubmissionError(errorMsg);
+                }
             }
         } catch (error) {
             console.error('Create ticket error:', error);
             setSubmissionStatus('error');
-            setErrorMessage('Network error or server unreachable.');
+            const errorMsg = 'Network error or server unreachable.';
+            if (onTicketSubmissionError) {
+                onTicketSubmissionError(errorMsg);
+            }
         } finally {
             setLoading(false);
         }
-    };
-
-    const handleViewTicket = () => {
-        if (createdTicketId) {
-            navigateTo('/tickets', createdTicketId);
-        }
-    };
-
-    const handleGoToMyTickets = () => {
-        navigateTo('myTickets');
     };
 
     const handleContactNumberChange = (e) => {
@@ -220,33 +224,6 @@ const CreateTicketComponent = ({ user, onClose, showFlashMessage, onTicketCreate
         setSubmissionStatus('idle');
         setErrorMessage('');
     };
-
-    // Success Popup - designed to be compact and centered
-    if (showSuccessPopup) {
-        return (
-            <div className="flex flex-col items-center justify-center w-full h-full p-4"> {/* Use h-full to fill parent height */}
-                <div className="bg-white rounded-lg shadow-lg w-full max-w-sm text-center border border-green-200 p-4"> {/* Max-width for popup */}
-                    <CheckCircle className="text-green-600 mx-auto mb-2" size={32} />
-                    <h2 className="text-base font-bold text-green-800 mb-1">Ticket Created!</h2>
-                    <p className="mb-3 text-sm">ID: <span className="font-mono font-semibold text-blue-700">{createdTicketDisplayId}</span></p>
-                    <div className="flex flex-col sm:flex-row gap-2 justify-center"> {/* Flex-col for small, flex-row for larger */}
-                        <button
-                            className="px-3 py-1 bg-green-600 text-white rounded-md text-sm font-semibold hover:bg-green-700 transition w-full sm:w-auto"
-                            onClick={handleViewTicket}
-                        >
-                            View Ticket
-                        </button>
-                        <button
-                            className="px-3 py-1 bg-gray-200 text-gray-800 rounded-md text-sm font-semibold hover:bg-gray-300 transition w-full sm:w-auto"
-                            onClick={onClose}
-                        >
-                            Close
-                        </button>
-                    </div>
-                </div>
-            </div>
-        );
-    }
 
     return (
         // Main form container: max-w-full to ensure it doesn't overflow, p-4 for padding
@@ -382,55 +359,23 @@ const CreateTicketComponent = ({ user, onClose, showFlashMessage, onTicketCreate
                         )}
                     </div>
 
-                    {submissionStatus !== 'success' && (
-                        <div className="flex flex-col sm:flex-row gap-2 mt-3 sm:mt-0 w-full sm:w-auto"> {/* Buttons stack on small screens */}
-                            <SecondaryButton onClick={onClose} className="w-full sm:w-auto px-2 py-1 text-xs" disabled={loading}>
-                                Cancel
-                            </SecondaryButton>
-                            <PrimaryButton
-                                type="submit"
-                                loading={loading || uploadingAttachments ? (uploadingAttachments ? "Uploading..." : "Creating...") : null}
-                                Icon={Send}
-                                className="w-full sm:w-auto px-2 py-1 text-xs"
-                                disabled={loading}
-                            >
-                                Submit
-                            </PrimaryButton>
-                        </div>
-                    )}
+                    <div className="flex flex-col sm:flex-row gap-2 mt-3 sm:mt-0 w-full sm:w-auto"> {/* Buttons stack on small screens */}
+                        <SecondaryButton onClick={onClose} className="w-full sm:w-auto px-2 py-1 text-xs" disabled={loading}>
+                            Cancel
+                        </SecondaryButton>
+                        <PrimaryButton
+                            type="submit"
+                            loading={loading || uploadingAttachments ? (uploadingAttachments ? "Uploading..." : "Creating...") : null}
+                            Icon={Send}
+                            className="w-full sm:w-auto px-2 py-1 text-xs"
+                            disabled={loading}
+                        >
+                            Submit
+                        </PrimaryButton>
+                    </div>
                 </div>
 
-                {/* Status Messages (always full width, centered) */}
-                {submissionStatus === 'creating' && (
-                    <div className="col-span-full flex items-center justify-center p-2 text-xs text-blue-800 bg-blue-50 rounded mt-3">
-                        <Loader2 size={12} className="animate-spin mr-1" />
-                        <span>Creating ticket...</span>
-                    </div>
-                )}
-                {submissionStatus === 'success' && (
-                    <div className="col-span-full flex flex-col items-center justify-center p-3 text-center text-green-800 bg-green-50 rounded border border-green-200 mt-3">
-                        <CheckCircle size={16} className="text-green-600 mb-1" />
-                        <p className="font-semibold text-xs">
-                            Ticket <span onClick={handleViewTicket} className="text-blue-600 hover:underline cursor-pointer">
-                                {createdTicketDisplayId}
-                            </span> created successfully!
-                        </p>
-                        <div className="flex flex-col sm:flex-row gap-2 mt-2 w-full sm:w-auto">
-                            <PrimaryButton onClick={handleViewTicket} Icon={CheckCircle} className="w-full sm:w-auto px-2 py-1 bg-green-600 hover:bg-green-700 text-xs">
-                                View Ticket
-                            </PrimaryButton>
-                            <SecondaryButton onClick={handleGoToMyTickets} className="w-full sm:w-auto px-2 py-1 text-xs">
-                                My Tickets
-                            </SecondaryButton>
-                        </div>
-                    </div>
-                )}
-                {submissionStatus === 'error' && errorMessage && (
-                    <div className="col-span-full flex items-center justify-center p-2 text-xs text-red-800 bg-red-50 rounded border border-red-200 mt-3">
-                        <XCircle size={12} className="mr-1" />
-                        <span>Error: {errorMessage}</span>
-                    </div>
-                )}
+
             </form>
         </div>
     );

@@ -2,9 +2,31 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import {
     Button, Chip, TextField, Box, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
-    IconButton, Snackbar, Alert, Typography, Popover, Collapse, Dialog, DialogTitle, DialogContent, DialogActions, MenuItem, Select, useMediaQuery, Card, CardContent, CardActions, Grid, CircularProgress
+    IconButton, Snackbar, Alert, Typography, Popover, Collapse, Dialog, DialogTitle, DialogContent, DialogActions, MenuItem, Select, useMediaQuery, Card, CardContent, CardActions, Grid, CircularProgress,
+    FormControl, InputLabel, OutlinedInput, FormHelperText, Tooltip, TablePagination
 } from '@mui/material';
-import { Edit as EditIcon, Delete as DeleteIcon, Add as AddIcon, Clear as ClearIcon, VpnKey as VpnKeyIcon, LockReset as LockResetIcon, Save as SaveIcon, Group as GroupIcon } from '@mui/icons-material';
+import { 
+    Edit as EditIcon, 
+    Delete as DeleteIcon, 
+    Add as AddIcon, 
+    Clear as ClearIcon, 
+    VpnKey as VpnKeyIcon, 
+    LockReset as LockResetIcon, 
+    Save as SaveIcon, 
+    Group as GroupIcon,
+    Business as BusinessIcon,
+    Person as PersonIcon,
+    Email as EmailIcon,
+    Lock as LockIcon,
+    Info as InfoIcon,
+    Phone as PhoneIcon,
+    SupervisorAccount as SupervisorAccountIcon,
+    Work as WorkIcon,
+    Badge as BadgeIcon,
+    Refresh as RefreshIcon,
+    Close as CloseIcon,
+    AdminPanelSettings as AdminIcon
+} from '@mui/icons-material';
 import SearchIcon from '@mui/icons-material/Search';
 import { API_BASE_URL } from '../../config/constants';
 import './UserManagementComponent.css';
@@ -93,12 +115,12 @@ function generatePassword(length = 10) {
 const USER_TEMPLATE_HEADERS = [
   'firstName',
   'lastName',
+  'employeeId',
   'email',
+  'designation',
   'contactNumber',
   'managerEmail',
   'employmentType',
-  'designation',
-  'employeeId',
 ];
 
 const UserManagementComponent = ({ user, showFlashMessage }) => {
@@ -143,6 +165,10 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
     const previousClientsRef = useRef([]);
     const [clientFilter, setClientFilter] = useState('');
     const [highlightedClient, setHighlightedClient] = useState('');
+    const [page, setPage] = useState(0);
+    const [rowsPerPage, setRowsPerPage] = useState(10);
+    const [lastFetchTime, setLastFetchTime] = useState(null);
+    const [passwordChangeNotifications, setPasswordChangeNotifications] = useState({});
 
     const handleToggleClientCollapse = (client) => {
       setCollapsedClients(prev => ({ ...prev, [client]: !prev[client] }));
@@ -219,101 +245,52 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
 
     useEffect(() => {
         fetchClients();
-    }, [fetchClients]);
+    }, []);
 
     useEffect(() => {
         if (!user || !user.firebaseUser) {
             console.log("No user or firebaseUser available, skipping listener setup");
             return;
         }
+        
+        console.log("Setting up users data fetching...");
         setLoading(true);
         setError(null);
-        console.log("Setting up real-time users listener...");
         
-        const fetchUsersFromAPI = async () => {
-            try {
-                console.log("Falling back to API method...");
-                
-                if (previousClientsRef.current.length === 0) {
-                    await fetchClients();
-                }
-                
-                const idToken = await user.firebaseUser.getIdToken();
-                const response = await fetch(`${API_BASE_URL}/api/users`, {
-                    headers: {
-                        'Authorization': `Bearer ${idToken}`,
-                        'Content-Type': 'application/json'
-                    }
-                });
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                }
-                const fetchedUsers = await response.json();
-                console.log("Fetched users from API:", fetchedUsers.length);
-                const usersWithClientDetails = fetchedUsers.map(u => {
-                    const clientMatch = previousClientsRef.current.find(c => c['Client name'] === u.client_name);
-                    return {
-                        ...u,
-                        asset_id: u.asset_id || u.assetid || '',
-                        domain: clientMatch ? clientMatch.Domain : (u.domain || ''),
-                        clientname: clientMatch ? clientMatch['Client name'] : (u.client_name || 'Unknown Client'),
-                        companyName: u.client_name || u.companyName || 'Unknown Company',
-                        firstName: u.firstName || '',
-                        lastName: u.lastName || '',
-                        contactNumber: u.contactNumber || '',
-                        managerEmail: u.managerEmail || '',
-                        employmentType: u.employmentType || '',
-                        designation: u.designation || '',
-                        employeeId: u.employeeId || '',
-                    };
-                });
-                console.log("Processed users with client details:", usersWithClientDetails.length);
-                if (usersWithClientDetails.length > 0) {
-                    if (!areUsersEqual(previousUsersRef.current, usersWithClientDetails)) {
-                        console.log("Updating users state with new data");
-                        setUsers(usersWithClientDetails);
-                        previousUsersRef.current = usersWithClientDetails;
-                    } else {
-                        console.log("Users data unchanged, skipping update");
-                    }
-                } else {
-                    console.log("No users found, setting empty array");
-                    setUsers([]);
-                    previousUsersRef.current = [];
-                }
-                
-                setLoading(false);
-                setError(null);
-            } catch (error) {
-                console.error("Error fetching users from API:", error);
-                setError(`API error: ${error.message}`);
-                setUsers([]);
-                setLoading(false);
-            }
-        };
+                let isInitialLoad = true;
         
+        // Use API method for initial load to avoid double loading (with cache support)
+        fetchUsersFromAPI(false);
+        
+        // Set up Firestore listener for real-time updates only
+        let unsubscribe = null;
         try {
             const usersRef = collection(db, 'users');
-            console.log("Created users collection reference:", usersRef);
+            console.log("Setting up Firestore listener for real-time updates...");
             
-            const unsubscribe = onSnapshot(usersRef, 
+            unsubscribe = onSnapshot(usersRef, 
                 async (snapshot) => {
+                    if (isInitialLoad) {
+                        isInitialLoad = false;
+                        return; // Skip the first Firestore update since we already have API data
+                    }
+                    
                     try {
                         console.log("Real-time update received, snapshot size:", snapshot.size);
                         
                         if (previousClientsRef.current.length === 0) {
                             await fetchClients();
                         }
+                        
                         const fetchedUsers = [];
                         snapshot.forEach((doc) => {
                             const userData = doc.data();
-                            console.log("Processing user document:", doc.id, userData);
                             fetchedUsers.push({
                                 uid: doc.id,
                                 ...userData
                             });
                         });
-                        console.log("Fetched users from Firestore:", fetchedUsers.length);
+                        
                         const usersWithClientDetails = fetchedUsers.map(u => {
                             const clientMatch = previousClientsRef.current.find(c => c['Client name'] === u.client_name);
                             return {
@@ -331,47 +308,37 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                                 employeeId: u.employeeId || '',
                             };
                         });
-                        console.log("Processed users with client details:", usersWithClientDetails.length);
-                        if (usersWithClientDetails.length > 0) {
+                        
                             if (!areUsersEqual(previousUsersRef.current, usersWithClientDetails)) {
-                                console.log("Updating users state with new data");
+                            console.log("Updating users state with real-time data");
                                 setUsers(usersWithClientDetails);
                                 previousUsersRef.current = usersWithClientDetails;
-                            } else {
-                                console.log("Users data unchanged, skipping update");
-                            }
-                        } else {
-                            console.log("No users found, setting empty array");
-                            setUsers([]);
-                            previousUsersRef.current = [];
+                            
+                            // Update cache with real-time data
+                            const currentTime = Date.now();
+                            localStorage.setItem('userManagement_cache', JSON.stringify(usersWithClientDetails));
+                            localStorage.setItem('userManagement_cacheTime', currentTime.toString());
+                            setLastFetchTime(currentTime);
                         }
-                        
-                        setLoading(false);
-                        setError(null);
                     } catch (error) {
                         console.error("Error processing real-time users update:", error);
-                        setError(`Error processing users: ${error.message}`);
-                        setUsers([]);
-                        setLoading(false);
                     }
                 },
                 (error) => {
                     console.error("Error in real-time users listener:", error);
-                    console.log("Falling back to API method due to Firestore error");
-                    fetchUsersFromAPI();
                 }
             );
-            
-            return () => {
-                console.log("Cleaning up real-time users listener...");
-                unsubscribe();
-            };
         } catch (error) {
             console.error("Error setting up Firestore listener:", error);
-            console.log("Falling back to API method due to setup error");
-            fetchUsersFromAPI();
         }
-    }, [user, fetchClients, db]);
+            
+            return () => {
+            console.log("Cleaning up users data fetching...");
+            if (unsubscribe) {
+                unsubscribe();
+        }
+        };
+    }, [user, db]);
 
     const handleAdd = () => {
         setAddMode(true);
@@ -505,8 +472,6 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
         setEditRowId(user.uid);
         setEditRowData({
             ...user,
-            showPasswordField: false,
-            password: '',
             emailPrefix: user.email ? user.email.split('@')[0] : '',
             domain: user.email ? user.email.split('@')[1] : (user.domain || ''),
         });
@@ -517,9 +482,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
         setEditRowData(prev => ({ ...prev, [name]: value }));
     };
 
-    const handleTogglePasswordField = () => {
-        setEditRowData(prev => ({ ...prev, showPasswordField: !prev.showPasswordField, password: '' }));
-    };
+
 
     const handleEditSave = async (uid) => {
         try {
@@ -542,19 +505,19 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                 asset_id: editRowData.asset_id,
             };
             
-            if (editRowData.showPasswordField && editRowData.password) {
-                updatePayload.password = editRowData.password;
-            }
-            
             Object.keys(updatePayload).forEach(key => {
                 if (updatePayload[key] === undefined) {
                     delete updatePayload[key];
                 }
             });
             
+            const idToken = await user.firebaseUser.getIdToken();
             const res = await fetch(`${API_BASE_URL}/api/users/${uid}`, {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Authorization': `Bearer ${idToken}`,
+                    'Content-Type': 'application/json' 
+                },
                 body: JSON.stringify(updatePayload),
             });
             
@@ -565,7 +528,23 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
             
             setEditRowId(null);
             setEditRowData({ ...initialUserState, showPasswordField: false });
-            setSnackbar({ open: true, message: 'User updated successfully.', severity: 'success' });
+            // Show inline notification for this specific user
+            setPasswordChangeNotifications(prev => ({
+              ...prev,
+              [uid]: {
+                message: 'edit-success',
+                timestamp: Date.now()
+              }
+            }));
+            
+            // Auto-hide the notification after 5 seconds
+            setTimeout(() => {
+              setPasswordChangeNotifications(prev => {
+                const newState = { ...prev };
+                delete newState[uid];
+                return newState;
+              });
+            }, 5000);
         } catch (err) {
             setSnackbar({ open: true, message: err.message, severity: 'error' });
         }
@@ -573,7 +552,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
 
     const handleEditCancel = () => {
         setEditRowId(null);
-        setEditRowData({ ...initialUserState, showPasswordField: false });
+        setEditRowData({ ...initialUserState });
     };
 
     const handleDeleteClick = (event, uid, email) => {
@@ -589,8 +568,13 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
         if (!uid) return;
         
         try {
+            const idToken = await user.firebaseUser.getIdToken();
             const res = await fetch(`${API_BASE_URL}/api/users/${uid}`, {
-                method: 'DELETE'
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${idToken}`,
+                    'Content-Type': 'application/json'
+                }
             });
             
             if (!res.ok) {
@@ -598,7 +582,23 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                 throw new Error(errData.error || 'Failed to delete user');
             }
             
-            setSnackbar({ open: true, message: 'User deleted successfully.', severity: 'success' });
+            // Show inline notification for this specific user
+            setPasswordChangeNotifications(prev => ({
+              ...prev,
+              [uid]: {
+                message: 'delete-success',
+                timestamp: Date.now()
+              }
+            }));
+            
+            // Auto-hide the notification after 5 seconds
+            setTimeout(() => {
+              setPasswordChangeNotifications(prev => {
+                const newState = { ...prev };
+                delete newState[uid];
+                return newState;
+              });
+            }, 5000);
             userToDeleteUidRef.current = null;
             setCurrentUserEmailToDelete('');
         } catch (err) {
@@ -688,9 +688,13 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
           payload.client_name = user.companyName;
         }
         
+        const idToken = await user.firebaseUser.getIdToken();
         const res = await fetch(`${API_BASE_URL}/api/users`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Authorization': `Bearer ${idToken}`,
+            'Content-Type': 'application/json' 
+          },
           body: JSON.stringify(payload),
         });
         
@@ -727,9 +731,13 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
       }
       
       try {
+        const idToken = await user.firebaseUser.getIdToken();
         const res = await fetch(`${API_BASE_URL}/api/users/${pwdUserId}/password`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Authorization': `Bearer ${idToken}`,
+            'Content-Type': 'application/json' 
+          },
           body: JSON.stringify({ password: newPassword, mustChangePassword: true }),
         });
         
@@ -738,7 +746,24 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
           throw new Error(errData.error || 'Failed to change password');
         }
         
-        setSnackbar({ open: true, message: 'Password updated successfully.', severity: 'success' });
+        // Show inline notification for this specific user
+        setPasswordChangeNotifications(prev => ({
+          ...prev,
+          [pwdUserId]: {
+            message: 'password reset-success',
+            timestamp: Date.now()
+          }
+        }));
+        
+        // Auto-hide the notification after 5 seconds
+        setTimeout(() => {
+          setPasswordChangeNotifications(prev => {
+            const newState = { ...prev };
+            delete newState[pwdUserId];
+            return newState;
+          });
+        }, 5000);
+         
         closeChangePwdModal();
       } catch (err) {
         setSnackbar({ open: true, message: err.message, severity: 'error' });
@@ -759,12 +784,12 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
         companyName: '12%',
         firstName: '8%',
         lastName: '8%',
+        employeeId: '8%',
         email: '18%',
+        designation: '8%',
         contactNumber: '8%',
         managerEmail: '12%',
         employmentType: '8%',
-        designation: '8%',
-        employeeId: '8%',
         actions: '10%',
     };
 
@@ -773,12 +798,12 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
             return {
                 firstName: '10%',
                 lastName: '10%',
+                employeeId: '10%',
                 email: '22%',
+                designation: '10%',
                 contactNumber: '10%',
                 managerEmail: '15%',
                 employmentType: '10%',
-                designation: '10%',
-                employeeId: '10%',
                 actions: '13%',
             };
         }
@@ -998,6 +1023,106 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
       setCredentialsDownloaded(true);
     };
 
+    const handleChangePage = (event, newPage) => {
+      setPage(newPage);
+    };
+
+        const handleChangeRowsPerPage = (event) => {
+        setRowsPerPage(parseInt(event.target.value, 10));
+        setPage(0);
+    };
+
+    const fetchUsersFromAPI = async (forceRefresh = false) => {
+        try {
+            // Check cache first (unless force refresh is requested)
+            if (!forceRefresh) {
+                const cachedData = localStorage.getItem('userManagement_cache');
+                const cacheTime = localStorage.getItem('userManagement_cacheTime');
+                
+                if (cachedData && cacheTime) {
+                    const cacheAge = Date.now() - parseInt(cacheTime);
+                    const cacheValidDuration = 5 * 60 * 1000; // 5 minutes
+                    
+                    if (cacheAge < cacheValidDuration) {
+                        console.log("Loading users from cache...");
+                        const cachedUsers = JSON.parse(cachedData);
+                        setUsers(cachedUsers);
+                        previousUsersRef.current = cachedUsers;
+                        setLastFetchTime(parseInt(cacheTime));
+                        setLoading(false);
+                        setError(null);
+                        return;
+                    } else {
+                        console.log("Cache expired, fetching fresh data...");
+                    }
+                }
+            }
+            
+            console.log("Fetching users from API...");
+            
+            if (previousClientsRef.current.length === 0) {
+                await fetchClients();
+            }
+            
+            const idToken = await user.firebaseUser.getIdToken();
+            const response = await fetch(`${API_BASE_URL}/api/users`, {
+                headers: {
+                    'Authorization': `Bearer ${idToken}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            const fetchedUsers = await response.json();
+            console.log("Fetched users from API:", fetchedUsers.length);
+            
+            const usersWithClientDetails = fetchedUsers.map(u => {
+                const clientMatch = previousClientsRef.current.find(c => c['Client name'] === u.client_name);
+                return {
+                    ...u,
+                    asset_id: u.asset_id || u.assetid || '',
+                    domain: clientMatch ? clientMatch.Domain : (u.domain || ''),
+                    clientname: clientMatch ? clientMatch['Client name'] : (u.client_name || 'Unknown Client'),
+                    companyName: u.client_name || u.companyName || 'Unknown Company',
+                    firstName: u.firstName || '',
+                    lastName: u.lastName || '',
+                    contactNumber: u.contactNumber || '',
+                    managerEmail: u.managerEmail || '',
+                    employmentType: u.employmentType || '',
+                    designation: u.designation || '',
+                    employeeId: u.employeeId || '',
+                };
+            });
+            
+            if (!areUsersEqual(previousUsersRef.current, usersWithClientDetails)) {
+                console.log("Updating users state with API data");
+                setUsers(usersWithClientDetails);
+                previousUsersRef.current = usersWithClientDetails;
+                
+                // Cache the data
+                const currentTime = Date.now();
+                localStorage.setItem('userManagement_cache', JSON.stringify(usersWithClientDetails));
+                localStorage.setItem('userManagement_cacheTime', currentTime.toString());
+                setLastFetchTime(currentTime);
+            }
+            
+            setLoading(false);
+            setError(null);
+        } catch (error) {
+            console.error("Error fetching users from API:", error);
+            setError(`API error: ${error.message}`);
+            setUsers([]);
+            setLoading(false);
+        }
+    };
+
+    const handleRefresh = async () => {
+        console.log("Manual refresh requested...");
+        setLoading(true);
+        await fetchUsersFromAPI(true); // Force refresh
+    };
+
     return (
         <div className="user-management-container">
             <style>
@@ -1023,7 +1148,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                 `}
             </style>
             <Box sx={{ 
-                p: { xs: 2, sm: 3 }, 
+                p: 2, 
                 maxWidth: '100%', 
                 overflowX: 'auto',
                 backgroundColor: '#f8f9fa',
@@ -1035,23 +1160,23 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                     flexDirection: { xs: 'column', sm: 'row' }, 
                     justifyContent: 'space-between', 
                     alignItems: { xs: 'flex-start', sm: 'center' },
-                    mb: 3,
+                    mb: 2,
                     pb: 2,
                     borderBottom: '1px solid #e0e0e0'
                 }}>
                     <Box>
                         <Typography 
-                            variant="h4" 
+                            variant="h6" 
                             component="h1" 
                             sx={{ 
-                                fontWeight: 600, 
-                                color: '#1976d2',
+                                fontWeight: 500, 
+                                color: '#2c3e50',
                                 mb: 0.5
                             }}
                         >
                             User Management
                         </Typography>
-                        <Typography variant="body2" color="textSecondary">
+                        <Typography variant="body2" color="textSecondary" sx={{ fontSize: '0.75rem' }}>
                             Manage user accounts and permissions
                         </Typography>
                     </Box>
@@ -1066,15 +1191,20 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                         <Button
                             variant="contained"
                             color="primary"
-                            startIcon={<AddIcon />}
+                            startIcon={<AddIcon sx={{ fontSize: '0.75rem' }} />}
                             onClick={openAddUserModal}
+                            size="small"
                             sx={{
-                                borderRadius: 2,
+                                borderRadius: 0.5,
                                 textTransform: 'none',
                                 fontWeight: 500,
-                                boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                                fontSize: '0.75rem',
+                                px: 1.25,
+                                py: 0.2,
+                                minHeight: '24px',
+                                boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
                                 '&:hover': {
-                                    boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
+                                    boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
                                 }
                             }}
                         >
@@ -1084,30 +1214,53 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                             variant="outlined"
                             color="primary"
                             onClick={openImportModal}
+                            size="small"
                             sx={{
-                                borderRadius: 2,
+                                borderRadius: 0.5,
                                 textTransform: 'none',
                                 fontWeight: 500,
-                                borderWidth: 1.5,
+                                fontSize: '0.75rem',
+                                px: 1.25,
+                                py: 0.2,
+                                minHeight: '24px',
+                                borderWidth: 1,
                                 '&:hover': {
-                                    borderWidth: 2,
+                                    borderWidth: 1.5,
                                 }
                             }}
                         >
                             Import Users
                         </Button>
+                        <Button
+                            variant="outlined"
+                            color="primary"
+                            onClick={handleRefresh}
+                            disabled={loading}
+                            startIcon={<RefreshIcon sx={{ fontSize: '0.75rem' }} />}
+                            size="small"
+                            sx={{
+                                borderRadius: 0.5,
+                                textTransform: 'none',
+                                fontWeight: 500,
+                                fontSize: '0.75rem',
+                                px: 1.25,
+                                py: 0.2,
+                                minHeight: '24px',
+                                borderWidth: 1,
+                                '&:hover': {
+                                    borderWidth: 1.5,
+                                }
+                            }}
+                        >
+                            Refresh
+                        </Button>
                     </Box>
                 </Box>
 
                 {/* Search and Filter Section */}
-                <Paper 
-                    elevation={0} 
+                <Box 
                     sx={{ 
-                        p: 2, 
-                        mb: 3, 
-                        borderRadius: 2, 
-                        backgroundColor: '#ffffff',
-                        border: '1px solid #e0e0e0',
+                        mb: 2, 
                         display: 'flex',
                         flexDirection: { xs: 'column', sm: 'row' },
                         gap: 2,
@@ -1123,19 +1276,20 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                         sx={{ 
                             maxWidth: { sm: 400 },
                             '& .MuiOutlinedInput-root': {
-                                borderRadius: 2,
+                                borderRadius: 1,
+                                fontSize: '0.75rem'
                             }
                         }}
                         InputProps={{
                             startAdornment: (
                                 <InputAdornment position="start">
-                                    <SearchIcon color="disabled" />
+                                    <SearchIcon color="disabled" sx={{ fontSize: '1rem' }} />
                                 </InputAdornment>
                             ),
                             endAdornment: search && (
                                 <InputAdornment position="end">
                                     <IconButton size="small" onClick={() => setSearch('')}>
-                                        <ClearIcon fontSize="small" />
+                                        <ClearIcon fontSize="small" sx={{ fontSize: '1rem' }} />
                                     </IconButton>
                                 </InputAdornment>
                             )
@@ -1144,65 +1298,96 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                     
                     {clientFilter && (
                         <Chip
-                            icon={<GroupIcon />}
+                            icon={<GroupIcon sx={{ fontSize: '1rem' }} />}
                             label={`Filtered by: ${clientFilter}`}
                             onDelete={clearClientFilter}
                             color="primary"
                             variant="outlined"
+                            size="small"
                             sx={{
-                                borderRadius: 2,
+                                borderRadius: 1,
                                 fontWeight: 500,
+                                fontSize: '0.75rem',
                                 '& .MuiChip-deleteIcon': {
                                     color: '#1976d2',
                                 }
                             }}
                         />
                     )}
-                </Paper>
+                </Box>
 
                 {/* Add User Form */}
                 <Collapse in={addMode} timeout="auto" unmountOnExit>
                     <Paper 
                         elevation={0} 
                         sx={{ 
-                            p: 3, 
-                            mb: 3, 
-                            borderRadius: 2, 
+                            p: 2, 
+                            mb: 2, 
+                            borderRadius: 1, 
                             backgroundColor: '#ffffff',
                             border: '1px solid #e0e0e0',
                         }}
                     >
-                        <Typography variant="h6" sx={{ mb: 2, fontWeight: 500 }}>
+                        <Typography variant="h6" sx={{ mb: 1, fontWeight: 500, fontSize: '1rem' }}>
                             Add New User
                         </Typography>
                         <Box display="flex" flexWrap="wrap" gap={2}>
+                            {!(user && user.role === 'site_admin') && (
                             <Autocomplete
                                 options={previousClientsRef.current.map(c => c['Client name'])}
                                 value={addRowData.clientname || ''}
                                 onChange={handleAddClientChange}
                                 renderInput={(params) => (
-                                    <TextField {...params} label="Client Name" required size="small"
+                                        <TextField {...params} label="Company Name" required size="small"
                                         data-field-type="company"
-                                        InputLabelProps={{ style: { fontSize: '0.8rem' } }}
+                                        InputLabelProps={{ style: { fontSize: '1rem' } }}
                                         inputProps={{ ...params.inputProps, style: { fontSize: '0.8rem' } }}
-                                        placeholder="Client Name"
+                                            placeholder="Company Name"
                                         sx={{ minWidth: 200, flex: 1 }}
                                     />
                                 )}
                             />
+                            )}
                             <TextField
-                                label="Domain Name"
-                                name="domain"
-                                value={addRowData.domain}
+                                label="First Name"
+                                name="firstName"
+                                value={addRowData.firstName}
                                 onChange={handleAddChange}
                                 required
                                 size="small"
-                                data-field-type="company"
-                                InputLabelProps={{ style: { fontSize: '0.8rem' } }}
+                                data-field-type="name"
+                                InputLabelProps={{ style: { fontSize: '1rem' } }}
                                 inputProps={{ style: { fontSize: '0.8rem' } }}
-                                placeholder="Domain Name"
+                                placeholder="First Name"
                                 sx={{ minWidth: 150, flex: 1 }}
-                                disabled={!!addRowData.domain}
+                            />
+                            <TextField
+                                label="Last Name"
+                                name="lastName"
+                                value={addRowData.lastName}
+                                onChange={handleAddChange}
+                                required
+                                size="small"
+                                data-field-type="name"
+                                InputLabelProps={{ style: { fontSize: '1rem' } }}
+                                inputProps={{ style: { fontSize: '0.8rem' } }}
+                                placeholder="Last Name"
+                                sx={{ minWidth: 150, flex: 1 }}
+                            />
+                            <TextField
+                                label="Employee ID"
+                                name="employeeId"
+                                value={addRowData.employeeId}
+                                onChange={handleAddChange}
+                                required
+                                size="small"
+                                data-field-type="name"
+                                InputLabelProps={{ style: { fontSize: '1rem' } }}
+                                inputProps={{ style: { fontSize: '0.8rem' } }}
+                                placeholder="Employee ID"
+                                sx={{ minWidth: 150, flex: 1 }}
+                                error={addRowData.employeeId && checkDuplicateEmployeeId(addRowData.employeeId)}
+                                helperText={addRowData.employeeId && checkDuplicateEmployeeId(addRowData.employeeId) ? 'Employee ID already exists' : ''}
                             />
                             <TextField
                                 label="Email"
@@ -1218,7 +1403,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                                 required
                                 size="small"
                                 data-field-type="email"
-                                InputLabelProps={{ style: { fontSize: '0.8rem' } }}
+                                InputLabelProps={{ style: { fontSize: '1rem' } }}
                                 inputProps={{ style: { fontSize: '0.8rem' } }}
                                 placeholder="Email Prefix"
                                 sx={{ flex: 2 }}
@@ -1231,71 +1416,16 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                                 }}
                             />
                             <TextField
-                                label="Password"
-                                name="password"
-                                type="password"
-                                value={addRowData.password}
-                                onChange={handleAddChange}
-                                required
-                                size="small"
-                                data-field-type="password"
-                                InputLabelProps={{ style: { fontSize: '0.8rem' } }}
-                                inputProps={{ style: { fontSize: '0.8rem' } }}
-                                placeholder="Password"
-                                sx={{ flex: 1 }}
-                            />
-                            <TextField
-                                label="Asset ID"
-                                name="asset_id"
-                                value={addRowData.asset_id}
+                                label="Designation"
+                                name="designation"
+                                value={addRowData.designation}
                                 onChange={handleAddChange}
                                 required
                                 size="small"
                                 data-field-type="name"
                                 InputLabelProps={{ style: { fontSize: '0.8rem' } }}
                                 inputProps={{ style: { fontSize: '0.8rem' } }}
-                                placeholder="Asset ID"
-                                sx={{ minWidth: 150, flex: 1 }}
-                            />
-                            <TextField
-                                label="Employee ID"
-                                name="employeeId"
-                                value={addRowData.employeeId}
-                                onChange={handleAddChange}
-                                required
-                                size="small"
-                                data-field-type="name"
-                                InputLabelProps={{ style: { fontSize: '0.8rem' } }}
-                                inputProps={{ style: { fontSize: '0.8rem' } }}
-                                placeholder="Employee ID"
-                                sx={{ minWidth: 150, flex: 1 }}
-                                error={addRowData.employeeId && checkDuplicateEmployeeId(addRowData.employeeId)}
-                                helperText={addRowData.employeeId && checkDuplicateEmployeeId(addRowData.employeeId) ? 'Employee ID already exists' : ''}
-                            />
-                            <TextField
-                                label="First Name"
-                                name="firstName"
-                                value={addRowData.firstName}
-                                onChange={handleAddChange}
-                                required
-                                size="small"
-                                data-field-type="name"
-                                InputLabelProps={{ style: { fontSize: '0.8rem' } }}
-                                inputProps={{ style: { fontSize: '0.8rem' } }}
-                                placeholder="First Name"
-                                sx={{ minWidth: 150, flex: 1 }}
-                            />
-                            <TextField
-                                label="Last Name"
-                                name="lastName"
-                                value={addRowData.lastName}
-                                onChange={handleAddChange}
-                                required
-                                size="small"
-                                data-field-type="name"
-                                InputLabelProps={{ style: { fontSize: '0.8rem' } }}
-                                inputProps={{ style: { fontSize: '0.8rem' } }}
-                                placeholder="Last Name"
+                                placeholder="Designation"
                                 sx={{ minWidth: 150, flex: 1 }}
                             />
                             <TextField
@@ -1306,7 +1436,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                                 required
                                 size="small"
                                 data-field-type="contact"
-                                InputLabelProps={{ style: { fontSize: '0.8rem' } }}
+                                InputLabelProps={{ style: { fontSize: '1rem' } }}
                                 inputProps={{ style: { fontSize: '0.8rem' } }}
                                 placeholder="Contact Number"
                                 sx={{ minWidth: 150, flex: 1 }}
@@ -1319,7 +1449,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                                 required
                                 size="small"
                                 data-field-type="email"
-                                InputLabelProps={{ style: { fontSize: '0.8rem' } }}
+                                InputLabelProps={{ style: { fontSize: '1rem' } }}
                                 inputProps={{ style: { fontSize: '0.8rem' } }}
                                 placeholder="Manager Email"
                                 sx={{ minWidth: 200, flex: 1 }}
@@ -1339,16 +1469,44 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                                 ))}
                             </Select>
                             <TextField
-                                label="Designation"
-                                name="designation"
-                                value={addRowData.designation}
+                                label="Password"
+                                name="password"
+                                type="password"
+                                value={addRowData.password}
+                                onChange={handleAddChange}
+                                required
+                                size="small"
+                                data-field-type="password"
+                                InputLabelProps={{ style: { fontSize: '1rem' } }}
+                                inputProps={{ style: { fontSize: '0.8rem' } }}
+                                placeholder="Password"
+                                sx={{ flex: 1 }}
+                            />
+                            <TextField
+                                label="Domain Name"
+                                name="domain"
+                                value={addRowData.domain}
+                                onChange={handleAddChange}
+                                required
+                                size="small"
+                                data-field-type="company"
+                                InputLabelProps={{ style: { fontSize: '1rem' } }}
+                                inputProps={{ style: { fontSize: '0.8rem' } }}
+                                placeholder="Domain Name"
+                                sx={{ minWidth: 150, flex: 1 }}
+                                disabled={!!addRowData.domain}
+                            />
+                            <TextField
+                                label="Asset ID"
+                                name="asset_id"
+                                value={addRowData.asset_id}
                                 onChange={handleAddChange}
                                 required
                                 size="small"
                                 data-field-type="name"
-                                InputLabelProps={{ style: { fontSize: '0.8rem' } }}
+                                InputLabelProps={{ style: { fontSize: '1rem' } }}
                                 inputProps={{ style: { fontSize: '0.8rem' } }}
-                                placeholder="Designation"
+                                placeholder="Asset ID"
                                 sx={{ minWidth: 150, flex: 1 }}
                             />
                         </Box>
@@ -1395,434 +1553,876 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                             overflow: 'hidden'
                         }}
                     >
-                        {clientOrder.length === 0 ? (
+                        {filteredUsers.length === 0 ? (
                             <Box sx={{ p: 4, textAlign: 'center' }}>
-                                <Typography variant="body1" color="textSecondary">
+                                <Typography variant="body1" color="textSecondary" sx={{ fontSize: '0.75rem' }}>
                                     No user profiles found.
                                 </Typography>
                             </Box>
                         ) : (
-                            clientOrder.map((client) => (
-                                <Box key={client} sx={{ mb: 3 }}>
-                                    <Box 
-                                        sx={{ 
-                                            p: 2, 
-                                            backgroundColor: '#f5f5f5',
-                                            display: 'flex', 
-                                            justifyContent: 'space-between', 
-                                            alignItems: 'center',
-                                            borderBottom: '1px solid #e0e0e0'
-                                        }}
-                                    >
-                                        <Typography variant="h6" sx={{ fontWeight: 500 }}>
-                                            {client} ({groupedUsers[client].length} user{groupedUsers[client].length !== 1 ? 's' : ''})
-                                        </Typography>
-                                        <Button
-                                            size="small"
-                                            onClick={() => handleToggleClientCollapse(client)}
-                                            sx={{ minWidth: 0, p: 1 }}
-                                        >
-                                            {collapsedClients[client] ? <AddIcon /> : <ClearIcon />}
-                                        </Button>
-                                    </Box>
-                                    
-                                    {collapsedClients[client] ? (
-                                        <Box sx={{ p: 2, textAlign: 'center', backgroundColor: '#fafafa' }}>
-                                            <Typography variant="body2" color="textSecondary">
-                                                Collapsed - {groupedUsers[client].length} users
-                                            </Typography>
-                                        </Box>
-                                    ) : (
-                                        <TableContainer>
-                                            <Table size="small">
-                                                <TableHead>
+                            <>
+                                <TableContainer sx={{ 
+                                    maxHeight: 400,
+                                    '&::-webkit-scrollbar': {
+                                        width: '6px !important',
+                                        height: '6px !important',
+                                    },
+                                    '&::-webkit-scrollbar-track': {
+                                        background: '#f1f1f1 !important',
+                                        borderRadius: '3px !important',
+                                    },
+                                    '&::-webkit-scrollbar-thumb': {
+                                        background: '#c1c1c1 !important',
+                                        borderRadius: '3px !important',
+                                        '&:hover': {
+                                            background: '#a8a8a8 !important',
+                                        },
+                                    },
+                                }}>
+                                    <Table size="small" sx={{ minWidth: 700, borderCollapse: 'collapse' }}>
+                                        <TableHead sx={{ bgcolor: '#f5f7fa' }}>
                                                     <TableRow>
-                                                        <TableCell sx={{ width: '50px', borderRight: '1px solid #e0e0e0', fontWeight: 700, fontSize: '0.9rem', color: '#1976d2' }}>No.</TableCell>
+                                                <TableCell sx={{ py: 0.5, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0', width: '5%' }}>
+                                                    #
+                                                </TableCell>
                                                         {!(user && user.role === 'site_admin') && (
-                                                            <TableCell sx={{ width: adjustedColumnWidths.companyName, borderRight: '1px solid #e0e0e0', fontWeight: 700, fontSize: '0.9rem', color: '#1976d2' }}>Company Name</TableCell>
-                                                        )}
-                                                        <TableCell sx={{ width: adjustedColumnWidths.firstName, borderRight: '1px solid #e0e0e0', fontWeight: 700, fontSize: '0.9rem', color: '#1976d2' }}>First Name</TableCell>
-                                                        <TableCell sx={{ width: adjustedColumnWidths.lastName, borderRight: '1px solid #e0e0e0', fontWeight: 700, fontSize: '0.9rem', color: '#1976d2' }}>Last Name</TableCell>
-                                                        <TableCell sx={{ width: adjustedColumnWidths.email, borderRight: '1px solid #e0e0e0', fontWeight: 700, fontSize: '0.9rem', color: '#1976d2' }}>Email</TableCell>
-                                                        <TableCell sx={{ width: adjustedColumnWidths.contactNumber, borderRight: (!isXs && !isSm) ? '1px solid #e0e0e0' : undefined, fontWeight: 700, fontSize: '0.9rem', color: '#1976d2' }}>Contact Number</TableCell>
-                                                        {!isXs && !isSm && <TableCell sx={{ width: adjustedColumnWidths.managerEmail, borderRight: '1px solid #e0e0e0', fontWeight: 700, fontSize: '0.9rem', color: '#1976d2' }}>Manager Email</TableCell>}
-                                                        {!isXs && !isSm && <TableCell sx={{ width: adjustedColumnWidths.employmentType, borderRight: '1px solid #e0e0e0', fontWeight: 700, fontSize: '0.9rem', color: '#1976d2' }}>Employment Type</TableCell>}
-                                                        {!isXs && !isSm && <TableCell sx={{ width: adjustedColumnWidths.designation, borderRight: '1px solid #e0e0e0', fontWeight: 700, fontSize: '0.9rem', color: '#1976d2' }}>Designation</TableCell>}
-                                                        <TableCell sx={{ width: adjustedColumnWidths.employeeId, borderRight: (!isXs && !isSm) ? '1px solid #e0e0e0' : undefined, fontWeight: 700, fontSize: '0.9rem', color: '#1976d2' }}>Employee ID</TableCell>
-                                                        <TableCell sx={{ width: adjustedColumnWidths.actions, fontWeight: 700, fontSize: '0.9rem', color: '#1976d2' }}>Actions</TableCell>
+                                                    <TableCell sx={{ py: 0.5, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0', width: adjustedColumnWidths.companyName }}>
+                                                        Company Name
+                                                    </TableCell>
+                                                )}
+                                                <TableCell sx={{ py: 0.5, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0', width: adjustedColumnWidths.firstName }}>
+                                                    First Name
+                                                </TableCell>
+                                                <TableCell sx={{ py: 0.5, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0', width: adjustedColumnWidths.lastName }}>
+                                                    Last Name
+                                                </TableCell>
+                                                <TableCell sx={{ py: 0.5, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0', width: adjustedColumnWidths.employeeId }}>
+                                                    Employee ID
+                                                </TableCell>
+                                                <TableCell sx={{ py: 0.5, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0', width: adjustedColumnWidths.email }}>
+                                                    Email
+                                                </TableCell>
+                                                <TableCell sx={{ py: 0.5, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0', width: adjustedColumnWidths.designation }}>
+                                                    Designation
+                                                </TableCell>
+                                                <TableCell sx={{ py: 0.5, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0', width: adjustedColumnWidths.contactNumber }}>
+                                                    Contact
+                                                </TableCell>
+                                                <TableCell sx={{ py: 0.5, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0', width: adjustedColumnWidths.managerEmail }}>
+                                                    Manager Email
+                                                </TableCell>
+                                                <TableCell sx={{ py: 0.5, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0', width: adjustedColumnWidths.employmentType }}>
+                                                    Employment Type
+                                                </TableCell>
+                                                <TableCell align="right" sx={{ py: 0.5, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', width: adjustedColumnWidths.actions }}>
+                                                    Actions
+                                                </TableCell>
                                                     </TableRow>
                                                 </TableHead>
                                                 <TableBody>
-                                                    {groupedUsers[client].map((u, i) => (
+                                            {filteredUsers.length === 0 ? (
+                                                <TableRow>
+                                                    <TableCell colSpan={user && user.role === 'site_admin' ? 9 : 10} align="center" sx={{ py: 4 }}>
+                                                        <Typography variant="body2" color="textSecondary">
+                                                            No user profiles found.
+                                                        </Typography>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ) : (
+                                                filteredUsers
+                                                    .slice(filteredUsers.length > 10 ? page * rowsPerPage : 0, filteredUsers.length > 10 ? page * rowsPerPage + rowsPerPage : filteredUsers.length)
+                                                    .sort((a, b) => a.email.localeCompare(b.email))
+                                                    .map((u, i) => (
                                                         <TableRow 
                                                             key={u.uid}
                                                             hover
                                                             sx={{ 
-                                                                '&:hover': { backgroundColor: '#f5f5f5' },
-                                                                backgroundColor: isOwnRow(u) ? '#e3f2fd' : 'inherit'
+                                                                '&:nth-of-type(odd)': { bgcolor: '#fafbfc' },
+                                                                '&:hover': { bgcolor: '#f1f5f9' }
                                                             }}
                                                         >
-                                                            <TableCell sx={{ borderRight: '1px solid #e0e0e0', fontSize: '0.8rem', fontWeight: 600, color: '#666' }}>
-                                                                {i + 1}
+                                                            <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0', width: '5%' }}>
+                                                                {filteredUsers.length > 10 ? page * rowsPerPage + i + 1 : i + 1}
                                                             </TableCell>
-                                                            {editRowId === u.uid ? (
-                                                                <>
                                                                     {!(user && user.role === 'site_admin') && (
-                                                                        <TableCell sx={{ borderRight: '1px solid #e0e0e0' }}>
-                                                                            <TextField
-                                                                                value={editRowData.companyName || ''}
-                                                                                size="small"
-                                                                                variant="standard"
-                                                                                InputProps={{ readOnly: true, disableUnderline: true, style: { fontSize: '0.8rem' } }}
-                                                                                fullWidth
-                                                                            />
+                                                                <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0', width: adjustedColumnWidths.companyName }}>
+                                                                    {u.companyName || u.client_name || '-'}
                                                                         </TableCell>
                                                                     )}
-                                                                    <TableCell sx={{ borderRight: '1px solid #e0e0e0' }}>
-                                                                        <TextField
-                                                                            value={editRowData.firstName || ''}
-                                                                            size="small"
-                                                                            variant="standard"
-                                                                            InputProps={{ readOnly: true, disableUnderline: true, style: { fontSize: '0.8rem' } }}
-                                                                            fullWidth
-                                                                        />
+                                                            <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0', width: adjustedColumnWidths.firstName }}>
+                                                                        {u.firstName || (u.name ? u.name.split(' ')[0] : '')}
+                                                            </TableCell>
+                                                            <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0', width: adjustedColumnWidths.lastName }}>
+                                                                        {u.lastName || (u.name ? u.name.split(' ').slice(1).join(' ') : '')}
                                                                     </TableCell>
-                                                                    <TableCell sx={{ borderRight: '1px solid #e0e0e0' }}>
-                                                                        <TextField
-                                                                            value={editRowData.lastName || ''}
-                                                                            size="small"
-                                                                            variant="standard"
-                                                                            InputProps={{ readOnly: true, disableUnderline: true, style: { fontSize: '0.8rem' } }}
-                                                                            fullWidth
-                                                                        />
+                                                            <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0', width: adjustedColumnWidths.employeeId }}>
+                                                                {u.employeeId || '-'}
                                                                     </TableCell>
-                                                                    <TableCell sx={{ borderRight: '1px solid #e0e0e0' }}>
-                                                                        <TextField
-                                                                            value={editRowData.email || ''}
-                                                                            size="small"
-                                                                            variant="standard"
-                                                                            InputProps={{ readOnly: true, disableUnderline: true, style: { fontSize: '0.8rem' } }}
-                                                                            fullWidth
-                                                                        />
-                                                                    </TableCell>
-                                                                    <TableCell sx={{ borderRight: (!isXs && !isSm) ? '1px solid #e0e0e0' : undefined }}>
-                                                                        <TextField
-                                                                            name="contactNumber"
-                                                                            value={editRowData.contactNumber || ''}
-                                                                            onChange={handleEditChange}
-                                                                            size="small"
-                                                                            variant="standard"
-                                                                            InputProps={{ disableUnderline: true, style: { fontSize: '0.8rem', outline: '2px solid #1976d2' } }}
-                                                                            fullWidth
-                                                                        />
-                                                                    </TableCell>
-                                                                    {!isXs && !isSm && (
-                                                                        <TableCell sx={{ borderRight: '1px solid #e0e0e0' }}>
-                                                                            <TextField
-                                                                                name="managerEmail"
-                                                                                value={editRowData.managerEmail || ''}
-                                                                                onChange={handleEditChange}
-                                                                                size="small"
-                                                                                variant="standard"
-                                                                                InputProps={{ disableUnderline: true, style: { fontSize: '0.8rem', outline: '2px solid #1976d2' } }}
-                                                                                fullWidth
-                                                                            />
-                                                                        </TableCell>
-                                                                    )}
-                                                                    {!isXs && !isSm && (
-                                                                        <TableCell sx={{ borderRight: '1px solid #e0e0e0' }}>
-                                                                            <Select
-                                                                                name="employmentType"
-                                                                                value={editRowData.employmentType || ''}
-                                                                                onChange={handleEditChange}
-                                                                                size="small"
-                                                                                variant="standard"
-                                                                                disableUnderline
-                                                                                sx={{ fontSize: '0.8rem', outline: '2px solid #1976d2' }}
-                                                                                fullWidth
-                                                                            >
-                                                                                {EMPLOYMENT_TYPES.map(opt => (
-                                                                                    <MenuItem key={opt.value} value={opt.value} sx={{ fontSize: '0.8rem' }}>{opt.label}</MenuItem>
-                                                                                ))}
-                                                                            </Select>
-                                                                        </TableCell>
-                                                                    )}
-                                                                    {!isXs && !isSm && (
-                                                                        <TableCell sx={{ borderRight: '1px solid #e0e0e0' }}>
-                                                                            <TextField
-                                                                                name="designation"
-                                                                                value={editRowData.designation || ''}
-                                                                                onChange={handleEditChange}
-                                                                                size="small"
-                                                                                variant="standard"
-                                                                                InputProps={{ disableUnderline: true, style: { fontSize: '0.8rem', outline: '2px solid #1976d2' } }}
-                                                                                fullWidth
-                                                                            />
-                                                                        </TableCell>
-                                                                    )}
-                                                                    <TableCell sx={{ borderRight: (!isXs && !isSm) ? '1px solid #e0e0e0' : undefined }}>
-                                                                        <TextField
-                                                                            name="employeeId"
-                                                                            value={editRowData.employeeId || ''}
-                                                                            onChange={handleEditChange}
-                                                                            size="small"
-                                                                            variant="standard"
-                                                                            InputProps={{ 
-                                                                                disableUnderline: true, 
-                                                                                style: { 
-                                                                                    fontSize: '0.8rem', 
-                                                                                    outline: checkDuplicateEmployeeId(editRowData.employeeId, u.uid) ? '2px solid #f44336' : '2px solid #1976d2' 
-                                                                                } 
-                                                                            }}
-                                                                            fullWidth
-                                                                        />
-                                                                    </TableCell>
-                                                                    <TableCell sx={{ minWidth: 120, p: 0 }}>
-                                                                        <IconButton size="small" onClick={() => handleEditSave(u.uid)} title="Save" sx={{ p: 0.5 }}>
-                                                                            <SaveIcon fontSize="inherit" color={hasUnsavedChanges(editRowData, u) ? 'primary' : 'inherit'} />
-                                                                        </IconButton>
-                                                                        <IconButton size="small" onClick={handleEditCancel} title="Cancel" color="error" sx={{ p: 0.5 }}>
-                                                                            <ClearIcon fontSize="inherit" />
-                                                                        </IconButton>
-                                                                    </TableCell>
-                                                                </>
-                                                            ) : (
-                                                                <>
-                                                                    {!(user && user.role === 'site_admin') && (
-                                                                        <TableCell sx={{ borderRight: '1px solid #e0e0e0' }}>{u.companyName || u.client_name || '-'}</TableCell>
-                                                                    )}
-                                                                    <TableCell sx={{ borderRight: '1px solid #e0e0e0' }}>{u.firstName || '-'}</TableCell>
-                                                                    <TableCell sx={{ borderRight: '1px solid #e0e0e0' }}>{u.lastName || '-'}</TableCell>
-                                                                    <TableCell sx={{ borderRight: '1px solid #e0e0e0' }}>
-                                                                        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                            <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0', width: adjustedColumnWidths.email }}>
+                                                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                                                                    <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>
                                                                             {u.email}
-                                                                            {u.isSiteAdmin && (
-                                                                                <span style={{
-                                                                                    display: 'inline-flex',
-                                                                                    alignItems: 'center',
-                                                                                    justifyContent: 'center',
-                                                                                    width: '1.2em',
-                                                                                    height: '1.2em',
-                                                                                    borderRadius: '50%',
-                                                                                    background: '#1976d2',
-                                                                                    color: '#fff',
-                                                                                    fontWeight: 600,
-                                                                                    fontSize: '1em',
-                                                                                    marginLeft: 4,
-                                                                                    lineHeight: '1.2em',
-                                                                                    textAlign: 'center',
-                                                                                    verticalAlign: 'middle',
-                                                                                    padding: 0,
+                                                                    </Typography>
+                                                                    <Typography 
+                                                                        variant="caption" 
+                                                                        sx={{ 
+                                                                            fontSize: '0.7rem',
+                                                                            color: u.role === 'user' ? '#1976d2' : u.role === 'site_admin' ? '#d32f2f' : '#666',
+                                                                            fontWeight: 500
+                                                                        }}
+                                                                    >
+                                                                        ({u.role})
+                                                                    </Typography>
+                                                                </Box>
+                                                                    </TableCell>
+                                                            <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0', width: adjustedColumnWidths.designation }}>
+                                                                {u.designation || '-'}
+                                                            </TableCell>
+                                                            <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0', width: adjustedColumnWidths.contactNumber }}>
+                                                                {u.contactNumber || '-'}
+                                                            </TableCell>
+                                                            <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0', width: adjustedColumnWidths.managerEmail }}>
+                                                                {u.managerEmail || '-'}
+                                                            </TableCell>
+                                                            <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0', width: adjustedColumnWidths.employmentType }}>
+                                                                {u.employmentType || '-'}
+                                                            </TableCell>
+                                                            <TableCell align="right" sx={{ py: 0.4, px: 2, width: adjustedColumnWidths.actions }}>
+                                                                {passwordChangeNotifications[u.uid] ? (
+                                                                    <Typography 
+                                                                        variant="body2" 
+                                                                        sx={{ 
+                                                                            fontSize: '0.7rem',
+                                                                            color: passwordChangeNotifications[u.uid].message.includes('success') ? '#2e7d32' : '#d32f2f',
+                                                                            fontWeight: 500,
+                                                                            textAlign: 'right',
+                                                                            py: 0.5
+                                                                        }}
+                                                                    >
+                                                                        {passwordChangeNotifications[u.uid].message}
+                                                                    </Typography>
+                                                                ) : (
+                                                                    <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+                                                                        <Tooltip title="Reset Password">
+                                                                            <IconButton 
+                                                                                onClick={() => openChangePwdModal(u.uid)} 
+                                                                                size="small" 
+                                                                                sx={{ 
+                                                                                    p: 0.7,
+                                                                                    color: '#607d8b',
+                                                                                    '&:hover': { color: '#455a64', bgcolor: 'rgba(96, 125, 139, 0.1)' }
                                                                                 }}
-                                                                                    title="Site Admin"
-                                                                                >s</span>
-                                                                            )}
-                                                                        </span>
+                                                                            >
+                                                                                <LockResetIcon fontSize="small" />
+                                                                            </IconButton>
+                                                                        </Tooltip>
+                                                                        <Tooltip title="Edit">
+                                                                            <IconButton 
+                                                                                onClick={() => handleEditClick(u)} 
+                                                                                size="small" 
+                                                                                sx={{ 
+                                                                                    p: 0.7,
+                                                                                    color: '#607d8b',
+                                                                                    '&:hover': { color: '#455a64', bgcolor: 'rgba(96, 125, 139, 0.1)' }
+                                                                                }}
+                                                                            >
+                                                                                <EditIcon fontSize="small" />
+                                                                            </IconButton>
+                                                                        </Tooltip>
+                                                                        <Tooltip title="Delete">
+                                                                            <IconButton 
+                                                                                onClick={(event) => handleDeleteClick(event, u.uid, u.email)} 
+                                                                                size="small" 
+                                                                                sx={{ 
+                                                                                    p: 0.7,
+                                                                                    color: '#e57373',
+                                                                                    '&:hover': { color: '#f44336', bgcolor: 'rgba(244, 67, 54, 0.1)' }
+                                                                                }}
+                                                                            >
+                                                                                <DeleteIcon fontSize="small" />
+                                                                            </IconButton>
+                                                                        </Tooltip>
+                                                                    </Box>
+                                                                )}
                                                                     </TableCell>
-                                                                    <TableCell sx={{ borderRight: (!isXs && !isSm) ? '1px solid #e0e0e0' : undefined }}>{u.contactNumber || '-'}</TableCell>
-                                                                    {!isXs && !isSm && <TableCell sx={{ borderRight: '1px solid #e0e0e0' }}>{u.managerEmail || '-'}</TableCell>}
-                                                                    {!isXs && !isSm && <TableCell sx={{ borderRight: '1px solid #e0e0e0' }}>{u.employmentType || '-'}</TableCell>}
-                                                                    {!isXs && !isSm && <TableCell sx={{ borderRight: '1px solid #e0e0e0' }}>{u.designation || '-'}</TableCell>}
-                                                                    <TableCell sx={{ borderRight: (!isXs && !isSm) ? '1px solid #e0e0e0' : undefined }}>{u.employeeId || '-'}</TableCell>
-                                                                    <TableCell sx={{ minWidth: 120, p: 0 }}>
-                                                                        <IconButton 
-                                                                            size="small" 
-                                                                            onClick={() => openChangePwdModal(u.uid)} 
-                                                                            title={isOwnRow(u) ? "Cannot change your own password" : "Change Password"}
-                                                                            disabled={isOwnRow(u)}
-                                                                            sx={{ 
-                                                                                p: 0.5,
-                                                                                opacity: isOwnRow(u) ? 0.5 : 1,
-                                                                                '&:hover': {
-                                                                                    opacity: isOwnRow(u) ? 0.5 : 0.8
-                                                                                }
-                                                                            }}
-                                                                        >
-                                                                            <LockResetIcon fontSize="inherit" />
-                                                                        </IconButton>
-                                                                        <IconButton 
-                                                                            size="small" 
-                                                                            onClick={() => handleEditClick(u)} 
-                                                                            title={isOwnRow(u) ? "Cannot edit your own profile" : "Edit"}
-                                                                            disabled={isOwnRow(u)}
-                                                                            sx={{ 
-                                                                                p: 0.5,
-                                                                                opacity: isOwnRow(u) ? 0.5 : 1,
-                                                                                '&:hover': {
-                                                                                    opacity: isOwnRow(u) ? 0.5 : 0.8
-                                                                                }
-                                                                            }}
-                                                                        >
-                                                                            <EditIcon fontSize="inherit" />
-                                                                        </IconButton>
-                                                                        <IconButton 
-                                                                            size="small" 
-                                                                            onClick={(e) => handleDeleteClick(e, u.uid, u.email)} 
-                                                                            title={isOwnRow(u) ? "Cannot delete your own account" : "Delete"}
-                                                                            disabled={isOwnRow(u)}
-                                                                            color="error" 
-                                                                            sx={{ 
-                                                                                p: 0.5,
-                                                                                opacity: isOwnRow(u) ? 0.5 : 1,
-                                                                                '&:hover': {
-                                                                                    opacity: isOwnRow(u) ? 0.5 : 0.8
-                                                                                }
-                                                                            }}
-                                                                        >
-                                                                            <DeleteIcon fontSize="inherit" />
-                                                                        </IconButton>
-                                                                    </TableCell>
-                                                                </>
-                                                            )}
                                                         </TableRow>
-                                                    ))}
+                                                    ))
+                                            )}
                                                 </TableBody>
                                             </Table>
                                         </TableContainer>
-                                    )}
-                                </Box>
-                            ))
+                                
+                                {filteredUsers.length > 10 && (
+                                    <TablePagination
+                                        rowsPerPageOptions={[5, 10, 25]}
+                                        component="div"
+                                        count={filteredUsers.length}
+                                        rowsPerPage={rowsPerPage}
+                                        page={page}
+                                        onPageChange={handleChangePage}
+                                        onRowsPerPageChange={handleChangeRowsPerPage}
+                                        sx={{
+                                            '.MuiTablePagination-selectLabel, .MuiTablePagination-displayedRows': {
+                                                fontSize: '0.8rem'
+                                            },
+                                            '.MuiTablePagination-toolbar': {
+                                                minHeight: '40px'
+                                            }
+                                        }}
+                                    />
+                                )}
+                            </>
                         )}
                     </Paper>
                 )}
 
-                {/* Add User Modal */}
-                <Dialog open={addUserModalOpen} onClose={closeAddUserModal} maxWidth="xs" fullWidth>
-                  <DialogTitle sx={{ fontSize: 18, py: 1.5 }}>Create User</DialogTitle>
-                  <form onSubmit={handleAddUserSave}>
-                    <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, py: 2 }}>
-                      {user && user.role === 'site_admin' ? (
-                        <TextField
-                          label="Company Name"
-                          name="companyName"
-                          value={addUserData.companyName}
-                          InputProps={{ readOnly: true }}
-                          required
-                          size="small"
-                          fullWidth
-                          data-field-type="company"
-                          sx={{ mb: 1 }}
-                          helperText="Auto-filled from your company"
-                        />
-                      ) : (
-                        <Select
-                          name="companyName"
-                          value={addUserData.companyName}
-                          onChange={handleAddUserChange}
-                          required
-                          displayEmpty
-                          size="small"
-                          sx={{ mb: 1 }}
+  
+
+<Dialog
+    open={addUserModalOpen}
+    onClose={closeAddUserModal}
+    maxWidth="md"
+    fullWidth
+    PaperProps={{
+        sx: {
+            borderRadius: 0,
+            boxShadow: '0 8px 30px rgba(0,0,0,0.1)',
+            bgcolor: '#ffffff',
+        }
+    }}
+>
+    <DialogTitle
+        sx={{
+            background: '#283149',
+            minHeight: '50px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            color: 'white',
+            px: 2.5,
+            py: 2,
+            borderBottom: '1px solid #e0e0e0'
+        }}
+    >
+        <Typography variant="h6" component="div" sx={{ fontSize: '1rem', fontWeight: 600 }}>
+            Add User
+        </Typography>
+        <IconButton onClick={closeAddUserModal} sx={{ color: 'white', '&:hover': { bgcolor: 'rgba(255,255,255,0.1)' } }}>
+            <CloseIcon fontSize="small" />
+        </IconButton>
+    </DialogTitle>
+
+    <DialogContent sx={{ p: { xs: 2, sm: 2.5 }, bgcolor: '#f5f5f5' }}>
+        <Box component="form" onSubmit={handleAddUserSave} sx={{ display: 'flex', flexDirection: 'column', gap: 2 }} autoComplete="off">
+            {/* Hidden password field to trick Chrome autofill */}
+            <input type="password" style={{ display: 'none' }} autoComplete="new-password" />
+
+            {/* User Information Section */}
+            <Box sx={{ bgcolor: 'white', p: 2, border: '1px solid #e0e0e0', borderRadius: 1 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.5 }}>
+                    <PersonIcon sx={{ color: '#666', mr: 1 }} fontSize="small" />
+                    <Typography variant="subtitle1" sx={{ fontSize: '0.9rem', fontWeight: 600, color: '#333' }}>User Information</Typography>
+                </Box>
+                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 1.5 }}>
+{user && user.role === 'site_admin' ? (
+<TextField
+                            label="Company Name *" 
+name="companyName"
+value={addUserData.companyName}
+                            InputProps={{ 
+                                readOnly: true,
+                                startAdornment: <InputAdornment position="start"><BusinessIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
+                            }} 
+required
+size="small"
+fullWidth
+helperText="Auto-filled from your company"
+                            InputLabelProps={{ 
+                                shrink: true, 
+                                sx: { 
+                                    fontSize: '1rem',
+                                    color: '#1976d2',
+                                    fontWeight: 600,
+                                    '&.Mui-focused': {
+                                        color: '#1565c0'
+                                    }
+                                } 
+                            }}
+                            sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+/>
+) : (
+                        <TextField 
+                            select
+                            label="Company Name *" 
+name="companyName"
+value={addUserData.companyName}
+onChange={handleAddUserChange}
+required
+size="small"
+                            fullWidth
+                            InputProps={{
+                                startAdornment: <InputAdornment position="start"><BusinessIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
+                            }}
+                            InputLabelProps={{ 
+                                shrink: true, 
+                                sx: { 
+                                    fontSize: '1rem',
+                                    color: '#1976d2',
+                                    fontWeight: 600,
+                                    '&.Mui-focused': {
+                                        color: '#1565c0'
+                                    }
+                                } 
+                            }}
+                            sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
                         >
-                          <MenuItem value="" disabled>Select Company</MenuItem>
-                          {previousClientsRef.current.map(c => (
-                            <MenuItem key={c['Client name'] || c.companyName || c.id} value={c['Client name'] || c.companyName}>{c['Client name'] || c.companyName}</MenuItem>
-                          ))}
-                        </Select>
-                      )}
-                      <Box display="flex" gap={1}>
-                        <TextField
-                          label="First Name"
-                          name="firstName"
-                          value={addUserData.firstName}
-                          onChange={handleAddUserChange}
-                          required
-                          size="small"
-                          fullWidth
-                          data-field-type="name"
-                        />
-                        <TextField
-                          label="Last Name"
-                          name="lastName"
-                          value={addUserData.lastName}
-                          onChange={handleAddUserChange}
-                          required
-                          size="small"
-                          fullWidth
-                          data-field-type="name"
-                        />
-                      </Box>
-                      <TextField
-                        label="Email"
-                        name="email"
-                        value={addUserData.email}
-                        onChange={handleAddUserChange}
-                        required
+                            <MenuItem value="" disabled sx={{ fontSize: '0.85rem' }}>Select Company</MenuItem>
+{previousClientsRef.current.map(c => (
+                                <MenuItem key={c['Client name'] || c.companyName || c.id} value={c['Client name'] || c.companyName} sx={{ fontSize: '0.85rem' }}>
+                                    {c['Client name'] || c.companyName}
+                                </MenuItem>
+))}
+                        </TextField>
+)}
+                    
+                    <TextField
+                        label="Employee ID *" 
+                        name="employeeId" 
+                        value={addUserData.employeeId} 
+                        onChange={handleAddUserChange} 
+                        required 
                         size="small"
                         fullWidth
-                        data-field-type="email"
-                      />
-                      <TextField
-                        label="Password"
-                        name="password"
-                        value={addUserData.password}
-                        InputProps={{ readOnly: true }}
-                        size="small"
-                        fullWidth
-                        data-field-type="password"
-                        helperText="Auto-generated password"
-                      />
-                      <TextField
-                        label="Contact Number"
-                        name="contactNumber"
-                        value={addUserData.contactNumber}
-                        onChange={handleAddUserChange}
-                        required
-                        size="small"
-                        fullWidth
-                        data-field-type="contact"
-                      />
-                      <TextField
-                        label="Manager Email"
-                        name="managerEmail"
-                        value={addUserData.managerEmail}
-                        onChange={handleAddUserChange}
-                        required
-                        size="small"
-                        fullWidth
-                      />
-                      <Select
-                        name="employmentType"
-                        value={addUserData.employmentType}
-                        onChange={handleAddUserChange}
-                        required
-                        displayEmpty
-                        size="small"
-                        sx={{ mb: 1 }}
-                      >
-                        <MenuItem value="" disabled>Select Employment Type</MenuItem>
-                        {EMPLOYMENT_TYPES.map(opt => (
-                          <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
-                        ))}
-                      </Select>
-                      <TextField
-                        label="Designation"
-                        name="designation"
-                        value={addUserData.designation}
-                        onChange={handleAddUserChange}
-                        required
-                        size="small"
-                        fullWidth
-                      />
-                      <TextField
-                        label="Employee ID"
-                        name="employeeId"
-                        value={addUserData.employeeId}
-                        onChange={handleAddUserChange}
-                        required
-                        size="small"
-                        fullWidth
-                        data-field-type="name"
                         error={addUserData.employeeId && checkDuplicateEmployeeId(addUserData.employeeId)}
                         helperText={addUserData.employeeId && checkDuplicateEmployeeId(addUserData.employeeId) ? 'Employee ID already exists' : ''}
-                      />
-                    </DialogContent>
-                    <DialogActions sx={{ py: 1, px: 2 }}>
-                      <Button onClick={closeAddUserModal} size="small">Cancel</Button>
-                      <Button type="submit" variant="contained" color="primary" size="small">Create</Button>
-                    </DialogActions>
-                  </form>
-                </Dialog>
+                        InputProps={{
+                            startAdornment: <InputAdornment position="start"><BadgeIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
+                        }}
+                        InputLabelProps={{ 
+                            shrink: true, 
+                            sx: { 
+                                fontSize: '1rem',
+                                color: '#1976d2',
+                                fontWeight: 600,
+                                '&.Mui-focused': {
+                                    color: '#1565c0'
+                                }
+                            } 
+                        }}
+                        sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                    />
+                    
+                    <TextField 
+                        label="First Name *" 
+name="firstName"
+value={addUserData.firstName}
+onChange={handleAddUserChange}
+required
+size="small"
+fullWidth
+                        InputLabelProps={{ 
+                            shrink: true, 
+                            sx: { 
+                                fontSize: '1rem',
+                                color: '#1976d2',
+                                fontWeight: 600,
+                                '&.Mui-focused': {
+                                    color: '#1565c0'
+                                }
+                            } 
+                        }}
+                        sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                    />
+                    
+<TextField
+                        label="Last Name *" 
+name="lastName"
+value={addUserData.lastName}
+onChange={handleAddUserChange}
+required
+size="small"
+fullWidth
+                        InputLabelProps={{ 
+                            shrink: true, 
+                            sx: { 
+                                fontSize: '1rem',
+                                color: '#1976d2',
+                                fontWeight: 600,
+                                '&.Mui-focused': {
+                                    color: '#1565c0'
+                                }
+                            } 
+                        }}
+                        sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                    />
+                    
+<TextField
+                        label="Email *" 
+name="email"
+value={addUserData.email}
+onChange={handleAddUserChange}
+required
+size="small"
+fullWidth
+                        InputProps={{
+                            startAdornment: <InputAdornment position="start"><EmailIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
+                        }}
+                        InputLabelProps={{ 
+                            shrink: true, 
+                            sx: { 
+                                fontSize: '1rem',
+                                color: '#1976d2',
+                                fontWeight: 600,
+                                '&.Mui-focused': {
+                                    color: '#1565c0'
+                                }
+                            } 
+                        }}
+                        sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                    />
+                    
+<TextField
+                        label="Password *" 
+name="password"
+value={addUserData.password}
+                        InputProps={{ 
+                            readOnly: true,
+                            startAdornment: <InputAdornment position="start"><LockIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
+                        }} 
+                        required 
+size="small"
+fullWidth
+helperText="Auto-generated password"
+                        InputLabelProps={{ 
+                            shrink: true, 
+                            sx: { 
+                                fontSize: '1rem',
+                                color: '#1976d2',
+                                fontWeight: 600,
+                                '&.Mui-focused': {
+                                    color: '#1565c0'
+                                }
+                            } 
+                        }}
+                        sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                    />
+                    
+<TextField
+                        label="Contact Number *" 
+name="contactNumber"
+value={addUserData.contactNumber}
+onChange={handleAddUserChange}
+required
+size="small"
+fullWidth
+                        InputProps={{
+                            startAdornment: <InputAdornment position="start"><PhoneIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
+                        }}
+                        InputLabelProps={{ 
+                            shrink: true, 
+                            sx: { 
+                                fontSize: '1rem',
+                                color: '#1976d2',
+                                fontWeight: 600,
+                                '&.Mui-focused': {
+                                    color: '#1565c0'
+                                }
+                            } 
+                        }}
+                        sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                    />
+                    
+<TextField
+                        label="Manager Email *" 
+name="managerEmail"
+value={addUserData.managerEmail}
+onChange={handleAddUserChange}
+required
+size="small"
+fullWidth
+                        InputProps={{
+                            startAdornment: <InputAdornment position="start"><SupervisorAccountIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
+                        }}
+                        InputLabelProps={{ 
+                            shrink: true, 
+                            sx: { 
+                                fontSize: '1rem',
+                                color: '#1976d2',
+                                fontWeight: 600,
+                                '&.Mui-focused': {
+                                    color: '#1565c0'
+                                }
+                            } 
+                        }}
+                        sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                    />
+                    
+                    <TextField 
+                        select 
+                        label="Employment Type *" 
+name="employmentType"
+value={addUserData.employmentType}
+onChange={handleAddUserChange}
+required
+size="small"
+                        fullWidth
+                        InputProps={{
+                            startAdornment: <InputAdornment position="start"><WorkIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
+                        }}
+                        InputLabelProps={{ 
+                            shrink: true, 
+                            sx: { 
+                                fontSize: '1rem',
+                                color: '#1976d2',
+                                fontWeight: 600,
+                                '&.Mui-focused': {
+                                    color: '#1565c0'
+                                }
+                            } 
+                        }}
+                        sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                    >
+                        <MenuItem value="" disabled sx={{ fontSize: '0.85rem' }}>Select Employment Type</MenuItem>
+{EMPLOYMENT_TYPES.map(opt => (
+                            <MenuItem key={opt.value} value={opt.value} sx={{ fontSize: '0.85rem' }}>{opt.label}</MenuItem>
+))}
+                    </TextField>
+                    
+<TextField
+                        label="Designation *" 
+name="designation"
+value={addUserData.designation}
+onChange={handleAddUserChange}
+required
+size="small"
+fullWidth
+                        InputProps={{
+                            startAdornment: <InputAdornment position="start"><AdminIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
+                        }}
+                        InputLabelProps={{ 
+                            shrink: true, 
+                            sx: { 
+                                fontSize: '1rem',
+                                color: '#1976d2',
+                                fontWeight: 600,
+                                '&.Mui-focused': {
+                                    color: '#1565c0'
+                                }
+                            } 
+                        }}
+                        sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                    />
+                </Box>
+            </Box>
+        </Box>
+    </DialogContent>
+    
+    <DialogActions sx={{ py: 2, px: 3, bgcolor: '#f8f9fa', borderTop: '1px solid #e0e0e0' }}>
+        <Button 
+            onClick={closeAddUserModal} 
+            variant="outlined" 
+            size="small"
+            sx={{ 
+                textTransform: 'none', 
+                fontSize: '0.85rem',
+                borderRadius: 1,
+                px: 2
+            }}
+        >
+            Cancel
+        </Button>
+        <Button 
+            type="submit" 
+            variant="contained" 
+            color="primary" 
+            size="small"
+            onClick={handleAddUserSave}
+            sx={{ 
+                textTransform: 'none', 
+                fontSize: '0.85rem',
+                borderRadius: 1,
+                px: 2,
+                boxShadow: 'none',
+                '&:hover': {
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                }
+            }}
+        >
+            Add User
+        </Button>
+    </DialogActions>
+</Dialog>
+
+                {/* Edit User Modal */}
+                <Dialog
+                    open={editRowId !== null}
+                    onClose={handleEditCancel}
+                    maxWidth="md"
+                    fullWidth
+                    PaperProps={{
+                        sx: {
+                            borderRadius: 0,
+                            boxShadow: '0 8px 30px rgba(0,0,0,0.1)',
+                            bgcolor: '#ffffff',
+                        }
+                    }}
+                >
+                    <DialogTitle
+                        sx={{
+                            background: '#283149',
+                            minHeight: '50px',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            color: 'white',
+                            px: 2.5,
+                            py: 2,
+                            borderBottom: '1px solid #e0e0e0'
+                        }}
+                    >
+                        <Typography variant="h6" component="div" sx={{ fontSize: '1rem', fontWeight: 600 }}>
+                            Edit User
+                        </Typography>
+                        <IconButton onClick={handleEditCancel} sx={{ color: 'white', '&:hover': { bgcolor: 'rgba(255,255,255,0.1)' } }}>
+                            <ClearIcon fontSize="small" />
+                        </IconButton>
+                    </DialogTitle>
+
+                    <DialogContent sx={{ p: { xs: 2, sm: 2.5 }, bgcolor: '#f5f5f5' }}>
+                        <Box component="form" onSubmit={(e) => {
+                            e.preventDefault();
+                            handleEditSave(editRowId);
+                        }} sx={{ display: 'flex', flexDirection: 'column', gap: 2 }} autoComplete="off">
+                            {/* User Information Section */}
+                            <Box sx={{ bgcolor: 'white', p: 2, border: '1px solid #e0e0e0', borderRadius: 1 }}>
+                                <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.5 }}>
+                                    <PersonIcon sx={{ color: '#666', mr: 1 }} fontSize="small" />
+                                    <Typography variant="subtitle1" sx={{ fontSize: '0.9rem', fontWeight: 600, color: '#333' }}>User Information</Typography>
+                                </Box>
+                                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 1.5 }}>
+                                    {!(user && user.role === 'site_admin') && (
+                                        <TextField
+                                            label="Company Name *" 
+                                            name="companyName" 
+                                            value={editRowData.companyName || ''} 
+                                            onChange={handleEditChange} 
+                                            required 
+                                            size="small"
+                                            fullWidth
+                                            InputLabelProps={{ 
+                                                shrink: true, 
+                                                sx: { 
+                                                    fontSize: '1rem',
+                                                    color: '#1976d2',
+                                                    fontWeight: 600,
+                                                    '&.Mui-focused': {
+                                                        color: '#1565c0'
+                                                    }
+                                                } 
+                                            }}
+                                            sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                                        />
+                                    )}
+                                    
+                                    <TextField 
+                                        label="First Name *" 
+                                        name="firstName" 
+                                        value={editRowData.firstName || ''} 
+                                        onChange={handleEditChange} 
+                                        required 
+                                        size="small"
+                                        fullWidth
+                                        InputLabelProps={{ 
+                                            shrink: true, 
+                                            sx: { 
+                                                fontSize: '1rem',
+                                                color: '#1976d2',
+                                                fontWeight: 600,
+                                                '&.Mui-focused': {
+                                                    color: '#1565c0'
+                                                }
+                                            } 
+                                        }}
+                                        sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                                    />
+                                    
+                                    <TextField 
+                                        label="Last Name *" 
+                                        name="lastName" 
+                                        value={editRowData.lastName || ''} 
+                                        onChange={handleEditChange} 
+                                        required 
+                                        size="small"
+                                        fullWidth
+                                        InputLabelProps={{ 
+                                            shrink: true, 
+                                            sx: { 
+                                                fontSize: '1rem',
+                                                color: '#1976d2',
+                                                fontWeight: 600,
+                                                '&.Mui-focused': {
+                                                    color: '#1565c0'
+                                                }
+                                            } 
+                                        }}
+                                        sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                                    />
+                                    
+                                    <TextField 
+                                        label="Employee ID *" 
+name="employeeId"
+                                        value={editRowData.employeeId || ''} 
+                                        onChange={handleEditChange} 
+required
+size="small"
+fullWidth
+                                        InputLabelProps={{ 
+                                            shrink: true, 
+                                            sx: { 
+                                                fontSize: '1rem',
+                                                color: '#1976d2',
+                                                fontWeight: 600,
+                                                '&.Mui-focused': {
+                                                    color: '#1565c0'
+                                                }
+                                            } 
+                                        }}
+                                        sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                                    />
+                                    
+                                    <TextField 
+                                        label="Email" 
+                                        name="email" 
+                                        value={editRowData.email || ''} 
+                                        InputProps={{ readOnly: true }}
+                                        size="small"
+                                        fullWidth
+                                        InputLabelProps={{ 
+                                            shrink: true, 
+                                            sx: { 
+                                                fontSize: '1rem',
+                                                color: '#666',
+                                                fontWeight: 600
+                                            } 
+                                        }}
+                                        sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                                        helperText="Email cannot be changed"
+                                    />
+                                    
+                                    <TextField 
+                                        label="Designation *" 
+                                        name="designation" 
+                                        value={editRowData.designation || ''} 
+                                        onChange={handleEditChange} 
+                                        required 
+                                        size="small"
+                                        fullWidth
+                                        InputLabelProps={{ 
+                                            shrink: true, 
+                                            sx: { 
+                                                fontSize: '1rem',
+                                                color: '#1976d2',
+                                                fontWeight: 600,
+                                                '&.Mui-focused': {
+                                                    color: '#1565c0'
+                                                }
+                                            } 
+                                        }}
+                                        sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                                    />
+                                    
+                                    <TextField 
+                                        label="Contact Number *" 
+                                        name="contactNumber" 
+                                        value={editRowData.contactNumber || ''} 
+                                        onChange={handleEditChange} 
+                                        required 
+                                        size="small"
+                                        fullWidth
+                                        InputLabelProps={{ 
+                                            shrink: true, 
+                                            sx: { 
+                                                fontSize: '1rem',
+                                                color: '#1976d2',
+                                                fontWeight: 600,
+                                                '&.Mui-focused': {
+                                                    color: '#1565c0'
+                                                }
+                                            } 
+                                        }}
+                                        sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                                    />
+                                    
+                                    <TextField 
+                                        label="Manager Email *" 
+                                        name="managerEmail" 
+                                        value={editRowData.managerEmail || ''} 
+                                        onChange={handleEditChange} 
+                                        required 
+                                        size="small"
+                                        fullWidth
+                                        InputLabelProps={{ 
+                                            shrink: true, 
+                                            sx: { 
+                                                fontSize: '1rem',
+                                                color: '#1976d2',
+                                                fontWeight: 600,
+                                                '&.Mui-focused': {
+                                                    color: '#1565c0'
+                                                }
+                                            } 
+                                        }}
+                                        sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                                    />
+                                    
+                                    <FormControl fullWidth size="small" required>
+                                        <InputLabel 
+                                            sx={{ 
+                                                fontSize: '1rem',
+                                                color: '#1976d2',
+                                                fontWeight: 600,
+                                                '&.Mui-focused': {
+                                                    color: '#1565c0'
+                                                }
+                                            }}
+                                        >
+                                            Employment Type *
+                                        </InputLabel>
+                                        <Select
+                                            name="employmentType"
+                                            value={editRowData.employmentType || ''}
+                                            onChange={handleEditChange}
+                                            required
+                                            displayEmpty
+                                            label="Employment Type *"
+                                            sx={{ '& .MuiSelect-select': { fontSize: '0.85rem' } }}
+                                        >
+                                            <MenuItem value="" disabled sx={{ fontSize: '0.8rem' }}>Select Employment Type</MenuItem>
+                                            {EMPLOYMENT_TYPES.map(opt => (
+                                                <MenuItem key={opt.value} value={opt.value} sx={{ fontSize: '0.8rem' }}>{opt.label}</MenuItem>
+                                            ))}
+                                        </Select>
+                                    </FormControl>
+                                </Box>
+                            </Box>
+
+
+                        </Box>
+</DialogContent>
+                    <DialogActions sx={{ py: 2, px: 3, bgcolor: '#f5f5f5' }}>
+                        <Button onClick={handleEditCancel} variant="outlined" size="small">
+                            Cancel
+                        </Button>
+                        <Button 
+                            onClick={() => handleEditSave(editRowId)} 
+                            variant="contained" 
+                            color="primary" 
+                            size="small"
+                        >
+                            Save Changes
+                        </Button>
+</DialogActions>
+</Dialog>
 
                 {/* Change Password Modal */}
                 <Dialog open={changePwdModalOpen} onClose={closeChangePwdModal} maxWidth="xs" fullWidth>
@@ -2105,46 +2705,92 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                     </DialogActions>
                 </Dialog>
 
-                {/* Delete Confirmation Popover */}
-                <Popover
+                {/* Delete Confirmation Dialog */}
+                <Dialog
                     open={openConfirmPopover}
-                    anchorEl={anchorEl.current}
                     onClose={handleCancelDelete}
-                    anchorOrigin={{
-                        vertical: 'bottom',
-                        horizontal: 'left',
-                    }}
-                    transformOrigin={{
-                        vertical: 'top',
-                        horizontal: 'left',
-                    }}
+                    maxWidth="sm"
+                    fullWidth
                     PaperProps={{
                         sx: {
-                            p: 0.5,
-                            minWidth: 160,
-                            maxWidth: 220,
-                            boxShadow: 3,
-                            borderRadius: 1,
-                            fontSize: '0.7rem',
+                            borderRadius: 0,
+                            boxShadow: '0 8px 30px rgba(0,0,0,0.1)',
+                            bgcolor: '#ffffff',
                         }
                     }}
                 >
-                    <Box sx={{ p: 0.5 }}>
-                        <Typography variant="body2" sx={{ mb: 0.5, fontSize: '0.7rem', lineHeight: 1.2 }}>
-                            Delete "<strong>{currentUserEmailToDelete}</strong>"? This cannot be undone.
+                    <DialogTitle
+                        sx={{
+                            background: '#d32f2f',
+                            minHeight: '50px',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            color: 'white',
+                            px: 2.5,
+                            py: 2,
+                            borderBottom: '1px solid #e0e0e0'
+                        }}
+                    >
+                        <Typography variant="h6" component="div" sx={{ fontSize: '1rem', fontWeight: 600 }}>
+                            ⚠️ Delete User
                         </Typography>
-                        <Box display="flex" justifyContent="flex-end" gap={0.5}>
-                            <Button onClick={handleCancelDelete} size="small" variant="outlined" color="primary"
-                                sx={{ fontSize: '0.6rem', padding: '2px 5px', minWidth: 'auto' }}>
-                                No
-                            </Button>
-                            <Button onClick={handleConfirmDelete} size="small" variant="contained" color="primary" autoFocus
-                                sx={{ fontSize: '0.6rem', padding: '2px 5px', minWidth: 'auto' }}>
-                                Yes
-                            </Button>
+                        <IconButton onClick={handleCancelDelete} sx={{ color: 'white', '&:hover': { bgcolor: 'rgba(255,255,255,0.1)' } }}>
+                            <CloseIcon fontSize="small" />
+                        </IconButton>
+                    </DialogTitle>
+
+                    <DialogContent sx={{ p: { xs: 2, sm: 2.5 }, bgcolor: '#f5f5f5' }}>
+                        <Box sx={{ bgcolor: 'white', p: 2, border: '1px solid #e0e0e0', borderRadius: 1 }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.5 }}>
+                                <Typography variant="subtitle1" sx={{ fontSize: '0.9rem', fontWeight: 600, color: '#333' }}>
+                                    Confirm Deletion
+                                </Typography>
                         </Box>
+                            <Typography variant="body2" sx={{ mb: 2, fontSize: '0.85rem', lineHeight: 1.5 }}>
+                                Are you sure you want to delete <strong>{currentUserEmailToDelete}</strong>? 
+                            </Typography>
+                            <Typography variant="body2" sx={{ fontSize: '0.8rem', color: '#d32f2f', fontWeight: 500 }}>
+                                ⚠️ This action cannot be undone and will permanently remove the user from the system.
+                            </Typography>
                     </Box>
-                </Popover>
+                    </DialogContent>
+                    
+                    <DialogActions sx={{ py: 2, px: 3, bgcolor: '#f8f9fa', borderTop: '1px solid #e0e0e0' }}>
+                        <Button 
+                            onClick={handleCancelDelete} 
+                            variant="outlined" 
+                            size="small"
+                            sx={{ 
+                                textTransform: 'none', 
+                                fontSize: '0.85rem',
+                                borderRadius: 1,
+                                px: 2
+                            }}
+                        >
+                            Cancel
+                        </Button>
+                        <Button 
+                            onClick={handleConfirmDelete} 
+                            variant="contained" 
+                            color="error" 
+                            size="small"
+                            autoFocus
+                            sx={{ 
+                                textTransform: 'none', 
+                                fontSize: '0.85rem',
+                                borderRadius: 1,
+                                px: 2,
+                                boxShadow: 'none',
+                                '&:hover': {
+                                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                                }
+                            }}
+                        >
+                            Delete User
+                        </Button>
+                    </DialogActions>
+                </Dialog>
 
                 {/* Snackbar */}
                 <Snackbar open={snackbar.open} autoHideDuration={3000} onClose={() => setSnackbar({ ...snackbar, open: false })}>
