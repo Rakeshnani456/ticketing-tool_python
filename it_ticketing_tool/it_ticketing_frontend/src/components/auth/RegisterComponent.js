@@ -81,7 +81,7 @@ const RegisterComponent = ({ currentUser, navigateTo, showFlashMessage }) => {
     };
 
     return (
-        <div className="flex flex-col items-center justify-center min-h-[calc(100vh-4rem)] bg-offwhite p-4">
+        <div className="flex flex-col items-center justify-center min-h-screen bg-offwhite p-4">
             <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-sm border border-gray-200 animate-fade-in">
                 <h2 className="text-2xl font-extrabold text-gray-800 mb-5 text-center">Join Us</h2>
                 <form onSubmit={handleSubmit} className="space-y-3">

@@ -2,6 +2,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client'; // For React 18
 import './index.css'; // Your global CSS
+import './ticket-detail-fonts.css'; // Ticket detail font size adjustments
 import App from './App';
 import { BrowserRouter } from 'react-router-dom'; // Make sure this import is here
 import 'animate.css';

@@ -6,6 +6,15 @@ const path = require('path');
 const os = require('os');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
+const { 
+    logTicketCreated, 
+    logTicketAssigned, 
+    logStatusChange, 
+    logCommentAdded, 
+    logTicketResolved, 
+    logAttachmentUploaded,
+    logPriorityChange
+} = require('../utils/activityLogger');
 
 module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCollection, transporter, verifyFirebaseToken, checkRole, jsonSerializableTicket, jsonSerializableNotification, generateDisplayId, sendEmailAlert) => {
 
@@ -155,10 +164,25 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
 
             const newDisplayId = await generateDisplayIdInternal();
 
+            // Get user data for storing name information
+            const userDoc = await usersCollection.doc(reporterId).get();
+            const userData = userDoc.exists ? userDoc.data() : {};
+            let reporterName = reporterEmail;
+            if (userData.firstName || userData.lastName) {
+                reporterName = `${userData.firstName || ''} ${userData.lastName || ''}`.trim();
+            } else if (userData.name) {
+                reporterName = userData.name;
+            } else if (userData.client_name) {
+                reporterName = userData.client_name;
+            }
+
             const newTicket = {
                 display_id: newDisplayId,
                 reporter_id: reporterId,
                 reporter_email: reporterEmail,
+                reporter_name: reporterName,
+                reporter_firstName: userData.firstName || null,
+                reporter_lastName: userData.lastName || null,
                 request_for_email: request_for_email,
                 category: category,
                 short_description: short_description,
@@ -182,6 +206,13 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
             };
 
             const docRef = await ticketsCollection.add(newTicket);
+
+            // Log ticket creation activity with enhanced context
+            await logTicketCreated(db, docRef.id, reporterName, reporterEmail, { 
+                ...newTicket, 
+                ticket_display_id: newDisplayId,
+                client_name: clientName 
+            });
 
             const reporterUserRole = req.user.role;
             if (reporterUserRole === 'user') {
@@ -219,24 +250,26 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                     <p style=\"margin-top: 24px;\">Best regards,<br/>IT Service Desk<br/>Kriasol Technologies</p>
                 </div>
             `;
-            // Send email to both user and DL email in "To" field
+            // Send email with proper To and CC fields
             setImmediate(() => {
-                let toList = ['tt.support@kriasol.com'];
+                const toEmail = 'tt.support@kriasol.com';
+                let ccList = [];
                 
-                // Add user emails to "To" field
+                // Add requested by email and requested for email to CC (if they're different)
                 if (request_for_email && reporterEmail) {
                     if (request_for_email === reporterEmail) {
-                        toList.push(request_for_email);
+                        ccList.push(request_for_email);
                     } else {
-                        toList.push(request_for_email, reporterEmail);
+                        ccList.push(request_for_email, reporterEmail);
                     }
                 } else if (request_for_email) {
-                    toList.push(request_for_email);
+                    ccList.push(request_for_email);
                 } else if (reporterEmail) {
-                    toList.push(reporterEmail);
+                    ccList.push(reporterEmail);
                 }
                 
-                sendEmailAlert(toList.join(','), emailSubject, emailText, emailHtml);
+                const ccEmail = ccList.length > 0 ? ccList.join(',') : null;
+                sendEmailAlert(toEmail, emailSubject, emailText, emailHtml, ccEmail);
             });
 
             return res.status(201).json({ message: 'Ticket created successfully!', id: docRef.id, display_id: newDisplayId });
@@ -286,22 +319,19 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                 return res.status(403).json({ error: "Forbidden: Cannot update a resolved or cancelled ticket as a regular user." });
             }
 
-            if (authenticatedUserRole === "user" && ticketData.reporter_id !== authenticatedUid) {
-                return res.status(403).json({ error: "Forbidden: You can only update your own tickets." });
+            // Only support users (engineers) can edit tickets
+            if (!['support'].includes(authenticatedUserRole)) {
+                return res.status(403).json({ error: "Forbidden: Only support users can edit tickets." });
             }
 
-            // Restrict status and priority updates to only the assigned engineer
-            if ((status !== undefined && status !== ticketData.status) || (priority !== undefined && priority !== ticketData.priority)) {
-                if (ticketData.assigned_to_id !== authenticatedUid) {
-                    return res.status(403).json({ error: "Only the assigned engineer can update status or priority." });
-                }
-            }
+            // Since only support users can edit tickets, no additional permission checks needed for status/priority updates
 
             const updateData = {
                 updated_at: admin.firestore.FieldValue.serverTimestamp()
             };
 
             if (priority !== undefined) updateData.priority = priority;
+            if (category !== undefined) updateData.category = category;
             if (short_description !== undefined) updateData.short_description = short_description;
             if (long_description !== undefined) updateData.long_description = long_description;
             if (contact_number !== undefined) updateData.contact_number = contact_number;
@@ -321,6 +351,28 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                     added_at: att.added_at || now
                 }));
                 updateData.attachments = [...existingAttachments, ...attachmentsWithTimestamp];
+                
+                // Log attachment upload activity with enhanced context
+                const userDoc = await usersCollection.doc(authenticatedUid).get();
+                const userData = userDoc.exists ? userDoc.data() : {};
+                let userName = req.user.email;
+                if (userData.firstName || userData.lastName) {
+                    userName = `${userData.firstName || ''} ${userData.lastName || ''}`.trim();
+                } else if (userData.name) {
+                    userName = userData.name;
+                } else if (userData.client_name) {
+                    userName = userData.client_name;
+                }
+                for (const attachment of attachments) {
+                    const filename = attachment.originalFilename || attachment.filename || 'Unknown file';
+                    const attachmentDetails = {
+                        file_size: attachment.size || null,
+                        file_type: attachment.mimetype || null,
+                        short_description: ticketData.short_description,
+                        status: ticketData.status
+                    };
+                    await logAttachmentUploaded(db, ticketId, userName, filename, req.user.email, { ...attachmentDetails, ticket_display_id: ticketData.display_id });
+                }
             }
 
             // Status change logic
@@ -333,7 +385,26 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                     timestamp: new Date()
                 };
                 updateData.status_history = admin.firestore.FieldValue.arrayUnion(statusHistoryEntry);
+                
+                // Log status change activity with enhanced context
+                const userDoc = await usersCollection.doc(authenticatedUid).get();
+                const userData = userDoc.exists ? userDoc.data() : {};
+                let userName = req.user.email;
+                if (userData.firstName || userData.lastName) {
+                    userName = `${userData.firstName || ''} ${userData.lastName || ''}`.trim();
+                } else if (userData.name) {
+                    userName = userData.name;
+                } else if (userData.client_name) {
+                    userName = userData.client_name;
+                }
+                await logStatusChange(db, ticketId, userName, ticketData.status, status, req.user.email, { ...ticketData, ticket_display_id: ticketData.display_id });
+                
+                // Log resolution activity if status is Resolved
+                if (status === 'Resolved') {
+                    await logTicketResolved(db, ticketId, userName, req.user.email, { ...ticketData, ticket_display_id: ticketData.display_id });
+                }
 
+                // Handle resolved/cancelled specific logic
                 if (["Resolved", "Cancelled"].includes(status)) {
                     updateData.resolved_at = admin.firestore.FieldValue.serverTimestamp();
                     updateData.closed_by_email = req.user.email;
@@ -344,14 +415,45 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                         const timeSpentMinutes = Math.round(timeDiffMillis / (1000 * 60));
                         updateData.time_spent_minutes = timeSpentMinutes;
                     }
+                }
 
-                    const ticketReporterEmail = ticketData.reporter_email;
-                    const requestForEmail = ticketData.request_for_email;
-                    const emailSubject = `Ticket ${ticketData.display_id} Status Updated`;
-                    const emailText = `The status of your ticket (${ticketData.display_id} - ${ticketData.short_description}) has been updated to: ${status}.\n\nAccess the Ticketing Tool for more details.`;
-                    const baseUrl = getBaseUrl(req);
-                    const ticketLink = `${baseUrl}/tickets/${ticketId}`;
-                    const emailHtml = `<div style=\"font-family: Arial, sans-serif; color: #222;\"><p>The status of your ticket (<a href=\"${ticketLink}\" style=\"color: #2563eb; text-decoration: underline;\" target=\"_blank\"><strong>${ticketData.display_id}</strong></a> - ${ticketData.short_description}) has been updated to: <strong>${status}</strong>.</p><p>Access the Ticketing Tool for more details.</p></div>`;
+                // Send status change email for all status changes
+                const ticketReporterEmail = ticketData.reporter_email;
+                const requestForEmail = ticketData.request_for_email;
+                const emailSubject = `Ticket ${ticketData.display_id} Status Updated`;
+                const emailText = `The status of your ticket (${ticketData.display_id} - ${ticketData.short_description}) has been updated to: ${status}.\n\nAccess the Ticketing Tool for more details.`;
+                const baseUrl = getBaseUrl(req);
+                const ticketLink = `${baseUrl}/tickets/${ticketId}`;
+                const emailHtml = `<div style=\"font-family: Arial, sans-serif; color: #222;\"><p>The status of your ticket (<a href=\"${ticketLink}\" style=\"color: #2563eb; text-decoration: underline;\" target=\"_blank\"><strong>${ticketData.display_id}</strong></a> - ${ticketData.short_description}) has been updated to: <strong>${status}</strong>.</p><p>Access the Ticketing Tool for more details.</p></div>`;
+                
+                // Check if action is performed by engineer
+                const isEngineerAction = ['support', 'admin', 'super_admin', 'site_admin'].includes(authenticatedUserRole);
+                
+                if (isEngineerAction) {
+                    // Engineer action: To = request_for_email/reporter_email, CC = tt.support@kriasol.com + assigned engineer
+                    let toList = [];
+                    if (requestForEmail && ticketReporterEmail) {
+                        if (requestForEmail === ticketReporterEmail) {
+                            toList.push(requestForEmail);
+                        } else {
+                            toList.push(requestForEmail, ticketReporterEmail);
+                        }
+                    } else if (requestForEmail) {
+                        toList.push(requestForEmail);
+                    } else if (ticketReporterEmail) {
+                        toList.push(ticketReporterEmail);
+                    }
+                    
+                    let ccList = ['tt.support@kriasol.com'];
+                    if (ticketData.assigned_to_email) {
+                        ccList.push(ticketData.assigned_to_email);
+                    }
+                    
+                    setImmediate(() => {
+                        sendEmailAlert(toList.join(','), emailSubject, emailText, emailHtml, ccList.join(','));
+                    });
+                } else {
+                    // Non-engineer action: To = tt.support@kriasol.com + users, CC = none
                     setImmediate(() => {
                         let toList = ['tt.support@kriasol.com'];
                         
@@ -373,8 +475,8 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                 }
             }
 
-            // Assignment logic
-            if (assigned_to_email !== undefined) {
+            // Assignment logic - only process if assignment actually changed
+            if (assigned_to_email !== undefined && assigned_to_email !== ticketData.assigned_to_email) {
                 if (!['support', 'admin'].includes(authenticatedUserRole)) {
                     return res.status(403).json({ error: 'Forbidden: Only support associates or admins can assign tickets.' });
                 }
@@ -418,6 +520,19 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                         timestamp: new Date()
                     };
                     updateData.assigned_to_history = admin.firestore.FieldValue.arrayUnion(assignmentHistoryEntry);
+                    
+                    // Log assignment activity with enhanced context
+                    const userDoc = await usersCollection.doc(authenticatedUid).get();
+                    const userData = userDoc.exists ? userDoc.data() : {};
+                    let userName = req.user.email;
+                    if (userData.firstName || userData.lastName) {
+                        userName = `${userData.firstName || ''} ${userData.lastName || ''}`.trim();
+                    } else if (userData.name) {
+                        userName = userData.name;
+                    } else if (userData.client_name) {
+                        userName = userData.client_name;
+                    }
+                    await logTicketAssigned(db, ticketId, userName, assigned_to_email, req.user.email, { ...ticketData, ticket_display_id: ticketData.display_id });
 
                     if (assignedUserDoc.id !== authenticatedUid) {
                         await notificationsCollection.add({
@@ -449,14 +564,43 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                     const baseUrl = getBaseUrl(req);
                     const ticketLink = `${baseUrl}/tickets/${ticketId}`;
                     const emailHtml = `<div style=\"font-family: Arial, sans-serif; color: #222;\"><p>Ticket <a href=\"${ticketLink}\" style=\"color: #2563eb; text-decoration: underline;\" target=\"_blank\"><strong>${ticketData.display_id}</strong></a> - ${ticketData.short_description} has been assigned to engineer: <strong>${assignedEngineerEmail}</strong>.</p><p>Access the Ticketing Tool for more details.</p></div>`;
-                    // To: reporter_email, request_for_email; CC: assigned engineer
-                    let toList = [];
-                    if (reporterEmail) toList.push(reporterEmail);
-                    if (requestForEmail && requestForEmail !== reporterEmail) toList.push(requestForEmail);
-                    let ccList = assignedEngineerEmail;
-                    setImmediate(() => {
-                        sendEmailAlert(toList.join(','), emailSubject, emailText, emailHtml, ccList);
-                    });
+                    
+                    // Check if action is performed by engineer
+                    const isEngineerAction = ['support', 'admin', 'super_admin', 'site_admin'].includes(authenticatedUserRole);
+                    
+                    if (isEngineerAction) {
+                        // Engineer action: To = request_for_email/reporter_email, CC = tt.support@kriasol.com + assigned engineer
+                        let toList = [];
+                        if (requestForEmail && reporterEmail) {
+                            if (requestForEmail === reporterEmail) {
+                                toList.push(requestForEmail);
+                            } else {
+                                toList.push(requestForEmail, reporterEmail);
+                            }
+                        } else if (requestForEmail) {
+                            toList.push(requestForEmail);
+                        } else if (reporterEmail) {
+                            toList.push(reporterEmail);
+                        }
+                        
+                        let ccList = ['tt.support@kriasol.com'];
+                        if (assignedEngineerEmail) {
+                            ccList.push(assignedEngineerEmail);
+                        }
+                        
+                        setImmediate(() => {
+                            sendEmailAlert(toList.join(','), emailSubject, emailText, emailHtml, ccList.join(','));
+                        });
+                    } else {
+                        // Non-engineer action: To = reporter_email, request_for_email; CC = assigned engineer
+                        let toList = [];
+                        if (reporterEmail) toList.push(reporterEmail);
+                        if (requestForEmail && requestForEmail !== reporterEmail) toList.push(requestForEmail);
+                        let ccList = assignedEngineerEmail;
+                        setImmediate(() => {
+                            sendEmailAlert(toList.join(','), emailSubject, emailText, emailHtml, ccList);
+                        });
+                    }
                 }
             }
 
@@ -469,6 +613,19 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                     timestamp: new Date()
                 };
                 updateData.priority_history = admin.firestore.FieldValue.arrayUnion(priorityHistoryEntry);
+                
+                // Log priority change activity with enhanced context
+                const userDoc = await usersCollection.doc(authenticatedUid).get();
+                const userData = userDoc.exists ? userDoc.data() : {};
+                let userName = req.user.email;
+                if (userData.firstName || userData.lastName) {
+                    userName = `${userData.firstName || ''} ${userData.lastName || ''}`.trim();
+                } else if (userData.name) {
+                    userName = userData.name;
+                } else if (userData.client_name) {
+                    userName = userData.client_name;
+                }
+                await logPriorityChange(db, ticketId, userName, ticketData.priority, priority, req.user.email, { ...ticketData, ticket_display_id: ticketData.display_id });
             }
 
             // Category change
@@ -549,6 +706,23 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
             }
 
             await ticketsCollection.doc(ticketId).update(updateData);
+
+            // Log cancellation activity with enhanced context
+            const userDoc = await usersCollection.doc(authenticatedUid).get();
+            const userData = userDoc.exists ? userDoc.data() : {};
+            let userName = req.user.email;
+            if (userData.firstName || userData.lastName) {
+                userName = `${userData.firstName || ''} ${userData.lastName || ''}`.trim();
+            } else if (userData.name) {
+                userName = userData.name;
+            } else if (userData.client_name) {
+                userName = userData.client_name;
+            }
+            const cancellationDetails = {
+                short_description: ticketData.short_description,
+                cancellation_reason: closure_notes || null
+            };
+            await logTicketCancelled(db, ticketId, userName, req.user.email, { ...cancellationDetails, ticket_display_id: ticketData.display_id });
 
             if (ticketData.reporter_id !== authenticatedUid) {
                 await notificationsCollection.add({
@@ -636,6 +810,19 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                 comments: admin.firestore.FieldValue.arrayUnion(newComment),
                 updated_at: admin.firestore.FieldValue.serverTimestamp()
             });
+            
+            // Log comment addition activity with enhanced context
+            const userDoc = await usersCollection.doc(req.user.uid).get();
+            const userData = userDoc.exists ? userDoc.data() : {};
+            let userName = req.user.email;
+            if (userData.firstName || userData.lastName) {
+                userName = `${userData.firstName || ''} ${userData.lastName || ''}`.trim();
+            } else if (userData.name) {
+                userName = userData.name;
+            } else if (userData.client_name) {
+                userName = userData.client_name;
+            }
+            await logCommentAdded(db, ticketId, userName, req.user.email, comment_text, { ...ticketData, ticket_display_id: ticketData.display_id });
 
             if (req.user.uid !== ticketData.reporter_id) {
                 await notificationsCollection.add({
@@ -669,11 +856,12 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
             const ticketLink = `${baseUrl}/tickets/${ticketId}`;
             const emailHtml = `<div style=\"font-family: Arial, sans-serif; color: #222;\"><p>A new comment has been added to your ticket (<a href=\"${ticketLink}\" style=\"color: #2563eb; text-decoration: underline;\" target=\"_blank\"><strong>${ticketData.display_id}</strong></a> - ${ticketData.short_description}):</p><blockquote style=\"margin: 8px 0; padding-left: 12px; border-left: 2px solid #ccc;\">${comment_text}</blockquote><p>Access the Ticketing Tool for more details.</p></div>`;
             
-            // Send email notification for comments regardless of assignment status
-            setImmediate(() => {
+            // Check if action is performed by engineer
+            const isEngineerAction = ['support', 'admin', 'super_admin', 'site_admin'].includes(req.user.role);
+            
+            if (isEngineerAction) {
+                // Engineer action: To = request_for_email/reporter_email, CC = tt.support@kriasol.com + assigned engineer
                 let toList = [];
-                
-                // Add user emails to "To" field
                 if (requestForEmail && reporterEmail) {
                     if (requestForEmail === reporterEmail) {
                         toList.push(requestForEmail);
@@ -686,14 +874,44 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                     toList.push(reporterEmail);
                 }
                 
-                // If no users to send to, send only to tt.support@kriasol.com
-                if (toList.length === 0) {
-                    sendEmailAlert('tt.support@kriasol.com', emailSubject, emailText, emailHtml);
-                } else {
-                    // Send email with tt.support@kriasol.com in CC
-                    sendEmailAlert(toList.join(','), emailSubject, emailText, emailHtml, 'tt.support@kriasol.com');
+                let ccList = ['tt.support@kriasol.com'];
+                if (assignedToEmail) {
+                    ccList.push(assignedToEmail);
                 }
-            });
+                
+                setImmediate(() => {
+                    sendEmailAlert(toList.join(','), emailSubject, emailText, emailHtml, ccList.join(','));
+                });
+            } else {
+                // Non-engineer action: To = tt.support@kriasol.com + assigned engineer, CC = request_for_email/reporter_email
+                setImmediate(() => {
+                    let toList = ['tt.support@kriasol.com'];
+                    
+                    // Add assigned engineer to "To" field if ticket is assigned
+                    if (assignedToEmail) {
+                        toList.push(assignedToEmail);
+                    }
+                    
+                    let ccList = [];
+                    
+                    // Add requested by email and requested for email to CC (if they're different)
+                    if (requestForEmail && reporterEmail) {
+                        if (requestForEmail === reporterEmail) {
+                            ccList.push(requestForEmail);
+                        } else {
+                            ccList.push(requestForEmail, reporterEmail);
+                        }
+                    } else if (requestForEmail) {
+                        ccList.push(requestForEmail);
+                    } else if (reporterEmail) {
+                        ccList.push(reporterEmail);
+                    }
+                    
+                    const toEmail = toList.join(',');
+                    const ccEmail = ccList.length > 0 ? ccList.join(',') : null;
+                    sendEmailAlert(toEmail, emailSubject, emailText, emailHtml, ccEmail);
+                });
+            }
 
             return res.status(200).json({ message: 'Comment added successfully!' });
         } catch (error) {
@@ -736,18 +954,30 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
         }
     });
 
-    // --- Get All Tickets (for support and admin users) ---
-    router.get('/all', verifyFirebaseToken, checkRole(['support', 'admin', 'super_admin']), async (req, res) => {
+    // --- Get All Tickets (for support, admin, super_admin, and site_admin users) ---
+    router.get('/all', verifyFirebaseToken, checkRole(['support', 'admin', 'super_admin', 'site_admin']), async (req, res) => {
         const filterStatus = req.query.status;
         const filterAssignment = req.query.assignment;
+        const filterCompany = req.query.company; // New company filter parameter
         const searchKeyword = req.query.keyword ? req.query.keyword.toLowerCase() : '';
 
         try {
             let query = ticketsCollection;
 
+            // Apply company filtering for site admin users
+            if (req.user.role === 'site_admin' && req.user.client_name) {
+                query = query.where('client_name', '==', req.user.client_name);
+            }
+
             if (searchKeyword) {
                 const exactIdMatch = `TT${searchKeyword.toUpperCase().padStart(5, '0')}`;
-                const exactIdMatchQuery = ticketsCollection.where('display_id', '==', exactIdMatch);
+                let exactIdMatchQuery = ticketsCollection.where('display_id', '==', exactIdMatch);
+                
+                // Apply company filtering for site admin users in exact match query
+                if (req.user.role === 'site_admin' && req.user.client_name) {
+                    exactIdMatchQuery = exactIdMatchQuery.where('client_name', '==', req.user.client_name);
+                }
+                
                 const exactIdMatchSnapshot = await exactIdMatchQuery.get();
                 if (!exactIdMatchSnapshot.empty) {
                     return res.status(200).json(exactIdMatchSnapshot.docs.map(doc => jsonSerializableTicket(doc.id, doc.data())));
@@ -767,6 +997,11 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                 query = query.where('assigned_to_id', '==', req.user.uid);
             }
 
+            // Apply company filter
+            if (filterCompany) {
+                query = query.where('client_name', '==', filterCompany);
+            }
+
             const snapshot = await query.orderBy('created_at', 'desc').get();
             const tickets = snapshot.docs.map(doc => jsonSerializableTicket(doc.id, doc.data()));
             return res.status(200).json(tickets);
@@ -776,38 +1011,17 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
         }
     });
 
-    // --- New Route: Get Ticket Details ---
-    router.get('/:ticket_id', verifyFirebaseToken, async (req, res) => {
-        const ticketId = req.params.ticket_id;
-        const authenticatedUid = req.user.uid;
-        const authenticatedUserRole = req.user.role;
-
-        try {
-            const ticketDoc = await ticketsCollection.doc(ticketId).get();
-
-            if (!ticketDoc.exists) {
-                return res.status(404).json({ error: 'Ticket not found.' });
-            }
-
-            const ticketData = ticketDoc.data();
-
-            if (ticketData.reporter_id !== authenticatedUid && !['support', 'admin', 'super_admin'].includes(authenticatedUserRole)) {
-                return res.status(403).json({ error: 'Forbidden: You do not have permission to view this ticket.' });
-            }
-
-            return res.status(200).json(jsonSerializableTicket(ticketDoc.id, ticketData));
-        } catch (error) {
-            console.error(`Error fetching ticket ${ticketId}: ${error.message}`);
-            return res.status(500).json({ error: `Failed to fetch ticket details: ${error.message}` });
-        }
-    });
-
     // --- New Route: Export all tickets to CSV ---
-    router.get('/export', verifyFirebaseToken, checkRole(['support', 'admin', 'super_admin']), async (req, res) => {
+    router.get('/export', verifyFirebaseToken, checkRole(['support', 'admin', 'super_admin', 'site_admin']), async (req, res) => {
         const { start_date, end_date, status } = req.query;
 
         try {
             let query = ticketsCollection.orderBy('created_at', 'asc');
+
+            // Apply company filtering for site admin users
+            if (req.user.role === 'site_admin' && req.user.client_name) {
+                query = query.where('client_name', '==', req.user.client_name);
+            }
 
             if (start_date) {
                 const startDateObj = new Date(start_date);
@@ -866,7 +1080,6 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                     ticket.hostname_asset_id || '',
                     ticket.assigned_to_email || '',
                     ticket.created_at || '',
-                    ticket.updated_at || '',
                     ticket.resolved_at || '',
                     timeSpent,
                     `"${ticket.closure_notes ? ticket.closure_notes.replace(/"/g, '""') : ''}"`,
@@ -882,6 +1095,45 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
         } catch (error) {
             console.error(`Error exporting tickets: ${error.message}`);
             return res.status(500).json({ error: `Failed to export tickets: ${error.message}` });
+        }
+    });
+
+    // --- New Route: Get Ticket Details ---
+    router.get('/:ticket_id', verifyFirebaseToken, async (req, res) => {
+        const ticketId = req.params.ticket_id;
+        const authenticatedUid = req.user.uid;
+        const authenticatedUserRole = req.user.role;
+
+        try {
+            let ticketDoc = await ticketsCollection.doc(ticketId).get();
+
+            // If not found by document ID, try to find by display_id
+            if (!ticketDoc.exists && ticketId.startsWith('TT')) {
+                const displayIdQuery = await ticketsCollection.where('display_id', '==', ticketId).limit(1).get();
+                if (!displayIdQuery.empty) {
+                    ticketDoc = displayIdQuery.docs[0];
+                }
+            }
+
+            if (!ticketDoc.exists) {
+                return res.status(404).json({ error: 'Ticket not found.' });
+            }
+
+            const ticketData = ticketDoc.data();
+
+            // For site admin users, check if they can access this ticket based on company
+            if (authenticatedUserRole === 'site_admin') {
+                if (req.user.client_name && ticketData.client_name !== req.user.client_name) {
+                    return res.status(403).json({ error: 'Forbidden: You do not have permission to view tickets from other companies.' });
+                }
+            } else if (ticketData.reporter_id !== authenticatedUid && !['support', 'admin', 'super_admin'].includes(authenticatedUserRole)) {
+                return res.status(403).json({ error: 'Forbidden: You do not have permission to view this ticket.' });
+            }
+
+            return res.status(200).json(jsonSerializableTicket(ticketDoc.id, ticketData));
+        } catch (error) {
+            console.error(`Error fetching ticket ${ticketId}: ${error.message}`);
+            return res.status(500).json({ error: `Failed to fetch ticket details: ${error.message}` });
         }
     });
 

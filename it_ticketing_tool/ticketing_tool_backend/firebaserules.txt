@@ -34,6 +34,13 @@ service cloud.firestore {
         get(/databases/$(database)/documents/users/$(getUserId())).data.client_name == resource.data.client_name;
     }
 
+    // Helper: site_admin can read activities for their own company/client
+    function isSiteAdminForActivity() {
+      return exists(/databases/$(database)/documents/users/$(getUserId())) &&
+        get(/databases/$(database)/documents/users/$(getUserId())).data.role == 'site_admin' &&
+        get(/databases/$(database)/documents/users/$(getUserId())).data.client_name == resource.data.client_name;
+    }
+
     match /tickets/{ticketId} {
       allow read: if isAuthenticated() && (
         resource.data.reporter_id == getUserId() ||
@@ -85,6 +92,19 @@ service cloud.firestore {
     // Private user data (if any)
     match /artifacts/{appId}/users/{userId}/{document=**} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Rules for the 'activities' collection
+    match /activities/{activityId} {
+      // Allow authenticated users to read activities with company filtering for site admins
+      allow read: if isAuthenticated() && (
+        hasSupportAdminOrSuperAdminRole() ||
+        isSiteAdminForActivity()
+      );
+      // Allow authenticated users to create activities (for testing and frontend operations)
+      allow create: if isAuthenticated();
+      // Allow only the backend to update/delete activities (for security)
+      allow update, delete: if false;
     }
   }
 }

@@ -42,12 +42,18 @@ const Modal = ({ children, title, onClose, isOpen, customClassName = '', style =
     if (!show) return null;
 
     return (
-        // Fixed overlay for the modal background with optional blur and fade
-        <div className={`fixed inset-0 ${noBlur ? '' : 'bg-gray-600 bg-opacity-40 backdrop-blur-sm'} flex items-center justify-center p-4 z-50 transition-all duration-300 animate-fade-in`} style={noBlur ? {background: 'transparent'} : {}}>
+        // Fixed overlay for the modal background with enhanced blur and highest z-index
+        <div 
+            className={`fixed inset-0 ${noBlur ? '' : 'bg-gray-800 bg-opacity-60 backdrop-blur-md'} flex items-center justify-center p-4 transition-all duration-300 animate-fade-in`} 
+            style={{
+                zIndex: 99999,
+                ...(noBlur ? {background: 'transparent'} : {}),
+                ...style
+            }}
+        >
             {/* Modal content container with Animate.css zoomIn/zoomOut animation */}
             <div
-                className={`bg-white p-4 md:p-6 rounded-lg shadow-xl w-full max-w-[700px] min-h-[350px] relative max-h-screen overflow-y-auto animate__animated ${animateClass} animate__faster ${customClassName}`}
-                style={style}
+                className={`bg-white p-4 md:p-6 rounded-lg shadow-2xl w-full max-w-[700px] min-h-[350px] relative max-h-screen overflow-y-auto animate__animated ${animateClass} animate__faster ${customClassName}`}
                 onAnimationEnd={handleAnimationEnd}
             >
                 {/* Close button positioned at the top right */}

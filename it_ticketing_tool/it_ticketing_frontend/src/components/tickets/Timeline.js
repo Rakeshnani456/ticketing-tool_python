@@ -23,6 +23,7 @@ const Timeline = ({ events = [] }) => {
     const [hoveredIndex, setHoveredIndex] = useState(null);
     const scrollRef = useRef(null);
     const timelineBarRef = useRef(null);
+    const [isAnimating, setIsAnimating] = useState(false);
 
     // On mount or collapse, scroll to the far right (latest activity)
     useEffect(() => {
@@ -35,158 +36,188 @@ const Timeline = ({ events = [] }) => {
     useEffect(() => {
         const checkScroll = () => {
             if (scrollRef.current) {
-                setCanScrollLeft(scrollRef.current.scrollLeft > 0);
+                const { scrollLeft, clientWidth, scrollWidth } = scrollRef.current;
+                setCanScrollLeft(scrollLeft > 5); // Added buffer to prevent flickering
                 setCanScrollRight(
-                    scrollRef.current.scrollLeft + scrollRef.current.clientWidth < scrollRef.current.scrollWidth - 1
+                    scrollLeft + clientWidth < scrollWidth - 5
                 );
             }
         };
-        checkScroll();
+        
+        const resizeObserver = new ResizeObserver(checkScroll);
         if (scrollRef.current) {
             scrollRef.current.addEventListener('scroll', checkScroll);
+            resizeObserver.observe(scrollRef.current);
         }
-        window.addEventListener('resize', checkScroll);
+        
         return () => {
             if (scrollRef.current) {
                 scrollRef.current.removeEventListener('scroll', checkScroll);
+                resizeObserver.unobserve(scrollRef.current);
             }
-            window.removeEventListener('resize', checkScroll);
         };
     }, [events, expanded]);
 
-    // Scroll handlers
     const handleScrollLeft = () => {
         if (scrollRef.current) {
-            scrollRef.current.scrollBy({ left: -240, behavior: 'smooth' });
+            scrollRef.current.scrollBy({ left: -200, behavior: 'smooth' });
         }
     };
+    
     const handleScrollRight = () => {
         if (scrollRef.current) {
-            scrollRef.current.scrollBy({ left: 240, behavior: 'smooth' });
+            scrollRef.current.scrollBy({ left: 200, behavior: 'smooth' });
         }
     };
 
-    // Tooltip position logic
-    const getTooltipStyle = () => {
-        if (hoveredIndex === null || !timelineBarRef.current) return { display: 'none' };
+    const handleToggle = () => {
+        setIsAnimating(true);
+        setExpanded((prev) => !prev);
+        setTimeout(() => setIsAnimating(false), 300); // Match the duration of the animation
+    };
+
+    const getTooltipStyle = (index) => {
+        if (!timelineBarRef.current) return { display: 'none' };
         const eventEls = timelineBarRef.current.querySelectorAll('.timeline-event');
-        if (!eventEls[hoveredIndex]) return { display: 'none' };
-        const eventRect = eventEls[hoveredIndex].getBoundingClientRect();
-        const left = eventRect.left + eventRect.width / 2;
-        const top = eventRect.top;
+        if (!eventEls[index]) return { display: 'none' };
+        
+        const eventRect = eventEls[index].getBoundingClientRect();
+        const containerRect = timelineBarRef.current.getBoundingClientRect();
+        const left = Math.min(
+            Math.max(eventRect.left + eventRect.width / 2, containerRect.left + 100),
+            containerRect.right - 100
+        );
+        
         return {
             left: left,
-            top: top - 8,
+            top: eventRect.top - 8,
             transform: 'translateX(-50%) translateY(-100%)',
             position: 'fixed',
             zIndex: 9999,
             pointerEvents: 'none',
+            maxWidth: 'min(220px, calc(100vw - 32px))'
         };
     };
 
     if (!events.length) return null;
+    
     return (
-        <div className="max-w-6xl w-full mx-auto px-0 sm:px-0 md:px-1">
+        <div className="w-full min-w-0">
             <div
                 ref={timelineBarRef}
-                className={`bg-white border-t border-b border-gray-200 w-full relative overflow-visible transition-all duration-300 ${expanded ? 'max-h-[180px] py-1' : 'max-h-[52px] py-3'}`}
-                style={{ minHeight: expanded ? 64 : 40, transition: 'max-height 0.3s cubic-bezier(0.4,0,0.2,1)' }}
+                className={`bg-white border-t border-b border-gray-200 w-full relative overflow-hidden ${
+                    isAnimating ? 'transition-[height,padding] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]' : ''
+                } ${
+                    expanded ? 'h-[180px] py-2' : 'h-[56px]'
+                }`}
             >
-                {/* Left Arrow + Fade (expanded only) */}
-                {expanded && canScrollLeft && (
-                    <>
-                        <div className="pointer-events-none absolute top-0 left-0 h-full w-10 z-20" style={{background: 'linear-gradient(to right, rgba(255,255,255,0.9) 60%, rgba(255,255,255,0))'}} />
+                {/* Left Arrow + Fade */}
+                {canScrollLeft && (
+                    <div className="absolute top-0 left-0 h-full z-20 flex items-center">
+                        <div className="pointer-events-none w-12 h-full" style={{background: 'linear-gradient(to right, rgba(255,255,255,1) 0%, rgba(255,255,255,0.8) 60%, rgba(255,255,255,0))'}} />
                         <button
-                            className="absolute left-1 top-1/2 -translate-y-1/2 flex items-center justify-center w-7 h-7 bg-white/80 hover:bg-blue-100 rounded-full z-30 shadow border border-gray-200 transition"
-                            style={{ pointerEvents: 'auto' }}
+                            className="absolute left-2 top-1/2 -translate-y-1/2 flex items-center justify-center w-6 h-6 bg-white hover:bg-blue-50 rounded-full z-30 shadow-sm border border-gray-200 transition"
                             onClick={handleScrollLeft}
                             aria-label="Scroll timeline left"
                         >
-                            <ChevronLeft className="w-5 h-5 text-blue-600" />
+                            <ChevronLeft className="w-4 h-4 text-blue-600" />
                         </button>
-                    </>
+                    </div>
                 )}
-                {/* Right Arrow + Fade (expanded only) */}
-                {expanded && canScrollRight && (
-                    <>
-                        <div className="pointer-events-none absolute top-0 right-0 h-full w-10 z-20" style={{background: 'linear-gradient(to left, rgba(255,255,255,0.9) 60%, rgba(255,255,255,0))'}} />
+                
+                {/* Right Arrow + Fade */}
+                {canScrollRight && (
+                    <div className="absolute top-0 right-0 h-full z-20 flex items-center">
+                        <div className="pointer-events-none w-12 h-full" style={{background: 'linear-gradient(to left, rgba(255,255,255,1) 0%, rgba(255,255,255,0.8) 60%, rgba(255,255,255,0))'}} />
                         <button
-                            className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center justify-center w-7 h-7 bg-white/80 hover:bg-blue-100 rounded-full z-30 shadow border border-gray-200 transition"
-                            style={{ pointerEvents: 'auto' }}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center justify-center w-6 h-6 bg-white hover:bg-blue-50 rounded-full z-30 shadow-sm border border-gray-200 transition"
                             onClick={handleScrollRight}
                             aria-label="Scroll timeline right"
                         >
-                            <ChevronRight className="w-5 h-5 text-blue-600" />
+                            <ChevronRight className="w-4 h-4 text-blue-600" />
                         </button>
-                    </>
+                    </div>
                 )}
-                {/* Tooltip above the timeline bar */}
+                
+                {/* Tooltip */}
                 {!expanded && hoveredIndex !== null && (
-                    <div style={getTooltipStyle()}>
-                        <div className="relative bg-gray-900 text-white text-xs rounded py-2 px-3 min-w-[140px] max-w-[220px] text-center shadow-lg">
+                    <div style={getTooltipStyle(hoveredIndex)}>
+                        <div className="bg-gray-900 text-white text-xs rounded py-2 px-3 shadow-lg">
                             <div className="absolute left-1/2 -bottom-2 w-0 h-0 border-l-6 border-r-6 border-t-6 border-l-transparent border-r-transparent border-t-gray-900 -translate-x-1/2"></div>
-                            <div className="font-bold mb-1">{events[hoveredIndex].label}</div>
+                            <div className="font-bold mb-1 truncate">{events[hoveredIndex].label}</div>
                             <div>{new Date(events[hoveredIndex].timestamp).toLocaleString()}</div>
-                            {events[hoveredIndex].detail && <div className="text-gray-300 mt-1">{events[hoveredIndex].detail}</div>}
+                            {events[hoveredIndex].detail && (
+                                <div className="text-gray-300 mt-1 line-clamp-2">
+                                    {events[hoveredIndex].detail}
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}
+                
                 <div
                     ref={scrollRef}
-                    className={
-                        `w-full min-w-0 ${expanded ? 'overflow-x-auto' : 'overflow-x-hidden'} scrollbar-none overflow-y-hidden relative transition-all duration-300` +
-                        (expanded ? ' py-1 min-h-[96px] pl-3 pr-3' : ' flex items-center h-full justify-start')
-                    }
-                    style={{
-                        scrollbarWidth: 'none',
-                        msOverflowStyle: 'none',
-                        scrollbarColor: 'transparent transparent',
-                        ...(expanded && { WebkitOverflowScrolling: 'touch' }),
-                        ...(expanded && { WebkitScrollbar: { display: 'none' } })
-                    }}
+                    className={`w-full h-full ${
+                        expanded ? 'overflow-x-auto overflow-y-hidden px-2' : 'overflow-hidden'
+                    } scrollbar-none`}
                 >
-                    <div className={`inline-flex items-center min-h-0 min-w-0 transition-all duration-300 ${expanded ? 'space-x-2' : 'space-x-1 px-2'}`}> {/* Adjusted space-x for expanded */}
+                    <div className={`inline-flex items-center h-full ${
+                        expanded ? 'space-x-1 pl-2' : 'space-x-0'
+                    }`}>
                         {events.map((event, index) => (
                             <React.Fragment key={index}>
                                 {index > 0 && (
-                                    // Adjusted mx for expanded arrow
-                                    <div className={`flex items-center flex-shrink-0 group/timeline-arrow ${expanded ? 'mx-2' : 'h-8'}`}>
-                                        <ArrowRight size={expanded ? 22 : 20} className={`transition-colors drop-shadow-sm ${expanded ? 'text-blue-400 group-hover/timeline-arrow:text-blue-700' : 'text-gray-300'}`} />
+                                    <div className={`flex items-center justify-center flex-shrink-0 ${
+                                        expanded ? 'mx-1 h-full' : 'h-10'
+                                    }`}>
+                                        <ArrowRight 
+                                            size={expanded ? 20 : 16} 
+                                            className={`transition-all duration-300 ${
+                                                expanded ? 'text-blue-400' : 'text-gray-300'
+                                            }`} 
+                                        />
                                     </div>
                                 )}
                                 <div
-                                    // Adjusted w, h, and p-y for expanded event card
-                                    className={`timeline-event group ${expanded ? 'flex flex-col justify-center items-center w-32 min-h-20 p-2' : 'flex justify-center items-center w-8 h-8'} rounded border border-gray-200 bg-gray-50 text-gray-700 flex-shrink-0 relative cursor-pointer transition-shadow overflow-visible${expanded ? ' hover:ring-2 hover:ring-blue-300' : ''}`}
+                                    className={`timeline-event group ${
+                                        expanded 
+                                            ? 'flex flex-col justify-center items-center w-28 min-h-[140px] p-2' 
+                                            : 'flex justify-center items-center w-10 h-10'
+                                    } rounded border border-gray-200 bg-gray-50 text-gray-700 flex-shrink-0 relative cursor-pointer transition-all duration-300 ${
+                                        expanded ? 'hover:ring-1 hover:ring-blue-200' : ''
+                                    } ${
+                                        isAnimating ? expanded ? 'animate-zoomIn' : 'animate-zoomOut' : ''
+                                    }`}
                                     onMouseEnter={() => setHoveredIndex(index)}
                                     onMouseLeave={() => setHoveredIndex(null)}
-                                    style={expanded ? {} : { fontSize: '10px' }}
                                 >
                                     {event.icon && (
-                                        <event.icon 
-                                            size={expanded ? 18 : 18} 
-                                            className={
-                                                (event.iconColor ? event.iconColor : getIconColorClass(event.type)) +
-                                                (!expanded ? ' transition-transform duration-200 group-hover:scale-150' : '')
-                                            }
-                                        />
-                                    )} {/* Adjusted icon size for expanded */}
+                                        <div className={`flex items-center justify-center ${
+                                            expanded ? 'mb-2' : 'w-full h-full'
+                                        }`}>
+                                            <event.icon 
+                                                size={expanded ? 16 : 14} 
+                                                className={`transition-all duration-300 ${
+                                                    event.iconColor || getIconColorClass(event.type)
+                                                } ${!expanded ? 'group-hover:scale-125' : ''}`}
+                                            />
+                                        </div>
+                                    )}
                                     {expanded && (
                                         <>
-                                            {/* Adjusted margin-bottom for label */}
-                                            <div className="flex items-center text-xs font-semibold mb-1 w-full text-center">
-                                                <span className="truncate w-full" style={{overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>{event.label}</span>
+                                            <div className="text-xs font-semibold mb-1 w-full text-center line-clamp-1 transition-opacity duration-300">
+                                                {event.label}
                                             </div>
-                                            {/* Removed extra margin-right from clock icon */}
-                                            <p className="text-[10px] text-blue-700 font-bold flex items-center w-full justify-center truncate">
-                                                <Clock className="w-3 h-3 mr-1 text-blue-400" />
+                                            <p className="text-[10px] text-blue-700 font-bold flex items-center justify-center w-full truncate mb-1 transition-opacity duration-300">
+                                                <Clock className="w-3 h-3 mr-1 text-blue-400 flex-shrink-0" />
                                                 {new Date(event.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                             </p>
-                                            <p className="text-[10px] text-gray-500 w-full justify-center truncate">
+                                            <p className="text-[10px] text-gray-500 w-full text-center truncate mb-1 transition-opacity duration-300">
                                                 {new Date(event.timestamp).toLocaleDateString()}
                                             </p>
                                             {event.detail && (
-                                                <p className="text-[10px] text-gray-400 mt-1 w-full justify-center break-words overflow-hidden">
-                                                    {event.detail.split('@')[0]}
+                                                <p className="text-[10px] text-gray-400 w-full text-center line-clamp-2 transition-opacity duration-300">
+                                                    {event.detail}
                                                 </p>
                                             )}
                                         </>
@@ -197,16 +228,25 @@ const Timeline = ({ events = [] }) => {
                     </div>
                 </div>
             </div>
-            {/* Toggle button for expand/collapse at the bottom */}
-            <div className="flex items-center justify-center -mt-1.5 relative z-30">
+            
+            {/* Toggle button */}
+            <div className="flex items-center justify-center">
                 <button
-                    className="flex items-center gap-1 px-4 py-1 text-xs font-semibold rounded-b-none rounded-t-md transition-colors z-30 text-yellow-500"
-                    style={{ borderTopLeftRadius: 0, borderTopRightRadius: 0, position: 'relative', top: '4px' }}
-                    onClick={() => setExpanded((prev) => !prev)}
+                    className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold rounded-b-md bg-white border border-t-0 border-gray-200 hover:bg-gray-50 transition-colors"
+                    onClick={handleToggle}
                     aria-label={expanded ? 'Hide Timeline' : 'Show Timeline'}
                 >
-                    {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                    {expanded ? 'Hide Timeline' : 'Show Timeline'}
+                    {expanded ? (
+                        <>
+                            <ChevronUp className="w-3 h-3 transition-transform duration-300" />
+                            <span>Hide Timeline</span>
+                        </>
+                    ) : (
+                        <>
+                            <ChevronDown className="w-3 h-3 transition-transform duration-300" />
+                            <span>Show Timeline</span>
+                        </>
+                    )}
                 </button>
             </div>
         </div>

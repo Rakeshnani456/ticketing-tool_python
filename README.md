@@ -334,7 +334,7 @@ npm test
 ```bash
 cd it_ticketing_tool/it_ticketing_frontend
 npm run build
-firebase deploy
+firebase deploy --only hosting
 ```
 
 ### Backend Deployment
@@ -362,3 +362,12 @@ For support and questions, please contact the development team or create an issu
 ---
 
 **Note**: This documentation is maintained alongside the codebase. For the most up-to-date information, refer to the inline code comments and configuration files.
+
+
+| **Role**        | **Read All Tickets** | **Edit Tickets**    | **Create Tickets**  |
+| --------------- | -------------------- | ------------------- | ------------------- |
+| **Super Admin** | ✅ Yes                | ❌ No                | ✅ Yes (as reporter) |
+| **Admin**       | ✅ Yes                | ✅ Yes               | ✅ Yes (as reporter) |
+| **Support**     | ✅ Yes                | ✅ Yes               | ✅ Yes (as reporter) |
+| **Site Admin**  | ✅ Yes (own company)  | ❌ No                | ✅ Yes (as reporter) |
+| **User**        | ✅ Yes (own tickets)  | ✅ Yes (own tickets) | ✅ Yes               |

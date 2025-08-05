@@ -1,0 +1,150 @@
+/* Ticket Detail Page Font Size Increase (10%) */
+/* This file contains font size adjustments specifically for the ticket detail page */
+
+.ticket-detail-container {
+    font-size: 110% !important;
+}
+
+.ticket-detail-container * {
+    font-size: inherit;
+}
+
+/* Specific font size adjustments for ticket detail components */
+.ticket-detail-container .text-xs {
+    font-size: 0.825rem !important; /* Increased from 0.75rem by 10% */
+    line-height: 1.1rem !important;
+}
+
+.ticket-detail-container .text-sm {
+    font-size: 0.963rem !important; /* Increased from 0.875rem by 10% */
+    line-height: 1.375rem !important;
+}
+
+/* Arbitrary value font sizes with 10% increase */
+.ticket-detail-container [class*="text-[10px]"] {
+    font-size: 0.6875rem !important; /* Increased from 0.625rem by 10% */
+}
+
+.ticket-detail-container [class*="text-[11px]"] {
+    font-size: 0.756rem !important; /* Increased from 0.6875rem by 10% */
+}
+
+.ticket-detail-container [class*="text-[12px]"] {
+    font-size: 0.825rem !important; /* Increased from 0.75rem by 10% */
+}
+
+.ticket-detail-container [class*="text-[13px]"] {
+    font-size: 0.894rem !important; /* Increased from 0.8125rem by 10% */
+}
+
+.ticket-detail-container [class*="text-[14px]"] {
+    font-size: 0.963rem !important; /* Increased from 0.875rem by 10% */
+}
+
+.ticket-detail-container [class*="text-[15px]"] {
+    font-size: 1.031rem !important; /* Increased from 0.9375rem by 10% */
+}
+
+.ticket-detail-container [class*="text-[16px]"] {
+    font-size: 1.1rem !important; /* Increased from 1rem by 10% */
+}
+
+.ticket-detail-container [class*="text-[17px]"] {
+    font-size: 1.169rem !important; /* Increased from 1.0625rem by 10% */
+}
+
+.ticket-detail-container [class*="text-[18px]"] {
+    font-size: 1.238rem !important; /* Increased from 1.125rem by 10% */
+}
+
+.ticket-detail-container [class*="text-[19px]"] {
+    font-size: 1.307rem !important; /* Increased from 1.1875rem by 10% */
+}
+
+.ticket-detail-container [class*="text-[20px]"] {
+    font-size: 1.375rem !important; /* Increased from 1.25rem by 10% */
+}
+
+/* Material-UI component font size adjustments */
+.ticket-detail-container .MuiButton-root {
+    font-size: 110% !important;
+}
+
+/* Override for edit/save/cancel buttons to use their specific font sizes */
+.ticket-detail-container .MuiButton-root[style*="fontSize"] {
+    font-size: inherit !important;
+}
+
+/* Specific override for progress section buttons */
+.ticket-detail-container .bg-white.p-3 .MuiButton-root,
+.ticket-detail-container .bg-white.p-3.sm\\:p-4 .MuiButton-root {
+    font-size: inherit !important;
+}
+
+.ticket-detail-container .MuiSelect-select {
+    font-size: 110% !important;
+}
+
+.ticket-detail-container .MuiMenuItem-root {
+    font-size: 110% !important;
+}
+
+.ticket-detail-container .MuiInputBase-input {
+    font-size: 110% !important;
+}
+
+.ticket-detail-container .MuiFormLabel-root {
+    font-size: 110% !important;
+}
+
+/* Custom button styles for progress section */
+.ticket-progress-section button {
+    font-size: 0.75rem !important;
+    line-height: 1 !important;
+}
+
+/* Override universal font size for attachments section */
+.ticket-detail-container h3 {
+    font-size: 0.75rem !important;
+    line-height: 1 !important;
+}
+
+/* Override universal font size for attachment file names */
+.ticket-detail-container span[class*="text-[8px]"],
+.ticket-detail-container span[class*="text-[9px]"] {
+    font-size: 0.5rem !important;
+    line-height: 1 !important;
+}
+
+@media (min-width: 640px) {
+    .ticket-detail-container span[class*="text-[9px]"] {
+        font-size: 0.5625rem !important;
+        line-height: 1 !important;
+    }
+}
+
+/* Prevent scrollbars on individual comments */
+.ticket-detail-container .comment-item,
+.ticket-detail-container .comment-item * {
+    overflow: visible !important;
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
+}
+
+.ticket-detail-container .comment-item::-webkit-scrollbar,
+.ticket-detail-container .comment-item *::-webkit-scrollbar {
+    display: none !important;
+}
+
+/* Responsive adjustments */
+@media (max-width: 640px) {
+    .ticket-detail-container .text-xs {
+        font-size: 0.825rem !important; /* Increased by 10% */
+        line-height: 1.1rem !important;
+    }
+    
+    .ticket-detail-container .text-sm {
+        font-size: 0.963rem !important; /* Increased by 10% */
+        line-height: 1.375rem !important;
+    }
+}

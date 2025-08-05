@@ -1,7 +1,8 @@
 // src/components/tickets/AllTicketsComponent.js
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Loader2, XCircle, ListFilter, Download, User, CheckCircle, ChevronLeft, ChevronRight, ChevronUp } from 'lucide-react';
+import { useLocation } from 'react-router-dom';
+import { Loader2, XCircle, ListFilter, Download, User, CheckCircle, ChevronLeft, ChevronRight, ChevronUp, ChevronDown } from 'lucide-react';
 import { collection, query, onSnapshot, where, orderBy, getFirestore } from 'firebase/firestore';
 
 // Import common UI components
@@ -68,14 +69,82 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
     const [exportStatus, setExportStatus] = useState('');
 
     // Add at the top of the component (after useState declarations)
-    const [filterBy, setFilterBy] = useState('status'); // 'status' or 'priority'
+    const [filterBy, setFilterBy] = useState('status'); // 'status', 'priority', or 'company'
     const [filterPriority, setFilterPriority] = useState('');
+    const [filterCompany, setFilterCompany] = useState(''); // New state for company filter
+    const [companies, setCompanies] = useState([]); // New state for companies list
+    const [loadingCompanies, setLoadingCompanies] = useState(false); // New state for companies loading
 
     // Get today's date in ISO-MM-DD format for the max attribute of the end date input
     const today = new Date().toISOString().split('T')[0];
 
     // Initialize Firestore DB client. This will be the same instance as exported from firebase.js.
     const db = dbClient; // Use the already initialized dbClient
+
+    // Function to fetch companies for filtering
+    const fetchCompanies = useCallback(async () => {
+        if (loadingCompanies) return;
+        
+        setLoadingCompanies(true);
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/clients`);
+            if (!response.ok) {
+                throw new Error('Failed to fetch companies');
+            }
+            const companiesData = await response.json();
+            setCompanies(companiesData);
+        } catch (error) {
+            console.error('Error fetching companies:', error);
+            showFlashMessage('Failed to load companies for filtering', 'error');
+        } finally {
+            setLoadingCompanies(false);
+        }
+    }, [loadingCompanies, showFlashMessage]);
+
+    // Get location for URL parameters
+    const location = useLocation();
+
+    // Read URL parameters for initial filtering
+    useEffect(() => {
+        const urlParams = new URLSearchParams(location.search);
+        const statusParam = urlParams.get('status');
+        const assignmentParam = urlParams.get('assignment');
+        
+        console.log('URL Parameters detected:', {
+            statusParam,
+            assignmentParam,
+            fullSearch: location.search
+        });
+        
+        if (statusParam) {
+            console.log('Setting filter status from URL:', statusParam);
+            setFilterStatus(statusParam);
+            setFilterBy('status');
+        }
+        
+        if (assignmentParam) {
+            console.log('Setting filter assignment from URL:', assignmentParam);
+            setFilterAssignment(assignmentParam);
+        }
+    }, [location.search]);
+
+    // Check and reset company filter if user doesn't have permission
+    useEffect(() => {
+        const hasCompanyFilterPermission = user?.role === 'super_admin' || user?.role === 'admin' || user?.role === 'support';
+        
+        if (filterBy === 'company' && !hasCompanyFilterPermission) {
+            console.log('User does not have permission for company filtering, resetting to status filter');
+            setFilterBy('status');
+            setFilterCompany('');
+        }
+    }, [user?.role, filterBy]);
+
+    // Fetch companies when filterBy changes to 'company'
+    useEffect(() => {
+        if (filterBy === 'company' && companies.length === 0) {
+            fetchCompanies();
+        }
+    }, [filterBy, companies.length, fetchCompanies]);
 
     /**
      * Helper function to convert Firestore Timestamp to ISO string or Date object.
@@ -129,6 +198,48 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
             });
         }
 
+        // If company filter is active, use API instead of Firestore
+        if (filterBy === 'company' && filterCompany) {
+            const fetchTicketsFromAPI = async () => {
+                try {
+                    setLoading(true);
+                    const idToken = await user.firebaseUser.getIdToken();
+                    const params = new URLSearchParams();
+                    if (filterCompany) {
+                        params.append('company', filterCompany);
+                    }
+                    if (searchKeyword) {
+                        params.append('keyword', searchKeyword);
+                    }
+                    
+                    const response = await fetch(`${API_BASE_URL}/tickets/all?${params.toString()}`, {
+                        headers: {
+                            'Authorization': `Bearer ${idToken}`,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+                    
+                    const tickets = await response.json();
+                    setAllTickets(tickets);
+                    setLoading(false);
+                    setError(null);
+                } catch (error) {
+                    console.error('Error fetching tickets from API:', error);
+                    setError(`Failed to load tickets: ${error.message}`);
+                    showFlashMessage(`Failed to load tickets: ${error.message}`, 'error');
+                    setLoading(false);
+                }
+            };
+            
+            fetchTicketsFromAPI();
+            return () => {}; // No cleanup needed for API calls
+        }
+
+        // Use Firestore for real-time updates when not using company filter
         let ticketsRef = collection(db, 'tickets');
         let q;
 
@@ -176,7 +287,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
 
         // Cleanup function: unsubscribe from the listener when the component unmounts
         return () => unsubscribe();
-    }, [db, searchKeyword, user]); // Add user as dependency
+    }, [db, searchKeyword, user, filterBy, filterCompany]); // Add filterBy and filterCompany as dependencies
 
 
     /**
@@ -184,6 +295,13 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
      * whenever `allTickets` (the raw data from Firestore) or filter states change.
      */
     useEffect(() => {
+        console.log('Filtering effect triggered with:', {
+            filterStatus,
+            filterBy,
+            filterAssignment,
+            totalTickets: allTickets.length
+        });
+        
         let currentFilteredTickets = [...allTickets]; // Start with all tickets fetched by Firestore
 
         // If user is a site_admin, filter tickets by their company/client
@@ -224,7 +342,10 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
         // Apply status filter based on filterStatus state
         // If filterStatus is an empty string, no status filter is applied, showing all statuses
         if (filterBy === 'status' && filterStatus) {
+            console.log('Applying status filter:', filterStatus);
+            const beforeCount = currentFilteredTickets.length;
             currentFilteredTickets = currentFilteredTickets.filter(ticket => ticket.status === filterStatus);
+            console.log(`Status filter applied: ${beforeCount} -> ${currentFilteredTickets.length} tickets`);
         }
 
         // Apply assignment filter
@@ -264,18 +385,33 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
             currentFilteredTickets = currentFilteredTickets.filter(ticket => (ticket.priority || '').toLowerCase() === filterPriority.toLowerCase());
         }
 
+        // Apply company filter (only for client-side filtering when not using API)
+        // Note: When using API with company filter, the filtering is done on the backend
+        if (filterBy === 'company' && filterCompany) {
+            // Skip client-side filtering when using API
+            console.log('Company filter applied on backend via API');
+        }
+
         setDisplayedTickets(currentFilteredTickets); // Update displayed tickets
-    }, [allTickets, filterStatus, filterPriority, filterBy, filterAssignment, searchKeyword]); // Dependencies include all filtering states and user
+    }, [allTickets, filterStatus, filterPriority, filterBy, filterAssignment, filterCompany, searchKeyword]); // Dependencies include all filtering states and user
 
 
     // Effect hook to measure message box height and set up auto-hide timer
     useEffect(() => {
-        // Reset filter states based on initialFilterAssignment
-        setFilterAssignment(initialFilterAssignment);
-        if (!initialFilterAssignment && filterStatus !== '') { // Only reset to 'Open' if no assignment filter AND filterStatus is not already empty
-            setFilterStatus('Open'); // Re-default to Open if no assignment filter is active
-        } else {
-            setFilterStatus(''); // Clear status filter if an assignment filter is explicitly set
+        // Check if there are URL parameters first
+        const urlParams = new URLSearchParams(location.search);
+        const statusParam = urlParams.get('status');
+        const assignmentParam = urlParams.get('assignment');
+        
+        // Only reset filter states if there are no URL parameters
+        if (!statusParam && !assignmentParam) {
+            // Reset filter states based on initialFilterAssignment
+            setFilterAssignment(initialFilterAssignment);
+            if (!initialFilterAssignment && filterStatus !== '') { // Only reset to 'Open' if no assignment filter AND filterStatus is not already empty
+                setFilterStatus('Open'); // Re-default to Open if no assignment filter is active
+            } else {
+                setFilterStatus(''); // Clear status filter if an assignment filter is explicitly set
+            }
         }
 
         // Reset message visibility and animation states
@@ -300,7 +436,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
 
         // Cleanup the timer if the component unmounts or dependencies change before it fires
         return () => clearTimeout(timer);
-    }, [initialFilterAssignment]);
+    }, [initialFilterAssignment, location.search]);
 
 
     // Effect hook to handle clicks outside the export popup to close it
@@ -594,26 +730,63 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
             {showFilters && (
                 <div className="mb-2 p-3 bg-white rounded-md flex flex-wrap gap-2 items-center relative">
                     <span className="text-sm font-semibold text-gray-700 flex items-center">
-  {(filterBy !== 'status' || filterStatus !== '' || filterPriority !== '' || filterAssignment !== '') ? (
+  {(filterBy !== 'status' || filterStatus !== '' || filterPriority !== '' || filterAssignment !== '' || filterCompany !== '') ? (
     <CancelFilterIcon
       className="mr-1 cursor-pointer"
       style={{ width: 16, height: 16 }}
       title="Clear Filter"
-      onClick={() => { setFilterBy('status'); setFilterStatus(''); setFilterPriority(''); setFilterAssignment(''); }}
+      onClick={() => { setFilterBy('status'); setFilterStatus(''); setFilterPriority(''); setFilterAssignment(''); setFilterCompany(''); }}
     />
   ) : (
     <FilterIcon className="mr-1" style={{ width: 16, height: 16 }} />
   )}
   Filter By:
 </span>
-                    <select
-  value={filterBy}
-  onChange={e => { setFilterBy(e.target.value); setFilterStatus(''); setFilterPriority(''); }}
-  className="px-2 py-1 rounded border border-gray-300 text-xs font-semibold bg-white mr-2"
->
-  <option value="status">Status</option>
-  <option value="priority">Priority</option>
-</select>
+                    <div className="relative inline-block mr-2">
+                      <select
+                        value={filterBy}
+                        onChange={e => { 
+                          setFilterBy(e.target.value); 
+                          setFilterStatus(''); 
+                          setFilterPriority(''); 
+                          setFilterCompany(''); 
+                        }}
+                        className="px-2 py-1 rounded border border-gray-300 text-xs font-semibold bg-white pr-8 appearance-none"
+                      >
+                        <option value="status">Status</option>
+                        <option value="priority">Priority</option>
+                        {(user?.role === 'super_admin' || user?.role === 'admin' || user?.role === 'support') && (
+                          <option value="company">Company</option>
+                        )}
+                      </select>
+                      <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
+                        {filterBy === 'company' ? (
+                          <ChevronRight className="w-3 h-3 text-gray-500" />
+                        ) : (
+                          <ChevronDown className="w-3 h-3 text-gray-500" />
+                        )}
+                      </div>
+                    </div>
+{filterBy === 'company' && (user?.role === 'super_admin' || user?.role === 'admin' || user?.role === 'support') && (
+  <select
+    value={filterCompany}
+    onChange={e => setFilterCompany(e.target.value)}
+    className="px-2 py-1 rounded border border-gray-300 text-xs font-semibold bg-white mr-2"
+  >
+    <option value="">All</option>
+    {loadingCompanies ? (
+      <option value="" disabled>Loading companies...</option>
+    ) : companies.length === 0 ? (
+      <option value="" disabled>No companies found</option>
+    ) : (
+      companies.map(company => (
+        <option key={company.id} value={company.companyName}>
+          {company.companyName}
+        </option>
+      ))
+    )}
+  </select>
+)}
 {filterBy === 'status' && (
   <>
     <button onClick={() => { setFilterStatus(''); setFilterAssignment(''); }} className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-colors duration-200 shadow-sm ${filterStatus === '' && filterAssignment === '' ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}>All ({counts.total_tickets})</button>
@@ -632,6 +805,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
     <button onClick={() => setFilterPriority('Critical')} className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-colors duration-200 shadow-sm ${filterPriority === 'Critical' ? 'bg-red-900 text-white hover:bg-red-800' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}>Critical</button>
   </>
 )}
+
                     {/* Removed the "Closed/Resolved" filter button */}
 
                     {/* MODIFIED: Filter button for 'Unassigned' - ensure setFilterStatus('') is called */}
@@ -790,6 +964,13 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                             ))}
                         </tbody>
                     </table>
+                </div>
+            )}
+            
+            {/* Bottom Pagination */}
+            {displayedTickets.length > 0 && (
+                <div className="flex justify-end items-center mt-4 mb-2 px-4">
+                    {renderPagination()}
                 </div>
             )}
         </div>
