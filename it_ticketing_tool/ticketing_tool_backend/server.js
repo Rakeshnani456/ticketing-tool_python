@@ -166,6 +166,13 @@ const verifyFirebaseToken = async (req, res, next) => {
         }
         req.user.role = userData.role;
         req.user.client_name = userData.client_name || userData.companyName;
+        console.log(`User ${decodedToken.uid} (${userData.role}) client_name set to: ${req.user.client_name} (from client_name: ${userData.client_name}, companyName: ${userData.companyName})`);
+        
+        // Add additional validation for site_admin
+        if (userData.role === 'site_admin' && !req.user.client_name) {
+            console.error(`Site admin ${decodedToken.uid} has no client_name or companyName set`);
+        }
+        
         next();
     } catch (error) {
         console.error('Error verifying Firebase ID token or fetching user role:', error);

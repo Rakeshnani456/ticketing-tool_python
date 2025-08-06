@@ -3,7 +3,11 @@
 // --- API Base URL for your Node.js Backend ---
 // Make sure this matches your backend server's address
 export const API_BASE_URL = 'http://localhost:5000';
-//export const API_BASE_URL = 'https://ticketing-tool-python-1.onrender.com';
+//export const API_BASE_URL = 'https://ticketing-tool-python-8bbm.onrender.com';
+
+// --- React AI App URL for Vercel Deployment ---
+// This should point to your Vercel-deployed backend
+//export const react_ai_app_url = 'https://kriasol-cbf9co0u3-rakeshnani456s-projects.vercel.app';
 
 // --- Colors for Charts ---
 // These colors are used in the DashboardComponent for the Pie Chart

@@ -4,16 +4,49 @@ const router = express.Router();
 
 module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseToken) => {
 
+    // Health check endpoint
+    router.get('/health', (req, res) => {
+        res.status(200).json({ message: 'User management API is running' });
+    });
+
     // GET /api/users - Get users based on role
     router.get('/', verifyFirebaseToken, async (req, res) => {
+        console.log('GET /api/users request received');
         try {
             const userRole = req.user.role;
             const userClientName = req.user.client_name;
+            console.log('Request details:', { userRole, userClientName, userId: req.user.uid });
+            
+            // Test Firestore connection
+            if (!usersCollection) {
+                console.error('usersCollection is undefined');
+                return res.status(500).json({ error: 'Database connection error' });
+            }
             
             let snapshot;
             if (userRole === 'site_admin' && userClientName) {
                 // For site_admin, get users from their company/client
-                snapshot = await usersCollection.where('client_name', '==', userClientName).get();
+                console.log(`Site admin requesting users for client: ${userClientName}`);
+                
+                // Try to get users by client_name first
+                try {
+                    snapshot = await usersCollection.where('client_name', '==', userClientName).get();
+                    console.log(`Found ${snapshot.docs.length} users with client_name: ${userClientName}`);
+                    
+                    // If no users found, try companyName
+                    if (snapshot.empty) {
+                        snapshot = await usersCollection.where('companyName', '==', userClientName).get();
+                        console.log(`Found ${snapshot.docs.length} users with companyName: ${userClientName}`);
+                    }
+                } catch (queryError) {
+                    console.error('Error in Firestore query:', queryError);
+                    throw queryError;
+                }
+                
+                console.log(`Total found ${snapshot.docs.length} users for site admin`);
+            } else if (userRole === 'site_admin' && !userClientName) {
+                console.error('Site admin has no client_name set, returning empty result');
+                return res.status(200).json([]);
             } else if (userRole === 'support') {
                 // For support role, get all support users
                 snapshot = await usersCollection.where('role', '==', 'support').get();
@@ -24,10 +57,24 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
                 return res.status(403).json({ error: 'Insufficient permissions to view users.' });
             }
             
+            if (!snapshot) {
+                console.error('Snapshot is undefined, returning empty array');
+                return res.status(200).json([]);
+            }
+            
             const users = snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() }));
+            if (userRole === 'site_admin') {
+                console.log('Site admin users data:', users.map(u => ({ uid: u.uid, email: u.email, client_name: u.client_name, companyName: u.companyName })));
+            }
             return res.status(200).json(users);
         } catch (err) {
             console.error('Error fetching users:', err);
+            console.error('Error details:', {
+                userRole: req.user?.role,
+                userClientName: req.user?.client_name,
+                errorMessage: err.message,
+                errorStack: err.stack
+            });
             return res.status(500).json({ error: err.message || 'Failed to fetch users.' });
         }
     });

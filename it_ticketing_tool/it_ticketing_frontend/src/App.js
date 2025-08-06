@@ -10,6 +10,7 @@ import {
     ChevronRight,
     Search,
     CheckCircle,
+    CheckCircle2,
     XCircle,
     Info,
     AlertTriangle,
@@ -1067,14 +1068,15 @@ const App = () => {
                 {/* Display mobile number and email for user and site_admin roles */}
                 {currentUser && !isAuthLoading && location.pathname !== '/login' && location.pathname !== '/register' && (currentUser.role === 'user' || currentUser.role === 'site_admin') && (
                     <div className="flex items-center gap-4 mr-4">
-                        <div className="flex items-center gap-3 text-sm">
-                            <div className="flex items-center gap-1">
-                                <PhoneIcon sx={{ fontSize: '1.2rem', color: '#000000' }} />
-                                <span className=" text-black">{'+91 9391930393'}</span>
+                        <div className="flex items-center gap-4 text-sm">
+                            <div className="flex items-center gap-2 group cursor-pointer">
+                                <PhoneIcon sx={{ fontSize: '0.9rem', color: '#3b82f6' }} />
+                                <span className="text-blue-800 font-semibold text-xs tracking-wide group-hover:text-blue-900 transition-colors duration-200">{'+91 9391930393'}</span>
                             </div>
-                            <div className="flex items-center gap-1">
-                                <EmailIcon sx={{ fontSize: '1.2rem', color: '#000000' }} />
-                                <span className="text-black">{'raju.k@finstackk.com'}</span>
+                            <div className="w-px h-5 bg-blue-300"></div>
+                            <div className="flex items-center gap-2 group cursor-pointer">
+                                <EmailIcon sx={{ fontSize: '0.9rem', color: '#6366f1' }} />
+                                <span className="text-indigo-800 font-semibold text-xs tracking-wide group-hover:text-indigo-900 transition-colors duration-200">{'raju.k@finstackk.com'}</span>
                             </div>
                         </div>
                     </div>
@@ -1198,7 +1200,7 @@ const App = () => {
                     </div>
 
                     {/* Navigation Menu */}
-                    <div className="flex-1 px-3 py-1 flex flex-col">
+                    <div className="flex-1 px-3 py-2 flex flex-col space-y-1">
                         {/* Main Navigation */}
                         <div className="space-y-1 flex-1">
                             {(currentUser.role === 'super_admin') ? (
@@ -1214,11 +1216,11 @@ const App = () => {
                                         </motion.div>
                                     )}
                                     
-                                    <Link to="/all-tickets" className={`group flex items-center px-3 py-1  text-sm font-medium transition-all duration-200 hover:bg-gray-100 hover:text-gray-800 ${location.pathname === '/all-tickets' ? 'bg-gray-200 text-gray-800' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                    <Link to="/all-tickets" className={`group flex items-center px-3 py-2  text-sm font-medium transition-all duration-200 hover:bg-gray-100 hover:text-gray-800 ${location.pathname === '/all-tickets' ? 'bg-gray-200 text-gray-800' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                         { !isSidebarExpanded ? (
                                             <TooltipBubble title="All Tickets">
-                                                <div className="flex items-center justify-center w-6 h-6">
-                                                    <FileText size={20} className="flex-shrink-0" />
+                                                <div className="flex items-center justify-center w-7 h-7">
+                                                    <FileText size={23} className="flex-shrink-0" />
                                                 </div>
                                             </TooltipBubble>
                                         ) : (
@@ -1229,16 +1231,16 @@ const App = () => {
                                         <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">All Tickets</motion.span>
                                     </Link>
                                     
-                                    <Link to="/my-tickets" className={`group flex items-center px-3 py-1  text-sm font-medium transition-all duration-200 hover:bg-gray-100 hover:text-gray-800 ${location.pathname === '/my-tickets' ? 'bg-gray-200 text-gray-800' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                    <Link to="/my-tickets" className={`group flex items-center px-3 py-2  text-sm font-medium transition-all duration-200 hover:bg-gray-100 hover:text-gray-800 ${location.pathname === '/my-tickets' ? 'bg-gray-200 text-gray-800' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                         { !isSidebarExpanded ? (
                                             <TooltipBubble title="My Tickets">
-                                                <div className="flex items-center justify-center w-6 h-6">
-                                                    <UserCheck size={20} className="flex-shrink-0" />
+                                                <div className="flex items-center justify-center w-7 h-7">
+                                                    <CheckCircle2 size={23} className="flex-shrink-0" />
                                                 </div>
                                             </TooltipBubble>
                                         ) : (
                                             <div className="flex items-center justify-center w-5 h-5 mr-3">
-                                                <UserCheck size={18} className="flex-shrink-0" />
+                                                <CheckCircle2 size={18} className="flex-shrink-0" />
                                             </div>
                                         )}
                                         <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">My Tickets</motion.span>
@@ -1255,11 +1257,11 @@ const App = () => {
                                         </motion.div>
                                     )}
                                     
-                                    <Link to="/clients" className={`group flex items-center px-3 py-1  text-sm font-medium transition-all duration-200 hover:bg-gray-100 hover:text-gray-800 ${location.pathname === '/clients' ? 'bg-gray-200 text-gray-800' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                    <Link to="/clients" className={`group flex items-center px-3 py-2  text-sm font-medium transition-all duration-200 hover:bg-gray-100 hover:text-gray-800 ${location.pathname === '/clients' ? 'bg-gray-200 text-gray-800' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                         { !isSidebarExpanded ? (
                                             <TooltipBubble title="Clients">
-                                                <div className="flex items-center justify-center w-6 h-6">
-                                                    <Building size={20} className="flex-shrink-0" />
+                                                <div className="flex items-center justify-center w-7 h-7">
+                                                    <Building size={23} className="flex-shrink-0" />
                                                 </div>
                                             </TooltipBubble>
                                         ) : (
@@ -1281,11 +1283,11 @@ const App = () => {
                                         </motion.div>
                                     )}
                                     
-                                    <Link to="/reports" className={`group flex items-center px-3 py-1  text-sm font-medium transition-all duration-200 hover:bg-gray-100 hover:text-gray-800 ${location.pathname === '/reports' ? 'bg-gray-200 text-gray-800' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                    <Link to="/reports" className={`group flex items-center px-3 py-2  text-sm font-medium transition-all duration-200 hover:bg-gray-100 hover:text-gray-800 ${location.pathname === '/reports' ? 'bg-gray-200 text-gray-800' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                         { !isSidebarExpanded ? (
                                             <TooltipBubble title="Reports">
-                                                <div className="flex items-center justify-center w-6 h-6">
-                                                    <BarChart2 size={20} className="flex-shrink-0" />
+                                                <div className="flex items-center justify-center w-7 h-7">
+                                                    <BarChart2 size={23} className="flex-shrink-0" />
                                                 </div>
                                             </TooltipBubble>
                                         ) : (
@@ -1298,11 +1300,11 @@ const App = () => {
                                 </>
                             ) : currentUser.role === 'admin' ? (
                                 <>
-                                    <Link to="/all-tickets" className={`group flex items-center px-3 py-1  text-sm font-medium transition-all duration-200 hover:bg-gray-100 hover:text-gray-800 ${location.pathname === '/all-tickets' ? 'bg-gray-200 text-gray-800' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                    <Link to="/all-tickets" className={`group flex items-center px-3 py-2  text-sm font-medium transition-all duration-200 hover:bg-gray-100 hover:text-gray-800 ${location.pathname === '/all-tickets' ? 'bg-gray-200 text-gray-800' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                         { !isSidebarExpanded ? (
                                             <TooltipBubble title="All Tickets">
-                                                <div className="flex items-center justify-center w-6 h-6">
-                                                    <FileText size={20} className="flex-shrink-0" />
+                                                <div className="flex items-center justify-center w-7 h-7">
+                                                    <FileText size={23} className="flex-shrink-0" />
                                                 </div>
                                             </TooltipBubble>
                                         ) : (
@@ -1313,11 +1315,11 @@ const App = () => {
                                         <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">All Tickets</motion.span>
                                     </Link>
                                     
-                                    <Link to="/reports" className={`group flex items-center px-3 py-1  text-sm font-medium transition-all duration-200 hover:bg-gray-100 hover:text-gray-800 ${location.pathname === '/reports' ? 'bg-gray-200 text-gray-800' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                    <Link to="/reports" className={`group flex items-center px-3 py-2  text-sm font-medium transition-all duration-200 hover:bg-gray-100 hover:text-gray-800 ${location.pathname === '/reports' ? 'bg-gray-200 text-gray-800' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                         { !isSidebarExpanded ? (
                                             <TooltipBubble title="Reports">
-                                                <div className="flex items-center justify-center w-6 h-6">
-                                                    <BarChart2 size={20} className="flex-shrink-0" />
+                                                <div className="flex items-center justify-center w-7 h-7">
+                                                    <BarChart2 size={23} className="flex-shrink-0" />
                                                 </div>
                                             </TooltipBubble>
                                         ) : (
@@ -1330,11 +1332,11 @@ const App = () => {
                                 </>
                             ) : currentUser.role === 'site_admin' ? (
                                 <>
-                                    <Link to="/all-tickets" className={`group flex items-center px-3 py-1  text-sm font-medium transition-all duration-200 hover:bg-gray-100 hover:text-gray-800 ${location.pathname === '/all-tickets' ? 'bg-gray-200 text-gray-800' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                    <Link to="/all-tickets" className={`group flex items-center px-3 py-2  text-sm font-medium transition-all duration-200 hover:bg-gray-100 hover:text-gray-800 ${location.pathname === '/all-tickets' ? 'bg-gray-200 text-gray-800' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
                                         { !isSidebarExpanded ? (
                                             <TooltipBubble title="All Tickets">
-                                                <div className="flex items-center justify-center w-6 h-6">
-                                                    <FileText size={20} className="flex-shrink-0" />
+                                                <div className="flex items-center justify-center w-7 h-7">
+                                                    <FileText size={23} className="flex-shrink-0" />
                                                 </div>
                                             </TooltipBubble>
                                         ) : (
@@ -1345,11 +1347,11 @@ const App = () => {
                                         <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">All Tickets</motion.span>
                                     </Link>
                                     
-                                    <Link to="/my-tickets" className={`group flex items-center px-3 py-1  text-sm font-medium transition-all duration-200 hover:bg-gray-100 hover:text-gray-800 ${location.pathname === '/my-tickets' ? 'bg-gray-200 text-gray-800' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                    <Link to="/my-tickets" className={`group flex items-center px-3 py-2  text-sm font-medium transition-all duration-200 hover:bg-gray-100 hover:text-gray-800 ${location.pathname === '/my-tickets' ? 'bg-gray-200 text-gray-800' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
                                         { !isSidebarExpanded ? (
                                             <TooltipBubble title="My Tickets">
-                                                <div className="flex items-center justify-center w-6 h-6">
-                                                    <UserCheck size={20} className="flex-shrink-0" />
+                                                <div className="flex items-center justify-center w-7 h-7">
+                                                    <UserCheck size={23} className="flex-shrink-0" />
                                                 </div>
                                             </TooltipBubble>
                                         ) : (
@@ -1360,11 +1362,11 @@ const App = () => {
                                         <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">My Tickets</motion.span>
                                     </Link>
                                     
-                                    <Link to="/user-management" className={`group flex items-center px-3 py-1  text-sm font-medium transition-all duration-200 hover:bg-gray-100 hover:text-gray-800 ${location.pathname === '/user-management' ? 'bg-gray-200 text-gray-800' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                    <Link to="/user-management" className={`group flex items-center px-3 py-2  text-sm font-medium transition-all duration-200 hover:bg-gray-100 hover:text-gray-800 ${location.pathname === '/user-management' ? 'bg-gray-200 text-gray-800' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
                                         { !isSidebarExpanded ? (
                                             <TooltipBubble title="Users">
-                                                <div className="flex items-center justify-center w-6 h-6">
-                                                    <Users size={20} className="flex-shrink-0" />
+                                                <div className="flex items-center justify-center w-7 h-7">
+                                                    <Users size={23} className="flex-shrink-0" />
                                                 </div>
                                             </TooltipBubble>
                                         ) : (
@@ -1380,11 +1382,11 @@ const App = () => {
                                     {/* Only show Dashboard in sidebar for support and other non-admin roles */}
                                     {(['support', 'admin', 'site_admin'].includes(currentUser.role)) && (
                                         <>
-                                            <Link to="/dashboard" className={`group flex items-center px-3 py-1  text-sm font-medium transition-all duration-200 hover:bg-gray-100 hover:text-gray-800 ${location.pathname === '/dashboard' ? 'bg-gray-200 text-gray-800' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                            <Link to="/dashboard" className={`group flex items-center px-3 py-2  text-sm font-medium transition-all duration-200 hover:bg-gray-100 hover:text-gray-800 ${location.pathname === '/dashboard' ? 'bg-gray-200 text-gray-800' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                                 { !isSidebarExpanded ? (
                                                     <TooltipBubble title="Dashboard">
-                                                        <div className="flex items-center justify-center w-6 h-6">
-                                                            <Home size={20} className="flex-shrink-0" />
+                                                        <div className="flex items-center justify-center w-7 h-7">
+                                                            <Home size={23} className="flex-shrink-0" />
                                                         </div>
                                                     </TooltipBubble>
                                                 ) : (
@@ -1395,11 +1397,11 @@ const App = () => {
                                                 <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">Dashboard</motion.span>
                                             </Link>
                                             
-                                            <Link to="/all-tickets" className={`group flex items-center px-3 py-1  text-sm font-medium transition-all duration-200 hover:bg-gray-100 hover:text-gray-800 ${location.pathname === '/all-tickets' ? 'bg-gray-200 text-gray-800' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                            <Link to="/all-tickets" className={`group flex items-center px-3 py-2  text-sm font-medium transition-all duration-200 hover:bg-gray-100 hover:text-gray-800 ${location.pathname === '/all-tickets' ? 'bg-gray-200 text-gray-800' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
                                                 { !isSidebarExpanded ? (
                                                     <TooltipBubble title="All Tickets">
-                                                        <div className="flex items-center justify-center w-6 h-6">
-                                                            <FileText size={20} className="flex-shrink-0" />
+                                                        <div className="flex items-center justify-center w-7 h-7">
+                                                            <FileText size={23} className="flex-shrink-0" />
                                                         </div>
                                                     </TooltipBubble>
                                                 ) : (
@@ -1412,11 +1414,11 @@ const App = () => {
                                         </>
                                     )}
                                     
-                                    <Link to="/my-tickets" className={`group flex items-center px-3 py-1  text-sm font-medium transition-all duration-200 hover:bg-gray-100 hover:text-gray-800 ${location.pathname === '/my-tickets' ? 'bg-gray-200 text-gray-800' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                    <Link to="/my-tickets" className={`group flex items-center px-3 py-2  text-sm font-medium transition-all duration-200 hover:bg-gray-100 hover:text-gray-800 ${location.pathname === '/my-tickets' ? 'bg-gray-200 text-gray-800' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                         { !isSidebarExpanded ? (
                                             <TooltipBubble title="My Tickets">
-                                                <div className="flex items-center justify-center w-6 h-6">
-                                                    <UserCheck size={20} className="flex-shrink-0" />
+                                                <div className="flex items-center justify-center w-7 h-7">
+                                                    <UserCheck size={23} className="flex-shrink-0" />
                                                 </div>
                                             </TooltipBubble>
                                         ) : (
@@ -1427,11 +1429,11 @@ const App = () => {
                                         <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">My Tickets</motion.span>
                                     </Link>
                                     
-                                    <Link to="/create-ticket" className={`group flex items-center px-3 py-1  text-sm font-medium transition-all duration-200 hover:bg-green-50 hover:text-green-700 ${location.pathname === '/create-ticket' ? 'bg-green-50 text-green-700 shadow-sm' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                    <Link to="/create-ticket" className={`group flex items-center px-3 py-2  text-sm font-medium transition-all duration-200 hover:bg-green-50 hover:text-green-700 ${location.pathname === '/create-ticket' ? 'bg-green-50 text-green-700 shadow-sm' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                         { !isSidebarExpanded ? (
                                             <TooltipBubble title="Create Ticket">
-                                                <div className="flex items-center justify-center w-6 h-6">
-                                                    <Zap size={20} className="flex-shrink-0" />
+                                                <div className="flex items-center justify-center w-7 h-7">
+                                                    <Zap size={23} className="flex-shrink-0" />
                                                 </div>
                                             </TooltipBubble>
                                         ) : (
@@ -1448,11 +1450,11 @@ const App = () => {
                         {/* Bottom Menu Items */}
                         <div className={`${isSidebarExpanded ? 'pt-4 border-t border-gray-100' : 'absolute bottom-0 left-0 right-0'}`}>
                             <div className="space-y-0.5">
-                                <Link to="/knowledge-base" className={`group flex items-center px-3 py-1  text-sm font-medium transition-all duration-200 hover:bg-gray-100 hover:text-gray-800 ${location.pathname === '/knowledge-base' ? 'bg-gray-200 text-gray-800' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                    <Link to="/knowledge-base" className={`group flex items-center px-3 py-2  text-sm font-medium transition-all duration-200 hover:bg-gray-100 hover:text-gray-800 ${location.pathname === '/knowledge-base' ? 'bg-gray-200 text-gray-800' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                     { !isSidebarExpanded ? (
                                         <TooltipBubble title="Help & Info">
-                                            <div className="flex items-center justify-center w-6 h-6">
-                                                <HelpCircle size={20} className="flex-shrink-0" />
+                                            <div className="flex items-center justify-center w-7 h-7">
+                                                <HelpCircle size={23} className="flex-shrink-0" />
                                             </div>
                                         </TooltipBubble>
                                     ) : (
@@ -1463,11 +1465,11 @@ const App = () => {
                                     <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">Help & Info</motion.span>
                                 </Link>
                                 
-                                <Link to="/settings" className={`group flex items-center px-3 py-1  text-sm font-medium transition-all duration-200 hover:bg-gray-100 hover:text-gray-800 ${location.pathname === '/settings' ? 'bg-gray-200 text-gray-800' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                    <Link to="/settings" className={`group flex items-center px-3 py-2  text-sm font-medium transition-all duration-200 hover:bg-gray-100 hover:text-gray-800 ${location.pathname === '/settings' ? 'bg-gray-200 text-gray-800' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                     { !isSidebarExpanded ? (
                                         <TooltipBubble title="Settings">
-                                            <div className="flex items-center justify-center w-6 h-6">
-                                                <Settings size={20} className="flex-shrink-0" />
+                                            <div className="flex items-center justify-center w-7 h-7">
+                                                <Settings size={23} className="flex-shrink-0" />
                                             </div>
                                         </TooltipBubble>
                                     ) : (
@@ -1484,9 +1486,9 @@ const App = () => {
                                         <TooltipBubble title="Expand view">
                                             <button
                                                 onClick={() => setIsSidebarExpanded(true)}
-                                                className="group flex items-center justify-center px-3 py-1  text-sm font-medium transition-all duration-200 hover:bg-gray-100 hover:text-gray-800 text-gray-700"
+                                                className="group flex items-center justify-center px-3 py-2  text-sm font-medium transition-all duration-200 hover:bg-gray-100 hover:text-gray-800 text-gray-700"
                                             >
-                                                <ChevronRight size={20} className="flex-shrink-0" />
+                                                <ChevronRight size={23} className="flex-shrink-0" />
                                             </button>
                                         </TooltipBubble>
                                     </div>

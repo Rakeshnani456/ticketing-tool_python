@@ -539,26 +539,9 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
                  <Typography variant="h6" component="h1" sx={{ fontWeight: 500, color: '#2c3e50' }}>
            Engineer Management
          </Typography>
-        
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={handleAdd}
-          size="small"
-          sx={{
-            borderRadius: '6px',
-            textTransform: 'none',
-            boxShadow: 'none',
-            fontSize: '0.75rem',
-            px: 1.5,
-            py: 0.5
-          }}
-        >
-          Add Engineer
-        </Button>
       </Box>
       
-      <Box sx={{ mb: 3, display: 'flex', alignItems: 'center' }}>
+      <Box sx={{ mb: 1, display: 'flex', alignItems: 'center' }}>
         <TextField
           value={search}
           onChange={e => setSearch(e.target.value)}
@@ -608,14 +591,33 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
       )}
       
       {!loading && !error && (
-        <Paper 
-          elevation={0} 
-          sx={{ 
-            borderRadius: '8px', 
-            overflow: 'hidden',
-            border: '1px solid #e0e0e0'
-          }}
-        >
+        <>
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={handleAdd}
+              size="small"
+              sx={{
+                borderRadius: '6px',
+                textTransform: 'none',
+                boxShadow: 'none',
+                fontSize: '0.75rem',
+                px: 1.5,
+                py: 0.5
+              }}
+            >
+              Add Engineer
+            </Button>
+          </Box>
+          <Paper 
+            elevation={0} 
+            sx={{ 
+              borderRadius: '8px', 
+              overflow: 'hidden',
+              border: '1px solid #e0e0e0'
+            }}
+          >
                      <TableContainer>
              <Table size="small" sx={{ minWidth: 700, borderCollapse: 'collapse' }}>
               <TableHead sx={{ bgcolor: '#f5f7fa' }}>
@@ -798,6 +800,7 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
              />
            )}
         </Paper>
+        </>
       )}
       
       {/* Add Engineer Modal */}
@@ -842,7 +845,7 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <TextField 
-                  label="Employee ID *" 
+                  label="Employee ID" 
                   name="employeeid" 
                   value={addRowData.employeeid} 
                   onChange={handleAddChange} 
@@ -867,7 +870,7 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
                 />
                 
                 <TextField 
-                  label="First Name *" 
+                  label="First Name" 
                   name="firstName" 
                   value={addRowData.firstName} 
                   onChange={handleAddChange} 
@@ -889,7 +892,7 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
                 />
                 
                 <TextField 
-                  label="Last Name *" 
+                  label="Last Name" 
                   name="lastName" 
                   value={addRowData.lastName} 
                   onChange={handleAddChange} 
@@ -911,7 +914,7 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
                 />
                 
                 <TextField 
-                  label="Email *" 
+                  label="Email" 
                   name="email" 
                   value={addRowData.email} 
                   onChange={handleAddChange} 
@@ -936,7 +939,7 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
                 />
                 
                 <TextField 
-                  label="Password *" 
+                  label="Password" 
                   name="password" 
                   value={addRowData.password} 
                   InputProps={{ 
@@ -962,7 +965,7 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
                 />
                 
                 <TextField 
-                  label="Contact Number *" 
+                  label="Contact Number" 
                   name="contactNumber" 
                   value={addRowData.contactNumber} 
                   onChange={handleAddChange} 
@@ -987,7 +990,7 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
                 />
                 
                 <TextField 
-                  label="Manager Email *" 
+                  label="Manager Email" 
                   name="managerEmail" 
                   value={addRowData.managerEmail} 
                   onChange={handleAddChange} 
@@ -1013,7 +1016,7 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
                 
                 <TextField 
                   select 
-                  label="Employment Type *" 
+                  label="Employment Type" 
                   name="employmentType" 
                   value={addRowData.employmentType} 
                   onChange={handleAddChange} 
@@ -1042,7 +1045,7 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
                 </TextField>
                 
                 <TextField 
-                  label="Designation *" 
+                  label="Designation" 
                   name="designation" 
                   value={addRowData.designation} 
                   onChange={handleAddChange} 

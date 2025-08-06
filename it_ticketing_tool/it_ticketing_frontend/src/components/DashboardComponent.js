@@ -416,32 +416,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
       </header>
 
       <main className="px-3 py-2">
-        {/* Warning for site admin without company info */}
-        {user && user.role === 'site_admin' && !user.client_name && (
-          <div className="mb-4 p-3 bg-yellow-100 border border-yellow-400 text-yellow-800 rounded-md">
-            <div className="flex items-center">
-              <AlertCircle className="mr-2" size={16} />
-              <span className="text-sm font-medium">
-                Warning: Site admin profile missing company information. Showing all tickets and activities.
-              </span>
-            </div>
-          </div>
-        )}
-        
-        {/* Info about activities filtering for site admin */}
-        {user && user.role === 'site_admin' && user.client_name && activities.length === 0 && (
-          <div className="mb-4 p-3 bg-blue-100 border border-blue-400 text-blue-800 rounded-md">
-            <div className="flex items-center">
-              <Activity className="mr-2" size={16} />
-              <span className="text-sm font-medium">
-                {companyUsers.length === 0 
-                  ? 'Loading company users to filter activities...' 
-                  : 'Note: Activities are filtered to show only those from your company users. No activities found for your company at this time.'
-                }
-              </span>
-            </div>
-          </div>
-        )}
+
         
 
         
@@ -801,36 +776,12 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                     <p className="text-sm">
                       {user?.role === 'site_admin' && companyUsers.length === 0 
                         ? 'Loading company activities...' 
-                        : 'No recent activity found'
+                        : 'No activities found'
                       }
                     </p>
-                    <p className="text-xs mt-1">Activities array length: {activities.length}</p>
                     {user?.role === 'site_admin' && (
                       <p className="text-xs mt-1">Company users loaded: {companyUsers.length}</p>
                     )}
-                    <button 
-                      onClick={async () => {
-                        try {
-                          const { addDoc, serverTimestamp } = await import('firebase/firestore');
-                          const testActivity = {
-                            type: 'created',
-                            user_name: 'Test User',
-                            description: 'Test activity from frontend',
-                            ticket_id: 'TEST-001',
-                            timestamp: serverTimestamp()
-                          };
-                          const docRef = await addDoc(collection(dbClient, 'activities'), testActivity);
-                          console.log('Test activity added with ID:', docRef.id);
-                          alert('Test activity added!');
-                        } catch (error) {
-                          console.error('Error adding test activity:', error);
-                          alert('Error: ' + error.message);
-                        }
-                      }}
-                      className="px-3 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600 mt-2"
-                    >
-                      Add Test Activity
-                    </button>
                   </div>
                 )}
               </div>

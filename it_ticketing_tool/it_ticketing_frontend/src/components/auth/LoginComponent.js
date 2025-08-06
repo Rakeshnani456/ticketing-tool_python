@@ -212,7 +212,7 @@ const LoginComponent = ({ onLoginSuccess, navigateTo, showFlashMessage }) => {
         else feedback.push('a special character');
 
         const strengthText = score < 2 ? 'Weak' : score < 4 ? 'Fair' : score < 5 ? 'Good' : 'Strong';
-        const feedbackText = feedback.length > 0 ? `Add ${feedback.join(', ')}` : 'Strong password!';
+        const feedbackText = feedback.length > 0 ? `Add ${feedback.join(', ')}` : '';
 
         return { score, feedback: feedbackText, strength: strengthText };
     };
@@ -467,10 +467,8 @@ const LoginComponent = ({ onLoginSuccess, navigateTo, showFlashMessage }) => {
                     <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md border border-gray-100 animate-fade-in">
                         <div className="flex flex-col items-center mb-6">
                             <img src={require('../../assets/logo/logo.png')} alt="Company Logo" className="h-10 mb-2" />
-                            <h2 className="text-2xl font-bold text-gray-800 mb-1 tracking-tight">Set New Password</h2>
-                            <p className="text-gray-500 text-sm text-center">
-                                For your security, please create a new strong password.
-                            </p>
+                            <h2 className="text-2xl font-sm text-gray-800 mb-1 tracking-tight">Create Password</h2>
+                            
                         </div>
 
                         <NetworkStatus isOnline={isOnline} />
@@ -538,8 +536,7 @@ const LoginComponent = ({ onLoginSuccess, navigateTo, showFlashMessage }) => {
                 <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md border border-gray-100 animate-fade-in">
                     <div className="flex flex-col items-center mb-6">
                         <img src={require('../../assets/logo/logo.png')} alt="Company Logo" className="h-20 mb-2" />
-                        <h2 className="text-2xl font-bold text-gray-800 mb-1 tracking-tight">Welcome Back</h2>
-                        <p className="text-gray-500 text-sm">Sign in to continue to your account</p>
+                        <p className="text-gray-500 text-sm">Sign in to continue</p>
                     </div>
 
                     <NetworkStatus isOnline={isOnline} />
@@ -549,7 +546,7 @@ const LoginComponent = ({ onLoginSuccess, navigateTo, showFlashMessage }) => {
                         <div>
                             <FormInput
                                 id="email"
-                                label="Email Address"
+                                label="Email"
                                 type="email"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}

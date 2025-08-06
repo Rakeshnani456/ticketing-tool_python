@@ -37,6 +37,7 @@ import Autocomplete from '@mui/material/Autocomplete';
 import InputAdornment from '@mui/material/InputAdornment';
 import { useTheme } from '@mui/material/styles';
 import * as XLSX from 'xlsx';
+import ClientUserCard from './ClientUserCard';
 
 // Helper for deep comparison
 const areUsersEqual = (arr1, arr2) => {
@@ -191,8 +192,9 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
     const filteredUsers = useMemo(() => {
         console.log("filteredUsers useMemo triggered with:", { usersLength: users.length, search, clientFilter, userRole: user?.role });
         
+        // Since we're already filtering users by role and company in the real-time listener,
+        // we only need to apply search and client filter here
         let filtered = users.filter(u =>
-            (u.role === 'user' || u.role === 'site_admin') &&
             (u.email.toLowerCase().includes(search.toLowerCase()) ||
              u.clientname.toLowerCase().includes(search.toLowerCase()) ||
              (u.asset_id && u.asset_id.toLowerCase().includes(search.toLowerCase())) ||
@@ -202,7 +204,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
             )
         );
         
-        console.log("After initial filtering:", filtered.length);
+        console.log("After search filtering:", filtered.length);
         
         if (clientFilter) {
             const beforeClientFilter = filtered.length;
@@ -214,15 +216,28 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
             console.log("After client filtering:", { before: beforeClientFilter, after: filtered.length, clientFilter });
         }
         
-        if (user && user.role === 'site_admin' && user.companyName) {
-            const beforeSiteAdminFilter = filtered.length;
-            filtered = filtered.filter(u => u.clientname === user.companyName || u.companyName === user.companyName);
-            console.log("After site admin filtering:", { before: beforeSiteAdminFilter, after: filtered.length, userCompanyName: user.companyName });
-        }
-        
         console.log("Final filtered users:", filtered.length);
         return filtered;
-    }, [users, search, clientFilter, user]);
+    }, [users, search, clientFilter]);
+
+    // Group users by client for card view (only for super admin and admin)
+    const groupedUsersByClient = useMemo(() => {
+        if (user?.role === 'site_admin') return null; // Don't group for site admin
+        
+        const grouped = {};
+        filteredUsers.forEach(user => {
+            const clientName = user.clientname || user.client_name || user.companyName || 'Unknown Client';
+            if (!grouped[clientName]) {
+                grouped[clientName] = [];
+            }
+            grouped[clientName].push(user);
+        });
+        
+        // Convert to array and sort by client name
+        return Object.entries(grouped)
+            .map(([clientName, users]) => ({ clientName, users }))
+            .sort((a, b) => a.clientName.localeCompare(b.clientName));
+    }, [filteredUsers, user?.role]);
 
     const clearClientFilter = () => {
         setClientFilter('');
@@ -247,6 +262,33 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
         fetchClients();
     }, []);
 
+    // Load initial data from cache if available
+    useEffect(() => {
+        if (!user || !user.firebaseUser) return;
+        
+        const cacheKey = user.role === 'site_admin' ? 
+            `userManagement_cache_${user.role}_${user.companyName}` : 
+            `userManagement_cache_${user.role}`;
+        const cacheTimeKey = `${cacheKey}_time`;
+        
+        const cachedData = localStorage.getItem(cacheKey);
+        const cacheTime = localStorage.getItem(cacheTimeKey);
+        
+        if (cachedData && cacheTime) {
+            const cacheAge = Date.now() - parseInt(cacheTime);
+            const cacheValidDuration = 5 * 60 * 1000; // 5 minutes
+            
+            if (cacheAge < cacheValidDuration) {
+                console.log("Loading initial users from cache...");
+                const cachedUsers = JSON.parse(cachedData);
+                setUsers(cachedUsers);
+                previousUsersRef.current = cachedUsers;
+                setLastFetchTime(parseInt(cacheTime));
+                setLoading(false);
+            }
+        }
+    }, [user]);
+
     useEffect(() => {
         if (!user || !user.firebaseUser) {
             console.log("No user or firebaseUser available, skipping listener setup");
@@ -257,88 +299,120 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
         setLoading(true);
         setError(null);
         
-                let isInitialLoad = true;
-        
-        // Use API method for initial load to avoid double loading (with cache support)
-        fetchUsersFromAPI(false);
-        
-        // Set up Firestore listener for real-time updates only
         let unsubscribe = null;
-        try {
-            const usersRef = collection(db, 'users');
-            console.log("Setting up Firestore listener for real-time updates...");
-            
-            unsubscribe = onSnapshot(usersRef, 
-                async (snapshot) => {
-                    if (isInitialLoad) {
-                        isInitialLoad = false;
-                        return; // Skip the first Firestore update since we already have API data
-                    }
-                    
-                    try {
-                        console.log("Real-time update received, snapshot size:", snapshot.size);
-                        
-                        if (previousClientsRef.current.length === 0) {
-                            await fetchClients();
-                        }
-                        
-                        const fetchedUsers = [];
-                        snapshot.forEach((doc) => {
-                            const userData = doc.data();
-                            fetchedUsers.push({
-                                uid: doc.id,
-                                ...userData
-                            });
-                        });
-                        
-                        const usersWithClientDetails = fetchedUsers.map(u => {
-                            const clientMatch = previousClientsRef.current.find(c => c['Client name'] === u.client_name);
-                            return {
-                                ...u,
-                                asset_id: u.asset_id || u.assetid || '',
-                                domain: clientMatch ? clientMatch.Domain : (u.domain || ''),
-                                clientname: clientMatch ? clientMatch['Client name'] : (u.client_name || 'Unknown Client'),
-                                companyName: u.client_name || u.companyName || 'Unknown Company',
-                                firstName: u.firstName || '',
-                                lastName: u.lastName || '',
-                                contactNumber: u.contactNumber || '',
-                                managerEmail: u.managerEmail || '',
-                                employmentType: u.employmentType || '',
-                                designation: u.designation || '',
-                                employeeId: u.employeeId || '',
-                            };
-                        });
-                        
-                            if (!areUsersEqual(previousUsersRef.current, usersWithClientDetails)) {
-                            console.log("Updating users state with real-time data");
-                                setUsers(usersWithClientDetails);
-                                previousUsersRef.current = usersWithClientDetails;
-                            
-                            // Update cache with real-time data
-                            const currentTime = Date.now();
-                            localStorage.setItem('userManagement_cache', JSON.stringify(usersWithClientDetails));
-                            localStorage.setItem('userManagement_cacheTime', currentTime.toString());
-                            setLastFetchTime(currentTime);
-                        }
-                    } catch (error) {
-                        console.error("Error processing real-time users update:", error);
-                    }
-                },
-                (error) => {
-                    console.error("Error in real-time users listener:", error);
+        
+                const setupRealTimeListener = async () => {
+            try {
+                // Fetch clients first if not available
+                if (previousClientsRef.current.length === 0) {
+                    await fetchClients();
                 }
-            );
-        } catch (error) {
-            console.error("Error setting up Firestore listener:", error);
-        }
+                
+                // For site_admin, use API polling instead of Firestore listener due to permissions
+                if (user.role === 'site_admin') {
+                    console.log("Setting up API polling for site admin...");
+                    
+                    // Initial fetch
+                    await fetchUsersFromAPI();
+                    
+                    // Set up polling interval for real-time updates
+                    const pollInterval = setInterval(async () => {
+                        try {
+                            await fetchUsersFromAPI();
+                        } catch (error) {
+                            console.error("Error in API polling:", error);
+                        }
+                    }, 5000); // Poll every 5 seconds for more responsive updates
+                    
+                    // Store the interval ID for cleanup
+                    unsubscribe = () => clearInterval(pollInterval);
+                    
+                } else {
+                    // For other admin roles, use Firestore real-time listener
+                    const usersRef = collection(db, 'users');
+                    console.log("Setting up Firestore listener for real-time updates...");
+                    
+                    unsubscribe = onSnapshot(usersRef, 
+                        async (snapshot) => {
+                            try {
+                                console.log("Real-time update received, snapshot size:", snapshot.size);
+                                
+                                const fetchedUsers = [];
+                                snapshot.forEach((doc) => {
+                                    const userData = doc.data();
+                                    // Only include users and site_admins (exclude other roles)
+                                    if (userData.role === 'user' || userData.role === 'site_admin') {
+                                        fetchedUsers.push({
+                                            uid: doc.id,
+                                            ...userData
+                                        });
+                                    }
+                                });
+                                
+                                const usersWithClientDetails = fetchedUsers.map(u => {
+                                    const clientMatch = previousClientsRef.current.find(c => c['Client name'] === u.client_name);
+                                    return {
+                                        ...u,
+                                        asset_id: u.asset_id || u.assetid || '',
+                                        domain: clientMatch ? clientMatch.Domain : (u.domain || ''),
+                                        clientname: clientMatch ? clientMatch['Client name'] : (u.client_name || 'Unknown Client'),
+                                        companyName: u.client_name || u.companyName || 'Unknown Company',
+                                        firstName: u.firstName || '',
+                                        lastName: u.lastName || '',
+                                        contactNumber: u.contactNumber || '',
+                                        managerEmail: u.managerEmail || '',
+                                        employmentType: u.employmentType || '',
+                                        designation: u.designation || '',
+                                        employeeId: u.employeeId || '',
+                                    };
+                                });
+                                
+                                if (!areUsersEqual(previousUsersRef.current, usersWithClientDetails)) {
+                                    console.log("Updating users state with real-time data");
+                                    setUsers(usersWithClientDetails);
+                                    previousUsersRef.current = usersWithClientDetails;
+                                    
+                                    // Update cache with real-time data
+                                    const currentTime = Date.now();
+                                    const cacheKey = `userManagement_cache_${user.role}`;
+                                    const cacheTimeKey = `${cacheKey}_time`;
+                                    localStorage.setItem(cacheKey, JSON.stringify(usersWithClientDetails));
+                                    localStorage.setItem(cacheTimeKey, currentTime.toString());
+                                    setLastFetchTime(currentTime);
+                                }
+                                
+                                setLoading(false);
+                                setError(null);
+                            } catch (error) {
+                                console.error("Error processing real-time users update:", error);
+                                setError(`Real-time update error: ${error.message}`);
+                                setLoading(false);
+                            }
+                        },
+                        (error) => {
+                            console.error("Error in real-time users listener:", error);
+                            setError(`Listener error: ${error.message}`);
+                            setLoading(false);
+                        }
+                    );
+                }
+            } catch (error) {
+                console.error("Error setting up data fetching:", error);
+                setError(`Setup error: ${error.message}`);
+                setLoading(false);
+            }
+        };
+        
+        // Start the real-time listener
+        setupRealTimeListener();
             
-            return () => {
+        return () => {
             console.log("Cleaning up users data fetching...");
             if (unsubscribe) {
                 unsubscribe();
-        }
+            }
         };
-    }, [user, db]);
+    }, [user, db, fetchClients]);
 
     const handleAdd = () => {
         setAddMode(true);
@@ -545,6 +619,12 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                 return newState;
               });
             }, 5000);
+            
+            // Force refresh the users list to show the updated user
+            if (user.role === 'site_admin') {
+              // For site admin, force refresh from API
+              await fetchUsersFromAPI(true);
+            }
         } catch (err) {
             setSnackbar({ open: true, message: err.message, severity: 'error' });
         }
@@ -599,6 +679,13 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                 return newState;
               });
             }, 5000);
+            
+            // Force refresh the users list to remove the deleted user
+            if (user.role === 'site_admin') {
+              // For site admin, force refresh from API
+              await fetchUsersFromAPI(true);
+            }
+            
             userToDeleteUidRef.current = null;
             setCurrentUserEmailToDelete('');
         } catch (err) {
@@ -705,6 +792,12 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
         
         setAddUserModalOpen(false);
         setSnackbar({ open: true, message: 'User created successfully.', severity: 'success' });
+        
+        // Force refresh the users list to show the new user
+        if (user.role === 'site_admin') {
+          // For site admin, force refresh from API
+          await fetchUsersFromAPI(true);
+        }
       } catch (err) {
         setSnackbar({ open: true, message: err.message, severity: 'error' });
       }
@@ -765,6 +858,12 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
         }, 5000);
          
         closeChangePwdModal();
+        
+        // Force refresh the users list to show the updated user
+        if (user.role === 'site_admin') {
+          // For site admin, force refresh from API
+          await fetchUsersFromAPI(true);
+        }
       } catch (err) {
         setSnackbar({ open: true, message: err.message, severity: 'error' });
       }
@@ -1032,12 +1131,19 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
         setPage(0);
     };
 
+
+
     const fetchUsersFromAPI = async (forceRefresh = false) => {
         try {
             // Check cache first (unless force refresh is requested)
             if (!forceRefresh) {
-                const cachedData = localStorage.getItem('userManagement_cache');
-                const cacheTime = localStorage.getItem('userManagement_cacheTime');
+                const cacheKey = user.role === 'site_admin' ? 
+                    `userManagement_cache_${user.role}_${user.companyName}` : 
+                    `userManagement_cache_${user.role}`;
+                const cacheTimeKey = `${cacheKey}_time`;
+                
+                const cachedData = localStorage.getItem(cacheKey);
+                const cacheTime = localStorage.getItem(cacheTimeKey);
                 
                 if (cachedData && cacheTime) {
                     const cacheAge = Date.now() - parseInt(cacheTime);
@@ -1058,7 +1164,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                 }
             }
             
-            console.log("Fetching users from API...");
+            console.log("Fetching users from API...", { userRole: user.role, userCompanyName: user.companyName });
             
             if (previousClientsRef.current.length === 0) {
                 await fetchClients();
@@ -1075,7 +1181,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
             const fetchedUsers = await response.json();
-            console.log("Fetched users from API:", fetchedUsers.length);
+            console.log("Fetched users from API:", fetchedUsers.length, "users:", fetchedUsers.map(u => ({ uid: u.uid, email: u.email, role: u.role, client_name: u.client_name })));
             
             const usersWithClientDetails = fetchedUsers.map(u => {
                 const clientMatch = previousClientsRef.current.find(c => c['Client name'] === u.client_name);
@@ -1095,15 +1201,31 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                 };
             });
             
-            if (!areUsersEqual(previousUsersRef.current, usersWithClientDetails)) {
+            // For site_admin, filter users to only show their company's users
+            let filteredUsers = usersWithClientDetails;
+            if (user.role === 'site_admin' && user.companyName) {
+                const beforeFilter = filteredUsers.length;
+                filteredUsers = usersWithClientDetails.filter(u => 
+                    u.clientname === user.companyName || 
+                    u.companyName === user.companyName
+                );
+                console.log(`Site admin filtering: ${beforeFilter} -> ${filteredUsers.length} users for company ${user.companyName}`);
+                console.log("Filtered users:", filteredUsers.map(u => ({ uid: u.uid, email: u.email, clientname: u.clientname, companyName: u.companyName })));
+            }
+            
+            if (!areUsersEqual(previousUsersRef.current, filteredUsers)) {
                 console.log("Updating users state with API data");
-                setUsers(usersWithClientDetails);
-                previousUsersRef.current = usersWithClientDetails;
+                setUsers(filteredUsers);
+                previousUsersRef.current = filteredUsers;
                 
-                // Cache the data
+                // Cache the data with role-specific keys
                 const currentTime = Date.now();
-                localStorage.setItem('userManagement_cache', JSON.stringify(usersWithClientDetails));
-                localStorage.setItem('userManagement_cacheTime', currentTime.toString());
+                const cacheKey = user.role === 'site_admin' ? 
+                    `userManagement_cache_${user.role}_${user.companyName}` : 
+                    `userManagement_cache_${user.role}`;
+                const cacheTimeKey = `${cacheKey}_time`;
+                localStorage.setItem(cacheKey, JSON.stringify(filteredUsers));
+                localStorage.setItem(cacheTimeKey, currentTime.toString());
                 setLastFetchTime(currentTime);
             }
             
@@ -1120,7 +1242,18 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
     const handleRefresh = async () => {
         console.log("Manual refresh requested...");
         setLoading(true);
-        await fetchUsersFromAPI(true); // Force refresh
+        
+        if (user.role === 'site_admin') {
+            // For site admin, force refresh from API
+            await fetchUsersFromAPI(true);
+        } else {
+            // For other roles, clear cache and let Firestore listener handle it
+            const cacheKey = `userManagement_cache_${user.role}`;
+            const cacheTimeKey = `${cacheKey}_time`;
+            localStorage.removeItem(cacheKey);
+            localStorage.removeItem(cacheTimeKey);
+            setLoading(false);
+        }
     };
 
     return (
@@ -1178,6 +1311,11 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                         </Typography>
                         <Typography variant="body2" color="textSecondary" sx={{ fontSize: '0.75rem' }}>
                             Manage user accounts and permissions
+                            {user.role === 'site_admin' && lastFetchTime && (
+                                <span style={{ marginLeft: '8px', color: '#666' }}>
+                                    • Last updated: {new Date(lastFetchTime).toLocaleTimeString()}
+                                </span>
+                            )}
                         </Typography>
                     </Box>
                     
@@ -1561,24 +1699,52 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                             </Box>
                         ) : (
                             <>
-                                <TableContainer sx={{ 
-                                    maxHeight: 400,
-                                    '&::-webkit-scrollbar': {
-                                        width: '6px !important',
-                                        height: '6px !important',
-                                    },
-                                    '&::-webkit-scrollbar-track': {
-                                        background: '#f1f1f1 !important',
-                                        borderRadius: '3px !important',
-                                    },
-                                    '&::-webkit-scrollbar-thumb': {
-                                        background: '#c1c1c1 !important',
-                                        borderRadius: '3px !important',
-                                        '&:hover': {
-                                            background: '#a8a8a8 !important',
+                                {/* Card View for Super Admin and Admin */}
+                                {user && (user.role === 'super_admin' || user.role === 'admin') && groupedUsersByClient && (
+                                    <Box sx={{ width: '100%', m: 0, p: 0 }}>
+                                        {groupedUsersByClient.length === 0 ? (
+                                            <Typography variant="body2" sx={{ color: 'text.secondary', mt: 2 }}>
+                                                No clients with users found.
+                                            </Typography>
+                                        ) : (
+                                            groupedUsersByClient.map(({ clientName, users }, index) => (
+                                                <ClientUserCard
+                                                    key={clientName}
+                                                    clientName={clientName}
+                                                    users={users}
+                                                    index={index + 1}
+                                                    onEditClick={handleEditClick}
+                                                    onDeleteClick={(user) => handleDeleteClick(null, user.uid, user.email)}
+                                                    showEdit={true}
+                                                    showDelete={true}
+                                                    isOwnRow={isOwnRow}
+                                                />
+                                            ))
+                                        )}
+                                    </Box>
+                                )}
+          
+
+                                {/* Table View for Site Admin and when no grouping */}
+                                {(!user || user.role === 'site_admin' || !groupedUsersByClient) && (
+                                    <TableContainer sx={{ 
+                                        maxHeight: 400,
+                                        '&::-webkit-scrollbar': {
+                                            width: '6px !important',
+                                            height: '6px !important',
                                         },
-                                    },
-                                }}>
+                                        '&::-webkit-scrollbar-track': {
+                                            background: '#f1f1f1 !important',
+                                            borderRadius: '3px !important',
+                                        },
+                                        '&::-webkit-scrollbar-thumb': {
+                                            background: '#c1c1c1 !important',
+                                            borderRadius: '3px !important',
+                                            '&:hover': {
+                                                background: '#a8a8a8 !important',
+                                            },
+                                        },
+                                    }}>
                                     <Table size="small" sx={{ minWidth: 700, borderCollapse: 'collapse' }}>
                                         <TableHead sx={{ bgcolor: '#f5f7fa' }}>
                                                     <TableRow>
@@ -1751,7 +1917,8 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                                                 </TableBody>
                                             </Table>
                                         </TableContainer>
-                                
+                                )}
+
                                 {filteredUsers.length > 10 && (
                                     <TablePagination
                                         rowsPerPageOptions={[5, 10, 25]}
@@ -1826,7 +1993,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                 <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 1.5 }}>
 {user && user.role === 'site_admin' ? (
 <TextField
-                            label="Company Name *" 
+                            label="Company Name" 
 name="companyName"
 value={addUserData.companyName}
                             InputProps={{ 
@@ -1853,7 +2020,7 @@ helperText="Auto-filled from your company"
 ) : (
                         <TextField 
                             select
-                            label="Company Name *" 
+                            label="Company Name" 
 name="companyName"
 value={addUserData.companyName}
 onChange={handleAddUserChange}
@@ -1886,7 +2053,7 @@ size="small"
 )}
                     
                     <TextField
-                        label="Employee ID *" 
+                        label="Employee ID" 
                         name="employeeId" 
                         value={addUserData.employeeId} 
                         onChange={handleAddUserChange} 
@@ -1913,7 +2080,7 @@ size="small"
                     />
                     
                     <TextField 
-                        label="First Name *" 
+                        label="First Name" 
 name="firstName"
 value={addUserData.firstName}
 onChange={handleAddUserChange}
@@ -1935,7 +2102,7 @@ fullWidth
                     />
                     
 <TextField
-                        label="Last Name *" 
+                        label="Last Name" 
 name="lastName"
 value={addUserData.lastName}
 onChange={handleAddUserChange}
@@ -1957,7 +2124,7 @@ fullWidth
                     />
                     
 <TextField
-                        label="Email *" 
+                        label="Email" 
 name="email"
 value={addUserData.email}
 onChange={handleAddUserChange}
@@ -1982,7 +2149,7 @@ fullWidth
                     />
                     
 <TextField
-                        label="Password *" 
+                        label="Password" 
 name="password"
 value={addUserData.password}
                         InputProps={{ 
@@ -2008,7 +2175,7 @@ helperText="Auto-generated password"
                     />
                     
 <TextField
-                        label="Contact Number *" 
+                        label="Contact Number" 
 name="contactNumber"
 value={addUserData.contactNumber}
 onChange={handleAddUserChange}
@@ -2033,7 +2200,7 @@ fullWidth
                     />
                     
 <TextField
-                        label="Manager Email *" 
+                        label="Manager Email" 
 name="managerEmail"
 value={addUserData.managerEmail}
 onChange={handleAddUserChange}
@@ -2059,7 +2226,7 @@ fullWidth
                     
                     <TextField 
                         select 
-                        label="Employment Type *" 
+                        label="Employment Type" 
 name="employmentType"
 value={addUserData.employmentType}
 onChange={handleAddUserChange}
@@ -2089,7 +2256,7 @@ size="small"
                     </TextField>
                     
 <TextField
-                        label="Designation *" 
+                        label="Designation" 
 name="designation"
 value={addUserData.designation}
 onChange={handleAddUserChange}
@@ -2793,7 +2960,20 @@ fullWidth
                 </Dialog>
 
                 {/* Snackbar */}
-                <Snackbar open={snackbar.open} autoHideDuration={3000} onClose={() => setSnackbar({ ...snackbar, open: false })}>
+                <Snackbar 
+                    open={snackbar.open} 
+                    autoHideDuration={3000} 
+                    onClose={() => setSnackbar({ ...snackbar, open: false })}
+                    anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+                    sx={{ 
+                        top: '80px !important', // Position below the header/tabs
+                        '& .MuiAlert-root': {
+                            minWidth: '300px',
+                            borderRadius: '8px',
+                            boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+                        }
+                    }}
+                >
                     <Alert onClose={() => setSnackbar({ ...snackbar, open: false })} severity={snackbar.severity} sx={{ width: '100%' }}>
                         {snackbar.message}
                     </Alert>

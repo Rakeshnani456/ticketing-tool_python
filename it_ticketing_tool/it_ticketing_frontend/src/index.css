@@ -310,12 +310,12 @@ textarea.max-w-none.w-full::-webkit-scrollbar-corner {
 }
 
 /* Ensure proper vertical alignment for collapsed sidebar icons */
-.sidebar-glass .flex.items-center.justify-center.w-6.h-6 {
+.sidebar-glass .flex.items-center.justify-center.w-7.h-7 {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
 }
 
 /* Ensure consistent spacing for collapsed sidebar menu items */
@@ -351,17 +351,17 @@ textarea.max-w-none.w-full::-webkit-scrollbar-corner {
 }
 
 /* Force icon size for collapsed state */
-.sidebar-glass .flex.items-center.justify-center.w-6.h-6 svg {
-  width: 20px !important;
-  height: 20px !important;
-  min-width: 20px !important;
-  min-height: 20px !important;
+.sidebar-glass .flex.items-center.justify-center.w-7.h-7 svg {
+  width: 23px !important;
+  height: 23px !important;
+  min-width: 23px !important;
+  min-height: 23px !important;
 }
 
 /* Ensure proper icon sizing for all collapsed navigation items */
-.sidebar-glass .TooltipBubble .flex.items-center.justify-center.w-6.h-6 svg {
-  width: 20px !important;
-  height: 20px !important;
+.sidebar-glass .TooltipBubble .flex.items-center.justify-center.w-7.h-7 svg {
+  width: 23px !important;
+  height: 23px !important;
 }
 
 header {

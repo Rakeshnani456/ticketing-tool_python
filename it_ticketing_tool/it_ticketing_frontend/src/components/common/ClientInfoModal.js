@@ -21,7 +21,7 @@ const designationOptions = [
   { value: 'Other', label: 'Other' },
 ];
 
-// Validation schema is unchanged
+// Validation schema with better handling for empty values
 const validationSchema = yup.object().shape({
   companyName: yup.string().required('Company name is required').min(2, 'Minimum 2 characters').max(100, 'Maximum 100 characters'),
   website: yup.string().nullable().transform((value) => (value === '' ? null : value)),
@@ -34,13 +34,13 @@ const validationSchema = yup.object().shape({
   authContactNumber: yup.string().required('Contact number is required').matches(/^[0-9\s\-\(\)]{7,15}$/, 'Invalid phone number'),
   authOfficeEmail: yup.string().email('Invalid email').required('Office email is required').max(100, 'Maximum 100 characters'),
   authPersonalEmail: yup.string().nullable().transform((value) => (value === '' ? null : value)).email('Invalid email').max(100, 'Maximum 100 characters'),
-  authDesignation: yup.string().required('Designation is required'),
+  authDesignation: yup.string().nullable().transform((value) => (value === '' ? 'Other' : value)).required('Designation is required'),
   siteFirstName: yup.string().required('First name is required').min(2, 'Minimum 2 characters').max(50, 'Maximum 50 characters'),
   siteLastName: yup.string().required('Last name is required').min(2, 'Minimum 2 characters').max(50, 'Maximum 50 characters'),
   siteEmail: yup.string().email('Invalid email').required('Email is required').max(100, 'Maximum 100 characters'),
   siteContactCountryCode: yup.string().required('Country code is required').matches(/^[\+]?[0-9]{1,4}$/, 'Invalid country code'),
   siteContactNumber: yup.string().required('Contact number is required').matches(/^[0-9\s\-\(\)]{7,15}$/, 'Invalid phone number'),
-  siteDesignation: yup.string().required('Designation is required'),
+  siteDesignation: yup.string().nullable().transform((value) => (value === '' ? 'Other' : value)).required('Designation is required'),
 });
 
 const initialState = {
@@ -55,13 +55,13 @@ const initialState = {
   authContactNumber: '',
   authOfficeEmail: '',
   authPersonalEmail: '',
-  authDesignation: '',
+  authDesignation: 'Other',
   siteFirstName: '',
   siteLastName: '',
   siteEmail: '',
   siteContactCountryCode: '+91',
   siteContactNumber: '',
-  siteDesignation: '',
+  siteDesignation: 'Other',
 };
 
 const ClientInfoModal = ({ isOpen, onClose, onSave, initialData = null }) => {
@@ -95,7 +95,14 @@ const ClientInfoModal = ({ isOpen, onClose, onSave, initialData = null }) => {
   useEffect(() => {
     if (isOpen) {
       setShowSuccess(false);
-      reset(initialData || initialState);
+      // Ensure all required fields have values when editing
+      const formData = initialData ? {
+        ...initialState,
+        ...initialData,
+        authDesignation: initialData.authDesignation || 'Other',
+        siteDesignation: initialData.siteDesignation || 'Other',
+      } : initialState;
+      reset(formData);
       clearErrors();
       setSameAsAuth(false); // Reset checkbox state
     }
