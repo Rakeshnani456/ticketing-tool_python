@@ -290,34 +290,33 @@ const CreateTicketComponent = ({ user, onClose, showFlashMessage, onTicketCreate
                         value={formData.long_description}
                         onChange={handleChange}
                         rows={4} // Keep rows minimal
-                        maxLength={1000}
+                        maxLength={10000}
                         className="w-full resize-none text-xs"
                     />
-                    <div className="text-right text-xs text-gray-500 mt-0.5">Max 1000 characters</div>
                 </div>
 
                 {/* Section 4: Contact Number and Hostname/AssetID */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3"> {/* Responsive columns */}
                     <FormInput
                         id="contact_number"
-                        label="Contact Number *"
+                        label="Contact*"
                         type="text"
                         value={formData.contact_number}
                         onChange={handleContactNumberChange}
                         required
-                        placeholder="e.g., +91-9876543210"
+                       
                         maxLength={15}
                         disabled={submissionStatus === 'success' || submissionStatus === 'creating'}
                         className="w-full text-xs"
                     />
                     <FormInput
                         id="hostname_asset_id"
-                        label="Hostname/AssetID *"
+                        label="AssetID *"
                         type="text"
                         value={formData.hostname_asset_id}
                         onChange={handleChange}
                         required
-                        placeholder="e.g., LPT-XYZ-001"
+                        placeholder="Hostname or AssetID"
                         disabled={submissionStatus === 'success' || submissionStatus === 'creating'}
                         className="w-full text-xs"
                     />
@@ -327,7 +326,7 @@ const CreateTicketComponent = ({ user, onClose, showFlashMessage, onTicketCreate
                 <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mt-2"> {/* Responsive layout for this section */}
                     <div className="flex-1 min-w-0"> {/* min-w-0 to allow content to shrink */}
                         <label htmlFor="attachments" className="block text-gray-700 text-xs font-semibold mb-0.5">
-                            Attachments <span className="font-normal text-gray-500">(PDF, JPG, PNG, Word. Max 10MB/file, 50MB total)</span>
+                            Attachments <span className="text-xs text-gray-400">(PDF, JPG, PNG, Word or Zip)</span>
                         </label>
                         <input
                             type="file"

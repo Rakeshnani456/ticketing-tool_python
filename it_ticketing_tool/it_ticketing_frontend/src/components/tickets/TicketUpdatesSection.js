@@ -56,7 +56,7 @@ const TicketUpdatesSection = ({
 
     return (
         <div className="max-w-full w-full mx-auto py-1 space-y-1 min-w-0 overflow-x-hidden">
-            <div ref={commentsSectionRef} id="comments-section" className="bg-white pt-1.5 sm:pt-2 pl-0 pr-1.5 sm:pr-3 pb-1.5 sm:pb-2 w-full min-w-0 max-w-full overflow-x-hidden">
+            <div ref={commentsSectionRef} id="comments-section" className="bg-white p-3 sm:p-4 w-full min-w-0 max-w-full overflow-x-hidden">
                 <div className="border-b border-gray-200 mb-2 sm:mb-3 w-full min-w-0 max-w-full overflow-x-hidden">
                     <nav className="flex flex-col sm:flex-row space-y-1 sm:space-y-0 sm:space-x-4 w-full min-w-0 max-w-full overflow-x-hidden">
                         <button
@@ -83,7 +83,10 @@ const TicketUpdatesSection = ({
                 </div>
 
                 {activeTab === 'comments' && (
-                    <div className="w-full min-w-0 max-w-full overflow-x-hidden">
+                    <div className="bg-white border border-gray-300 rounded-lg p-2 sm:p-3 w-full min-w-0 max-w-full overflow-x-hidden">
+                        <label className="block text-xs font-bold text-gray-800 mb-1 sm:mb-1.5">
+                            Comments:
+                        </label>
                         {/* Comments List with Smooth Scrolling */}
                         <div className="relative mb-2 sm:mb-3 w-full min-w-0 max-w-full overflow-x-hidden">
                             {/* Scrollable Comments Container */}
@@ -96,8 +99,15 @@ const TicketUpdatesSection = ({
                                 }}
                                 onScroll={(e) => {
                                     const container = e.target;
-                                    const isBottom = container.scrollTop + container.clientHeight >= container.scrollHeight - 5;
-                                    setIsAtBottom(isBottom);
+                                    const scrollTop = container.scrollTop;
+                                    const scrollHeight = container.scrollHeight;
+                                    const clientHeight = container.clientHeight;
+                                    const isBottom = scrollTop + clientHeight >= scrollHeight - 10;
+                                    
+                                    // Only update state if it's actually changing to prevent flickering
+                                    if (isBottom !== isAtBottom) {
+                                        setIsAtBottom(isBottom);
+                                    }
                                 }}
                                 onWheel={(e) => {
                                     e.stopPropagation = false;
@@ -173,36 +183,31 @@ const TicketUpdatesSection = ({
                                     ) : (
                                         <div className="text-center py-6 w-full min-w-0 max-w-full overflow-x-hidden">
                                             <MessageSquare className="w-10 h-10 mx-auto mb-2" />
-                                                                            <p className="text-xs">No comments yet</p>
-                                <p className="text-[10px] mt-0.5">Be the first to comment</p>
+                                            <p className="text-xs text-gray-500">No comments yet</p>
                                         </div>
                                     )}
                                 </div>
                             </div>
 
                             {/* Latest Comments Overlay Button */}
-                            {ticket.comments && ticket.comments.length > 6 && !isAtBottom && (
-                                <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 z-10">
+                            {ticket.comments && ticket.comments.length > 2 && !isAtBottom && (
+                                <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 z-20">
                                     <button
                                         onClick={(e) => {
                                             e.preventDefault();
                                             e.stopPropagation();
-                                            const newCount = Math.max(6, visibleCommentCount - 2);
-                                            setVisibleCommentCount(newCount);
-                                            setTimeout(() => {
-                                                const commentsContainer = document.getElementById('comments-container');
-                                                if (commentsContainer) {
-                                                    commentsContainer.scrollTo({
-                                                        top: commentsContainer.scrollHeight,
-                                                        behavior: 'smooth'
-                                                    });
-                                                    setTimeout(() => {
-                                                        setIsAtBottom(true);
-                                                    }, 500);
-                                                }
-                                            }, 100);
+                                            const commentsContainer = document.getElementById('comments-container');
+                                            if (commentsContainer) {
+                                                // Set isAtBottom to true immediately to prevent flickering
+                                                setIsAtBottom(true);
+                                                // Then scroll to bottom
+                                                commentsContainer.scrollTo({
+                                                    top: commentsContainer.scrollHeight,
+                                                    behavior: 'smooth'
+                                                });
+                                            }
                                         }}
-                                        className="bg-white/90 backdrop-blur-sm border border-gray-200 rounded-full px-2 py-0.5 text-blue-600 hover:text-blue-800 hover:bg-white text-xs font-medium flex items-center justify-center gap-1 cursor-pointer shadow-sm hover:shadow-md transition-all duration-200"
+                                        className="bg-white/95 backdrop-blur-sm border border-gray-300 rounded-full px-3 py-1 text-blue-600 hover:text-blue-800 hover:bg-white text-xs font-medium flex items-center justify-center gap-1 cursor-pointer shadow-lg hover:shadow-xl transition-all duration-200"
                                     >
                                         Latest
                                         <span>↓</span>
@@ -244,7 +249,7 @@ const TicketUpdatesSection = ({
                 )}
 
                 {activeTab === 'closure' && (
-                    <div className="bg-gradient-to-r from-emerald-50 to-emerald-100 border border-emerald-200 rounded-lg p-2 sm:p-3 w-full min-w-0 max-w-full overflow-x-hidden">
+                    <div className="bg-white border border-gray-300 rounded-lg p-2 sm:p-3 w-full min-w-0 max-w-full overflow-x-hidden">
                         <label className="block text-xs font-bold text-gray-800 mb-1 sm:mb-1.5">
                             Closure notes:
                         </label>
@@ -255,7 +260,7 @@ const TicketUpdatesSection = ({
                             rows={10}
                             disabled={!canEdit || isTicketClosedOrResolved}
                             hasError={closureNotesHasError}
-                            className="FieldBox border border-blue-300 px-1.5 py-0.5 bg-white rounded w-full min-w-0 max-w-full text-xs focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-transparent"
+                            className="FieldBox border border-gray-400 px-1.5 py-0.5 bg-white rounded w-full min-w-0 max-w-full text-xs focus:outline-none focus:ring-2 focus:ring-gray-400 focus:border-transparent"
                             placeholder="Enter closure notes here..."
                         />
                         {closureNotesErrorMessage && (

@@ -69,6 +69,8 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [passwordChangeNotifications, setPasswordChangeNotifications] = useState({});
+  const [actionNotifications, setActionNotifications] = useState({});
+  const [changePwdError, setChangePwdError] = useState('');
 
   const fetchClients = useCallback(async () => {
     try {
@@ -115,7 +117,7 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
   }, [fetchClients, user]);
 
   function generatePassword(length = 10) {
-    const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*';
+    const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     let password = '';
     for (let i = 0; i < length; i++) {
       password += chars.charAt(Math.floor(Math.random() * chars.length));
@@ -176,8 +178,14 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
         throw new Error(errData.error || 'Failed to add engineer');
       }
       
+      const newEngineerData = await res.json();
       setAddMode(false);
       setSnackbar({ open: true, message: 'Engineer added successfully.', severity: 'success' });
+      
+      // Show inline notification for the new engineer
+      if (newEngineerData && newEngineerData.uid) {
+        showActionNotification(newEngineerData.uid, 'Engineer created successfully', 'success');
+      }
       
       // Refresh engineers list
       const fetchEngineers = async () => {
@@ -301,22 +309,7 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
       });
       
       // Show inline notification for this specific user
-      setPasswordChangeNotifications(prev => ({
-        ...prev,
-        [uid]: {
-          message: 'edit-success',
-          timestamp: Date.now()
-        }
-      }));
-      
-      // Auto-hide the notification after 5 seconds
-      setTimeout(() => {
-        setPasswordChangeNotifications(prev => {
-          const newState = { ...prev };
-          delete newState[uid];
-          return newState;
-        });
-      }, 5000);
+      showActionNotification(uid, 'Engineer updated successfully', 'success');
       
       // Refresh engineers list
       const fetchEngineers = async () => {
@@ -400,22 +393,7 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
       }
       
       // Show inline notification for this specific user
-      setPasswordChangeNotifications(prev => ({
-        ...prev,
-        [uid]: {
-          message: 'delete-success',
-          timestamp: Date.now()
-        }
-      }));
-      
-      // Auto-hide the notification after 5 seconds
-      setTimeout(() => {
-        setPasswordChangeNotifications(prev => {
-          const newState = { ...prev };
-          delete newState[uid];
-          return newState;
-        });
-      }, 5000);
+      showActionNotification(uid, 'Engineer deleted successfully', 'success');
       setUserToDeleteUid(null);
       setCurrentUserEmailToDelete('');
       
@@ -463,16 +441,42 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
     setChangePwdModalOpen(false);
     setPwdUserId(null);
     setNewPassword('');
+    setChangePwdError('');
+  };
+
+  const isAlphanumeric = (str) => /^[a-zA-Z0-9]+$/.test(str);
+
+  const showActionNotification = (uid, message, type = 'success') => {
+    setActionNotifications(prev => ({
+      ...prev,
+      [uid]: {
+        message,
+        type,
+        timestamp: Date.now()
+      }
+    }));
+    
+    // Auto-hide after 5 seconds
+    setTimeout(() => {
+      setActionNotifications(prev => {
+        const newState = { ...prev };
+        delete newState[uid];
+        return newState;
+      });
+    }, 5000);
   };
 
   const handleChangePassword = async (e) => {
     e.preventDefault();
-    
+    setChangePwdError && setChangePwdError('');
     if (!newPassword || newPassword.length < 6) {
       setSnackbar({ open: true, message: 'Password must be at least 6 characters.', severity: 'error' });
       return;
     }
-    
+    if (!isAlphanumeric(newPassword)) {
+      setSnackbar({ open: true, message: 'Password must contain only alphabets and numbers.', severity: 'error' });
+      return;
+    }
     try {
       const idToken = await user.firebaseUser.getIdToken();
       
@@ -491,26 +495,11 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
       }
       
       // Show inline notification for this specific user
-      setPasswordChangeNotifications(prev => ({
-        ...prev,
-        [pwdUserId]: {
-          message: 'password reset-success',
-          timestamp: Date.now()
-        }
-      }));
-      
-      // Auto-hide the notification after 5 seconds
-      setTimeout(() => {
-        setPasswordChangeNotifications(prev => {
-          const newState = { ...prev };
-          delete newState[pwdUserId];
-          return newState;
-        });
-      }, 5000);
+      showActionNotification(pwdUserId, 'Password reset successfully', 'success');
       
       closeChangePwdModal();
     } catch (err) {
-      setSnackbar({ open: true, message: err.message, severity: 'error' });
+      setSnackbar({ open: true, message: err.message || 'Failed to change password', severity: 'error' });
     }
   };
 
@@ -716,18 +705,18 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
                            />
                          </TableCell>
                          <TableCell align="right" sx={{ py: 0.4, px: 2 }}>
-                          {passwordChangeNotifications[u.uid] ? (
+                          {actionNotifications[u.uid] ? (
                             <Typography 
                               variant="body2" 
                               sx={{ 
                                 fontSize: '0.7rem',
-                                color: passwordChangeNotifications[u.uid].message.includes('success') ? '#2e7d32' : '#d32f2f',
+                                color: actionNotifications[u.uid].type === 'success' ? '#2e7d32' : '#d32f2f',
                                 fontWeight: 500,
                                 textAlign: 'right',
                                 py: 0.5
                               }}
                             >
-                              {passwordChangeNotifications[u.uid].message}
+                              {actionNotifications[u.uid].message}
                             </Typography>
                           ) : (
                             <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
@@ -1455,6 +1444,9 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
                 }}
                 sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
               />
+              {changePwdError && (
+                <Typography variant="body2" color="error" sx={{ mt: 1 }}>{changePwdError}</Typography>
+              )}
             </Box>
           </Box>
         </DialogContent>

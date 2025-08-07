@@ -110,7 +110,6 @@ module.exports = (db, admin, usersCollection, verifyFirebaseToken) => {
             if (userProfile.mustChangePassword) {
                 // Require password change before allowing login
                 return res.status(403).json({
-                    error: 'Password change required before login.',
                     mustChangePassword: true,
                     user: loggedInUser
                 });

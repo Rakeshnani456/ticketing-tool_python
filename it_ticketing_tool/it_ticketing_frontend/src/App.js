@@ -91,6 +91,7 @@ import DashboardComponent from './components/DashboardComponent';
 import ProfileComponent from './components/ProfileComponent';
 import AccessDeniedComponent from './components/AccessDeniedComponent';
 import ChangePasswordComponent from './components/ChangePasswordComponent';
+import InitialPasswordChangeComponent from './components/auth/InitialPasswordChangeComponent';
 import UserManagementComponent from './components/admin/UserManagementComponent';
 import Modal from './components/common/Modal';
 import AdminManagementComponent from './components/admin/AdminManagementComponent';
@@ -492,6 +493,7 @@ const App = () => {
                                  navigate('/my-tickets');
                              }
                         }
+                        // Don't navigate if user is on password change route - let them complete the process
                         
                         // Set loading to false after successful authentication
                         setIsAuthLoading(false);
@@ -499,6 +501,22 @@ const App = () => {
                         return () => { // Cleanup for tickets listener if auth state changes again
                            unsubscribeTickets();
                         };
+                    } else if (response.status === 403 && data.mustChangePassword) {
+                        // Password change required - allow user to stay on password change route
+                        console.log("Password change required for user:", firebaseUser.email);
+                        
+                        // If user is already on the password change route, don't sign them out
+                        if (location.pathname === '/initial-password-change') {
+                            setCurrentUser(null);
+                            setIsAuthLoading(false);
+                            // Don't navigate - let them stay on password change page
+                        } else {
+                            // If they're on any other route, sign them out and redirect to login
+                            authClient.signOut();
+                            setCurrentUser(null);
+                            setIsAuthLoading(false);
+                            navigate('/login');
+                        }
                     } else {
                         // If backend verification fails, show error and log out from Firebase
                         console.error("Backend login verification failed:", data.error);
@@ -522,7 +540,7 @@ const App = () => {
                 setCurrentUser(null);
                 setIsAuthLoading(false);
                 // Ensure we are on a public route if no user is logged in
-                if (location.pathname !== '/login' && location.pathname !== '/register') {
+                if (location.pathname !== '/login' && location.pathname !== '/register' && location.pathname !== '/initial-password-change') {
                     navigate('/login');
                 }
                 setTicketCounts({ active_tickets: 0, assigned_to_me: 0, total_tickets: 0 }); // Reset counts
@@ -644,12 +662,12 @@ const App = () => {
      * @param {string|null} [id=null] - Optional ID for detail pages (e.g., ticket ID).
      * @returns {void}
      */
-    const navigateTo = useCallback((path, id = null) => {
+    const navigateTo = useCallback((path, id = null, options = {}) => {
         // console.log(`App: Navigating to path: ${path}, with ID: ${id}`); // Debugging
         if (id) {
-            navigate(`${path}/${id}`); // Append ID to path for detail pages
+            navigate(`${path}/${id}`, options); // Append ID to path for detail pages
         } else {
-            navigate(path);
+            navigate(path, options);
         }
         setSearchKeyword(''); // Clear search keyword on page change
         setTicketListRefreshKey(prev => prev + 1); // Increment key to force ticket list refresh
@@ -1182,7 +1200,7 @@ const App = () => {
                 >
                     {/* Logo at the top of the sidebar */}
                     <div className={`flex ${isSidebarExpanded ? 'justify-start px-3 py-2 border-b border-gray-200' : 'justify-center pt-2 pb-1'}`}>
-                        <Link to={currentUser ? '/my-tickets' : '/login'} className="flex items-center">
+                        <Link to={currentUser ? (['site_admin', 'super_admin', 'engineer', 'support', 'admin'].includes(currentUser.role) ? '/dashboard' : '/my-tickets') : '/login'} className="flex items-center">
                             <img 
                                 src={isSidebarExpanded ? KriasolLogo : FabLogo} 
                                 alt="Logo" 
@@ -1376,6 +1394,21 @@ const App = () => {
                                         )}
                                         <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">Users</motion.span>
                                     </Link>
+                                    
+                                    <Link to="/create-ticket" className={`group flex items-center px-3 py-2  text-sm font-medium transition-all duration-200 hover:bg-green-50 hover:text-green-700 ${location.pathname === '/create-ticket' ? 'bg-green-50 text-green-700 shadow-sm' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                        { !isSidebarExpanded ? (
+                                            <TooltipBubble title="Create Ticket">
+                                                <div className="flex items-center justify-center w-7 h-7">
+                                                    <Zap size={23} className="flex-shrink-0" />
+                                                </div>
+                                            </TooltipBubble>
+                                        ) : (
+                                            <div className="flex items-center justify-center w-5 h-5 mr-3">
+                                                <Zap size={18} className="flex-shrink-0" />
+                                            </div>
+                                        )}
+                                        <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">Create Ticket</motion.span>
+                                    </Link>
                                 </>
                             ) : (
                                 <>
@@ -1547,6 +1580,7 @@ const App = () => {
                         {/* Public Routes (Login/Register) */}
                         <Route path="/login" element={<LoginComponent onLoginSuccess={handleLoginSuccess} navigateTo={navigateTo} showFlashMessage={showFlashMessage} />} />
                         <Route path="/register" element={<RegisterComponent currentUser={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} />} />
+                        <Route path="/initial-password-change" element={<InitialPasswordChangeComponent navigateTo={navigateTo} showFlashMessage={showFlashMessage} />} />
 
                         {/* Protected Routes (require currentUser) */}
                         {currentUser ? (

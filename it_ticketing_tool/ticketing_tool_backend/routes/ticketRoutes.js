@@ -1126,7 +1126,7 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                 if (req.user.client_name && ticketData.client_name !== req.user.client_name) {
                     return res.status(403).json({ error: 'Forbidden: You do not have permission to view tickets from other companies.' });
                 }
-            } else if (ticketData.reporter_id !== authenticatedUid && !['support', 'admin', 'super_admin'].includes(authenticatedUserRole)) {
+            } else if (ticketData.reporter_id !== authenticatedUid && !['support', 'admin', 'super_admin', 'site_admin'].includes(authenticatedUserRole)) {
                 return res.status(403).json({ error: 'Forbidden: You do not have permission to view this ticket.' });
             }
 
@@ -1268,7 +1268,7 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
     });
 
     // --- Danger: Delete All Tickets Endpoint ---
-    router.delete('/all', verifyFirebaseToken, checkRole(['support', 'admin', 'super_admin']), async (req, res) => {
+    router.delete('/all', verifyFirebaseToken, checkRole(['support', 'admin', 'super_admin', 'site_admin']), async (req, res) => {
         try {
             const snapshot = await ticketsCollection.get();
             const batch = admin.firestore().batch();

@@ -33,6 +33,10 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
   // State for original fetched activities (for re-filtering)
   const [originalActivities, setOriginalActivities] = useState([]);
   
+  // State for company filter (for Super Admin and Engineer)
+  const [selectedCompany, setSelectedCompany] = useState('');
+  const [availableCompanies, setAvailableCompanies] = useState([]);
+  
 
   
   // Theme classes
@@ -250,6 +254,37 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
     }
   }, [companyUsers, user, originalActivities, tickets]);
 
+  // Fetch available companies for Super Admin and Engineer
+  useEffect(() => {
+    if (!user || (user.role !== 'super_admin' && user.role !== 'engineer')) return;
+
+    const usersRef = collection(dbClient, 'users');
+    const unsubscribeCompanies = onSnapshot(usersRef, (snapshot) => {
+      const companies = new Set();
+      snapshot.docs.forEach(doc => {
+        const userData = doc.data();
+        if (userData.client_name) {
+          companies.add(userData.client_name);
+        }
+        if (userData.companyName) {
+          companies.add(userData.companyName);
+        }
+      });
+      
+      const companiesList = Array.from(companies).sort();
+      setAvailableCompanies(companiesList);
+      
+      // Set "All" as default if none selected
+      if (!selectedCompany) {
+        setSelectedCompany('All');
+      }
+    });
+
+    return () => {
+      unsubscribeCompanies();
+    };
+  }, [user, selectedCompany]);
+
   // Create mappings for ticket ID lookups
   const ticketMappings = useMemo(() => {
     const displayIdToDocIdMap = {};
@@ -272,7 +307,11 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
     const lastWeek = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     const lastMonth = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
     
-    const timeFilteredTickets = tickets.filter(ticket => {
+    // Filter tickets by selected company for Super Admin and Engineer - DISABLED
+    let filteredTickets = tickets;
+    // Company filtering disabled - use all tickets
+    
+    const timeFilteredTickets = filteredTickets.filter(ticket => {
       const ticketDate = ticket.created_at;
       if (timeRange === 'week') return ticketDate >= lastWeek;
       if (timeRange === 'month') return ticketDate >= lastMonth;
@@ -356,7 +395,13 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
       assignedToMe,
       avgResolutionTime
     };
-  }, [tickets, agents, timeRange, user]);
+  }, [tickets, agents, timeRange, user, selectedCompany]);
+
+  // Filter activities by selected company for Super Admin and Engineer - DISABLED
+  const filteredActivities = useMemo(() => {
+    // Company filtering disabled - return all activities
+    return activities;
+  }, [activities]);
 
   // Status colors for charts
   const statusColors = {
@@ -393,14 +438,36 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
           <div>
             <h1 className="text-xl font-bold flex items-center">
               <TrendingUp className="mr-2 text-blue-500" size={18} />
-              Support Analytics
+              Service Desk Insights
             </h1>
-            <p className="mt-1 opacity-75 text-sm">Real-time ticket management</p>
           </div>
+
+          {/* Company Filter for Super Admin and Engineer - DISABLED */}
+          {/* {(user?.role === 'super_admin' || user?.role === 'engineer') && availableCompanies.length > 0 && (
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium">Company:</label>
+                             <select
+                 value={selectedCompany}
+                 onChange={(e) => setSelectedCompany(e.target.value)}
+                 className={`px-3 py-1 rounded-md text-sm border ${
+                   darkMode 
+                     ? 'bg-gray-700 border-gray-600 text-white' 
+                     : 'bg-white border-gray-300 text-gray-900'
+                 } focus:outline-none focus:ring-2 focus:ring-blue-500`}
+               >
+                 <option value="All">All</option>
+                 {availableCompanies.map(company => (
+                   <option key={company} value={company}>
+                     {company}
+                   </option>
+                 ))}
+               </select>
+            </div>
+          )} */}
           
           {(user?.role === 'admin' || user?.role === 'super_admin') && (
             <div className="text-right">
-              <p className="text-sm opacity-75">
+              <p className="text-xs opacity-75">
                 For detailed analytics, visit{' '}
                 <button
                   onClick={() => navigateTo('/reports')}
@@ -422,14 +489,14 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
         
         {/* Stats Overview */}
         <div className={`grid grid-cols-1 md:grid-cols-${(user?.role === 'engineer' || user?.role === 'support') ? '4' : user?.role === 'admin' || user?.role === 'super_admin' ? '4' : '3'} gap-3 mb-4`}>
-          {/* Total Active Tickets - All roles can see */}
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            onClick={() => navigateTo('/all-tickets')}
-            className={`${cardClass} rounded-lg p-3 shadow-lg border cursor-pointer hover:shadow-xl transition-all duration-200 hover:scale-105`}
-          >
+                     {/* Total Active Tickets - All roles can see */}
+           <motion.div 
+             initial={{ opacity: 0, y: 20 }}
+             animate={{ opacity: 1, y: 0 }}
+             transition={{ delay: 0.1 }}
+             onClick={() => navigateTo('/all-tickets')}
+             className={`${cardClass} rounded-lg p-3 shadow-lg border cursor-pointer hover:shadow-xl transition-all duration-200 hover:scale-105`}
+           >
             <div className="flex justify-between items-start">
               <div>
                 <p className="opacity-75 text-xs">Total Tickets</p>
@@ -444,14 +511,14 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
             </div>
           </motion.div>
           
-          {/* Open Tickets - All roles can see */}
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            onClick={() => navigateTo('/all-tickets?status=Open')}
-            className={`${cardClass} rounded-lg p-3 shadow-lg border cursor-pointer hover:shadow-xl transition-all duration-200 hover:scale-105`}
-          >
+                     {/* Open Tickets - All roles can see */}
+           <motion.div 
+             initial={{ opacity: 0, y: 20 }}
+             animate={{ opacity: 1, y: 0 }}
+             transition={{ delay: 0.2 }}
+             onClick={() => navigateTo('/all-tickets?status=Open')}
+             className={`${cardClass} rounded-lg p-3 shadow-lg border cursor-pointer hover:shadow-xl transition-all duration-200 hover:scale-105`}
+           >
             <div className="flex justify-between items-start">
               <div>
                 <p className="opacity-75 text-xs">Open Tickets</p>
@@ -466,14 +533,14 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
             </div>
           </motion.div>
           
-          {/* In Progress - All roles can see */}
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-            onClick={() => navigateTo('/all-tickets?status=In Progress')}
-            className={`${cardClass} rounded-lg p-3 shadow-lg border cursor-pointer hover:shadow-xl transition-all duration-200 hover:scale-105`}
-          >
+                     {/* In Progress - All roles can see */}
+           <motion.div 
+             initial={{ opacity: 0, y: 20 }}
+             animate={{ opacity: 1, y: 0 }}
+             transition={{ delay: 0.3 }}
+             onClick={() => navigateTo('/all-tickets?status=In Progress')}
+             className={`${cardClass} rounded-lg p-3 shadow-lg border cursor-pointer hover:shadow-xl transition-all duration-200 hover:scale-105`}
+           >
             <div className="flex justify-between items-start">
               <div>
                 <p className="opacity-75 text-xs">In Progress</p>
@@ -488,15 +555,15 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
             </div>
           </motion.div>
           
-          {/* Assigned to Me - Only Engineers and Support */}
-          {(user?.role === 'engineer' || user?.role === 'support') && (
-            <motion.div 
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.4 }}
-              onClick={() => navigateTo('/assigned-to-me')}
-              className={`${cardClass} rounded-lg p-3 shadow-lg border cursor-pointer hover:shadow-xl transition-all duration-200 hover:scale-105`}
-            >
+                     {/* Assigned to Me - Only Engineers and Support */}
+           {(user?.role === 'engineer' || user?.role === 'support') && (
+             <motion.div 
+               initial={{ opacity: 0, y: 20 }}
+               animate={{ opacity: 1, y: 0 }}
+               transition={{ delay: 0.4 }}
+               onClick={() => navigateTo('/assigned-to-me')}
+               className={`${cardClass} rounded-lg p-3 shadow-lg border cursor-pointer hover:shadow-xl transition-all duration-200 hover:scale-105`}
+             >
               <div className="flex justify-between items-start">
                 <div>
                   <p className="opacity-75 text-xs">Assigned to Me</p>
@@ -565,9 +632,9 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
             
             {activeTab === 'activity' && (
               <div className="space-y-2 max-h-64 overflow-y-auto pr-2">
-                {console.log('Activities array length:', activities.length)}
-                {activities.length > 0 ? (
-                  activities.map(activity => {
+                {console.log('Activities array length:', filteredActivities.length)}
+                {filteredActivities.length > 0 ? (
+                  filteredActivities.map(activity => {
                     // Get activity icon and color based on type
                     const getActivityIcon = (type) => {
                       switch (type) {

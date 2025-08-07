@@ -223,35 +223,35 @@ const TicketDetailsSection = ({
                 <label className="block text-xs font-bold mb-2">
                     Description:
                 </label>
-                {isEditing && canEdit ? (
-                    <>
-                        <EditableTextarea
-                            id="long_description"
-                            value={editableFields.long_description}
-                            onChange={handleEditChange}
-                            rows={10}
-                            disabled={!canEdit}
-                            className="FieldBox border border-blue-300 px-3 py-2 bg-white rounded-md w-full min-w-0 max-w-full text-xs focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-transparent"
-                            style={{ height: '200px' }}
-                            maxLength={1200}
-                        />
-                        {isEditing && canEdit && (
+                <div className="border border-gray-200 px-3 py-2 bg-gradient-to-r from-gray-50 to-gray-100 rounded-md w-full min-w-0 max-w-full overflow-y-auto" style={{ height: '200px' }}>
+                    {isEditing && canEdit && (!ticket.long_description || ticket.long_description.trim() === '') ? (
+                        <>
+                            <EditableTextarea
+                                id="long_description"
+                                value={editableFields.long_description}
+                                onChange={handleEditChange}
+                                rows={10}
+                                disabled={!canEdit}
+                                className="w-full min-w-0 max-w-full text-xs bg-transparent border-none focus:outline-none resize-none"
+                                style={{ height: '180px', lineHeight: '1.4', wordWrap: 'break-word', overflowWrap: 'break-word', fontFamily: 'inherit' }}
+                                maxLength={1200}
+                            />
                             <div className="text-xs text-gray-500 mt-2 text-right w-full font-medium">{editableFields.long_description.length}/1200 characters</div>
-                        )}
-                    </>
-                ) : (
-                    <div className="border border-gray-200 px-3 py-2 bg-gradient-to-r from-gray-50 to-gray-100 rounded-md w-full min-w-0 max-w-full overflow-y-auto" style={{ height: '200px' }}>
-                        {ticket.long_description ? (
-                            <span className="text-xs whitespace-pre-wrap break-words w-full min-w-0 max-w-full" style={{ lineHeight: '1.4', wordWrap: 'break-word', overflowWrap: 'break-word', fontFamily: 'inherit' }}>
-                                {ticket.long_description}
-                            </span>
-                        ) : (
-                            <span className="text-xs italic whitespace-pre-wrap break-words mt-0 w-full min-w-0 max-w-full" style={{ lineHeight: '1.4', wordWrap: 'break-word', overflowWrap: 'break-word', fontFamily: 'inherit' }}>
-                                No description provided.
-                            </span>
-                        )}
-                    </div>
-                )}
+                        </>
+                    ) : (
+                        <>
+                            {ticket.long_description ? (
+                                <span className="text-xs whitespace-pre-wrap break-words w-full min-w-0 max-w-full" style={{ lineHeight: '1.4', wordWrap: 'break-word', overflowWrap: 'break-word', fontFamily: 'inherit' }}>
+                                    {ticket.long_description}
+                                </span>
+                            ) : (
+                                <span className="text-xs italic whitespace-pre-wrap break-words mt-0 w-full min-w-0 max-w-full" style={{ lineHeight: '1.4', wordWrap: 'break-word', overflowWrap: 'break-word', fontFamily: 'inherit' }}>
+                                    No description provided.
+                                </span>
+                            )}
+                        </>
+                    )}
+                </div>
             </div>
 
             {/* Attachments section */}

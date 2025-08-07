@@ -27,7 +27,7 @@ import EmailIcon from '@mui/icons-material/Email';
 import WorkIcon from '@mui/icons-material/Work';
 import PhoneIcon from '@mui/icons-material/Phone';
 import BadgeIcon from '@mui/icons-material/Badge';
-import { Edit as EditIcon, Delete as DeleteIcon } from '@mui/icons-material';
+import { Edit as EditIcon, Delete as DeleteIcon, LockReset as LockResetIcon } from '@mui/icons-material';
 
 const InfoRow = ({ icon, label, value, itemSx }) => (
     <Box
@@ -82,9 +82,11 @@ const ClientUserCard = ({
     onDeleteUser, 
     onEditClick, 
     onDeleteClick,
+    onPasswordResetClick,
     showEdit,
     showDelete,
-    isOwnRow 
+    isOwnRow,
+    actionNotifications 
 }) => {
     const [expanded, setExpanded] = useState(false);
 
@@ -97,13 +99,19 @@ const ClientUserCard = ({
             variant="outlined"
             sx={{
                 mb: 2,
-                borderRadius: 0,
-                boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
-                transition: 'box-shadow 0.2s',
-                '&:hover': { boxShadow: '0 4px 16px rgba(0,0,0,0.08)' },
+                borderRadius: 1,
+                boxShadow: expanded ? '0 4px 16px rgba(0,0,0,0.08)' : '0 2px 8px rgba(0,0,0,0.04)',
+                transition: 'box-shadow 0.2s, border-left 0.2s, background 0.2s',
                 width: '100%',
-                borderLeft: 'none',
+                borderLeft: expanded ? '4px solid #1976d2' : '4px solid #90caf9',
                 borderRight: 'none',
+                borderTop: 'none',
+                borderBottom: 'none',
+                background: expanded ? '#f5f7fa' : '#f8fafc',
+                '&:hover': {
+                    background: '#e3f2fd',
+                    borderLeft: '4px solid #1976d2',
+                },
             }}
         >
             <Box
@@ -113,9 +121,10 @@ const ClientUserCard = ({
                 width="100%"
                 sx={{
                     cursor: 'pointer',
-                    background: expanded ? '#f5f7fa' : '#fff',
+                    background: expanded ? '#f5f7fa' : '#f8fafc',
                     px: 0,
                     py: 0.5,
+                    minHeight: 56,
                 }}
                 onClick={() => setExpanded((prev) => !prev)}
             >
@@ -123,12 +132,13 @@ const ClientUserCard = ({
                 <Box sx={{ pl: 2, pr: 1 }}>
                     <Avatar
                         sx={{
-                            width: 24,
-                            height: 24,
+                            width: 28,
+                            height: 28,
                             bgcolor: 'primary.main',
-                            fontSize: '0.7rem',
-                            fontWeight: 600,
-                            color: 'white'
+                            fontSize: '0.8rem',
+                            fontWeight: 700,
+                            color: 'white',
+                            boxShadow: '0 1px 4px rgba(25,118,210,0.10)'
                         }}
                     >
                         {index}
@@ -136,44 +146,44 @@ const ClientUserCard = ({
                 </Box>
                 
                 <Box display="flex" alignItems="center" gap={1} sx={{ pl: 1 }}>
-                    <BusinessIcon sx={{ color: 'primary.main', fontSize: '1.1rem' }} />
-                    <Typography variant="h6" sx={{ fontWeight: 700, fontSize: '0.85rem', minWidth: 100 }}>
+                    <BusinessIcon sx={{ color: 'primary.main', fontSize: '1.2rem' }} />
+                    <Typography variant="h6" sx={{ fontWeight: 700, fontSize: '0.95rem', minWidth: 100 }}>
                         {clientName || 'Unknown Client'}
                     </Typography>
                 </Box>
                 
-                <Box display="flex" alignItems="center" gap={1} flex={1} justifyContent="flex-start" flexWrap="wrap" sx={{ ml: 2, minWidth: 0, width: '100%' }}>
+                <Box display="flex" alignItems="center" gap={2} flex={1} justifyContent="flex-start" flexWrap="wrap" sx={{ ml: 2, minWidth: 0, width: '100%' }}>
                     <InfoRow 
-                        icon={<GroupIcon fontSize="small" sx={{ color: 'text.secondary', fontSize: '1rem' }} />} 
+                        icon={<GroupIcon fontSize="small" sx={{ color: 'text.secondary', fontSize: '1.1rem' }} />} 
                         label="Total Users" 
                         value={userCount} 
                     />
                     <InfoRow 
-                        icon={<PersonIcon fontSize="small" sx={{ color: 'text.secondary', fontSize: '1rem' }} />} 
+                        icon={<PersonIcon fontSize="small" sx={{ color: 'text.secondary', fontSize: '1.1rem' }} />} 
                         label="Regular Users" 
                         value={activeUsers} 
                     />
                     <InfoRow 
-                        icon={<WorkIcon fontSize="small" sx={{ color: 'text.secondary', fontSize: '1rem' }} />} 
+                        icon={<WorkIcon fontSize="small" sx={{ color: 'text.secondary', fontSize: '1.1rem' }} />} 
                         label="Site Admins" 
                         value={siteAdmins} 
                     />
                     
                     {/* User Count Badge */}
                     <Box display="flex" alignItems="center" gap={0.5} sx={{ ml: 1 }}>
-                        <GroupIcon fontSize="small" sx={{ color: 'text.secondary', fontSize: '1rem' }} />
+                        <GroupIcon fontSize="small" sx={{ color: 'text.secondary', fontSize: '1.1rem' }} />
                         <Chip
                             label={`${userCount} user${userCount !== 1 ? 's' : ''}`}
                             size="small"
                             sx={{
-                                height: 20,
-                                fontSize: '0.65rem',
+                                height: 22,
+                                fontSize: '0.7rem',
                                 fontWeight: 600,
                                 bgcolor: userCount > 0 ? '#e3f2fd' : '#f5f5f5',
                                 color: userCount > 0 ? '#1976d2' : '#757575',
                                 border: userCount > 0 ? '1px solid #bbdefb' : '1px solid #e0e0e0',
                                 '& .MuiChip-label': {
-                                    px: 1,
+                                    px: 1.2,
                                 }
                             }}
                         />
@@ -181,7 +191,7 @@ const ClientUserCard = ({
                 </Box>
                 
                 <Tooltip title={expanded ? 'Hide Users' : 'Show Users'}>
-                    <IconButton size="small" sx={{ ml: 1, mr: 2 }}>
+                    <IconButton size="small" sx={{ ml: 1, mr: 2, color: expanded ? 'primary.main' : '#90caf9', transition: 'color 0.2s' }}>
                         {expanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
                     </IconButton>
                 </Tooltip>
@@ -204,7 +214,7 @@ const ClientUserCard = ({
                                     <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem' }}>Designation</TableCell>
                                     <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem' }}>Contact</TableCell>
                                     <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem' }}>Role</TableCell>
-                                    {(showEdit || showDelete) && (
+                                    {(showEdit || showDelete || onPasswordResetClick) && (
                                         <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem' }}>Actions</TableCell>
                                     )}
                                 </TableRow>
@@ -277,37 +287,69 @@ const ClientUserCard = ({
                                                 }}
                                             />
                                         </TableCell>
-                                        {(showEdit || showDelete) && (
+                                                                                {(showEdit || showDelete || onPasswordResetClick) && (
                                             <TableCell>
-                                                <Box display="flex" alignItems="center" gap={0.5}>
-                                                    {showEdit && !isOwnRow(user) && (
-                                                        <Tooltip title="Edit User">
-                                                            <IconButton 
-                                                                size="small" 
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    onEditClick && onEditClick(user);
-                                                                }}
-                                                            >
-                                                                <EditIcon fontSize="small" />
-                                                            </IconButton>
-                                                        </Tooltip>
-                                                    )}
-                                                    {showDelete && !isOwnRow(user) && (
-                                                        <Tooltip title="Delete User">
-                                                            <IconButton 
-                                                                size="small" 
-                                                                color="error"
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    onDeleteClick && onDeleteClick(user);
-                                                                }}
-                                                            >
-                                                                <DeleteIcon fontSize="small" />
-                                                            </IconButton>
-                                                        </Tooltip>
-                                                    )}
-                                                </Box>
+                                                {actionNotifications && actionNotifications[user.uid] ? (
+                                                    <Typography 
+                                                        variant="body2" 
+                                                        sx={{ 
+                                                            fontSize: '0.7rem',
+                                                            color: actionNotifications[user.uid].type === 'success' ? '#2e7d32' : '#d32f2f',
+                                                            fontWeight: 500,
+                                                            textAlign: 'right',
+                                                            py: 0.5
+                                                        }}
+                                                    >
+                                                        {actionNotifications[user.uid].message}
+                                                    </Typography>
+                                                ) : (
+                                                    <Box display="flex" alignItems="center" gap={0.5}>
+                                                        {onPasswordResetClick && !isOwnRow(user) && (
+                                                            <Tooltip title="Reset Password">
+                                                                <IconButton 
+                                                                    size="small" 
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        onPasswordResetClick && onPasswordResetClick(user);
+                                                                    }}
+                                                                    sx={{ 
+                                                                        color: '#607d8b',
+                                                                        '&:hover': { color: '#455a64', bgcolor: 'rgba(96, 125, 139, 0.1)' }
+                                                                    }}
+                                                                >
+                                                                    <LockResetIcon fontSize="small" />
+                                                                </IconButton>
+                                                            </Tooltip>
+                                                        )}
+                                                        {showEdit && !isOwnRow(user) && (
+                                                            <Tooltip title="Edit User">
+                                                                <IconButton 
+                                                                    size="small" 
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        onEditClick && onEditClick(user);
+                                                                    }}
+                                                                >
+                                                                    <EditIcon fontSize="small" />
+                                                                </IconButton>
+                                                            </Tooltip>
+                                                        )}
+                                                        {showDelete && !isOwnRow(user) && (
+                                                            <Tooltip title="Delete User">
+                                                                <IconButton 
+                                                                    size="small" 
+                                                                    color="error" 
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        onDeleteClick && onDeleteClick(user);
+                                                                    }}
+                                                                >
+                                                                    <DeleteIcon fontSize="small" />
+                                                                </IconButton>
+                                                            </Tooltip>
+                                                        )}
+                                                    </Box>
+                                                )}
                                             </TableCell>
                                         )}
                                     </TableRow>
