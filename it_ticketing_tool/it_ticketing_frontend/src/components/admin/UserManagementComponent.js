@@ -2431,7 +2431,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                 },
             }}>
                 <Table size="small" sx={{ minWidth: 700, borderCollapse: 'collapse' }}>
-                    <TableHead sx={{ bgcolor: '#f5f7fa' }}>
+                    <TableHead sx={{ bgcolor: '#ffffff' }}>
                         <TableRow>
                             {showCheckboxes && (
                             <TableCell padding="checkbox">
@@ -2502,8 +2502,8 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                                 key={u.uid}
                                 hover
                                 sx={{ 
-                                    bgcolor: '#fff3e0',
-                                    '&:hover': { bgcolor: '#ffe0b2' }
+                                    bgcolor: '#ffffff',
+                                    '&:hover': { bgcolor: '#f5f5f5' }
                                 }}
                             >
                                 {showCheckboxes && (

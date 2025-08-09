@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Loader2, XCircle, ListFilter, Download, User, CheckCircle, ChevronLeft, ChevronRight, ChevronUp, ChevronDown } from 'lucide-react';
-import { collection, query, onSnapshot, where, orderBy, getFirestore } from 'firebase/firestore';
+import { collection, query, onSnapshot, where, orderBy, getFirestore, limit } from 'firebase/firestore';
 
 // Import common UI components
 import PrimaryButton from '../common/PrimaryButton';
@@ -187,6 +187,23 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
 
         setError(null);
 
+        // OPTIMIZED: Check cache first
+        const cacheKey = `all_tickets_${user.uid}_${searchKeyword || 'default'}_${filterBy || 'default'}_${filterCompany || 'default'}`;
+        const cachedData = localStorage.getItem(cacheKey);
+        const cacheTime = localStorage.getItem(`${cacheKey}_time`);
+        const now = Date.now();
+        
+        // Use cached data if it's less than 2 minutes old
+        if (cachedData && cacheTime && (now - parseInt(cacheTime)) < 120000) {
+            try {
+                const parsedData = JSON.parse(cachedData);
+                setAllTickets(parsedData);
+                setLoading(false);
+            } catch (e) {
+                console.warn('Failed to parse cached all tickets data:', e);
+            }
+        }
+
         // Debug site admin user profile
         if (user.role === 'site_admin') {
             console.log("Site admin user profile debug:", {
@@ -198,48 +215,6 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
             });
         }
 
-        // If company filter is active, use API instead of Firestore
-        if (filterBy === 'company' && filterCompany) {
-            const fetchTicketsFromAPI = async () => {
-                try {
-                    setLoading(true);
-                    const idToken = await user.firebaseUser.getIdToken();
-                    const params = new URLSearchParams();
-                    if (filterCompany) {
-                        params.append('company', filterCompany);
-                    }
-                    if (searchKeyword) {
-                        params.append('keyword', searchKeyword);
-                    }
-                    
-                    const response = await fetch(`${API_BASE_URL}/tickets/all?${params.toString()}`, {
-                        headers: {
-                            'Authorization': `Bearer ${idToken}`,
-                            'Content-Type': 'application/json'
-                        }
-                    });
-                    
-                    if (!response.ok) {
-                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                    }
-                    
-                    const tickets = await response.json();
-                    setAllTickets(tickets);
-                    setLoading(false);
-                    setError(null);
-                } catch (error) {
-                    console.error('Error fetching tickets from API:', error);
-                    setError(`Failed to load tickets: ${error.message}`);
-                    showFlashMessage(`Failed to load tickets: ${error.message}`, 'error');
-                    setLoading(false);
-                }
-            };
-            
-            fetchTicketsFromAPI();
-            return () => {}; // No cleanup needed for API calls
-        }
-
-        // Use Firestore for real-time updates when not using company filter
         let ticketsRef = collection(db, 'tickets');
         let q;
 
@@ -247,17 +222,17 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
         // apply that filter directly in the Firestore query for efficiency.
         if (searchKeyword && searchKeyword.toUpperCase().startsWith('TICKET-')) {
             const exactId = searchKeyword.toUpperCase();
-            q = query(ticketsRef, where('display_id', '==', exactId), orderBy('created_at', 'desc'));
+            q = query(ticketsRef, where('display_id', '==', exactId), orderBy('created_at', 'desc'), limit(10));
         } else if (user && user.role === 'site_admin' && user.client_name) {
             // Only fetch tickets for this site_admin's company
-            q = query(ticketsRef, where('client_name', '==', user.client_name), orderBy('created_at', 'desc'));
+            q = query(ticketsRef, where('client_name', '==', user.client_name), orderBy('created_at', 'desc'), limit(100));
         } else if (user && user.role === 'site_admin') {
             // Fallback: if site admin doesn't have client_name, fetch all tickets and filter client-side
             console.warn("Site admin user doesn't have client_name field, falling back to client-side filtering");
-            q = query(ticketsRef, orderBy('created_at', 'desc'));
+            q = query(ticketsRef, orderBy('created_at', 'desc'), limit(100));
         } else {
             // Otherwise, fetch all tickets ordered by creation date.
-            q = query(ticketsRef, orderBy('created_at', 'desc'));
+            q = query(ticketsRef, orderBy('created_at', 'desc'), limit(100));
         }
 
         // Set up the real-time listener
@@ -269,6 +244,10 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
             setAllTickets(fetchedTickets); // Update the raw fetched tickets (full dataset or exact search result)
             setLoading(false);
             setError(null);
+            
+            // Cache the data
+            localStorage.setItem(cacheKey, JSON.stringify(fetchedTickets));
+            localStorage.setItem(`${cacheKey}_time`, now.toString());
         }, (err) => {
             console.error("Firestore onSnapshot error:", err);
             // Add more specific error handling for site admin
@@ -287,7 +266,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
 
         // Cleanup function: unsubscribe from the listener when the component unmounts
         return () => unsubscribe();
-    }, [db, searchKeyword, user, filterBy, filterCompany]); // Add filterBy and filterCompany as dependencies
+    }, [db, searchKeyword, user, filterBy, filterCompany]);
 
 
     /**

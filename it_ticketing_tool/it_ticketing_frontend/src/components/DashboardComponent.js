@@ -50,15 +50,33 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
   useEffect(() => {
     if (!user || !user.firebaseUser) return;
     
+    // OPTIMIZED: Check cache first
+    const cacheKey = `dashboard_data_${user.uid}`;
+    const cachedData = localStorage.getItem(cacheKey);
+    const cacheTime = localStorage.getItem(`${cacheKey}_time`);
+    const now = Date.now();
+    
+    // Use cached data if it's less than 2 minutes old
+    if (cachedData && cacheTime && (now - parseInt(cacheTime)) < 120000) {
+      try {
+        const parsedData = JSON.parse(cachedData);
+        setTickets(parsedData.tickets || []);
+        setCompanyUsers(parsedData.companyUsers || []);
+        setLoading(false);
+      } catch (e) {
+        console.warn('Failed to parse cached dashboard data:', e);
+      }
+    }
+    
     // Fetch tickets with company filtering for site admin
     const ticketsRef = collection(dbClient, 'tickets');
     let ticketsQuery;
     
-    // Apply company filtering for site admin users
+    // OPTIMIZED: Apply proper filtering to reduce reads
     if (user.role === 'site_admin' && user.client_name) {
-      ticketsQuery = query(ticketsRef, where('client_name', '==', user.client_name), orderBy('created_at', 'desc'));
+      ticketsQuery = query(ticketsRef, where('client_name', '==', user.client_name), orderBy('created_at', 'desc'), limit(50));
     } else {
-      ticketsQuery = query(ticketsRef, orderBy('created_at', 'desc'));
+      ticketsQuery = query(ticketsRef, orderBy('created_at', 'desc'), limit(50));
     }
     
     const unsubscribeTickets = onSnapshot(ticketsQuery, (snapshot) => {
@@ -83,16 +101,25 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
       
       setTickets(filteredTickets);
       setLoading(false);
+      
+      // Cache the data
+      const dataToCache = {
+        tickets: filteredTickets,
+        companyUsers: companyUsers,
+        timestamp: now
+      };
+      localStorage.setItem(cacheKey, JSON.stringify(dataToCache));
+      localStorage.setItem(`${cacheKey}_time`, now.toString());
     });
     
     // Initialize empty agents array (will be populated from real data when available)
     setAgents([]);
     
-    // Fetch company users for site admin filtering
+    // OPTIMIZED: Only fetch company users if needed and not already cached
     let unsubscribeUsers = null;
     if (user.role === 'site_admin' && user.client_name) {
       const usersRef = collection(dbClient, 'users');
-      const usersQuery = query(usersRef, where('client_name', '==', user.client_name));
+      const usersQuery = query(usersRef, where('client_name', '==', user.client_name), limit(100));
       
       unsubscribeUsers = onSnapshot(usersQuery, (snapshot) => {
         const fetchedUsers = snapshot.docs.map(doc => ({
@@ -100,22 +127,35 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
           ...doc.data()
         }));
         setCompanyUsers(fetchedUsers);
+        
+        // Update cache with new company users
+        const existingCache = localStorage.getItem(cacheKey);
+        if (existingCache) {
+          try {
+            const parsedCache = JSON.parse(existingCache);
+            parsedCache.companyUsers = fetchedUsers;
+            localStorage.setItem(cacheKey, JSON.stringify(parsedCache));
+          } catch (e) {
+            console.warn('Failed to update cache with company users:', e);
+          }
+        }
+        
         console.log(`Fetched ${fetchedUsers.length} users for company: ${user.client_name}`);
       }, (error) => {
         console.error('Error fetching company users:', error);
       });
     }
     
-    // Fetch recent activities from Firebase with company filtering for site admin
+    // OPTIMIZED: Reduce activities fetch and add caching
     const activitiesRef = collection(dbClient, 'activities');
     let activitiesQuery;
     
     // For site admin, we'll fetch more activities and filter client-side
     // This handles existing activities that don't have client_name field
     if (user.role === 'site_admin' && user.client_name) {
-      activitiesQuery = query(activitiesRef, orderBy('timestamp', 'desc'), limit(50));
+      activitiesQuery = query(activitiesRef, orderBy('timestamp', 'desc'), limit(20));
     } else {
-      activitiesQuery = query(activitiesRef, orderBy('timestamp', 'desc'), limit(3));
+      activitiesQuery = query(activitiesRef, orderBy('timestamp', 'desc'), limit(5));
     }
     
     console.log('Setting up activities listener...');

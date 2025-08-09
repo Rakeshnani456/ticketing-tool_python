@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Loader2, XCircle, PlusCircle, User, ChevronLeft, ChevronRight } from 'lucide-react'; // Icons
-import { collection, query, onSnapshot, where, orderBy, getFirestore } from 'firebase/firestore'; // NEW: Firestore imports
+import { collection, query, onSnapshot, where, orderBy, getFirestore, limit } from 'firebase/firestore'; // NEW: Firestore imports
 
 // Import common UI components
 import LinkButton from '../common/LinkButton';
@@ -74,15 +74,33 @@ const MyTicketsComponent = ({ user, navigateTo, showFlashMessage, searchKeyword,
 
         setError(null);
 
+        // OPTIMIZED: Check cache first
+        const cacheKey = `my_tickets_${firebaseUser.uid}_${searchKeyword || 'default'}`;
+        const cachedData = localStorage.getItem(cacheKey);
+        const cacheTime = localStorage.getItem(`${cacheKey}_time`);
+        const now = Date.now();
+        
+        // Use cached data if it's less than 2 minutes old
+        if (cachedData && cacheTime && (now - parseInt(cacheTime)) < 120000) {
+            try {
+                const parsedData = JSON.parse(cachedData);
+                setTickets(parsedData);
+                setLoading(false);
+            } catch (e) {
+                console.warn('Failed to parse cached my tickets data:', e);
+            }
+        }
+
         let ticketsRef = collection(db, 'tickets');
         let q;
         
-        // If searching, include all tickets including cancelled ones
+        // OPTIMIZED: Apply proper filtering and limits
         if (searchKeyword) {
             q = query(
                 ticketsRef,
                 where('reporter_id', '==', firebaseUser.uid), // Filter by current user's ID
-                orderBy('created_at', 'desc') // Order by creation date
+                orderBy('created_at', 'desc'), // Order by creation date
+                limit(100) // Limit to prevent excessive reads
             );
         } else {
             // Default filter: show active tickets only (Open, In Progress, Hold)
@@ -90,7 +108,8 @@ const MyTicketsComponent = ({ user, navigateTo, showFlashMessage, searchKeyword,
                 ticketsRef,
                 where('reporter_id', '==', firebaseUser.uid), // Filter by current user's ID
                 where('status', 'in', ['Open', 'In Progress', 'Hold']), // Default filter: show active tickets only
-                orderBy('created_at', 'desc') // Order by creation date
+                orderBy('created_at', 'desc'), // Order by creation date
+                limit(50) // Limit to prevent excessive reads
             );
         }
 
@@ -103,7 +122,8 @@ const MyTicketsComponent = ({ user, navigateTo, showFlashMessage, searchKeyword,
                 ticketsRef,
                 where('reporter_id', '==', firebaseUser.uid),
                 where('display_id', '==', exactId),
-                orderBy('created_at', 'desc')
+                orderBy('created_at', 'desc'),
+                limit(10) // Limit for exact searches
             );
         }
 
@@ -135,6 +155,10 @@ const MyTicketsComponent = ({ user, navigateTo, showFlashMessage, searchKeyword,
             setTickets(fetchedTickets);
             setLoading(false);
             setError(null);
+            
+            // Cache the data
+            localStorage.setItem(cacheKey, JSON.stringify(fetchedTickets));
+            localStorage.setItem(`${cacheKey}_time`, now.toString());
         }, (err) => {
             console.error("Firestore onSnapshot error (MyTicketsComponent):", err);
             setError(`Failed to load your tickets: ${err.message}`);

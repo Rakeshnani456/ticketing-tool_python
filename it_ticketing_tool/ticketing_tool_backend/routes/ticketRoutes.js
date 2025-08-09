@@ -925,6 +925,7 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
         const userId = req.query.userId;
         const authenticatedUid = req.user.uid;
         const searchKeyword = req.query.keyword ? req.query.keyword.toLowerCase() : '';
+        const limit = parseInt(req.query.limit) || 50; // OPTIMIZED: Add limit parameter
 
         if (userId !== authenticatedUid) {
             return res.status(403).json({ error: 'Unauthorized: You can only view your own tickets.' });
@@ -932,20 +933,26 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
 
         try {
             let query = ticketsCollection.where('reporter_id', '==', userId);
-            query = query.where('status', 'in', ['Open', 'In Progress', 'Hold']);
+            
+            // OPTIMIZED: Only apply status filter if no search keyword
+            if (!searchKeyword) {
+                query = query.where('status', 'in', ['Open', 'In Progress', 'Hold']);
+            }
 
             if (searchKeyword) {
                 const exactIdMatch = `TT${searchKeyword.toUpperCase().padStart(5, '0')}`;
                 const exactIdMatchQuery = ticketsCollection
                     .where('reporter_id', '==', userId)
-                    .where('display_id', '==', exactIdMatch);
+                    .where('display_id', '==', exactIdMatch)
+                    .limit(10); // OPTIMIZED: Limit exact searches
                 const exactIdMatchSnapshot = await exactIdMatchQuery.get();
                 if (!exactIdMatchSnapshot.empty) {
                     return res.status(200).json(exactIdMatchSnapshot.docs.map(doc => jsonSerializableTicket(doc.id, doc.data())));
                 }
             }
 
-            const snapshot = await query.orderBy('created_at', 'desc').get();
+            // OPTIMIZED: Apply limit to prevent excessive reads
+            const snapshot = await query.orderBy('created_at', 'desc').limit(limit).get();
             const tickets = snapshot.docs.map(doc => jsonSerializableTicket(doc.id, doc.data()));
             return res.status(200).json(tickets);
         } catch (error) {
@@ -960,6 +967,7 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
         const filterAssignment = req.query.assignment;
         const filterCompany = req.query.company; // New company filter parameter
         const searchKeyword = req.query.keyword ? req.query.keyword.toLowerCase() : '';
+        const limit = parseInt(req.query.limit) || 100; // OPTIMIZED: Add limit parameter
 
         try {
             let query = ticketsCollection;
@@ -978,7 +986,7 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                     exactIdMatchQuery = exactIdMatchQuery.where('client_name', '==', req.user.client_name);
                 }
                 
-                const exactIdMatchSnapshot = await exactIdMatchQuery.get();
+                const exactIdMatchSnapshot = await exactIdMatchQuery.limit(10).get(); // OPTIMIZED: Limit exact searches
                 if (!exactIdMatchSnapshot.empty) {
                     return res.status(200).json(exactIdMatchSnapshot.docs.map(doc => jsonSerializableTicket(doc.id, doc.data())));
                 }
@@ -1002,7 +1010,8 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                 query = query.where('client_name', '==', filterCompany);
             }
 
-            const snapshot = await query.orderBy('created_at', 'desc').get();
+            // OPTIMIZED: Apply limit to prevent excessive reads
+            const snapshot = await query.orderBy('created_at', 'desc').limit(limit).get();
             const tickets = snapshot.docs.map(doc => jsonSerializableTicket(doc.id, doc.data()));
             return res.status(200).json(tickets);
         } catch (error) {

@@ -240,7 +240,7 @@ const AdminManagementComponent = ({ currentUser }) => {
             </Box>
             <Box component="tbody">
               {table.getRowModel().rows.map(row => (
-                <Box component="tr" key={row.id} sx={{ minHeight: 32, maxHeight: 32 }}>
+                <Box component="tr" key={row.id} sx={{ minHeight: 32, maxHeight: 32, bgcolor: '#ffffff', '&:hover': { bgcolor: '#f5f5f5' } }}>
                   {row.getVisibleCells().map(cell => (
                     <Box component="td" key={cell.id} sx={{ p: 1, borderBottom: 1, borderColor: 'divider', fontSize: 13 }}>
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}

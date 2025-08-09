@@ -440,15 +440,15 @@ const App = () => {
                         setCurrentUser(userProfile);
                         fetchNotifications(userProfile); // Fetch notifications for logged-in user
 
-                        // Start polling for notifications
+                        // OPTIMIZED: Reduced polling frequency from 30s to 2 minutes
                         if (notificationPollingIntervalRef.current) {
                             clearInterval(notificationPollingIntervalRef.current);
                         }
                         notificationPollingIntervalRef.current = setInterval(() => {
                             fetchNotifications(userProfile);
-                        }, 30000); // Poll every 30 seconds
+                        }, 120000); // Poll every 2 minutes instead of 30 seconds
 
-                        // NEW: Set up Firestore listener for ticket counts
+                        // OPTIMIZED: Set up Firestore listener for ticket counts with caching
                         const ticketsCollectionRef = collection(dbClient, 'tickets');
                         let ticketsQuery;
 
@@ -461,6 +461,21 @@ const App = () => {
                             ticketsQuery = query(ticketsCollectionRef, where('reporter_id', '==', userProfile.uid));
                         }
 
+                        // OPTIMIZED: Check cache before setting up listener
+                        const cacheKey = `ticket_counts_${userProfile.uid}`;
+                        const cachedCounts = localStorage.getItem(cacheKey);
+                        const cacheTime = localStorage.getItem(`${cacheKey}_time`);
+                        const now = Date.now();
+                        
+                        // Use cached data if it's less than 5 minutes old
+                        if (cachedCounts && cacheTime && (now - parseInt(cacheTime)) < 300000) {
+                            try {
+                                const parsedCounts = JSON.parse(cachedCounts);
+                                setTicketCounts(parsedCounts);
+                            } catch (e) {
+                                console.warn('Failed to parse cached ticket counts:', e);
+                            }
+                        }
 
                         const unsubscribeTickets = onSnapshot(ticketsQuery, (snapshot) => {
                             const fetchedTickets = snapshot.docs.map(doc => ({
@@ -473,11 +488,17 @@ const App = () => {
                             const activeTickets = fetchedTickets.filter(t => ['Open', 'In Progress', 'Hold'].includes(t.status)).length;
                             const assignedToMeTickets = fetchedTickets.filter(t => t.assigned_to_id === userProfile.uid && !['Closed', 'Resolved'].includes(t.status)).length;
 
-                            setTicketCounts({
+                            const newCounts = {
                                 total_tickets: totalTickets,
                                 active_tickets: activeTickets,
                                 assigned_to_me: assignedToMeTickets
-                            });
+                            };
+
+                            setTicketCounts(newCounts);
+                            
+                            // Cache the counts for 5 minutes
+                            localStorage.setItem(cacheKey, JSON.stringify(newCounts));
+                            localStorage.setItem(`${cacheKey}_time`, now.toString());
                         }, (err) => {
                             console.error("Firestore onSnapshot error for ticket counts:", err);
                             // Optionally show a flash message for count errors
@@ -1094,7 +1115,7 @@ const App = () => {
                             <div className="w-px h-5 bg-blue-300"></div>
                             <div className="flex items-center gap-2 group cursor-pointer">
                                 <EmailIcon sx={{ fontSize: '0.9rem', color: '#6366f1' }} />
-                                <span className="text-indigo-800 font-semibold text-xs tracking-wide group-hover:text-indigo-900 transition-colors duration-200">{'raju.k@finstackk.com'}</span>
+                                <span className="text-indigo-800 font-semibold text-xs tracking-wide group-hover:text-indigo-900 transition-colors duration-200">{'HelloIT@finstackk.com'}</span>
                             </div>
                         </div>
                     </div>

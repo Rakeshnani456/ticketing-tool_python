@@ -609,7 +609,7 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
           >
                      <TableContainer>
              <Table size="small" sx={{ minWidth: 700, borderCollapse: 'collapse' }}>
-              <TableHead sx={{ bgcolor: '#f5f7fa' }}>
+              <TableHead sx={{ bgcolor: '#ffffff' }}>
                 <TableRow>
                                      <TableCell sx={{ py: 0.4, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
                      #
@@ -658,8 +658,8 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
                         key={u.id || u.uid} 
                         hover
                         sx={{ 
-                          '&:nth-of-type(odd)': { bgcolor: '#fafbfc' },
-                          '&:hover': { bgcolor: '#f1f5f9' }
+                          bgcolor: '#ffffff',
+                          '&:hover': { bgcolor: '#f5f5f5' }
                         }}
                       >
                                                  <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>

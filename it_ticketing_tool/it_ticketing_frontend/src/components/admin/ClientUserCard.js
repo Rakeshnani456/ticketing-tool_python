@@ -224,8 +224,8 @@ const ClientUserCard = ({
                                     <TableRow 
                                         key={user.uid} 
                                         sx={{ 
-                                            '&:nth-of-type(odd)': { backgroundColor: '#fafafa' },
-                                            '&:hover': { backgroundColor: '#f0f8ff' }
+                                            bgcolor: '#ffffff',
+                                            '&:hover': { backgroundColor: '#f5f5f5' }
                                         }}
                                     >
                                         <TableCell sx={{ fontSize: '0.75rem' }}>

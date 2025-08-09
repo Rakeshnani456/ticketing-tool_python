@@ -393,6 +393,28 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
 
         setError(null);
 
+        // OPTIMIZED: Check cache first
+        const cacheKey = `ticket_detail_${ticketId}`;
+        const cachedData = localStorage.getItem(cacheKey);
+        const cacheTime = localStorage.getItem(`${cacheKey}_time`);
+        const now = Date.now();
+        
+        // Use cached data if it's less than 1 minute old
+        if (cachedData && cacheTime && (now - parseInt(cacheTime)) < 60000) {
+            try {
+                const parsedData = JSON.parse(cachedData);
+                setTicket(parsedData.ticket);
+                setTimelineEvents(parsedData.timelineEvents || []);
+                setLoading(false);
+                
+                if (['Resolved', 'Cancelled'].includes(parsedData.ticket.status)) {
+                    setIsEditing(false);
+                }
+            } catch (e) {
+                console.warn('Failed to parse cached ticket detail data:', e);
+            }
+        }
+
         const ticketDocRef = doc(db, 'tickets', ticketId);
 
         const unsubscribe = onSnapshot(ticketDocRef, (docSnapshot) => {
@@ -408,50 +430,27 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                 }
 
                 setTicket(fetchedTicket);
-                setTimelineEvents(generateTimelineEvents(fetchedTicket));
+                const timelineEventsData = generateTimelineEvents(fetchedTicket);
+                setTimelineEvents(timelineEventsData);
+                
                 if (['Resolved', 'Cancelled'].includes(fetchedTicket.status)) {
                     setIsEditing(false);
                 }
-
-                if (!isEditing || !ticket) {
-                    setEditableFields({
-                        short_description: fetchedTicket.short_description || '',
-                        long_description: fetchedTicket.long_description || '',
-                        priority: fetchedTicket.priority || '',
-                        status: fetchedTicket.status || '',
-                        assigned_to_email: fetchedTicket.assigned_to_email || '',
-                        closed_by_email: fetchedTicket.closed_by_email || '',
-                        category: fetchedTicket.category || '',
-                    });
-                    setClosureNotes(fetchedTicket.closure_notes || '');
-                    setTimeSpent(fetchedTicket.time_spent || '');
-                } else if (isEditing) {
-                    if (['Resolved', 'Cancelled'].includes(fetchedTicket.status)) {
-                        setEditableFields(prev => ({
-                            ...prev,
-                            status: fetchedTicket.status,
-                            priority: fetchedTicket.priority,
-                            assigned_to_email: fetchedTicket.assigned_to_email,
-                            closed_by_email: fetchedTicket.closed_by_email,
-                            category: fetchedTicket.category || '',
-                        }));
-                        setClosureNotes(fetchedTicket.closure_notes || '');
-                        setTimeSpent(fetchedTicket.time_spent || '');
-                    }
-                }
-
+                
+                // Cache the data
+                const dataToCache = {
+                    ticket: fetchedTicket,
+                    timelineEvents: timelineEventsData,
+                    timestamp: now
+                };
+                localStorage.setItem(cacheKey, JSON.stringify(dataToCache));
+                localStorage.setItem(`${cacheKey}_time`, now.toString());
+                
                 setLoading(false);
                 setError(null);
-                setAssignedToErrorMessage('');
-                setClosureNotesErrorMessage('');
-                setTimeSpentErrorMessage('');
-                setAssignedToHasError(false);
-                setTimeSpentHasError(false);
-                setClosureNotesHasError(false);
-
             } else {
-                setError(`Ticket with ID ${ticketId} not found.`);
-                showFlashMessage(`Ticket with ID ${ticketId} not found.`, 'error');
+                setError('Ticket not found.');
+                showFlashMessage('Ticket not found.', 'error');
                 setTicket(null);
                 setLoading(false);
             }
@@ -463,7 +462,7 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
         });
 
         return () => unsubscribe();
-    }, [ticketId, db, generateTimelineEvents, user, isSupportUser, isEditing, showFlashMessage]);
+    }, [ticketId, user, db, isSupportUser]);
 
     useEffect(() => {
         if (isEditing && ticket) {
