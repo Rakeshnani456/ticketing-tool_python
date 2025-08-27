@@ -245,8 +245,7 @@ const TicketDetailsSection = ({
                                     {ticket.long_description}
                                 </span>
                             ) : (
-                                <span className="text-xs italic whitespace-pre-wrap break-words mt-0 w-full min-w-0 max-w-full" style={{ lineHeight: '1.4', wordWrap: 'break-word', overflowWrap: 'break-word', fontFamily: 'inherit' }}>
-                                    No description provided.
+                                <span className="text-gray-500 text-[10px] col-span-full text-left py-2 font-medium" style={{ lineHeight: '1.4', wordWrap: 'break-word', overflowWrap: 'break-word', fontFamily: 'inherit' }}>No description provided.
                                 </span>
                             )}
                         </>
@@ -381,7 +380,7 @@ const TicketDetailsSection = ({
                             );
                         })
                     ) : (
-                        <p className="text-gray-500 text-[10px] col-span-full text-center py-2 font-medium">No attachments yet.</p>
+                        <p className="text-gray-500 text-[10px] col-span-full text-left py-2 font-medium">No attachments yet.</p>
                     )}
                 </div>
             </div>

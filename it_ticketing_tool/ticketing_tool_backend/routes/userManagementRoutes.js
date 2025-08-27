@@ -2,7 +2,7 @@
 const express = require('express');
 const router = express.Router();
 
-module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseToken) => {
+module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseToken, emailService) => {
 
     // Health check endpoint
     router.get('/health', (req, res) => {
@@ -171,6 +171,29 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
                     isSiteAdmin: false // Always false for users created here
                 };
                 await userRef.set(userData);
+                
+                // Send welcome email to the new user
+                if (emailService) {
+                    const portalUrl = process.env.FRONTEND_URL || 'https://ticketing-tool.kriasol.com';
+                    const emailData = {
+                        userName: `${firstName} ${lastName}`,
+                        clientName: 'Kriasol Technologies',
+                        portalUrl: portalUrl,
+                        userEmail: email,
+                        tempPassword: finalPassword,
+                        companyName: 'Kriasol Technologies'
+                    };
+                    
+                    // Send email asynchronously (don't block the response)
+                    setImmediate(async () => {
+                        try {
+                            await emailService.sendWelcomeEmail(emailData);
+                        } catch (emailError) {
+                            console.error('Error sending welcome email:', emailError);
+                        }
+                    });
+                }
+                
                 return res.status(201).json({ message: 'Engineer created in Auth and Firestore.' });
             } catch (err) {
                 console.error('Error creating engineer:', err);
@@ -224,6 +247,29 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
                     isSiteAdmin: false // Always false for users created here
                 };
                 await userRef.set(userData);
+                
+                // Send welcome email to the new user
+                if (emailService) {
+                    const portalUrl = process.env.FRONTEND_URL || 'https://ticketing-tool.kriasol.com';
+                    const emailData = {
+                        userName: `${firstName} ${lastName}`,
+                        clientName: companyName,
+                        portalUrl: portalUrl,
+                        userEmail: email,
+                        tempPassword: password,
+                        companyName: companyName
+                    };
+                    
+                    // Send email asynchronously (don't block the response)
+                    setImmediate(async () => {
+                        try {
+                            await emailService.sendWelcomeEmail(emailData);
+                        } catch (emailError) {
+                            console.error('Error sending welcome email:', emailError);
+                        }
+                    });
+                }
+                
                 return res.status(201).json({ message: 'User created in Auth and Firestore.' });
             } catch (err) {
                 console.error('Error creating user:', err);
@@ -321,6 +367,8 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
             return res.status(400).json({ error: 'No users provided.' });
         }
         const results = [];
+        const emailResults = [];
+        
         for (const user of users) {
             const { companyName, firstName, lastName, email, password, contactNumber, managerEmail, employmentType, designation, employeeId } = user;
             // Validate required fields
@@ -375,10 +423,37 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
                 };
                 await userRef.set(userData);
                 results.push({ email, success: true });
+                
+                // Prepare email data for bulk sending
+                if (emailService) {
+                    const portalUrl = process.env.FRONTEND_URL || 'https://ticketing-tool.kriasol.com';
+                    const emailData = {
+                        userName: `${firstName} ${lastName}`,
+                        clientName: companyName,
+                        portalUrl: portalUrl,
+                        userEmail: email,
+                        tempPassword: password,
+                        companyName: companyName
+                    };
+                    emailResults.push(emailData);
+                }
             } catch (err) {
                 results.push({ email, success: false, error: err.message || 'Failed to create user.' });
             }
         }
+        
+        // Send welcome emails to all successfully created users
+        if (emailService && emailResults.length > 0) {
+            setImmediate(async () => {
+                try {
+                    const emailSendResults = await emailService.sendBulkWelcomeEmails(emailResults);
+                    console.log(`Bulk welcome emails sent: ${emailSendResults.filter(r => r.success).length}/${emailSendResults.length} successful`);
+                } catch (emailError) {
+                    console.error('Error sending bulk welcome emails:', emailError);
+                }
+            });
+        }
+        
         return res.status(200).json({ results });
     });
 

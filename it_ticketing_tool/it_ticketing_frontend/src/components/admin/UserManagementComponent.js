@@ -335,7 +335,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                 setLoading(false);
             }
         }
-    }, [user]);
+    }, [user?.uid, user?.role, user?.companyName]);
 
     // Calculate user statistics
     useEffect(() => {
@@ -472,7 +472,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                 unsubscribe();
             }
         };
-    }, [user, db, fetchClients]);
+    }, [user?.uid, user?.role, user?.companyName, db]); // Only depend on specific user properties, not the entire user object
 
     const handleAdd = () => {
         setAddMode(true);
@@ -1212,7 +1212,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
       setPage(0);
     };
 
-    const fetchUsersFromAPI = async (forceRefresh = false) => {
+    const fetchUsersFromAPI = useCallback(async (forceRefresh = false) => {
         try {
             // Check cache first (unless force refresh is requested)
             if (!forceRefresh) {
@@ -1315,7 +1315,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
             setUsers([]);
             setLoading(false);
         }
-    };
+    }, [user?.uid, user?.role, user?.companyName, fetchClients]);
 
     const handleRefresh = async () => {
         console.log("Manual refresh requested...");
@@ -1926,22 +1926,26 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                             )}
                             
                             <Box sx={{ display: 'flex', border: '1px solid #e0e0e0', borderRadius: 1 }}>
-                                <IconButton 
-                                    size="small" 
-                                    onClick={() => setViewMode('table')}
-                                    color={viewMode === 'table' ? 'primary' : 'default'}
-                                    sx={{ borderRadius: 0 }}
-                                >
-                                    <ViewListIcon fontSize="small" />
-                                </IconButton>
-                                <IconButton 
-                                    size="small" 
-                                    onClick={() => setViewMode('cards')}
-                                    color={viewMode === 'cards' ? 'primary' : 'default'}
-                                    sx={{ borderRadius: 0 }}
-                                >
-                                    <ViewModuleIcon fontSize="small" />
-                                </IconButton>
+                                <Tooltip title="List View" placement="top">
+                                    <IconButton 
+                                        size="small" 
+                                        onClick={() => setViewMode('table')}
+                                        color={viewMode === 'table' ? 'primary' : 'default'}
+                                        sx={{ borderRadius: 0 }}
+                                    >
+                                        <ViewListIcon fontSize="small" />
+                                    </IconButton>
+                                </Tooltip>
+                                <Tooltip title="Card View" placement="top">
+                                    <IconButton 
+                                        size="small" 
+                                        onClick={() => setViewMode('cards')}
+                                        color={viewMode === 'cards' ? 'primary' : 'default'}
+                                        sx={{ borderRadius: 0 }}
+                                    >
+                                        <ViewModuleIcon fontSize="small" />
+                                    </IconButton>
+                                </Tooltip>
                             </Box>
                         </Box>
                     </Box>
@@ -2250,7 +2254,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                                                         sx={{ 
                                                             display: 'flex', 
                                                             alignItems: 'center', 
-                                                            p: 1.5, 
+                                                            p: 1, 
                                                             bgcolor: '#f5f5f5', 
                                                             borderRadius: 1,
                                                             cursor: 'pointer',
@@ -2258,8 +2262,8 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                                                         }}
                                                         onClick={() => handleToggleClientCollapse(clientName)}
                                                     >
-                                                        <BusinessIcon sx={{ mr: 1, color: '#1976d2' }} />
-                                                        <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: 500 }}>
+                                                        <BusinessIcon sx={{ mr: 1, color: '#1976d2', fontSize: '1rem' }} />
+                                                        <Typography variant="subtitle1" sx={{ flexGrow: 1, fontWeight: 500, fontSize: '0.9rem' }}>
                                                             {clientName}
                                                         </Typography>
                                                         <Typography variant="body2" sx={{ mr: 2 }}>
@@ -2390,7 +2394,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
             sx={{ 
                 display: 'flex', 
                 alignItems: 'center', 
-                p: 1.5, 
+                p: 1, 
                 bgcolor: '#f5f5f5', 
                 borderRadius: 1,
                 cursor: 'pointer',
@@ -2399,8 +2403,8 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
             }}
             onClick={() => handleToggleClientCollapse(clientName)}
         >
-            <BusinessIcon sx={{ mr: 1, color: '#1976d2' }} />
-            <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: 500 }}>
+            <BusinessIcon sx={{ mr: 1, color: '#1976d2', fontSize: '1rem' }} />
+            <Typography variant="subtitle1" sx={{ flexGrow: 1, fontWeight: 500, fontSize: '0.9rem' }}>
                 {clientName}
             </Typography>
             <Typography variant="body2" sx={{ mr: 2 }}>

@@ -16,7 +16,7 @@ const {
     logPriorityChange
 } = require('../utils/activityLogger');
 
-module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCollection, transporter, verifyFirebaseToken, checkRole, jsonSerializableTicket, jsonSerializableNotification, generateDisplayId, sendEmailAlert) => {
+module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCollection, transporter, verifyFirebaseToken, checkRole, jsonSerializableTicket, jsonSerializableNotification, generateDisplayId, emailService) => {
 
     const validTicketCategories = ['software', 'hardware', 'troubleshoot'];
     const validTicketPriorities = ['Low', 'Medium', 'High', 'Critical'];
@@ -251,7 +251,7 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                 </div>
             `;
             // Send email with proper To and CC fields
-            setImmediate(() => {
+            setImmediate(async () => {
                 const toEmail = 'tt.support@kriasol.com';
                 let ccList = [];
                 
@@ -269,7 +269,28 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                 }
                 
                 const ccEmail = ccList.length > 0 ? ccList.join(',') : null;
-                sendEmailAlert(toEmail, emailSubject, emailText, emailHtml, ccEmail);
+                
+                // Use new EmailService instead of old sendEmailAlert
+                try {
+                    const baseUrl = getBaseUrl(req);
+                    const ticketUrl = `${baseUrl}/tickets/${docRef.id}`;
+                    
+                    const ticketData = {
+                        ticketId: newDisplayId,
+                        subject: short_description,
+                        description: long_description || short_description,
+                        priority: priority || 'Low',
+                        category: category,
+                        reporterName: reporterEmail,
+                        ticketUrl: ticketUrl,
+                        toEmail: toEmail,
+                        ccEmail: ccEmail
+                    };
+                    
+                    await emailService.sendTicketNotificationEmail(ticketData);
+                } catch (error) {
+                    console.error('Error sending ticket notification email:', error);
+                }
             });
 
             return res.status(201).json({ message: 'Ticket created successfully!', id: docRef.id, display_id: newDisplayId });
@@ -449,12 +470,28 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                         ccList.push(ticketData.assigned_to_email);
                     }
                     
-                    setImmediate(() => {
-                        sendEmailAlert(toList.join(','), emailSubject, emailText, emailHtml, ccList.join(','));
+                    setImmediate(async () => {
+                        try {
+                            const baseUrl = getBaseUrl(req);
+                            const ticketUrl = `${baseUrl}/tickets/${ticketId}`;
+                            
+                            const emailData = {
+                                display_id: ticketData.display_id,
+                                short_description: ticketData.short_description,
+                                status: status,
+                                ticketUrl: ticketUrl,
+                                toEmail: toList.join(','),
+                                ccEmail: ccList.join(',')
+                            };
+                            
+                            await emailService.sendTicketStatusUpdateEmail(emailData);
+                        } catch (error) {
+                            console.error('Error sending ticket status update email:', error);
+                        }
                     });
                 } else {
                     // Non-engineer action: To = tt.support@kriasol.com + users, CC = none
-                    setImmediate(() => {
+                    setImmediate(async () => {
                         let toList = ['tt.support@kriasol.com'];
                         
                         // Add user emails to "To" field
@@ -470,7 +507,19 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                             toList.push(ticketReporterEmail);
                         }
                         
-                        sendEmailAlert(toList.join(','), emailSubject, emailText, emailHtml);
+                        const baseUrl = getBaseUrl(req);
+                        const ticketUrl = `${baseUrl}/tickets/${ticketId}`;
+                        
+                        const emailData = {
+                            display_id: ticketData.display_id,
+                            short_description: ticketData.short_description,
+                            status: status,
+                            ticketUrl: ticketUrl,
+                            toEmail: toList.join(','),
+                            ccEmail: null
+                        };
+                        
+                        await emailService.sendTicketStatusUpdateEmail(emailData);
                     });
                 }
             }
@@ -588,8 +637,24 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                             ccList.push(assignedEngineerEmail);
                         }
                         
-                        setImmediate(() => {
-                            sendEmailAlert(toList.join(','), emailSubject, emailText, emailHtml, ccList.join(','));
+                        setImmediate(async () => {
+                            try {
+                                const baseUrl = getBaseUrl(req);
+                                const ticketUrl = `${baseUrl}/tickets/${ticketId}`;
+                                
+                                const emailData = {
+                                    display_id: ticketData.display_id,
+                                    short_description: ticketData.short_description,
+                                    assignedEngineerEmail: assignedEngineerEmail,
+                                    ticketUrl: ticketUrl,
+                                    toEmail: toList.join(','),
+                                    ccEmail: ccList.join(',')
+                                };
+                                
+                                await emailService.sendTicketAssignmentEmail(emailData);
+                            } catch (error) {
+                                console.error('Error sending ticket assignment email:', error);
+                            }
                         });
                     } else {
                         // Non-engineer action: To = reporter_email, request_for_email; CC = assigned engineer
@@ -597,8 +662,24 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                         if (reporterEmail) toList.push(reporterEmail);
                         if (requestForEmail && requestForEmail !== reporterEmail) toList.push(requestForEmail);
                         let ccList = assignedEngineerEmail;
-                        setImmediate(() => {
-                            sendEmailAlert(toList.join(','), emailSubject, emailText, emailHtml, ccList);
+                        setImmediate(async () => {
+                            try {
+                                const baseUrl = getBaseUrl(req);
+                                const ticketUrl = `${baseUrl}/tickets/${ticketId}`;
+                                
+                                const emailData = {
+                                    display_id: ticketData.display_id,
+                                    short_description: ticketData.short_description,
+                                    assignedEngineerEmail: assignedEngineerEmail,
+                                    ticketUrl: ticketUrl,
+                                    toEmail: toList.join(','),
+                                    ccEmail: ccList
+                                };
+                                
+                                await emailService.sendTicketAssignmentEmail(emailData);
+                            } catch (error) {
+                                console.error('Error sending ticket assignment email:', error);
+                            }
                         });
                     }
                 }
@@ -753,7 +834,7 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
             const baseUrl = getBaseUrl(req);
             const ticketLink = `${baseUrl}/tickets/${ticketId}`;
             const emailHtml = `<div style=\"font-family: Arial, sans-serif; color: #222;\"><p>Your ticket (<a href=\"${ticketLink}\" style=\"color: #2563eb; text-decoration: underline;\" target=\"_blank\"><strong>${ticketData.display_id}</strong></a> - ${ticketData.short_description}) has been cancelled.</p><p>Access the Ticketing Tool for more details.</p></div>`;
-            setImmediate(() => {
+            setImmediate(async () => {
                 let toList = ['tt.support@kriasol.com'];
                 
                 // Add user emails to "To" field
@@ -765,11 +846,22 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                     }
                 } else if (requestForEmail) {
                     toList.push(requestForEmail);
-                } else if (ticketReporterEmail) {
-                    toList.push(ticketReporterEmail);
-                }
-                
-                sendEmailAlert(toList.join(','), emailSubject, emailText, emailHtml);
+                                    } else if (ticketReporterEmail) {
+                        toList.push(ticketReporterEmail);
+                    }
+                    
+                    const baseUrl = getBaseUrl(req);
+                    const ticketUrl = `${baseUrl}/tickets/${ticketId}`;
+                    
+                    const emailData = {
+                        display_id: ticketData.display_id,
+                        short_description: ticketData.short_description,
+                        ticketUrl: ticketUrl,
+                        toEmail: toList.join(','),
+                        ccEmail: null
+                    };
+                    
+                    await emailService.sendTicketCancellationEmail(emailData);
             });
 
             return res.status(200).json({ message: 'Ticket cancelled successfully!', id: ticketId });
@@ -880,7 +972,15 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                 }
                 
                 setImmediate(() => {
-                    sendEmailAlert(toList.join(','), emailSubject, emailText, emailHtml, ccList.join(','));
+                    emailService.sendTicketCommentEmail({
+                        toEmail: toList.join(','),
+                        ccEmail: ccList.join(','),
+                        display_id: ticketData.display_id,
+                        short_description: ticketData.short_description,
+                        comment_text: comment_text,
+                        commenterEmail: commenterEmail,
+                        ticketUrl: ticketLink
+                    });
                 });
             } else {
                 // Non-engineer action: To = tt.support@kriasol.com + assigned engineer, CC = request_for_email/reporter_email
@@ -909,7 +1009,15 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                     
                     const toEmail = toList.join(',');
                     const ccEmail = ccList.length > 0 ? ccList.join(',') : null;
-                    sendEmailAlert(toEmail, emailSubject, emailText, emailHtml, ccEmail);
+                    emailService.sendTicketCommentEmail({
+                        toEmail: toEmail,
+                        ccEmail: ccEmail,
+                        display_id: ticketData.display_id,
+                        short_description: ticketData.short_description,
+                        comment_text: comment_text,
+                        commenterEmail: commenterEmail,
+                        ticketUrl: ticketLink
+                    });
                 });
             }
 

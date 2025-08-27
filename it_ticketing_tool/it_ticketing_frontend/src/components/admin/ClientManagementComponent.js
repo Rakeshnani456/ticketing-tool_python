@@ -111,6 +111,11 @@ const ClientManagementComponent = ({ user }) => {
   }, [users]);
 
   useEffect(() => {
+    // Only set up listeners if user exists and has required role
+    if (!user || !['admin', 'site_admin', 'super_admin'].includes(user.role)) {
+      return;
+    }
+
     setLoading(true);
     setError(null);
     
@@ -140,7 +145,7 @@ const ClientManagementComponent = ({ user }) => {
       if (unsubClients) unsubClients();
       if (unsubUsers) unsubUsers();
     };
-  }, [user]);
+  }, [user?.uid, user?.role]); // Only depend on user ID and role, not the entire user object
 
   // Handler for edit
   const handleEditClient = (client) => {
@@ -197,7 +202,7 @@ const ClientManagementComponent = ({ user }) => {
   };
 
   return (
-    <div style={{ width: '100%', minHeight: '100vh', overflowX: 'hidden', overflowY: 'auto', boxSizing: 'border-box', background: '#fff', padding: 0 }}>
+    <div className="client-management-page" style={{ width: '100%', minHeight: '100vh', overflowX: 'hidden', overflowY: 'auto', boxSizing: 'border-box', background: '#fff', padding: 0 }}>
       {/* Title and Add Client Button side by side, left-aligned */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, paddingTop: 24, paddingLeft: 24 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

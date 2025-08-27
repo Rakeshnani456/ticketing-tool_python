@@ -6,6 +6,9 @@ const cors = require('cors');
 const admin = require('firebase-admin');
 const nodemailer = require('nodemailer');
 
+// Import email service and templates
+const EmailService = require('./utils/emailService');
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 
@@ -64,6 +67,9 @@ const transporter = nodemailer.createTransport({
         pass: process.env.EMAIL_PASS       // Use process.env.EMAIL_PASS in production
     }
 });
+
+// Initialize email service
+const emailService = new EmailService(transporter);
 
 app.use(cors());
 app.use(express.json());
@@ -261,11 +267,11 @@ const adminManagementRouter = require('./routes/adminManagement');
 
 
 app.use('/', authRoutes(db, admin, usersCollection, verifyFirebaseToken));
-app.use('/tickets', ticketRoutes(db, admin, ticketsCollection, usersCollection, notificationsCollection, transporter, verifyFirebaseToken, checkRole, jsonSerializableTicket, jsonSerializableNotification, generateDisplayId, sendEmailAlert));
+app.use('/tickets', ticketRoutes(db, admin, ticketsCollection, usersCollection, notificationsCollection, transporter, verifyFirebaseToken, checkRole, jsonSerializableTicket, jsonSerializableNotification, generateDisplayId, emailService));
 app.use('/admin', adminRoutes(db, admin, usersCollection, verifyFirebaseToken, checkRole));
 app.use('/notifications', notificationRoutes(db, notificationsCollection, verifyFirebaseToken, jsonSerializableNotification));
 app.use('/api/clients', clientRoutes(db, clientsCollection, usersCollection));
-app.use('/api/users', userManagementRoutes(db, admin, usersCollection, clientsCollection, verifyFirebaseToken));
+app.use('/api/users', userManagementRoutes(db, admin, usersCollection, clientsCollection, verifyFirebaseToken, emailService));
 app.use('/dashboard', dashboardRoutes(db, ticketsCollection, clientsCollection, usersCollection, requireSuperAdmin));
 app.use('/upload-attachment', attachmentRoutes(admin, verifyFirebaseToken));
 app.use('/admin-management', adminManagementRouter(db, usersCollection, verifyFirebaseToken, requireSuperAdmin));

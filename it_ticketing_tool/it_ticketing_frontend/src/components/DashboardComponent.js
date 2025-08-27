@@ -1,6 +1,5 @@
 // src/components/ModernDashboard.js
 import React, { useState, useEffect, useMemo } from 'react';
-import { motion } from 'framer-motion';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   LineChart, Line, AreaChart, Area, PieChart, Pie, Cell, Sankey
@@ -40,11 +39,11 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
 
   
   // Theme classes
-  const bgClass = darkMode ? 'bg-gray-900' : 'bg-gray-50';
+  const bgClass = darkMode ? 'bg-gray-900' : 'bg-[#fafafa]';
   const textClass = darkMode ? 'text-white' : 'text-gray-900';
   const cardClass = darkMode 
     ? 'bg-gray-800/70 backdrop-blur-lg border-gray-700' 
-    : 'bg-white/70 backdrop-blur-lg border-gray-200';
+    : 'bg-white/90 backdrop-blur-lg border-gray-300';
 
   // Fetch data from Firebase
   useEffect(() => {
@@ -74,9 +73,9 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
     
     // OPTIMIZED: Apply proper filtering to reduce reads
     if (user.role === 'site_admin' && user.client_name) {
-      ticketsQuery = query(ticketsRef, where('client_name', '==', user.client_name), orderBy('created_at', 'desc'), limit(50));
+      ticketsQuery = query(ticketsRef, where('client_name', '==', user.client_name), orderBy('created_at', 'desc'), limit(100));
     } else {
-      ticketsQuery = query(ticketsRef, orderBy('created_at', 'desc'), limit(50));
+      ticketsQuery = query(ticketsRef, orderBy('created_at', 'desc'), limit(100));
     }
     
     const unsubscribeTickets = onSnapshot(ticketsQuery, (snapshot) => {
@@ -347,25 +346,17 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
     const lastWeek = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     const lastMonth = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
     
-    // Filter tickets by selected company for Super Admin and Engineer - DISABLED
+    // Use all tickets for dashboard counts (no time filtering)
     let filteredTickets = tickets;
-    // Company filtering disabled - use all tickets
-    
-    const timeFilteredTickets = filteredTickets.filter(ticket => {
-      const ticketDate = ticket.created_at;
-      if (timeRange === 'week') return ticketDate >= lastWeek;
-      if (timeRange === 'month') return ticketDate >= lastMonth;
-      return true;
-    });
     
     // Status counts
-    const statusCounts = timeFilteredTickets.reduce((acc, ticket) => {
+    const statusCounts = filteredTickets.reduce((acc, ticket) => {
       acc[ticket.status] = (acc[ticket.status] || 0) + 1;
       return acc;
     }, {});
     
     // Priority counts
-    const priorityCounts = timeFilteredTickets.reduce((acc, ticket) => {
+    const priorityCounts = filteredTickets.reduce((acc, ticket) => {
       acc[ticket.priority] = (acc[ticket.priority] || 0) + 1;
       return acc;
     }, {});
@@ -428,7 +419,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
       volumeTrend,
       agentPerformance,
       recentTickets,
-      totalTickets: timeFilteredTickets.length,
+      totalTickets: filteredTickets.length,
       totalActiveTickets,
       openTickets,
       inProgressTickets,
@@ -473,12 +464,12 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
   return (
     <div className={`min-h-screen ${bgClass} ${textClass} transition-colors duration-300`}>
       {/* Header */}
-      <header className={`px-3 py-2 border-b ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+      <header className={`px-3 py-6`}>
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-xl font-bold flex items-center">
-              <TrendingUp className="mr-2 text-blue-500" size={18} />
+            <h1 className="text-xl font-medium flex items-center" style={{ color: '#2c3e50', marginBottom: '0.125rem' }}>
               Service Desk Insights
+              <TrendingUp className="ml-3 text-[#e85c34]" size={20} />
             </h1>
           </div>
 
@@ -507,7 +498,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
           
           {(user?.role === 'admin' || user?.role === 'super_admin') && (
             <div className="text-right">
-              <p className="text-xs opacity-75">
+              <p className="text-xs font-bold opacity-75">
                 For detailed analytics, visit{' '}
                 <button
                   onClick={() => navigateTo('/reports')}
@@ -522,7 +513,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
         </div>
       </header>
 
-      <main className="px-3 py-2">
+      <main className="px-3 pb-1">
 
         
 
@@ -530,18 +521,15 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
         {/* Stats Overview */}
         <div className={`grid grid-cols-1 md:grid-cols-${(user?.role === 'engineer' || user?.role === 'support') ? '4' : user?.role === 'admin' || user?.role === 'super_admin' ? '4' : '3'} gap-3 mb-4`}>
                      {/* Total Active Tickets - All roles can see */}
-           <motion.div 
-             initial={{ opacity: 0, y: 20 }}
-             animate={{ opacity: 1, y: 0 }}
-             transition={{ delay: 0.1 }}
+           <div 
              onClick={() => navigateTo('/all-tickets')}
-             className={`${cardClass} rounded-lg p-3 shadow-lg border cursor-pointer hover:shadow-xl transition-all duration-200 hover:scale-105`}
+             className={`${cardClass} rounded-lg p-3 border cursor-pointer transition-all duration-200 hover:scale-105`}
            >
             <div className="flex justify-between items-start">
               <div>
-                <p className="opacity-75 text-xs">Total Tickets</p>
+                <p className="opacity-75 font-semibold text-sm">Total Tickets</p>
                 <p className="text-2xl font-bold mt-1">{dashboardData.totalActiveTickets}</p>
-                <p className="text-blue-500 text-xs mt-1 flex items-center">
+                <p className="text-blue-500 text-xs font-bold mt-1 flex items-center">
                   <Activity size={12} className="mr-1" /> Active tickets
                 </p>
               </div>
@@ -549,21 +537,18 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                 <Activity size={18} />
               </div>
             </div>
-          </motion.div>
+          </div>
           
                      {/* Open Tickets - All roles can see */}
-           <motion.div 
-             initial={{ opacity: 0, y: 20 }}
-             animate={{ opacity: 1, y: 0 }}
-             transition={{ delay: 0.2 }}
+           <div 
              onClick={() => navigateTo('/all-tickets?status=Open')}
-             className={`${cardClass} rounded-lg p-3 shadow-lg border cursor-pointer hover:shadow-xl transition-all duration-200 hover:scale-105`}
+             className={`${cardClass} rounded-lg p-3 border cursor-pointer transition-all duration-200 hover:scale-105`}
            >
             <div className="flex justify-between items-start">
               <div>
-                <p className="opacity-75 text-xs">Open Tickets</p>
+                <p className="opacity-75 font-semibold text-sm">Open Tickets</p>
                 <p className="text-2xl font-bold mt-1">{dashboardData.openTickets}</p>
-                <p className="text-orange-500 text-xs mt-1 flex items-center">
+                <p className="text-orange-500 text-xs font-bold mt-1 flex items-center">
                   <AlertCircle size={12} className="mr-1" /> Need attention
                 </p>
               </div>
@@ -571,21 +556,18 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                 <AlertCircle size={18} />
               </div>
             </div>
-          </motion.div>
+          </div>
           
                      {/* In Progress - All roles can see */}
-           <motion.div 
-             initial={{ opacity: 0, y: 20 }}
-             animate={{ opacity: 1, y: 0 }}
-             transition={{ delay: 0.3 }}
+           <div 
              onClick={() => navigateTo('/all-tickets?status=In Progress')}
-             className={`${cardClass} rounded-lg p-3 shadow-lg border cursor-pointer hover:shadow-xl transition-all duration-200 hover:scale-105`}
+             className={`${cardClass} rounded-lg p-3 border cursor-pointer transition-all duration-200 hover:scale-105`}
            >
             <div className="flex justify-between items-start">
               <div>
-                <p className="opacity-75 text-xs">In Progress</p>
+                <p className="opacity-75 font-semibold text-sm">In Progress</p>
                 <p className="text-2xl font-bold mt-1">{dashboardData.inProgressTickets}</p>
-                <p className="text-yellow-500 text-xs mt-1 flex items-center">
+                <p className="text-yellow-500 text-xs font-bold mt-1 flex items-center">
                   <Clock size={12} className="mr-1" /> Being worked on
                 </p>
               </div>
@@ -593,22 +575,19 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                 <Clock size={18} />
               </div>
             </div>
-          </motion.div>
+          </div>
           
                      {/* Assigned to Me - Only Engineers and Support */}
            {(user?.role === 'engineer' || user?.role === 'support') && (
-             <motion.div 
-               initial={{ opacity: 0, y: 20 }}
-               animate={{ opacity: 1, y: 0 }}
-               transition={{ delay: 0.4 }}
+             <div 
                onClick={() => navigateTo('/assigned-to-me')}
-               className={`${cardClass} rounded-lg p-3 shadow-lg border cursor-pointer hover:shadow-xl transition-all duration-200 hover:scale-105`}
+               className={`${cardClass} rounded-lg p-3 border cursor-pointer transition-all duration-200 hover:scale-105`}
              >
               <div className="flex justify-between items-start">
                 <div>
-                  <p className="opacity-75 text-xs">Assigned to Me</p>
+                  <p className="opacity-75 font-semibold text-sm">Assigned to Me</p>
                   <p className="text-2xl font-bold mt-1">{dashboardData.assignedToMe}</p>
-                  <p className="text-green-500 text-xs mt-1 flex items-center">
+                  <p className="text-green-500 text-xs font-bold mt-1 flex items-center">
                     <Users size={12} className="mr-1" /> My tickets
                   </p>
                 </div>
@@ -616,22 +595,19 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                   <Users size={18} />
                 </div>
               </div>
-            </motion.div>
+            </div>
           )}
           
           {/* Avg Resolution - Only Admin/Super Admin - NOT CLICKABLE */}
           {(user?.role === 'admin' || user?.role === 'super_admin') && (
-            <motion.div 
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: (user?.role === 'engineer' || user?.role === 'support') ? 0.5 : 0.4 }}
-              className={`${cardClass} rounded-lg p-3 shadow-lg border`}
+            <div 
+              className={`${cardClass} rounded-lg p-3 border`}
             >
               <div className="flex justify-between items-start">
                 <div>
-                  <p className="opacity-75 text-xs">Avg. Resolution</p>
+                  <p className="opacity-75 font-semibold text-sm">Avg. Resolution</p>
                   <p className="text-2xl font-bold mt-1">{dashboardData.avgResolutionTime}m</p>
-                  <p className="text-purple-500 text-xs mt-1 flex items-center">
+                  <p className="text-purple-500 text-xs font-bold mt-1 flex items-center">
                     <TrendingUp size={12} className="mr-1" /> Minutes avg
                   </p>
                 </div>
@@ -639,31 +615,28 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                   <TrendingUp size={18} />
                 </div>
               </div>
-            </motion.div>
+            </div>
           )}
         </div>
 
         {/* Recent Activity & Tickets Section */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-4">
           {/* Activity & Tickets Tabs */}
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.5 }}
-            className={`${cardClass} rounded-lg p-3 shadow-lg border lg:col-span-2`}
+          <div 
+            className={`${cardClass} rounded-lg p-3 border lg:col-span-2`}
           >
             <div className="flex justify-between items-center mb-3">
               <h2 className="text-lg font-bold">Updates</h2>
               <div className="flex space-x-1">
                 <button 
                   onClick={() => setActiveTab('activity')}
-                  className={`px-3 py-1 rounded-md text-sm ${activeTab === 'activity' ? 'bg-blue-500 text-white' : darkMode ? 'bg-gray-700' : 'bg-gray-100'}`}
+                  className={`px-3 py-1 rounded-md text-sm transition-all duration-200 ${activeTab === 'activity' ? 'bg-[#e85c34] text-white' : darkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-100 hover:bg-gray-200'}`}
                 >
                   Activity
                 </button>
                 <button 
                   onClick={() => setActiveTab('tickets')}
-                  className={`px-3 py-1 rounded-md text-sm ${activeTab === 'tickets' ? 'bg-blue-500 text-white' : darkMode ? 'bg-gray-700' : 'bg-gray-100'}`}
+                  className={`px-3 py-1 rounded-md text-sm transition-all duration-200 ${activeTab === 'tickets' ? 'bg-[#e85c34] text-white' : darkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-100 hover:bg-gray-200'}`}
                 >
                   Recent Tickets ({dashboardData.recentTickets.length})
                 </button>
@@ -742,10 +715,11 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                             <div className="flex-1 min-w-0">
                               {/* New format: User full name • TicketID : Subjectline */}
                               <div className="mb-1">
-                                <div className="text-sm font-normal" style={{ fontFamily: 'Arial, sans-serif' }}>
-                                  <span className="text-[#0000FF] dark:text-[#0000FF]">
+                                <div className="flex items-center">
+                                  <span className="font-semibold text-sm text-[#DC5802]">
                                     {activity.user_name || activity.user || 'System'}
-                                  </span> •{' '}
+                                  </span>
+                                  <span className="text-gray-600 mx-1">•</span>
                                   <button
                                     onClick={() => {
                                       // Get the ticket ID for navigation
@@ -761,7 +735,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                                       
                                       navigateTo(`/tickets/${ticketIdForNavigation}`);
                                     }}
-                                    className="text-[#0000FF] hover:text-[#0000FF]/80 dark:text-[#0000FF] dark:hover:text-[#0000FF]/80 underline cursor-pointer transition-colors"
+                                    className="font-bold text-sm text-[#1005e6] hover:text-[#1005e6]/80 underline cursor-pointer transition-colors"
                                   >
                                     {activity.ticket_display_id || 
                                      (activity.ticket_id && activity.ticket_id.startsWith('TT') ? activity.ticket_id : null) || 
@@ -770,7 +744,10 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                                      (activity.ticketId && ticketMappings.docIdToDisplayIdMap[activity.ticketId]) ||
                                      'Unknown Ticket'}
                                   </button>
-                                  {' '}: {activity.ticket_title || 'No title'}
+                                  <span className="text-gray-600 mx-1">•</span>
+                                  <span className="font-semibold text-sm text-[#DC5802]">
+                                    {activity.ticket_title || 'No title'}
+                                  </span>
                                 </div>
                               </div>
                               
@@ -794,10 +771,10 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                                 
                                 {/* Show comment text for comments */}
                                 {activity.type === 'comment' && activity.comment_text && (
-                                  <div className="bg-white dark:bg-gray-800 rounded p-2 border-l-2 border-green-500">
-                                    <p className="text-xs text-gray-700 dark:text-gray-300 italic">
+                                  <div>
+                                    <span className="text-xs text-gray-700 dark:text-gray-300 italic bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
                                       "{activity.comment_text}"
-                                    </p>
+                                    </span>
                                     {activity.comment_length > 100 && (
                                       <p className="text-xs text-gray-500 mt-1">
                                         (truncated from {activity.comment_length} characters)
@@ -864,10 +841,10 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                             </div>
                           </div>
                           <div className="text-right ml-3 flex-shrink-0">
-                            <p className="text-xs opacity-75">
+                            <p className="text-xs font-semibold opacity-75">
                               {formatTimeAgo(activity.timestamp)}
                             </p>
-                            <p className="text-xs opacity-50 mt-1">
+                            <p className="text-xs font-semibold opacity-50 mt-1">
                               {new Date(activity.timestamp).toLocaleDateString()} at {new Date(activity.timestamp).toLocaleTimeString([], { 
                                 hour: '2-digit', 
                                 minute: '2-digit' 
@@ -962,7 +939,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                 )}
               </div>
             )}
-          </motion.div>
+          </div>
         </div>
 
         {/* Status Distribution & Team Performance - Hidden */}
@@ -975,11 +952,8 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
         {/* Charts Grid - Moved to Bottom */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
           {/* Ticket Volume Trend */}
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.7 }}
-            className={`${cardClass} rounded-lg p-3 shadow-lg border`}
+          <div 
+            className={`${cardClass} rounded-lg p-3 border`}
           >
             <h2 className="text-lg font-bold mb-3">Ticket Volume Trend</h2>
             <div className="h-64">
@@ -1002,14 +976,11 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                 </div>
               )}
             </div>
-          </motion.div>
+          </div>
 
           {/* Resolution Time */}
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.8 }}
-            className={`${cardClass} rounded-lg p-3 shadow-lg border`}
+          <div 
+            className={`${cardClass} rounded-lg p-3 border`}
           >
             <h2 className="text-lg font-bold mb-3">Avg. Resolution Time</h2>
             <div className="h-64">
@@ -1032,7 +1003,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                 </div>
               )}
             </div>
-          </motion.div>
+          </div>
         </div>
       </main>
     </div>

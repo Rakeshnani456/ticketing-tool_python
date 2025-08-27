@@ -164,67 +164,85 @@ const Timeline = ({ events = [] }) => {
                     <div className={`inline-flex items-center h-full ${
                         expanded ? 'space-x-1 pl-2' : 'space-x-0'
                     }`}>
-                        {events.map((event, index) => (
-                            <React.Fragment key={index}>
-                                {index > 0 && (
-                                    <div className={`flex items-center justify-center flex-shrink-0 ${
-                                        expanded ? 'mx-1 h-full' : 'h-10'
-                                    }`}>
-                                        <ArrowRight 
-                                            size={expanded ? 20 : 16} 
-                                            className={`transition-all duration-300 ${
-                                                expanded ? 'text-blue-400' : 'text-gray-300'
-                                            }`} 
-                                        />
-                                    </div>
-                                )}
-                                <div
-                                    className={`timeline-event group ${
-                                        expanded 
-                                            ? 'flex flex-col justify-center items-center w-28 min-h-[140px] p-2' 
-                                            : 'flex justify-center items-center w-10 h-10'
-                                    } rounded border border-gray-200 bg-gray-50 text-gray-700 flex-shrink-0 relative cursor-pointer transition-all duration-300 ${
-                                        expanded ? 'hover:ring-1 hover:ring-blue-200' : ''
-                                    } ${
-                                        isAnimating ? expanded ? 'animate-zoomIn' : 'animate-zoomOut' : ''
-                                    }`}
-                                    onMouseEnter={() => setHoveredIndex(index)}
-                                    onMouseLeave={() => setHoveredIndex(null)}
-                                >
-                                    {event.icon && (
-                                        <div className={`flex items-center justify-center ${
-                                            expanded ? 'mb-2' : 'w-full h-full'
+                        {events.map((event, index) => {
+                            // Handle the icon component properly
+                            let IconComponent = Clock; // Default icon
+                            
+                            if (event.icon) {
+                                // Check if event.icon is a React component (function or class)
+                                if (typeof event.icon === 'function') {
+                                    IconComponent = event.icon;
+                                } else if (typeof event.icon === 'object' && event.icon.$$typeof) {
+                                    // It's already a React element
+                                    IconComponent = event.icon;
+                                } else {
+                                    // Default to Clock if icon is invalid
+                                    IconComponent = Clock;
+                                }
+                            }
+                            
+                            return (
+                                <React.Fragment key={index}>
+                                    {index > 0 && (
+                                        <div className={`flex items-center justify-center flex-shrink-0 ${
+                                            expanded ? 'mx-1 h-full' : 'h-10'
                                         }`}>
-                                            <event.icon 
-                                                size={expanded ? 16 : 14} 
+                                            <ArrowRight 
+                                                size={expanded ? 20 : 16} 
                                                 className={`transition-all duration-300 ${
-                                                    event.iconColor || getIconColorClass(event.type)
-                                                } ${!expanded ? 'group-hover:scale-125' : ''}`}
+                                                    expanded ? 'text-blue-400' : 'text-gray-300'
+                                                }`} 
                                             />
                                         </div>
                                     )}
-                                    {expanded && (
-                                        <>
-                                            <div className="text-xs font-semibold mb-1 w-full text-center line-clamp-1 transition-opacity duration-300">
-                                                {event.label}
+                                    <div
+                                        className={`timeline-event group ${
+                                            expanded 
+                                                ? 'flex flex-col justify-center items-center w-28 min-h-[140px] p-2' 
+                                                : 'flex justify-center items-center w-10 h-10'
+                                        } rounded border border-gray-200 bg-gray-50 text-gray-700 flex-shrink-0 relative cursor-pointer transition-all duration-300 ${
+                                            expanded ? 'hover:ring-1 hover:ring-blue-200' : ''
+                                        } ${
+                                            isAnimating ? expanded ? 'animate-zoomIn' : 'animate-zoomOut' : ''
+                                        }`}
+                                        onMouseEnter={() => setHoveredIndex(index)}
+                                        onMouseLeave={() => setHoveredIndex(null)}
+                                    >
+                                        {event.icon && (
+                                            <div className={`flex items-center justify-center ${
+                                                expanded ? 'mb-2' : 'w-full h-full'
+                                            }`}>
+                                                <IconComponent 
+                                                    size={expanded ? 16 : 14} 
+                                                    className={`transition-all duration-300 ${
+                                                        event.iconColor || getIconColorClass(event.type)
+                                                    } ${!expanded ? 'group-hover:scale-125' : ''}`}
+                                                />
                                             </div>
-                                            <p className="text-[10px] text-blue-700 font-bold flex items-center justify-center w-full truncate mb-1 transition-opacity duration-300">
-                                                <Clock className="w-3 h-3 mr-1 text-blue-400 flex-shrink-0" />
-                                                {new Date(event.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                            </p>
-                                            <p className="text-[10px] text-gray-500 w-full text-center truncate mb-1 transition-opacity duration-300">
-                                                {new Date(event.timestamp).toLocaleDateString()}
-                                            </p>
-                                            {event.detail && (
-                                                <p className="text-[10px] text-gray-400 w-full text-center line-clamp-2 transition-opacity duration-300">
-                                                    {event.detail}
+                                        )}
+                                        {expanded && (
+                                            <>
+                                                <div className="text-xs font-semibold mb-1 w-full text-center line-clamp-1 transition-opacity duration-300">
+                                                    {event.label}
+                                                </div>
+                                                <p className="text-[10px] text-blue-700 font-bold flex items-center justify-center w-full truncate mb-1 transition-opacity duration-300">
+                                                    <Clock className="w-3 h-3 mr-1 text-blue-400 flex-shrink-0" />
+                                                    {new Date(event.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                                 </p>
-                                            )}
-                                        </>
-                                    )}
-                                </div>
-                            </React.Fragment>
-                        ))}
+                                                <p className="text-[10px] text-gray-500 w-full text-center truncate mb-1 transition-opacity duration-300">
+                                                    {new Date(event.timestamp).toLocaleDateString()}
+                                                </p>
+                                                {event.detail && (
+                                                    <p className="text-[10px] text-gray-400 w-full text-center line-clamp-2 transition-opacity duration-300">
+                                                        {event.detail}
+                                                    </p>
+                                                )}
+                                            </>
+                                        )}
+                                    </div>
+                                </React.Fragment>
+                            );
+                        })}
                     </div>
                 </div>
             </div>
@@ -232,7 +250,7 @@ const Timeline = ({ events = [] }) => {
             {/* Toggle button */}
             <div className="flex items-center justify-center">
                 <button
-                    className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold rounded-b-md bg-white border border-t-0 border-gray-200 hover:bg-gray-50 transition-colors"
+                    className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold rounded-b-md bg-white text-orange-500 border border-t-0 border-orange-500 hover:bg-orange-50 transition-colors"
                     onClick={handleToggle}
                     aria-label={expanded ? 'Hide Timeline' : 'Show Timeline'}
                 >

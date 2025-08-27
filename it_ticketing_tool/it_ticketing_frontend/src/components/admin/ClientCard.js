@@ -217,7 +217,6 @@ const ClientCard = ({ client, index, onEdit, onRemove, showEdit, showRemove, use
         borderRadius: 0,
         boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
         transition: 'box-shadow 0.2s',
-        '&:hover': { boxShadow: '0 4px 16px rgba(0,0,0,0.08)' },
         width: '100%',
         borderLeft: 'none',
         borderRight: 'none',
@@ -282,9 +281,7 @@ const ClientCard = ({ client, index, onEdit, onRemove, showEdit, showRemove, use
                   border: userCount > 0 ? '1px solid #bbdefb' : '1px solid #e0e0e0',
                   cursor: userCount > 0 ? 'pointer' : 'default',
                   '&:hover': userCount > 0 ? {
-                    bgcolor: '#bbdefb',
-                    transform: 'scale(1.05)',
-                    transition: 'all 0.2s ease-in-out'
+                    bgcolor: '#bbdefb'
                   } : {},
                   '& .MuiChip-label': {
                     px: 1,

@@ -65,7 +65,7 @@ const BellRing = ({
         width={width}
         height={height}
         viewBox="0 0 24 24"
-        fill="none"
+        fill="white"
         stroke={stroke}
         strokeWidth={strokeWidth}
         strokeLinecap="round"
@@ -106,7 +106,7 @@ const BellRing = ({
             alignItems: "center",
             justifyContent: "center",
             padding: "0 3px",
-            boxShadow: "0 0 0 2px #fff",
+            boxShadow: "0 0 0 1px #fff",
             lineHeight: 1
           }}
         >

@@ -211,7 +211,7 @@ textarea.max-w-none.w-full::-webkit-scrollbar-corner {
   -webkit-backdrop-filter: none;
   border-radius: 0;
   box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.08);
-  border: 1px solid #e5e7eb;
+  border-right: 1px solid #9ca3af;
   transition: background 0.3s, box-shadow 0.3s;
 }
 
@@ -231,7 +231,7 @@ textarea.max-w-none.w-full::-webkit-scrollbar-corner {
 }
 
 .sidebar-glass .menu-item.active, .sidebar-glass .menu-item[aria-current="page"] {
-  background: #e5e7eb; /* Grey bg */
+  background: rgba(244, 76, 35, 0.15); /* Orange background when selected */
   color: #f44c23;
   border-radius: 0;
   box-shadow: none;
@@ -364,11 +364,13 @@ textarea.max-w-none.w-full::-webkit-scrollbar-corner {
   height: 23px !important;
 }
 
-header {
-  background: #f8fafc !important; /* Match sidebar and content */
+/* Main app header - fixed top header */
+header.fixed.top-0 {
+  background: #e85c34 !important; /* Main app header color */
   box-shadow: none !important;
   border-bottom: none !important;
 }
+
 
 body {
   overflow-x: hidden;
@@ -510,6 +512,28 @@ body {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+/* Disable all hover scale/transform effects on client management page */
+.client-management-page *,
+.client-management-page *:hover {
+    transform: none !important;
+    transition: none !important;
+    animation: none !important;
+}
+
+/* Specifically target Material-UI components on client management page */
+.client-management-page .MuiCard-root,
+.client-management-page .MuiCard-root:hover,
+.client-management-page .MuiChip-root,
+.client-management-page .MuiChip-root:hover,
+.client-management-page .MuiButton-root,
+.client-management-page .MuiButton-root:hover,
+.client-management-page .MuiIconButton-root,
+.client-management-page .MuiIconButton-root:hover {
+    transform: none !important;
+    transition: none !important;
+    animation: none !important;
 }
 
 /* Responsive grid adjustments */
