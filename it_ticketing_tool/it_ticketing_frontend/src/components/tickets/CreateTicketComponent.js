@@ -289,7 +289,7 @@ const CreateTicketComponent = ({ user, onClose, showFlashMessage, onTicketCreate
                         label="Description"
                         value={formData.long_description}
                         onChange={handleChange}
-                        rows={4} // Keep rows minimal
+                        rows={6} // Increased height for better user experience
                         maxLength={10000}
                         className="w-full resize-none text-xs"
                     />

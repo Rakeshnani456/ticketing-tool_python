@@ -546,7 +546,7 @@ Ticket Details:
 
 You can view the complete ticket history and additional details by accessing the Enterprise Ticketing Portal.
 
-If you have any questions regarding this update, please reply to this notification or contact our support team.
+If you have any questions regarding this update, please reach out to the IT Team.
 
 Thank you,
 IT Team
@@ -574,7 +574,7 @@ Kriasol Technologies LLP
             <a href="${ticketUrl}" class="button">View Ticket Details</a>
         </div>
         
-        <p>If you have any questions regarding this update, please reply to this notification or contact our support team.</p>
+        <p>If you have any questions regarding this update, please reach out to the IT Team.</p>
     `);
     return {
         subject,
@@ -584,7 +584,7 @@ Kriasol Technologies LLP
 };
 
 /**
- * Ticket assignment email template
+ * Ticket assignment email template for internal team communication
  * @param {Object} ticketData - Ticket data object
  * @returns {Object} Email content with subject, text, and html
  */
@@ -641,6 +641,74 @@ Kriasol Technologies LLP
         </div>
         
         <p>You can access the ticket and update its status through the Enterprise Ticketing Portal.</p>
+    `);
+    return {
+        subject,
+        text: textContent,
+        html: htmlContent
+    };
+};
+
+/**
+ * Ticket assignment notification email template for users
+ * @param {Object} ticketData - Ticket data object
+ * @returns {Object} Email content with subject, text, and html
+ */
+const getUserTicketAssignmentTemplate = (ticketData) => {
+    const {
+        display_id = '',
+        short_description = '',
+        assignedEngineerEmail = '',
+        ticketUrl = '',
+        toEmail = '',
+        ccEmail = ''
+    } = ticketData;
+    const subject = `Your Ticket Has Been Assigned - ${display_id}`;
+    const textContent = `
+TICKET ASSIGNMENT UPDATE
+
+Dear User,
+
+Great news! Your ticket has been assigned to an engineer and is now being worked on.
+
+Ticket Details:
+- Ticket ID: ${display_id}
+- Subject: ${short_description}
+- Assigned Engineer: ${assignedEngineerEmail}
+
+Your ticket is now in progress and our team is working to resolve your issue as quickly as possible.
+
+You can track the progress of your ticket through the Enterprise Ticketing Portal.
+
+Thank you for your patience,
+IT Team
+Kriasol Technologies LLP
+    `;
+    const htmlContent = createBaseTemplate(() => `
+        <h2>Ticket Assignment Update</h2>
+        
+        <p>Dear User,</p>
+        
+        <div class="success">
+            <strong>Great news! Your ticket has been assigned to an engineer and is now being worked on.</strong>
+        </div>
+        
+        <div class="info-box">
+            <h3>Ticket Details</h3>
+            <ul>
+                <li><strong>Ticket ID:</strong> ${display_id}</li>
+                <li><strong>Subject:</strong> ${short_description}</li>
+                <li><strong>Assigned Engineer:</strong> <span class="highlight">${assignedEngineerEmail}</span></li>
+            </ul>
+        </div>
+        
+        <p>Your ticket is now in progress and our team is working to resolve your issue as quickly as possible.</p>
+        
+        <div style="text-align: center;">
+            <a href="${ticketUrl}" class="button">Track Your Ticket</a>
+        </div>
+        
+        <p>You can track the progress of your ticket through the Enterprise Ticketing Portal.</p>
     `);
     return {
         subject,
@@ -765,7 +833,7 @@ Kriasol Technologies LLP
                 <li><strong>Subject:</strong> ${short_description}</li>
                 <li><strong>Commented by:</strong> <span class="highlight">${commenterEmail}</span></li>
             </ul>
-        </div>
+            </div>
         
         <div class="comment-box">
             <div class="comment-meta">Comment:</div>
@@ -785,13 +853,100 @@ Kriasol Technologies LLP
     };
 };
 
+/**
+ * Password sharing email template for admin password resets
+ * @param {Object} userData - User data object
+ * @returns {Object} Email content with subject, text, and html
+ */
+const getPasswordSharingTemplate = (userData) => {
+    const {
+        userName = '',
+        companyName = '',
+        userEmail = '',
+        newPassword = '',
+        loginUrl = ''
+    } = userData;
+    
+    const subject = `Your New Password - Kriasol Technologies Enterprise Ticketing System`;
+    const textContent = `
+Dear ${userName},
+
+Your password has been reset by an administrator in the Kriasol Technologies Enterprise Ticketing System.
+
+Your new login credentials are:
+- Email: ${userEmail}
+- New Password: ${newPassword}
+- Login URL: ${loginUrl}
+
+SECURITY NOTICE:
+- Please log in immediately and change your password to something secure and memorable
+- Do not share this password with anyone
+- If you did not request this password reset, please contact your IT administrator immediately
+
+You can access the portal using the login URL above. Upon first login, you will be prompted to create a new password.
+
+If you have any questions or need assistance, please contact your IT support team.
+
+Best regards,
+IT Team
+Kriasol Technologies LLP
+    `;
+    
+    const htmlContent = createBaseTemplate(() => `
+        <h2>Your Password Has Been Reset</h2>
+        
+        <p>Dear <strong>${userName}</strong>,</p>
+        
+        <p>Your password has been reset by an administrator in the <strong>Kriasol Technologies Enterprise Ticketing System</strong>.</p>
+        
+        <div class="info-box">
+            <h3>Your New Login Credentials</h3>
+            <ul>
+                <li><strong>Email:</strong> <span class="highlight">${userEmail}</span></li>
+                <li><strong>New Password:</strong> <span class="highlight">${newPassword}</span></li>
+                <li><strong>Login URL:</strong> <a href="${loginUrl}" class="button">Access Enterprise Portal</a></li>
+            </ul>
+        </div>
+        
+        <div class="warning">
+            <strong>SECURITY NOTICE:</strong> Please log in immediately and change your password to something secure and memorable. Do not share this password with anyone.
+        </div>
+        
+        <div class="info-box">
+            <h3>Next Steps</h3>
+            <ol>
+                <li>Access the portal using the login URL above</li>
+                <li>Sign in with your email and the new password provided</li>
+                <li>You will be prompted to create a new secure password</li>
+                <li>Complete your profile setup if needed</li>
+            </ol>
+        </div>
+        
+        <p>If you did not request this password reset, please contact your IT administrator immediately.</p>
+        
+        <p>If you have any questions or need assistance, please contact your IT support team.</p>
+        
+        <div class="success">
+            <strong>Thank you for using the Kriasol Technologies Enterprise Ticketing System.</strong>
+        </div>
+    `);
+    
+    return {
+        subject,
+        text: textContent,
+        html: htmlContent
+    };
+};
+
 module.exports = {
     getWelcomeEmailTemplate,
     getPasswordResetTemplate,
     getTicketNotificationTemplate,
     getTicketStatusUpdateTemplate,
     getTicketAssignmentTemplate,
+    getUserTicketAssignmentTemplate,
     getTicketCancellationTemplate,
     getTicketCommentTemplate,
+    getPasswordSharingTemplate,
     createBaseTemplate
 };

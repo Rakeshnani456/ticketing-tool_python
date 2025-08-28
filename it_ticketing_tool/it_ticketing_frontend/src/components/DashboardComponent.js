@@ -716,7 +716,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                               {/* New format: User full name • TicketID : Subjectline */}
                               <div className="mb-1">
                                 <div className="flex items-center">
-                                  <span className="font-semibold text-sm text-[#DC5802]">
+                                  <span className="font-normal text-sm text-[#DC5802]">
                                     {activity.user_name || activity.user || 'System'}
                                   </span>
                                   <span className="text-gray-600 mx-1">•</span>
@@ -735,7 +735,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                                       
                                       navigateTo(`/tickets/${ticketIdForNavigation}`);
                                     }}
-                                    className="font-bold text-sm text-[#1005e6] hover:text-[#1005e6]/80 underline cursor-pointer transition-colors"
+                                    className="font-normal text-sm text-[#1005e6] hover:text-[#1005e6]/80 underline cursor-pointer transition-colors"
                                   >
                                     {activity.ticket_display_id || 
                                      (activity.ticket_id && activity.ticket_id.startsWith('TT') ? activity.ticket_id : null) || 
@@ -745,7 +745,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                                      'Unknown Ticket'}
                                   </button>
                                   <span className="text-gray-600 mx-1">•</span>
-                                  <span className="font-semibold text-sm text-[#DC5802]">
+                                  <span className="font-normal text-sm text-[#DC5802]">
                                     {activity.ticket_title || 'No title'}
                                   </span>
                                 </div>
@@ -772,7 +772,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                                 {/* Show comment text for comments */}
                                 {activity.type === 'comment' && activity.comment_text && (
                                   <div>
-                                    <span className="text-xs text-gray-700 dark:text-gray-300 italic bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
+                                    <span className="text-xs text-gray-800 italic bg-orange-50 dark:bg-orange-900/30 px-2 py-1 rounded">
                                       "{activity.comment_text}"
                                     </span>
                                     {activity.comment_length > 100 && (
@@ -841,10 +841,10 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                             </div>
                           </div>
                           <div className="text-right ml-3 flex-shrink-0">
-                            <p className="text-xs font-semibold opacity-75">
+                            <p className="text-xs font-normal opacity-75">
                               {formatTimeAgo(activity.timestamp)}
                             </p>
-                            <p className="text-xs font-semibold opacity-50 mt-1">
+                            <p className="text-xs font-normal opacity-50 mt-1">
                               {new Date(activity.timestamp).toLocaleDateString()} at {new Date(activity.timestamp).toLocaleTimeString([], { 
                                 hour: '2-digit', 
                                 minute: '2-digit' 
@@ -880,7 +880,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                         <div className="flex-1">
                           {/* Full Name • Ticket ID • Subject Line */}
                           <div className="flex items-center mb-1">
-                            <span className="font-semibold text-sm text-gray-900">
+                            <span className="font-normal text-sm text-gray-900">
                               {(() => {
                                 // Construct full name from firstName and lastName
                                 if (ticket.reporter_firstName || ticket.reporter_lastName) {
@@ -893,12 +893,12 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                             <span className="text-gray-600 mx-1">•</span>
                             <button
                               onClick={() => navigateTo(`/tickets/${ticket.id}`)}
-                              className="font-bold text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 underline cursor-pointer transition-colors"
+                              className="font-normal text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 underline cursor-pointer transition-colors"
                             >
                               {ticket.display_id || ticket.ticket_id || ticket.id}
                             </button>
                             <span className="text-gray-600 mx-1">•</span>
-                            <span className="font-semibold text-sm text-gray-900">
+                            <span className="font-normal text-sm text-gray-900">
                               {ticket.short_description || ticket.subject || ticket.title || 'No description'}
                             </span>
                           </div>
@@ -925,7 +925,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                           </div>
                           
                           {/* Created DateTime */}
-                          <p className="text-xs font-semibold text-gray-600 dark:text-gray-400">
+                          <p className="text-xs font-normal text-gray-600 dark:text-gray-400">
                             Created: {ticket.created_at.toLocaleDateString()} at {ticket.created_at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </p>
                         </div>

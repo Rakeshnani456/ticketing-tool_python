@@ -1,6 +1,7 @@
 // routes/userManagementRoutes.js
 const express = require('express');
 const router = express.Router();
+const cacheManager = require('../utils/cacheManager');
 
 module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseToken, emailService) => {
 
@@ -9,13 +10,20 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
         res.status(200).json({ message: 'User management API is running' });
     });
 
-    // GET /api/users - Get users based on role
+    // GET /api/users - Get users based on role with caching
     router.get('/', verifyFirebaseToken, async (req, res) => {
-        console.log('GET /api/users request received');
         try {
             const userRole = req.user.role;
             const userClientName = req.user.client_name;
-            console.log('Request details:', { userRole, userClientName, userId: req.user.uid });
+            
+            // Create cache key based on user role and client
+            const cacheKey = `users_${userRole}_${userClientName || 'all'}`;
+            
+            // Try to get from cache first
+            const cachedUsers = cacheManager.get(cacheKey);
+            if (cachedUsers) {
+                return res.status(200).json(cachedUsers);
+            }
             
             // Test Firestore connection
             if (!usersCollection) {
@@ -26,24 +34,20 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
             let snapshot;
             if (userRole === 'site_admin' && userClientName) {
                 // For site_admin, get users from their company/client
-                console.log(`Site admin requesting users for client: ${userClientName}`);
                 
                 // Try to get users by client_name first
                 try {
                     snapshot = await usersCollection.where('client_name', '==', userClientName).get();
-                    console.log(`Found ${snapshot.docs.length} users with client_name: ${userClientName}`);
                     
                     // If no users found, try companyName
                     if (snapshot.empty) {
                         snapshot = await usersCollection.where('companyName', '==', userClientName).get();
-                        console.log(`Found ${snapshot.docs.length} users with companyName: ${userClientName}`);
                     }
                 } catch (queryError) {
                     console.error('Error in Firestore query:', queryError);
                     throw queryError;
                 }
                 
-                console.log(`Total found ${snapshot.docs.length} users for site admin`);
             } else if (userRole === 'site_admin' && !userClientName) {
                 console.error('Site admin has no client_name set, returning empty result');
                 return res.status(200).json([]);
@@ -63,18 +67,13 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
             }
             
             const users = snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() }));
-            if (userRole === 'site_admin') {
-                console.log('Site admin users data:', users.map(u => ({ uid: u.uid, email: u.email, client_name: u.client_name, companyName: u.companyName })));
-            }
+            
+            // Cache the results for 2 minutes
+            cacheManager.set(cacheKey, users, 2 * 60 * 1000);
+            
             return res.status(200).json(users);
         } catch (err) {
             console.error('Error fetching users:', err);
-            console.error('Error details:', {
-                userRole: req.user?.role,
-                userClientName: req.user?.client_name,
-                errorMessage: err.message,
-                errorStack: err.stack
-            });
             return res.status(500).json({ error: err.message || 'Failed to fetch users.' });
         }
     });
@@ -357,6 +356,48 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
         } catch (err) {
             console.error('Error updating password:', err);
             return res.status(500).json({ error: err.message || 'Failed to update password.' });
+        }
+    });
+
+    // POST /api/users/:uid/send-password-email - Send password sharing email
+    router.post('/:uid/send-password-email', verifyFirebaseToken, async (req, res) => {
+        const { uid } = req.params;
+        const { password, userEmail, userName, companyName } = req.body;
+        
+        if (!password || !userEmail || !userName || !companyName) {
+            return res.status(400).json({ error: 'Missing required fields: password, userEmail, userName, companyName' });
+        }
+        
+        try {
+            // Verify the user exists
+            const userDoc = await usersCollection.doc(uid).get();
+            if (!userDoc.exists) {
+                return res.status(404).json({ error: 'User not found' });
+            }
+            
+            // Send the password sharing email
+            if (emailService) {
+                const loginUrl = process.env.FRONTEND_URL || 'https://ticketing-tool.kriasol.com';
+                const emailData = {
+                    userName,
+                    companyName,
+                    userEmail,
+                    newPassword: password,
+                    loginUrl
+                };
+                
+                const emailSent = await emailService.sendPasswordSharingEmail(emailData);
+                if (emailSent) {
+                    return res.status(200).json({ message: 'Password sharing email sent successfully' });
+                } else {
+                    return res.status(500).json({ error: 'Failed to send password sharing email' });
+                }
+            } else {
+                return res.status(500).json({ error: 'Email service not available' });
+            }
+        } catch (err) {
+            console.error('Error sending password sharing email:', err);
+            return res.status(500).json({ error: err.message || 'Failed to send password sharing email' });
         }
     });
 

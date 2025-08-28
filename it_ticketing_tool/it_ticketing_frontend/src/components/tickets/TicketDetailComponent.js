@@ -150,6 +150,7 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
     }, [ticket?.short_description, subjectExpanded]);
 
     const isSupportUser = user?.role === 'support' || user?.role === 'admin' || user?.role === 'super_admin' || user?.role === 'site_admin';
+    const isEngineer = user?.role === 'engineer';
 
     const priorities = [
         { value: 'Low', label: 'Low' },
@@ -481,7 +482,7 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
     }, [isEditing, ticket]);
 
     useEffect(() => {
-        if (isEditing && isSupportUser) {
+        if (isEditing && (isSupportUser || isEngineer)) {
             setSupportUsersLoading(true);
             user.firebaseUser.getIdToken()
                 .then(idToken => {
@@ -502,11 +503,15 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                     setSupportUsersLoading(false);
                 });
         }
-    }, [isEditing, isSupportUser, user]);
+    }, [isEditing, isSupportUser, isEngineer, user]);
 
     const isTicketClosedOrResolved = ticket && ['Resolved', 'Cancelled'].includes(ticket.status);
-    const canEdit = !isTicketClosedOrResolved && 
-                   ['support'].includes(user?.role);
+    const isTicketCreator = ticket && ticket.reporter_id === user?.uid;
+    
+    // Only Engineers can edit tickets (not ticket creators or other support users)
+    const canEdit = !isTicketClosedOrResolved && isEngineer;
+    
+    // Comments and attachments can be added by anyone if ticket is not closed/resolved
     const canAddComments = !isTicketClosedOrResolved;
     const canAddAttachments = !isTicketClosedOrResolved;
 

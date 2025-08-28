@@ -30,9 +30,9 @@ const EditableTextarea = ({ id, value, onChange, rows = 3, className = "", disab
         onChange={onChange}
         rows={rows}
         ref={inputRef}
-        className={`border-2 rounded-md px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none flex-shrink-0 w-full transition-all duration-200 text-xs
-            ${disabled ? 'bg-gradient-to-r from-gray-50 to-gray-100 border-gray-300 cursor-not-allowed text-gray-600' : 'bg-white border-gray-300 hover:border-blue-400'}
-            ${hasError ? 'border-red-500 ring-2 ring-red-200 bg-red-50' : ''}
+        className={`rounded-md px-2 py-1.5 focus:outline-none resize-none flex-shrink-0 w-full transition-all duration-200 text-xs border border-gray-300
+            ${disabled ? 'bg-gradient-to-r from-gray-50 to-gray-100 cursor-not-allowed text-gray-600' : 'bg-white hover:border-blue-400'}
+            ${hasError ? 'border-red-500 bg-red-50' : ''}
             ${className}`}
         disabled={disabled}
         maxLength={maxLength}

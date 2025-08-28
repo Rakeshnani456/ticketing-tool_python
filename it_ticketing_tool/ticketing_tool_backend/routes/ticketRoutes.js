@@ -340,12 +340,28 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                 return res.status(403).json({ error: "Forbidden: Cannot update a resolved or cancelled ticket as a regular user." });
             }
 
-            // Only support users (engineers) can edit tickets
-            if (!['support'].includes(authenticatedUserRole)) {
-                return res.status(403).json({ error: "Forbidden: Only support users can edit tickets." });
+            // Check if user is either the ticket creator or a support user
+            const isTicketCreator = ticketData.reporter_id === authenticatedUid;
+            const isSupportUser = ['support'].includes(authenticatedUserRole);
+            
+            if (!isTicketCreator && !isSupportUser) {
+                return res.status(403).json({ error: "Forbidden: Only ticket creators and support users can edit tickets." });
             }
 
-            // Since only support users can edit tickets, no additional permission checks needed for status/priority updates
+            // Additional permission checks for specific operations
+            // Only support users can change status, priority, category, and assign tickets
+            if (status !== undefined || priority !== undefined || category !== undefined || assigned_to_email !== undefined) {
+                if (!isSupportUser) {
+                    return res.status(403).json({ error: "Forbidden: Only support users can change ticket status, priority, category, or assign tickets." });
+                }
+            }
+
+            // Only support users can add closure notes and time spent
+            if (closure_notes !== undefined || time_spent !== undefined) {
+                if (!isSupportUser) {
+                    return res.status(403).json({ error: "Forbidden: Only support users can add closure notes or time spent." });
+                }
+            }
 
             const updateData = {
                 updated_at: admin.firestore.FieldValue.serverTimestamp()
@@ -526,9 +542,6 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
 
             // Assignment logic - only process if assignment actually changed
             if (assigned_to_email !== undefined && assigned_to_email !== ticketData.assigned_to_email) {
-                if (!['support', 'admin'].includes(authenticatedUserRole)) {
-                    return res.status(403).json({ error: 'Forbidden: Only support associates or admins can assign tickets.' });
-                }
                 if (assigned_to_email === null || assigned_to_email === '') {
                     updateData.assigned_to_id = null;
                     updateData.assigned_to_email = null;
@@ -651,7 +664,7 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                                     ccEmail: ccList.join(',')
                                 };
                                 
-                                await emailService.sendTicketAssignmentEmail(emailData);
+                                await emailService.sendTicketAssignmentEmail(emailData, false); // false = team notification
                             } catch (error) {
                                 console.error('Error sending ticket assignment email:', error);
                             }
@@ -676,7 +689,7 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                                     ccEmail: ccList
                                 };
                                 
-                                await emailService.sendTicketAssignmentEmail(emailData);
+                                await emailService.sendTicketAssignmentEmail(emailData, true); // true = user notification
                             } catch (error) {
                                 console.error('Error sending ticket assignment email:', error);
                             }

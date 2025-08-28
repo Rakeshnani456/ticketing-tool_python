@@ -5,6 +5,9 @@
 export const API_BASE_URL = 'http://localhost:5000';
 //export const API_BASE_URL = 'https://ticketing-tool-python-8bbm.onrender.com';
 
+// --- Frontend URL for email links ---
+export const FRONTEND_URL = 'https://it-ticketing-tool-dd679.web.app/c';
+
 // --- React AI App URL for Vercel Deployment ---
 // This should point to your Vercel-deployed backend
 //export const react_ai_app_url = 'https://kriasol-cbf9co0u3-rakeshnani456s-projects.vercel.app';

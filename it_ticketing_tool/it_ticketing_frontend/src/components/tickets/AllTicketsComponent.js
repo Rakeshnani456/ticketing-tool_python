@@ -655,7 +655,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
 
     // Conditional rendering for error states only
     const [currentPage, setCurrentPage] = useState(1);
-    const ticketsPerPage = 15;
+    const ticketsPerPage = 30;
     const totalPages = Math.ceil(displayedTickets.length / ticketsPerPage);
     const paginatedTickets = displayedTickets.slice((currentPage - 1) * ticketsPerPage, currentPage * ticketsPerPage);
 

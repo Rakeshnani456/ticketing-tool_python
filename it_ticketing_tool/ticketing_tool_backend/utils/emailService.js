@@ -1,6 +1,6 @@
 // utils/emailService.js
 
-const { getWelcomeEmailTemplate, getPasswordResetTemplate, getTicketNotificationTemplate, getTicketStatusUpdateTemplate, getTicketAssignmentTemplate, getTicketCancellationTemplate, getTicketCommentTemplate } = require('./emailTemplates');
+const { getWelcomeEmailTemplate, getPasswordResetTemplate, getTicketNotificationTemplate, getTicketStatusUpdateTemplate, getTicketAssignmentTemplate, getUserTicketAssignmentTemplate, getTicketCancellationTemplate, getTicketCommentTemplate, getPasswordSharingTemplate } = require('./emailTemplates');
 
 /**
  * Email service for sending various types of emails
@@ -128,11 +128,14 @@ class EmailService {
     /**
      * Send ticket assignment notification email
      * @param {Object} ticketData - Ticket data object
+     * @param {boolean} isUserNotification - Whether this is a user notification (true) or team notification (false)
      * @returns {Promise<boolean>} Success status
      */
-    async sendTicketAssignmentEmail(ticketData) {
+    async sendTicketAssignmentEmail(ticketData, isUserNotification = false) {
         try {
-            const { subject, text, html } = getTicketAssignmentTemplate(ticketData);
+            // Choose template based on recipient type
+            const template = isUserNotification ? getUserTicketAssignmentTemplate : getTicketAssignmentTemplate;
+            const { subject, text, html } = template(ticketData);
             
             const mailOptions = {
                 from: 'tt.support@kriasol.com',
@@ -144,10 +147,38 @@ class EmailService {
             };
 
             await this.transporter.sendMail(mailOptions);
-            console.log(`Ticket assignment email sent successfully to ${mailOptions.to}`);
+            const recipientType = isUserNotification ? 'user' : 'team';
+            console.log(`Ticket assignment email sent successfully to ${recipientType}: ${mailOptions.to}`);
             return true;
         } catch (error) {
             console.error(`Error sending ticket assignment email:`, error.message);
+            return false;
+        }
+    }
+
+    /**
+     * Send ticket assignment notification email to users
+     * @param {Object} ticketData - Ticket data object
+     * @returns {Promise<boolean>} Success status
+     */
+    async sendUserTicketAssignmentEmail(ticketData) {
+        try {
+            const { subject, text, html } = getUserTicketAssignmentTemplate(ticketData);
+            
+            const mailOptions = {
+                from: 'tt.support@kriasol.com',
+                to: ticketData.toEmail || 'tt.support@kriasol.com',
+                cc: ticketData.ccEmail,
+                subject: subject,
+                text: text,
+                html: html,
+            };
+
+            await this.transporter.sendMail(mailOptions);
+            console.log(`User ticket assignment email sent successfully to: ${mailOptions.to}`);
+            return true;
+        } catch (error) {
+            console.error(`Error sending user ticket assignment email:`, error.message);
             return false;
         }
     }
@@ -257,6 +288,32 @@ class EmailService {
         }
         
         return results;
+    }
+
+    /**
+     * Send password sharing email for admin password resets
+     * @param {Object} userData - User data object
+     * @returns {Promise<boolean>} Success status
+     */
+    async sendPasswordSharingEmail(userData) {
+        try {
+            const { subject, text, html } = getPasswordSharingTemplate(userData);
+            
+            const mailOptions = {
+                from: 'tt.support@kriasol.com',
+                to: userData.userEmail,
+                subject: subject,
+                text: text,
+                html: html,
+            };
+
+            await this.transporter.sendMail(mailOptions);
+            console.log(`Password sharing email sent successfully to ${userData.userEmail}`);
+            return true;
+        } catch (error) {
+            console.error(`Error sending password sharing email to ${userData.userEmail}:`, error.message);
+            return false;
+        }
     }
 }
 

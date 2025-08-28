@@ -284,7 +284,7 @@ const TicketProgressSection = ({
                     <label className="block text-xs font-bold mb-1.5">
                         Assigned to:
                     </label>
-                    {isEditing && isSupportUser && !isTicketClosedOrResolved ? (
+                    {isEditing && canEdit && !isTicketClosedOrResolved ? (
                         <div style={{ position: 'relative', width: '100%', minWidth: 0, maxWidth: '100%', overflow: 'hidden' }}>
                             <User className="w-3 h-3 text-gray-400" style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', zIndex: 2 }} />
                             <Select
@@ -294,13 +294,13 @@ const TicketProgressSection = ({
                                 fullWidth
                                 size="small"
                                 displayEmpty
-                                disabled={!isSupportUser || isTicketClosedOrResolved || supportUsersLoading}
+                                disabled={!canEdit || isTicketClosedOrResolved || supportUsersLoading}
                                 sx={{
                                     backgroundColor: 'white',
                                     width: '100%',
                                     height: '28px',
                                     minHeight: '28px',
-                                    border: isEditing && isSupportUser && !isTicketClosedOrResolved ? '1.5px solid #60a5fa' : '1px solid #d1d5db',
+                                    border: isEditing && canEdit && !isTicketClosedOrResolved ? '1.5px solid #60a5fa' : '1px solid #d1d5db',
                                     borderRadius: 0,
                                     pl: 2.5,
                                     pr: 1.5,
@@ -467,8 +467,8 @@ const TicketProgressSection = ({
                     </div>
                 )}
 
-                {/* Time Spent - Only for support/admin and when status is Resolved or closing or already resolved/cancelled */}
-                {isSupportUser && (
+                {/* Time Spent - Only for Engineers and when status is Resolved or closing or already resolved/cancelled */}
+                {(isSupportUser || canEdit) && (
                     <div className="w-full min-w-0 max-w-full overflow-x-hidden">
                         <label className="text-xs font-bold mb-1.5">
                             Time Spent <span className="text-xs font-normal">(minutes)</span>:
@@ -483,7 +483,7 @@ const TicketProgressSection = ({
                                         value={timeSpent}
                                         onChange={handleTimeSpentChange}
                                         className="FieldBox border border-blue-300 px-2 py-1 min-h-[28px] flex items-center bg-white rounded w-full min-w-0 max-w-full text-xs focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-transparent"
-                                        disabled={!isSupportUser || isTicketClosedOrResolved}
+                                        disabled={!canEdit || isTicketClosedOrResolved}
                                         placeholder="in minutes (e.g., 45)"
                                         style={{ minWidth: 0, maxWidth: '100%' }}
                                     />

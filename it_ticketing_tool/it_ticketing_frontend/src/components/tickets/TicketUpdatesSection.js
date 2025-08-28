@@ -11,9 +11,9 @@ const EditableTextarea = ({ id, value, onChange, rows = 3, className = "", disab
         onChange={onChange}
         rows={rows}
         ref={inputRef}
-        className={`border-2 rounded-md px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none flex-shrink-0 w-full transition-all duration-200 text-sm
-            ${disabled ? 'bg-gradient-to-r from-gray-50 to-gray-100 border-gray-300 cursor-not-allowed text-gray-600' : 'bg-white border-gray-300 hover:border-blue-400'}
-            ${hasError ? 'border-red-500 ring-2 ring-red-200 bg-red-50' : ''}
+        className={`rounded-md px-2 py-1.5 focus:outline-none resize-none flex-shrink-0 w-full transition-all duration-200 text-sm border border-gray-300
+            ${disabled ? 'bg-gradient-to-r from-gray-50 to-gray-100 cursor-not-allowed text-gray-600' : 'bg-white hover:border-blue-400'}
+            ${hasError ? 'border-red-500 bg-red-50' : ''}
             ${className}`}
         disabled={disabled}
         maxLength={maxLength}
@@ -182,8 +182,8 @@ const TicketUpdatesSection = ({
                                         })()
                                     ) : (
                                         <div className="text-center py-6 w-full min-w-0 max-w-full overflow-x-hidden">
-                                            <MessageSquare className="w-10 h-10 mx-auto mb-2" />
-                                            <p className="text-xs text-gray-500">No comments yet</p>
+                                            <MessageSquare className="w-10 h-10 mx-auto mb-2 text-gray-300" />
+                                            <p className="text-xs text-gray-400">No comments yet</p>
                                         </div>
                                     )}
                                 </div>
@@ -221,12 +221,13 @@ const TicketUpdatesSection = ({
                             <div className="bg-white border border-gray-200 rounded-md p-1.5 w-full min-w-0 max-w-full overflow-x-hidden">
                                 <div className="flex gap-1 w-full min-w-0 max-w-full overflow-x-hidden">
                                     <textarea
-                                        value={commentText}
+                                        value={commentText || ''}
                                         onChange={(e) => setCommentText(e.target.value)}
-                                        rows={2}
-                                        className="flex-1 border border-gray-300 rounded-md px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-xs resize-none min-w-0 max-w-full"
+                                        rows={6}
+                                        className="flex-1 rounded-md px-1.5 py-1 focus:outline-none text-xs resize-none min-w-0 max-w-full cursor-text placeholder:text-gray-400 placeholder:text-xs"
                                         placeholder="Add a comment..."
                                         disabled={commentLoading || !canAddComments}
+                                        tabIndex={0}
                                         onKeyDown={(e) => {
                                             if (e.key === 'Enter' && !e.shiftKey) {
                                                 e.preventDefault();

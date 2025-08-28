@@ -25,7 +25,7 @@ const MyTicketsComponent = ({ user, navigateTo, showFlashMessage, searchKeyword,
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [currentPage, setCurrentPage] = useState(1);
-    const ticketsPerPage = 15;
+    const ticketsPerPage = 30;
     const totalPages = Math.ceil(tickets.length / ticketsPerPage);
     const paginatedTickets = tickets.slice((currentPage - 1) * ticketsPerPage, currentPage * ticketsPerPage);
 

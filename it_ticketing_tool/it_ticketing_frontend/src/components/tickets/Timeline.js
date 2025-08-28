@@ -262,7 +262,7 @@ const Timeline = ({ events = [] }) => {
                     ) : (
                         <>
                             <ChevronDown className="w-3 h-3 transition-transform duration-300" />
-                            <span>Show Timeline</span>
+                            <span>Show Ticket Timeline</span>
                         </>
                     )}
                 </button>

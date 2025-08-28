@@ -152,31 +152,64 @@ const checkDbConnection = (req, res, next) => {
 };
 app.use(checkDbConnection);
 
-// --- Middleware to verify Firebase ID token for protected routes ---
-const verifyFirebaseToken = async (req, res, next) => {
+// User cache for authentication optimization
+const userCache = new Map();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+// Middleware to authenticate Firebase ID token
+const authenticateToken = async (req, res, next) => {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return res.status(401).json({ error: 'Unauthorized: No token provided or token format is invalid.' });
+        return res.status(401).json({ error: 'Unauthorized: No token provided.' });
     }
     const idToken = authHeader.split(' ')[1];
     try {
         const decodedToken = await admin.auth().verifyIdToken(idToken);
         req.user = decodedToken;
-        const userDoc = await db.collection('users').doc(decodedToken.uid).get();
-        if (!userDoc.exists) {
-            return res.status(403).json({ error: 'Forbidden: User profile not found.' });
-        }
-        const userData = userDoc.data();
-        if (!userData || !userData.role) {
-            return res.status(403).json({ error: 'Forbidden: User role not found.' });
-        }
-        req.user.role = userData.role;
-        req.user.client_name = userData.client_name || userData.companyName;
-        console.log(`User ${decodedToken.uid} (${userData.role}) client_name set to: ${req.user.client_name} (from client_name: ${userData.client_name}, companyName: ${userData.companyName})`);
         
-        // Add additional validation for site_admin
-        if (userData.role === 'site_admin' && !req.user.client_name) {
-            console.error(`Site admin ${decodedToken.uid} has no client_name or companyName set`);
+        // Check cache first
+        const cachedUser = userCache.get(decodedToken.uid);
+        const now = Date.now();
+        
+        if (cachedUser && (now - cachedUser.timestamp) < CACHE_TTL) {
+            // Use cached user data
+            req.user.role = cachedUser.data.role;
+            req.user.client_name = cachedUser.data.client_name;
+            // Only log on cache miss or for debugging
+            if (process.env.NODE_ENV === 'development') {
+                console.log(`User ${decodedToken.uid} (${cachedUser.data.role}) - using cached data`);
+            }
+        } else {
+            // Fetch from database and cache
+            const userDoc = await db.collection('users').doc(decodedToken.uid).get();
+            if (!userDoc.exists) {
+                return res.status(403).json({ error: 'Forbidden: User profile not found.' });
+            }
+            const userData = userDoc.data();
+            if (!userData || !userData.role) {
+                return res.status(403).json({ error: 'Forbidden: User role not found.' });
+            }
+            req.user.role = userData.role;
+            req.user.client_name = userData.client_name || userData.companyName;
+            
+            // Cache the user data
+            userCache.set(decodedToken.uid, {
+                data: {
+                    role: userData.role,
+                    client_name: req.user.client_name
+                },
+                timestamp: now
+            });
+            
+            // Only log on cache miss or for debugging
+            if (process.env.NODE_ENV === 'development') {
+                console.log(`User ${decodedToken.uid} (${userData.role}) client_name set to: ${req.user.client_name} (from client_name: ${userData.client_name}, companyName: ${userData.companyName})`);
+            }
+            
+            // Add additional validation for site_admin
+            if (userData.role === 'site_admin' && !req.user.client_name) {
+                console.error(`Site admin ${decodedToken.uid} has no client_name or companyName set`);
+            }
         }
         
         next();
@@ -266,15 +299,25 @@ const attachmentRoutes = require('./routes/attachmentRoutes');
 const adminManagementRouter = require('./routes/adminManagement');
 
 
-app.use('/', authRoutes(db, admin, usersCollection, verifyFirebaseToken));
-app.use('/tickets', ticketRoutes(db, admin, ticketsCollection, usersCollection, notificationsCollection, transporter, verifyFirebaseToken, checkRole, jsonSerializableTicket, jsonSerializableNotification, generateDisplayId, emailService));
-app.use('/admin', adminRoutes(db, admin, usersCollection, verifyFirebaseToken, checkRole));
-app.use('/notifications', notificationRoutes(db, notificationsCollection, verifyFirebaseToken, jsonSerializableNotification));
+app.use('/', authRoutes(db, admin, usersCollection, authenticateToken));
+app.use('/tickets', ticketRoutes(db, admin, ticketsCollection, usersCollection, notificationsCollection, transporter, authenticateToken, checkRole, jsonSerializableTicket, jsonSerializableNotification, generateDisplayId, emailService));
+app.use('/admin', adminRoutes(db, admin, usersCollection, authenticateToken, checkRole));
+app.use('/notifications', notificationRoutes(db, notificationsCollection, authenticateToken, jsonSerializableNotification));
 app.use('/api/clients', clientRoutes(db, clientsCollection, usersCollection));
-app.use('/api/users', userManagementRoutes(db, admin, usersCollection, clientsCollection, verifyFirebaseToken, emailService));
+app.use('/api/users', userManagementRoutes(db, admin, usersCollection, clientsCollection, authenticateToken, emailService));
 app.use('/dashboard', dashboardRoutes(db, ticketsCollection, clientsCollection, usersCollection, requireSuperAdmin));
-app.use('/upload-attachment', attachmentRoutes(admin, verifyFirebaseToken));
-app.use('/admin-management', adminManagementRouter(db, usersCollection, verifyFirebaseToken, requireSuperAdmin));
+app.use('/upload-attachment', attachmentRoutes(admin, authenticateToken));
+app.use('/admin-management', adminManagementRouter(db, usersCollection, authenticateToken, requireSuperAdmin));
+
+// Add cache statistics endpoint
+app.get('/api/cache/stats', (req, res) => {
+    res.json({
+        userCache: {
+            size: userCache.size,
+            ttl: CACHE_TTL
+        }
+    });
+});
 
 
 // Add a dummy client if none exist (for testing) - keep this in server.js or a separate setup file

@@ -35,9 +35,10 @@ import {
     Error as ErrorIcon,
     Warning as WarningIcon,
     MoreVert as MoreVertIcon,
-    Settings as SettingsIcon
+    Settings as SettingsIcon,
+    ContentCopy as ContentCopyIcon
 } from '@mui/icons-material';
-import { API_BASE_URL } from '../../config/constants';
+import { API_BASE_URL, FRONTEND_URL } from '../../config/constants';
 import './UserManagementComponent.css';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { getFirestore, collection, onSnapshot, query, where, orderBy } from 'firebase/firestore';
@@ -150,6 +151,8 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
     const [changePwdModalOpen, setChangePwdModalOpen] = useState(false);
     const [pwdUserId, setPwdUserId] = useState(null);
     const [newPassword, setNewPassword] = useState('');
+    const [passwordCopied, setPasswordCopied] = useState(false);
+    const [emailSent, setEmailSent] = useState(false);
     const [importModalOpen, setImportModalOpen] = useState(false);
     const [importedUsers, setImportedUsers] = useState([]);
     const [importError, setImportError] = useState('');
@@ -839,6 +842,8 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
       setChangePwdModalOpen(false);
       setPwdUserId(null);
       setNewPassword('');
+      setPasswordCopied(false);
+      setEmailSent(false);
       setChangePwdError('');
       setPasswordResetStatus('');
       setIsPasswordResetting(false);
@@ -866,6 +871,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
       }
       
       try {
+        // First, update the password
         const idToken = await user.firebaseUser.getIdToken();
         const res = await fetch(`${API_BASE_URL}/api/users/${pwdUserId}/password`, {
           method: 'PUT',
@@ -881,7 +887,39 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
           throw new Error(errData.error || 'Failed to change password');
         }
         
-        setPasswordResetStatus('Password reset successfully!');
+        // If email checkbox is checked, send the password email
+        if (emailSent) {
+          try {
+            const userData = users.find(u => u.uid === pwdUserId);
+            if (userData) {
+              const emailRes = await fetch(`${API_BASE_URL}/api/users/${pwdUserId}/send-password-email`, {
+                method: 'POST',
+                headers: { 
+                  'Authorization': `Bearer ${idToken}`,
+                  'Content-Type': 'application/json' 
+                },
+                body: JSON.stringify({ 
+                  password: newPassword,
+                  userEmail: userData.email,
+                  userName: `${userData.firstName || ''} ${userData.lastName || ''}`.trim() || userData.name || 'User',
+                  companyName: userData.clientname || userData.companyName || 'Company',
+                  loginUrl: FRONTEND_URL
+                }),
+              });
+              
+              if (emailRes.ok) {
+                setPasswordResetStatus('Password reset and email sent successfully!');
+              } else {
+                setPasswordResetStatus('Password reset successful, but email failed to send.');
+              }
+            }
+          } catch (emailErr) {
+            console.error('Email sending failed:', emailErr);
+            setPasswordResetStatus('Password reset successful, but email failed to send.');
+          }
+        } else {
+          setPasswordResetStatus('Password reset successfully!');
+        }
         
         // Show inline notification for this specific user
         setPasswordChangeNotifications(prev => ({
@@ -923,6 +961,8 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
         }, 3000);
       }
     };
+
+
 
     const hasUnsavedChanges = (editRowData, originalUser) => {
         return (
@@ -3326,6 +3366,119 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                     <DialogTitle sx={{ fontSize: 18, py: 1.5 }}>Change Password</DialogTitle>
                     <form onSubmit={handleChangePassword}>
                         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, py: 2 }}>
+                            <Box sx={{ 
+                                bgcolor: '#f8f9fa', 
+                                p: 2, 
+                                borderRadius: 1, 
+                                border: '1px solid #e0e0e0',
+                                mb: 1
+                            }}>
+                                <Typography variant="body2" sx={{ mb: 1, fontWeight: 500, color: '#1976d2' }}>
+                                    Generated Password:
+                                </Typography>
+                                <Box sx={{ 
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    gap: 1,
+                                    bgcolor: 'white',
+                                    p: 1.5,
+                                    borderRadius: 1,
+                                    border: '1px solid #e0e0e0'
+                                }}>
+                                    <Typography 
+                                        variant="body1" 
+                                        sx={{ 
+                                            fontFamily: 'monospace', 
+                                            fontSize: '1rem',
+                                            fontWeight: 600,
+                                            color: '#2c3e50',
+                                            flex: 1,
+                                            letterSpacing: '0.1em'
+                                        }}
+                                    >
+                                        {newPassword}
+                                    </Typography>
+                                    <Button
+                                        variant="contained"
+                                        startIcon={passwordCopied ? <CheckCircleIcon /> : <ContentCopyIcon />}
+                                        onClick={() => {
+                                            navigator.clipboard.writeText(newPassword);
+                                            setPasswordCopied(true);
+                                            showFlashMessage('Password copied to clipboard!', 'success');
+                                        }}
+                                        disabled={passwordCopied}
+                                        size="small"
+                                        sx={{ 
+                                            bgcolor: passwordCopied ? '#6c757d' : '#28a745',
+                                            '&:hover': { 
+                                                bgcolor: passwordCopied ? '#5a6268' : '#218838' 
+                                            },
+                                            textTransform: 'none',
+                                            fontWeight: 500,
+                                            opacity: passwordCopied ? 0.7 : 1,
+                                            cursor: passwordCopied ? 'not-allowed' : 'pointer'
+                                        }}
+                                    >
+                                        {passwordCopied ? 'Copied!' : 'Copy'}
+                                    </Button>
+                                    
+                                </Box>
+                                
+                                {/* Email Checkbox */}
+                                <Box sx={{ mt: 2, display: 'flex', alignItems: 'center' }}>
+                                    <Tooltip title="When checked, the password will be automatically sent to the user via email when you click Update">
+                                        <FormControlLabel
+                                            control={
+                                                <Checkbox
+                                                    checked={emailSent}
+                                                    onChange={(e) => setEmailSent(e.target.checked)}
+                                                    disabled={isPasswordResetting}
+                                                    sx={{
+                                                        color: '#007bff',
+                                                        '&.Mui-checked': {
+                                                            color: '#007bff',
+                                                        },
+                                                    }}
+                                                />
+                                            }
+                                            label={
+                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                    <EmailIcon fontSize="small" sx={{ color: '#007bff' }} />
+                                                    <Typography variant="body2" sx={{ fontSize: '0.9rem' }}>
+                                                        Send password via email to user
+                                                    </Typography>
+                                                </Box>
+                                            }
+                                            sx={{ 
+                                                margin: 0,
+                                                '& .MuiFormControlLabel-label': {
+                                                    fontSize: '0.9rem',
+                                                    color: '#333'
+                                                }
+                                            }}
+                                        />
+                                    </Tooltip>
+                                </Box>
+                                <Typography variant="caption" sx={{ color: '#6c757d', mt: 1, display: 'block' }}>
+                                    Copy this password and share it securely with the user. The user will be required to change it on login.
+                                </Typography>
+                                {!passwordCopied && !emailSent && (
+                                    <Typography variant="caption" sx={{ color: '#dc3545', mt: 1, display: 'block', fontWeight: 500 }}>
+                                        ⚠️ You must either copy the password or check the email option before proceeding with the update.
+                                    </Typography>
+                                )}
+                                {passwordCopied && (
+                                    <Typography variant="caption" sx={{ color: '#28a745', mt: 1, display: 'block', fontWeight: 500 }}>
+                                        ✅ Password copied! You can now proceed with the update.
+                                    </Typography>
+                                )}
+                                {emailSent && (
+                                    <Typography variant="caption" sx={{ color: '#28a745', mt: 1, display: 'block', fontWeight: 500 }}>
+                                        ✅ Email option selected! Password will be sent via email when you update.
+                                    </Typography>
+                                )}
+                            </Box>
+                            
                             <TextField
                                 label="New Password"
                                 name="newPassword"
@@ -3335,7 +3488,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                                 size="small"
                                 fullWidth
                                 type="text"
-                                helperText="Auto-generated password. Copy and share with the user."
+                                sx={{ display: 'none' }}
                             />
                             {changePwdError && (
                                 <Alert severity="error" sx={{ mb: 2 }}>
@@ -3365,8 +3518,12 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                                 variant="contained" 
                                 color="primary" 
                                 size="small"
-                                disabled={isPasswordResetting}
+                                disabled={isPasswordResetting || (!passwordCopied && !emailSent)}
                                 startIcon={isPasswordResetting ? <CircularProgress size={16} /> : null}
+                                sx={{
+                                    opacity: (!passwordCopied && !emailSent) ? 0.6 : 1,
+                                    cursor: (!passwordCopied && !emailSent) ? 'not-allowed' : 'pointer'
+                                }}
                             >
                                 {isPasswordResetting ? 'Updating...' : 'Update'}
                             </Button>
