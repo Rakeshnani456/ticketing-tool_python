@@ -42,17 +42,21 @@ module.exports = (admin, verifyFirebaseToken) => {
                 'image/jpeg',
                 'image/png',
                 'application/msword',
-                'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                'application/vnd.ms-excel',
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                'application/zip',
+                'application/x-zip-compressed'
             ];
             const allowedExtensions = [
-                '.pdf', '.jpg', '.jpeg', '.png', '.doc', '.docx'
+                '.pdf', '.jpg', '.jpeg', '.png', '.doc', '.docx', '.xls', '.xlsx', '.zip'
             ];
             const fileUploadPromise = new Promise((resolve, reject) => {
                 const isMimeTypeAllowed = mimetype && allowedMimeTypes.includes(mimetype);
                 const isExtensionAllowed = fileExtension && allowedExtensions.includes(fileExtension);
                 if (!isMimeTypeAllowed && !isExtensionAllowed) {
                     file.resume();
-                    const errorMsg = `File type for ${originalFilename} not allowed. Detected MIME: "${mimetype}", Extension: "${fileExtension}". Allowed types: PDF, JPG, PNG, Word.`;
+                    const errorMsg = `File type for ${originalFilename} not allowed. Detected MIME: "${mimetype}", Extension: "${fileExtension}". Allowed types: PNG, JPG, PDF, Word, Excel, ZIP.`;
                     return reject(new Error(errorMsg));
                 }
                 const uniqueFilename = `${uuidv4()}${fileExtension}`;

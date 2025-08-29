@@ -410,6 +410,71 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                     };
                     await logAttachmentUploaded(db, ticketId, userName, filename, req.user.email, { ...attachmentDetails, ticket_display_id: ticketData.display_id });
                 }
+
+                // Send attachment upload notification emails
+                setImmediate(async () => {
+                    try {
+                        const baseUrl = getBaseUrl(req);
+                        const ticketUrl = `${baseUrl}/tickets/${ticketId}`;
+                        
+                        // Determine recipients based on who performed the action
+                        const isEngineerAction = ['support', 'admin', 'super_admin', 'site_admin'].includes(authenticatedUserRole);
+                        
+                        if (isEngineerAction) {
+                            // Engineer action: Notify ticket stakeholders
+                            let toList = [];
+                            if (ticketData.request_for_email && ticketData.reporter_email) {
+                                if (ticketData.request_for_email === ticketData.reporter_email) {
+                                    toList.push(ticketData.request_for_email);
+                                } else {
+                                    toList.push(ticketData.request_for_email, ticketData.reporter_email);
+                                }
+                            } else if (ticketData.request_for_email) {
+                                toList.push(ticketData.request_for_email);
+                            } else if (ticketData.reporter_email) {
+                                toList.push(ticketData.reporter_email);
+                            }
+                            
+                            let ccList = ['tt.support@kriasol.com'];
+                            // Add the engineer who uploaded the attachment
+                            ccList.push(req.user.email);
+                            if (ticketData.assigned_to_email) {
+                                ccList.push(ticketData.assigned_to_email);
+                            }
+                            
+                            // Send email for each attachment
+                            for (const attachment of attachments) {
+                                const filename = attachment.originalFilename || attachment.filename || 'Unknown file';
+                                const emailData = {
+                                    display_id: ticketData.display_id,
+                                    short_description: ticketData.short_description,
+                                    fileName: filename,
+                                    uploadedBy: userName,
+                                    ticketUrl: ticketUrl,
+                                    toEmail: toList.join(','),
+                                    ccEmail: ccList.join(',')
+                                };
+                                
+                                await emailService.sendAttachmentUploadEmail(emailData);
+                            }
+                        } else {
+                            // Non-engineer action: Notify support team
+                            const emailData = {
+                                display_id: ticketData.display_id,
+                                short_description: ticketData.short_description,
+                                fileName: attachments.map(att => att.originalFilename || att.filename || 'Unknown file').join(', '),
+                                uploadedBy: userName,
+                                ticketUrl: ticketUrl,
+                                toEmail: 'tt.support@kriasol.com',
+                                ccEmail: req.user.email
+                            };
+                            
+                            await emailService.sendAttachmentUploadEmail(emailData);
+                        }
+                    } catch (error) {
+                        console.error('Error sending attachment upload notification email:', error);
+                    }
+                });
             }
 
             // Status change logic

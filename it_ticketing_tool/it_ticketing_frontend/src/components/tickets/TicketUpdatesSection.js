@@ -41,10 +41,6 @@ const TicketUpdatesSection = ({
     assignedToHasError,
     timeSpentHasError,
     closureNotesHasError: closureNotesError,
-    visibleCommentCount,
-    setVisibleCommentCount,
-    isAtBottom,
-    setIsAtBottom,
     user,
     profilePopup,
     showProfilePopup,
@@ -53,6 +49,7 @@ const TicketUpdatesSection = ({
     popupHideTimeout
 }) => {
     const commentsSectionRef = useRef(null);
+    const [showAllComments, setShowAllComments] = React.useState(false);
 
     return (
         <div className="max-w-full w-full mx-auto py-1 space-y-1 min-w-0 overflow-x-hidden">
@@ -62,7 +59,7 @@ const TicketUpdatesSection = ({
                         <button
                             onClick={() => setActiveTab('comments')}
                             className={`py-1 sm:py-1.5 px-1.5 sm:px-2 border-b-2 font-semibold text-xs transition-all duration-200 rounded-t-md ${activeTab === 'comments'
-                                    ? 'border-blue-600 text-blue-700 bg-blue-50'
+                                    ? 'border-orange-600 text-orange-700 bg-orange-50'
                                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 hover:bg-gray-50'
                                 }`}
                         >
@@ -72,7 +69,7 @@ const TicketUpdatesSection = ({
                         <button
                             onClick={() => setActiveTab('closure')}
                             className={`py-1 sm:py-1.5 px-1.5 sm:px-2 border-b-2 font-semibold text-xs transition-all duration-200 rounded-t-md ${activeTab === 'closure'
-                                    ? 'border-blue-600 text-blue-700 bg-blue-50'
+                                    ? 'border-orange-600 text-orange-700 bg-orange-50'
                                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 hover:bg-gray-50'
                                 }`}
                         >
@@ -83,102 +80,97 @@ const TicketUpdatesSection = ({
                 </div>
 
                 {activeTab === 'comments' && (
-                    <div className="bg-white border border-gray-300 rounded-lg p-2 sm:p-3 w-full min-w-0 max-w-full overflow-x-hidden">
+                    <>
                         <label className="block text-xs font-bold text-gray-800 mb-1 sm:mb-1.5">
                             Comments:
                         </label>
                         {/* Comments List with Smooth Scrolling */}
-                        <div className="relative mb-2 sm:mb-3 w-full min-w-0 max-w-full overflow-x-hidden">
+                        <div className="relative mb-2 sm:mb-3 w-full min-w-0 max-w-full overflow-x-hidden border border-gray-300 rounded-lg p-2 shadow-inner bg-gray-100">
                             {/* Scrollable Comments Container */}
                             <div 
                                 id="comments-container"
-                                className="max-h-64 overflow-y-auto pr-1 w-full min-w-0 max-w-full overflow-x-hidden"
-                                style={{
-                                    scrollbarWidth: 'thin',
-                                    scrollbarColor: '#cbd5e1 #f1f5f9'
-                                }}
-                                onScroll={(e) => {
-                                    const container = e.target;
-                                    const scrollTop = container.scrollTop;
-                                    const scrollHeight = container.scrollHeight;
-                                    const clientHeight = container.clientHeight;
-                                    const isBottom = scrollTop + clientHeight >= scrollHeight - 10;
-                                    
-                                    // Only update state if it's actually changing to prevent flickering
-                                    if (isBottom !== isAtBottom) {
-                                        setIsAtBottom(isBottom);
-                                    }
-                                }}
-                                onWheel={(e) => {
-                                    e.stopPropagation = false;
-                                }}
+                                className="w-full min-w-0 max-w-full overflow-x-hidden"
                             >
-                                <style>
-                                    {`
-                                        #comments-container::-webkit-scrollbar {
-                                            width: 6px;
-                                        }
-                                        #comments-container::-webkit-scrollbar-track {
-                                            background: #f1f5f9;
-                                            border-radius: 3px;
-                                        }
-                                        #comments-container::-webkit-scrollbar-thumb {
-                                            background: #cbd5e1;
-                                            border-radius: 3px;
-                                        }
-                                        #comments-container::-webkit-scrollbar-thumb:hover {
-                                            background: #94a3b8;
-                                        }
-                                    `}
-                                </style>
+
                                 
                                 <div className="space-y-2 w-full min-w-0 max-w-full">
                                     {/* Comments Display */}
                                     {ticket.comments && ticket.comments.length > 0 ? (
                                         (() => {
                                             const sortedComments = [...ticket.comments].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-                                            const displayedComments = sortedComments.slice(-visibleCommentCount);
+                                            const initialCommentCount = 6;
+                                            const displayedComments = showAllComments 
+                                                ? sortedComments 
+                                                : sortedComments.slice(-initialCommentCount);
 
-                                            return displayedComments.map((comment, index) => {
-                                                const isCurrentUser = comment.commenter === user?.email;
-                                                return (
-                                                    <div key={index} className={`flex comment-item ${isCurrentUser ? 'justify-end' : 'justify-start'} w-full min-w-0 max-w-full`}>
-                                                        <div className={`flex gap-2 max-w-[80%] min-w-0 ${isCurrentUser ? 'flex-row-reverse' : ''}`}>
-                                                            {/* Avatar */}
-                                                            <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center ${
-                                                                isCurrentUser 
-                                                                    ? 'bg-gradient-to-br from-green-500 to-green-600' 
-                                                                    : 'bg-gradient-to-br from-blue-500 to-blue-600'
-                                                            }`}>
-                                                                <span className="text-white text-xs font-semibold">
-                                                                    {(comment.commenter || 'A').charAt(0).toUpperCase()}
-                                                                </span>
-                                                            </div>
-                                                            
-                                                            {/* Comment Content */}
-                                                            <div className={`flex items-end gap-1 min-w-0 flex-1 ${isCurrentUser ? 'flex-row-reverse' : ''}`}>
-                                                                <div className={`inline-block px-2 py-1.5 rounded-2xl min-w-0 flex-1 overflow-hidden ${
-                                                                    isCurrentUser 
-                                                                        ? 'bg-green-100 rounded-tr-md' 
-                                                                        : 'bg-gray-100 rounded-tl-md'
-                                                                }`}>
-                                                                    <div className="mb-0.5 min-w-0">
-                                                                        <span className="font-semibold text-xs truncate block">
-                                                                            {comment.commenter || 'Anonymous'}
+                                            return (
+                                                <>
+                                                    {displayedComments.map((comment, index) => {
+                                                        const isCurrentUser = comment.commenter === user?.email;
+                                                        return (
+                                                            <div key={index} className={`flex comment-item ${isCurrentUser ? 'justify-end' : 'justify-start'} w-full min-w-0 max-w-full`}>
+                                                                <div className={`flex gap-2 max-w-[80%] min-w-0 ${isCurrentUser ? 'flex-row-reverse' : ''}`}>
+                                                                    {/* Avatar */}
+                                                                    <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center ${
+                                                                        isCurrentUser 
+                                                                            ? 'bg-gradient-to-br from-green-500 to-green-600' 
+                                                                            : 'bg-gradient-to-br from-blue-500 to-blue-600'
+                                                                    }`}>
+                                                                        <span className="text-white text-xs font-semibold">
+                                                                            {(comment.commenter || 'A').charAt(0).toUpperCase()}
                                                                         </span>
                                                                     </div>
-                                                                    <p className="text-xs whitespace-pre-wrap break-words min-w-0 overflow-hidden">
-                                                                        {comment.text}
-                                                                    </p>
+                                                                    
+                                                                    {/* Comment Content */}
+                                                                    <div className={`flex items-end gap-1 min-w-0 flex-1 ${isCurrentUser ? 'flex-row-reverse' : ''}`}>
+                                                                                                                                        <div className={`relative inline-block px-3 py-2 rounded-lg min-w-0 flex-1 overflow-hidden bg-white border border-gray-200 shadow-sm ${
+                                                                    isCurrentUser ? 'ml-2' : 'mr-2'
+                                                                }`}>
+                                                                    {/* Orange vertical bar - left for others, right for current user */}
+                                                                    <div className={`absolute top-0 bottom-0 w-1 bg-orange-600 ${
+                                                                        isCurrentUser ? 'right-0 rounded-r-lg' : 'left-0 rounded-l-lg'
+                                                                    }`}></div>
+                                                                    
+                                                                    {/* Comment content with padding to account for orange bar */}
+                                                                    <div className={`${isCurrentUser ? 'pr-3' : 'pl-3'}`}>
+                                                                        {/* Commenter email - orange underlined */}
+                                                                        <div className="mb-1 min-w-0">
+                                                                            <span className="text-xs text-orange-600 underline font-medium block">
+                                                                                {comment.commenter || 'Anonymous'}
+                                                                            </span>
+                                                                        </div>
+                                                                                {/* Comment text on next line */}
+                                                                                <p className="text-xs text-black whitespace-pre-wrap break-words min-w-0 overflow-hidden mb-2">
+                                                                                    {comment.text}
+                                                                                </p>
+                                                                                {/* Commented datetime */}
+                                                                                                                                                        <span className="text-[10px] text-gray-500">
+                                                                            {new Date(comment.timestamp).toLocaleString()}
+                                                                        </span>
+                                                                    </div>
                                                                 </div>
-                                                                <span className="text-[10px] shrink-0">
-                                                                    {new Date(comment.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                                                </span>
+                                                                    </div>
+                                                                </div>
                                                             </div>
+                                                        );
+                                                    })}
+                                                    
+                                                    {/* Show More/Less button - positioned below the comments */}
+                                                    {ticket.comments.length > initialCommentCount && (
+                                                        <div className="mt-3 text-center">
+                                                            <button
+                                                                onClick={() => setShowAllComments(!showAllComments)}
+                                                                className="text-[10px] text-orange-600 hover:text-orange-800 hover:underline font-medium"
+                                                            >
+                                                                {showAllComments 
+                                                                    ? 'Show Less' 
+                                                                    : `Show More (${ticket.comments.length - initialCommentCount} older comments)`
+                                                                }
+                                                            </button>
                                                         </div>
-                                                    </div>
-                                                );
-                                            });
+                                                    )}
+                                                </>
+                                            );
                                         })()
                                     ) : (
                                         <div className="text-center py-6 w-full min-w-0 max-w-full overflow-x-hidden">
@@ -189,42 +181,18 @@ const TicketUpdatesSection = ({
                                 </div>
                             </div>
 
-                            {/* Latest Comments Overlay Button */}
-                            {ticket.comments && ticket.comments.length > 2 && !isAtBottom && (
-                                <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 z-20">
-                                    <button
-                                        onClick={(e) => {
-                                            e.preventDefault();
-                                            e.stopPropagation();
-                                            const commentsContainer = document.getElementById('comments-container');
-                                            if (commentsContainer) {
-                                                // Set isAtBottom to true immediately to prevent flickering
-                                                setIsAtBottom(true);
-                                                // Then scroll to bottom
-                                                commentsContainer.scrollTo({
-                                                    top: commentsContainer.scrollHeight,
-                                                    behavior: 'smooth'
-                                                });
-                                            }
-                                        }}
-                                        className="bg-white/95 backdrop-blur-sm border border-gray-300 rounded-full px-3 py-1 text-blue-600 hover:text-blue-800 hover:bg-white text-xs font-medium flex items-center justify-center gap-1 cursor-pointer shadow-lg hover:shadow-xl transition-all duration-200"
-                                    >
-                                        Latest
-                                        <span>↓</span>
-                                    </button>
-                                </div>
-                            )}
+
                         </div>
 
                         {/* Add Comment Form */}
                         {canAddComments && (
-                            <div className="bg-white border border-gray-200 rounded-md p-1.5 w-full min-w-0 max-w-full overflow-x-hidden">
-                                <div className="flex gap-1 w-full min-w-0 max-w-full overflow-x-hidden">
+                            <div className="bg-gray-100 border border-gray-200 rounded-lg p-3 w-full min-w-0 max-w-full overflow-x-hidden shadow-sm">
+                                <div className="flex gap-2 w-full min-w-0 max-w-full overflow-x-hidden">
                                     <textarea
                                         value={commentText || ''}
                                         onChange={(e) => setCommentText(e.target.value)}
                                         rows={6}
-                                        className="flex-1 rounded-md px-1.5 py-1 focus:outline-none text-xs resize-none min-w-0 max-w-full cursor-text placeholder:text-gray-400 placeholder:text-xs"
+                                        className="flex-1 rounded-lg px-3 py-2 focus:outline-none text-sm resize-none min-w-0 max-w-full cursor-text placeholder:text-gray-700 placeholder:text-sm bg-white border border-orange-300 transition-all duration-200"
                                         placeholder="Add a comment..."
                                         disabled={commentLoading || !canAddComments}
                                         tabIndex={0}
@@ -238,15 +206,15 @@ const TicketUpdatesSection = ({
                                     <button
                                         onClick={handleAddComment}
                                         disabled={commentLoading || !commentText.trim() || !canAddComments}
-                                        className="px-2 py-1 text-xs font-semibold text-white bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-md shadow-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                                        className="px-2 py-1 text-xs font-semibold text-white bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 rounded-md shadow-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-orange-300 focus:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
                                         style={{ height: '24px', minHeight: '24px' }}
                                     >
-                                        {commentLoading ? <Loader2 className="animate-spin w-3 h-3" /> : 'Post'}
+                                        {commentLoading ? <Loader2 className="animate-spin w-4 h-4" /> : 'Post'}
                                     </button>
                                 </div>
                             </div>
                         )}
-                    </div>
+                    </>
                 )}
 
                 {activeTab === 'closure' && (

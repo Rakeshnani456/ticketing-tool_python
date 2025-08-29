@@ -1,6 +1,6 @@
 // utils/emailService.js
 
-const { getWelcomeEmailTemplate, getPasswordResetTemplate, getTicketNotificationTemplate, getTicketStatusUpdateTemplate, getTicketAssignmentTemplate, getUserTicketAssignmentTemplate, getTicketCancellationTemplate, getTicketCommentTemplate, getPasswordSharingTemplate } = require('./emailTemplates');
+const { getWelcomeEmailTemplate, getPasswordResetTemplate, getTicketNotificationTemplate, getTicketStatusUpdateTemplate, getTicketAssignmentTemplate, getUserTicketAssignmentTemplate, getTicketCancellationTemplate, getTicketCommentTemplate, getPasswordSharingTemplate, getAttachmentUploadTemplate } = require('./emailTemplates');
 
 /**
  * Email service for sending various types of emails
@@ -233,6 +233,33 @@ class EmailService {
             return true;
         } catch (error) {
             console.error(`Error sending ticket comment email:`, error.message);
+            return false;
+        }
+    }
+
+    /**
+     * Send attachment upload notification email
+     * @param {Object} attachmentData - Attachment data object
+     * @returns {Promise<boolean>} Success status
+     */
+    async sendAttachmentUploadEmail(attachmentData) {
+        try {
+            const { subject, text, html } = getAttachmentUploadTemplate(attachmentData);
+            
+            const mailOptions = {
+                from: 'tt.support@kriasol.com',
+                to: attachmentData.toEmail || 'tt.support@kriasol.com',
+                cc: attachmentData.ccEmail,
+                subject: subject,
+                text: text,
+                html: html,
+            };
+
+            await this.transporter.sendMail(mailOptions);
+            console.log(`Attachment upload email sent successfully to ${mailOptions.to}`);
+            return true;
+        } catch (error) {
+            console.error(`Error sending attachment upload email:`, error.message);
             return false;
         }
     }

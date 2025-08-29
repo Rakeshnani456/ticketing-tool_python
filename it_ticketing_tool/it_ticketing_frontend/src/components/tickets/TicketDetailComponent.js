@@ -45,8 +45,7 @@ import UserProfilePopup from '../common/UserProfilePopup';
 import Button from '@mui/material/Button';
 import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
-import { CircularProgressbar, buildStyles } from 'react-circular-progressbar';
-import 'react-circular-progressbar/dist/styles.css';
+
 
 // Import the new modular components
 import TicketDetailHeader from './TicketDetailHeader';
@@ -150,7 +149,7 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
     }, [ticket?.short_description, subjectExpanded]);
 
     const isSupportUser = user?.role === 'support' || user?.role === 'admin' || user?.role === 'super_admin' || user?.role === 'site_admin';
-    const isEngineer = user?.role === 'engineer';
+    const isEngineer = user?.role === 'support';
 
     const priorities = [
         { value: 'Low', label: 'Low' },
@@ -836,10 +835,13 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                 'image/png',
                 'application/msword',
                 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                'text/plain'
+                'application/vnd.ms-excel',
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                'application/zip',
+                'application/x-zip-compressed'
             ];
             if (!allowedTypes.includes(file.type)) {
-                showFlashMessage(`File type "${file.type}" not allowed for ${file.name}. Allowed types: PDF, JPG, PNG, Word, TXT.`, 'error');
+                showFlashMessage(`File type "${file.type}" not allowed for ${file.name}. Allowed types: PNG, JPG, PDF, Word, Excel, ZIP.`, 'error');
                 continue;
             }
             if (file.size > 10 * 1024 * 1024) {
@@ -910,7 +912,9 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
             });
         });
         await Promise.all(uploadPromises);
-        setUploadingFiles(prev => prev.filter(f => !filesToUpload.some(file => file.name === f.file.name)));
+        
+        // Don't remove uploading files immediately - let them stay until ticket data refreshes
+        // This prevents the brief disappearance and position jumping
         setUploadProgress(prev => {
             const newProgress = { ...prev };
             filesToUpload.forEach(file => { delete newProgress[file.name]; });
@@ -929,6 +933,11 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                 if (response.ok) {
                     setAttachmentFiles([]);
                     showFlashMessage('Attachments added successfully!', 'success');
+                    
+                    // Now that the ticket has been updated, remove the uploading files
+                    // This ensures smooth transition without gaps or position jumping
+                    setUploadingFiles(prev => prev.filter(f => !filesToUpload.some(file => file.name === f.file.name)));
+                    
                     if (!anyUploadFailed) {
                         setUploadButtonState('success');
                     } else {
@@ -941,6 +950,10 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                     const errorData = await response.json();
                     setUploadButtonState('error');
                     showFlashMessage(`Failed to update ticket with attachments: ${errorData.error || 'Server error'}`, 'error');
+                    
+                    // Clean up uploading files on error too
+                    setUploadingFiles(prev => prev.filter(f => !filesToUpload.some(file => file.name === f.file.name)));
+                    
                     setTimeout(() => {
                         setUploadButtonState('upload');
                     }, 2000);
@@ -957,6 +970,10 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
             if (!anyUploadFailed) {
                 showFlashMessage('No attachments were successfully uploaded to add to the ticket.', 'error');
             }
+            
+            // Clean up uploading files when no attachments were uploaded
+            setUploadingFiles(prev => prev.filter(f => !filesToUpload.some(file => file.name === f.file.name)));
+            
             setTimeout(() => {
                 setUploadButtonState('upload');
             }, 2000);

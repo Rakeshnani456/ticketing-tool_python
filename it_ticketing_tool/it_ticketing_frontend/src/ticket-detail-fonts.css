@@ -148,3 +148,33 @@
         line-height: 1.375rem !important;
     }
 }
+
+/* Override scrollbar styles for comments container - must be more specific */
+.ticket-detail-container #comments-container::-webkit-scrollbar {
+    width: 12px !important;
+    height: 12px !important;
+    background-color: transparent !important;
+    display: block !important;
+}
+
+.ticket-detail-container #comments-container::-webkit-scrollbar-track {
+    background: #f1f5f9 !important;
+    border-radius: 4px !important;
+}
+
+.ticket-detail-container #comments-container::-webkit-scrollbar-thumb {
+    background: #cbd5e1 !important;
+    border-radius: 4px !important;
+}
+
+.ticket-detail-container #comments-container::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8 !important;
+}
+
+.ticket-detail-container #comments-container::-webkit-scrollbar-button {
+    display: none !important;
+}
+
+.ticket-detail-container #comments-container::-webkit-scrollbar-corner {
+    background: transparent !important;
+}
