@@ -184,20 +184,17 @@ const MyTicketsComponent = ({ user, navigateTo, showFlashMessage, searchKeyword,
       if (end - start < 2) start = Math.max(1, end - 2);
       for (let i = start; i <= end; i++) {
         pages.push(
-          <button key={i} onClick={() => handlePageChange(i)} className={`mx-0.5 w-5 h-5 flex items-center justify-center rounded-full text-[10px] font-semibold transition-colors duration-200 ${i === currentPage ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}>{i}</button>
+          <button key={i} onClick={() => handlePageChange(i)} className={`mx-0.5 w-7 h-7 flex items-center justify-center rounded-full text-xs font-semibold transition-colors duration-200 ${i === currentPage ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}>{i}</button>
         );
       }
       const firstTicket = (currentPage - 1) * ticketsPerPage + 1;
       const lastTicket = Math.min(currentPage * ticketsPerPage, tickets.length);
       return (
-        <>
-          <div className="inline-flex items-center gap-0.5 align-middle">
-            <button onClick={() => handlePageChange(currentPage - 1)} disabled={currentPage === 1} className="w-5 h-5 flex items-center justify-center rounded-full bg-gray-200 text-gray-800 hover:bg-gray-300 disabled:opacity-50"><ChevronLeft size={10} /></button>
-            {pages}
-            <button onClick={() => handlePageChange(currentPage + 1)} disabled={currentPage === totalPages} className="w-5 h-5 flex items-center justify-center rounded-full bg-gray-200 text-gray-800 hover:bg-gray-300 disabled:opacity-50"><ChevronRight size={10} /></button>
-          </div>
-          <div className="text-[10px] text-gray-500 mt-1 ml-1 text-right">Showing tickets {firstTicket}-{lastTicket} of {tickets.length}</div>
-        </>
+        <div className="inline-flex items-center gap-1 align-middle">
+          <button onClick={() => handlePageChange(currentPage - 1)} disabled={currentPage === 1} className="w-7 h-7 flex items-center justify-center rounded-full bg-gray-200 text-gray-800 hover:bg-gray-300 disabled:opacity-50"><ChevronLeft size={12} /></button>
+          {pages}
+          <button onClick={() => handlePageChange(currentPage + 1)} disabled={currentPage === totalPages} className="w-7 h-7 flex items-center justify-center rounded-full bg-gray-200 text-gray-800 hover:bg-gray-300 disabled:opacity-50"><ChevronRight size={12} /></button>
+        </div>
       );
     }
 
@@ -273,37 +270,44 @@ const MyTicketsComponent = ({ user, navigateTo, showFlashMessage, searchKeyword,
                         <tbody className="divide-y divide-gray-200">
                             {paginatedTickets.map((ticket, index) => (
                                 <tr key={ticket.id} className="block sm:table-row bg-white border-b border-gray-200 hover:bg-gray-50 transition-colors duration-150 text-xs">
-                                    <td className="block sm:table-cell px-2 py-2 text-xs text-gray-800 whitespace-normal break-words border-r border-gray-200">
+                                    <td className="block sm:table-cell px-2 py-4 text-xs text-gray-800 whitespace-normal break-words border-r border-gray-200">
                                         <span className="block sm:hidden font-semibold text-gray-600">#:</span>
                                         {index + 1}
                                     </td>
-                                    <td className="block sm:table-cell px-2 py-2 text-xs text-blue-700 hover:underline font-medium cursor-pointer whitespace-normal break-words border-r border-gray-200" onClick={() => navigateTo('/tickets', ticket.id)}>
+                                    <td className="block sm:table-cell px-2 py-4 text-xs text-blue-700 hover:underline font-medium cursor-pointer whitespace-normal break-words border-r border-gray-200" onClick={() => navigateTo('/tickets', ticket.id)}>
                                         <span className="block sm:hidden font-semibold text-gray-600">Ticket ID:</span>
                                         {ticket.display_id}
                                     </td>
-                                    <td className="block sm:table-cell px-2 py-2 text-xs text-gray-800 max-w-xs truncate whitespace-normal break-words border-r border-gray-200" title={ticket.short_description}>
+                                    <td className="block sm:table-cell px-2 py-4 text-xs text-gray-800 max-w-xs truncate whitespace-normal break-words border-r border-gray-200" title={ticket.short_description}>
                                         <span className="block sm:hidden font-semibold text-gray-600">Short Description:</span>
                                         {ticket.short_description}
                                     </td>
-                                    <td className="block sm:table-cell px-2 py-2 text-xs text-gray-800 whitespace-normal break-words border-r border-gray-200">
+                                    <td className="block sm:table-cell px-2 py-4 text-xs text-gray-800 whitespace-normal break-words border-r border-gray-200">
                                         <span className="block sm:hidden font-semibold text-gray-600">Category:</span>
                                         {ticket.category}
                                     </td>
-                                    <td className="block sm:table-cell px-2 py-2 text-xs text-gray-800 whitespace-normal break-words border-r border-gray-200">
+                                    <td className="block sm:table-cell px-2 py-4 text-xs text-gray-800 whitespace-normal break-words border-r border-gray-200">
                                         <span className="block sm:hidden font-semibold text-gray-600">Priority:</span>
                                         <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getPriorityClasses(ticket.priority)}`}>{ticket.priority}</span>
                                     </td>
-                                    <td className="block sm:table-cell px-2 py-2 whitespace-normal break-words text-xs text-gray-800 border-r border-gray-200">
+                                    <td className="block sm:table-cell px-2 py-4 whitespace-normal break-words text-xs text-gray-800 border-r border-gray-200">
                                         <span className="block sm:hidden font-semibold text-gray-600">Status:</span>
                                         <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getStatusClasses(ticket.status)}`}>{ticket.status}</span>
                                     </td>
-                                    <td className="block sm:table-cell px-2 py-2 whitespace-normal break-words text-xs text-gray-800 border-r border-gray-200">
+                                    <td className="block sm:table-cell px-2 py-4 whitespace-normal break-words text-xs text-gray-800 border-r border-gray-200">
                                         <span className="block sm:hidden font-semibold text-gray-600">Assigned To:</span>
                                         {ticket.assigned_to_email || 'Unassigned'}
                                     </td>
-                                    <td className="block sm:table-cell px-2 py-2 whitespace-normal break-words text-xs text-gray-800">
+                                    <td className="block sm:table-cell px-2 py-4 whitespace-normal break-words text-xs text-gray-800">
                                         <span className="block sm:hidden font-semibold text-gray-600">Last Updated:</span>
-                                        {ticket.updated_at ? new Date(ticket.updated_at).toLocaleString() : 'N/A'}
+                                        {ticket.updated_at ? new Date(ticket.updated_at).toLocaleDateString('en-US', { 
+                                            month: 'short', 
+                                            day: '2-digit', 
+                                            year: 'numeric',
+                                            hour: '2-digit',
+                                            minute: '2-digit',
+                                            hour12: true 
+                                        }) : 'N/A'}
                                     </td>
                                 </tr>
                             ))}

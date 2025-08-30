@@ -297,6 +297,7 @@ const userManagementRoutes = require('./routes/userManagementRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
 const attachmentRoutes = require('./routes/attachmentRoutes');
 const adminManagementRouter = require('./routes/adminManagement');
+const analyticsRoutes = require('./routes/analyticsRoutes');
 
 
 app.use('/', authRoutes(db, admin, usersCollection, authenticateToken));
@@ -308,6 +309,7 @@ app.use('/api/users', userManagementRoutes(db, admin, usersCollection, clientsCo
 app.use('/dashboard', dashboardRoutes(db, ticketsCollection, clientsCollection, usersCollection, requireSuperAdmin));
 app.use('/upload-attachment', attachmentRoutes(admin, authenticateToken));
 app.use('/admin-management', adminManagementRouter(db, usersCollection, authenticateToken, requireSuperAdmin));
+app.use('/analytics', analyticsRoutes(db, admin, authenticateToken, checkRole));
 
 // Add cache statistics endpoint
 app.get('/api/cache/stats', (req, res) => {

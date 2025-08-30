@@ -938,6 +938,69 @@ Kriasol Technologies LLP
     };
 };
 
+/**
+ * Attachment upload notification email template
+ * @param {Object} attachmentData - Attachment data object
+ * @returns {Object} Email content with subject, text, and html
+ */
+const getAttachmentUploadTemplate = (attachmentData) => {
+    const {
+        display_id = '',
+        short_description = '',
+        fileName = '',
+        uploadedBy = '',
+        ticketUrl = ''
+    } = attachmentData;
+    
+    const subject = `Attachment Uploaded - Ticket ${display_id}`;
+    const textContent = `
+ATTACHMENT UPLOAD NOTIFICATION
+
+An attachment has been uploaded to a ticket in the Enterprise Ticketing System.
+
+Ticket Information:
+- Ticket ID: ${display_id}
+- Subject: ${short_description}
+- Attachment: ${fileName}
+- Uploaded by: ${uploadedBy}
+
+You can view the ticket and attachment details by accessing the link below:
+${ticketUrl}
+
+Thank you,
+IT Team
+Kriasol Technologies LLP
+    `;
+    
+    const htmlContent = createBaseTemplate(() => `
+        <h2>Attachment Upload Notification</h2>
+        
+        <p>An attachment has been uploaded to a ticket in the <strong>Enterprise Ticketing System</strong>.</p>
+        
+        <div class="info-box">
+            <h3>Ticket Information</h3>
+            <ul>
+                <li><strong>Ticket ID:</strong> ${display_id}</li>
+                <li><strong>Subject:</strong> ${short_description}</li>
+                <li><strong>Attachment:</strong> <span class="highlight">${fileName}</span></li>
+                <li><strong>Uploaded by:</strong> ${uploadedBy}</li>
+            </ul>
+        </div>
+        
+        <div style="text-align: center;">
+            <a href="${ticketUrl}" class="button">View Ticket Details</a>
+        </div>
+        
+        <p>You can view the ticket and attachment details by accessing the link above.</p>
+    `);
+    
+    return {
+        subject,
+        text: textContent,
+        html: htmlContent
+    };
+};
+
 module.exports = {
     getWelcomeEmailTemplate,
     getPasswordResetTemplate,
@@ -948,5 +1011,6 @@ module.exports = {
     getTicketCancellationTemplate,
     getTicketCommentTemplate,
     getPasswordSharingTemplate,
+    getAttachmentUploadTemplate,
     createBaseTemplate
 };

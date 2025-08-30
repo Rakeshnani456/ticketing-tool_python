@@ -85,7 +85,7 @@ const TicketUpdatesSection = ({
                             Comments:
                         </label>
                         {/* Comments List with Smooth Scrolling */}
-                        <div className="relative mb-2 sm:mb-3 w-full min-w-0 max-w-full overflow-x-hidden border border-gray-300 rounded-lg p-2 shadow-inner bg-gray-100">
+                        <div className="relative mb-2 sm:mb-3 w-full min-w-0 max-w-full overflow-x-hidden border border-gray-300 rounded-lg p-2 bg-gray-100">
                             {/* Scrollable Comments Container */}
                             <div 
                                 id="comments-container"

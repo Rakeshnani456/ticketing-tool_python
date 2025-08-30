@@ -22,6 +22,24 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
     const validTicketPriorities = ['Low', 'Medium', 'High', 'Critical'];
     const validTicketStatuses = ['Open', 'In Progress', 'Hold', 'Resolved', 'Cancelled'];
 
+    // Function to trigger analytics updates when tickets change
+    const triggerAnalyticsUpdate = async (action, ticketData) => {
+        try {
+            if (global.broadcastAnalyticsUpdate) {
+                // Trigger real-time analytics update
+                global.broadcastAnalyticsUpdate({
+                    type: 'ticket_update',
+                    action: action, // 'created', 'updated', 'deleted'
+                    data: ticketData,
+                    timestamp: new Date().toISOString()
+                });
+                console.log(`Analytics update triggered for ticket ${action}:`, ticketData.id || ticketData.display_id);
+            }
+        } catch (error) {
+            console.error('Error triggering analytics update:', error);
+        }
+    };
+
     // --- Helper for generating a simple display ID (if not moved to a shared utility) ---
     // Make sure generateDisplayId is accessible, either passed in or in a utility file
     async function generateDisplayIdInternal() {
@@ -293,6 +311,9 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                 }
             });
 
+            // Trigger analytics update for real-time reports
+            await triggerAnalyticsUpdate('created', { ...newTicket, id: docRef.id });
+
             return res.status(201).json({ message: 'Ticket created successfully!', id: docRef.id, display_id: newDisplayId });
         } catch (error) {
             console.error(`Error creating ticket: ${error.message}`);
@@ -340,26 +361,26 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                 return res.status(403).json({ error: "Forbidden: Cannot update a resolved or cancelled ticket as a regular user." });
             }
 
-            // Check if user is either the ticket creator or a support user
+            // Check if user is either the ticket creator or has appropriate permissions
             const isTicketCreator = ticketData.reporter_id === authenticatedUid;
-            const isSupportUser = ['support'].includes(authenticatedUserRole);
+            const hasEditPermission = ['support', 'admin', 'super_admin', 'site_admin'].includes(authenticatedUserRole);
             
-            if (!isTicketCreator && !isSupportUser) {
-                return res.status(403).json({ error: "Forbidden: Only ticket creators and support users can edit tickets." });
+            if (!isTicketCreator && !hasEditPermission) {
+                return res.status(403).json({ error: "Forbidden: Only ticket creators and users with appropriate permissions can edit tickets." });
             }
 
             // Additional permission checks for specific operations
-            // Only support users can change status, priority, category, and assign tickets
+            // Only users with appropriate permissions can change status, priority, category, and assign tickets
             if (status !== undefined || priority !== undefined || category !== undefined || assigned_to_email !== undefined) {
-                if (!isSupportUser) {
-                    return res.status(403).json({ error: "Forbidden: Only support users can change ticket status, priority, category, or assign tickets." });
+                if (!hasEditPermission) {
+                    return res.status(403).json({ error: "Forbidden: Only users with appropriate permissions can change ticket status, priority, category, or assign tickets." });
                 }
             }
 
-            // Only support users can add closure notes and time spent
+            // Only users with appropriate permissions can add closure notes and time spent
             if (closure_notes !== undefined || time_spent !== undefined) {
-                if (!isSupportUser) {
-                    return res.status(403).json({ error: "Forbidden: Only support users can add closure notes or time spent." });
+                if (!hasEditPermission) {
+                    return res.status(403).json({ error: "Forbidden: Only users with appropriate permissions can add closure notes or time spent." });
                 }
             }
 
@@ -401,7 +422,7 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                     userName = userData.client_name;
                 }
                 for (const attachment of attachments) {
-                    const filename = attachment.originalFilename || attachment.filename || 'Unknown file';
+                    const filename = attachment.originalFilename || attachment.fileName || attachment.filename || 'Unknown file';
                     const attachmentDetails = {
                         file_size: attachment.size || null,
                         file_type: attachment.mimetype || null,
@@ -444,7 +465,7 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                             
                             // Send email for each attachment
                             for (const attachment of attachments) {
-                                const filename = attachment.originalFilename || attachment.filename || 'Unknown file';
+                                const filename = attachment.originalFilename || attachment.fileName || attachment.filename || 'Unknown file';
                                 const emailData = {
                                     display_id: ticketData.display_id,
                                     short_description: ticketData.short_description,
@@ -462,7 +483,7 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                             const emailData = {
                                 display_id: ticketData.display_id,
                                 short_description: ticketData.short_description,
-                                fileName: attachments.map(att => att.originalFilename || att.filename || 'Unknown file').join(', '),
+                                fileName: attachments.map(att => att.originalFilename || att.fileName || att.filename || 'Unknown file').join(', '),
                                 uploadedBy: userName,
                                 ticketUrl: ticketUrl,
                                 toEmail: 'tt.support@kriasol.com',
@@ -799,6 +820,10 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
             }
 
             await ticketsCollection.doc(ticketId).update(updateData);
+            
+            // Trigger analytics update for real-time reports
+            await triggerAnalyticsUpdate('updated', { ...ticketData, ...updateData, id: ticketId });
+            
             return res.status(200).json({ message: 'Ticket updated successfully!' });
         } catch (error) {
             console.error(`Error updating ticket: ${error.message}`);
@@ -865,6 +890,9 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
             }
 
             await ticketsCollection.doc(ticketId).update(updateData);
+            
+            // Trigger analytics update for real-time reports
+            await triggerAnalyticsUpdate('updated', { ...ticketData, ...updateData, id: ticketId });
 
             // Log cancellation activity with enhanced context
             const userDoc = await usersCollection.doc(authenticatedUid).get();
@@ -980,6 +1008,9 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                 comments: admin.firestore.FieldValue.arrayUnion(newComment),
                 updated_at: admin.firestore.FieldValue.serverTimestamp()
             });
+            
+            // Trigger analytics update for real-time reports
+            await triggerAnalyticsUpdate('updated', { ...ticketData, id: ticketId });
             
             // Log comment addition activity with enhanced context
             const userDoc = await usersCollection.doc(req.user.uid).get();

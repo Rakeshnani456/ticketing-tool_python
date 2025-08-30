@@ -5,10 +5,10 @@ const os = require('os');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 
-module.exports = (admin, verifyFirebaseToken) => {
+module.exports = (admin, authenticateToken) => {
     const router = express.Router();
 
-    router.post('/', verifyFirebaseToken, async (req, res) => {
+    router.post('/', authenticateToken, async (req, res) => {
         if (!admin.storage()) {
             console.error("Firebase Storage not initialized.");
             if (!res.headersSent) {

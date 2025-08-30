@@ -20,7 +20,7 @@ import {
     Users,
     Shield,
     Pin,
-    BarChart2,
+
     ChevronUp,
     Home,
     FileText,
@@ -97,7 +97,8 @@ import Modal from './components/common/Modal';
 import AdminManagementComponent from './components/admin/AdminManagementComponent';
 import ClientManagementComponent from './components/admin/ClientManagementComponent';
 import EngineerManagementComponent from './components/admin/EngineerManagementComponent';
-import ReportsPage from './components/ReportsPage';
+import ReportsComponent from './components/ReportsComponent';
+
 
 
 // Placeholder components for new pages mentioned in sidebar
@@ -285,17 +286,17 @@ const App = () => {
             width: "auto",
             x: 0,
             transition: {
-                delay: 0.15,
-                duration: 0.25,
+                delay: 0.1,
+                duration: 0.2,
                 ease: "easeOut"
             }
         },
         collapsed: {
             opacity: 0,
             width: 0,
-            x: -20,
+            x: -10,
             transition: {
-                duration: 0.2,
+                duration: 0.15,
                 ease: "easeIn"
             }
         }
@@ -934,8 +935,7 @@ const App = () => {
         };
     }
 
-    // Define ReportsComponent inside App component to access currentUser
-    const ReportsComponent = () => <ReportsPage user={currentUser} />;
+    
 
     return (
         <div className="flex min-h-screen bg-white font-inter"> {/* Main flex container (row) */}
@@ -1023,108 +1023,98 @@ const App = () => {
                         color: '#FFFFFF'
                     }}
                 >
-                {/* Update the logo container to remove extra left margin/padding and align with sidebar menu items */}
-                {currentUser && (['admin', 'site_admin', 'super_admin'].includes(currentUser.role)) && (
-                    <Link to="/dashboard" className={`flex items-center px-3 py-1.5 text-sm font-medium transition-all duration-200 hover:bg-white/20 hover:text-white ${location.pathname === '/dashboard' ? 'bg-white/30 text-white' : 'text-white'}`}> 
-                        Dashboard
-                    </Link>
-                )}
-                {/* Management Dropdown (right of Dashboard) - Now using Material-UI Menu */}
-                {currentUser && (['super_admin', 'admin'].includes(currentUser.role)) && (
-                    <div className="relative ml-2">
-                        <button
-                            onClick={handleClick} // Use handleClick to open the MUI Menu
-                            className="flex items-center px-3 py-1.5 text-sm font-medium transition-all duration-200 hover:bg-white/20 hover:text-white text-white cursor-pointer"
-                            aria-controls={managementOpen ? 'management-menu' : undefined} // ARIA attributes
-                            aria-haspopup="true"
-                            aria-expanded={managementOpen ? 'true' : undefined}
-                        >
-                            Manage
-                            {managementOpen ? (
-                                <ChevronUp className="ml-1 w-4 h-4" />
-                            ) : (
-                                <ChevronDown className="ml-1 w-4 h-4" />
-                            )}
-                        </button>
-                        <Menu
-                            id="management-menu"
-                            anchorEl={anchorEl}
-                            open={managementOpen}
-                            onClose={handleClose}
-                            MenuListProps={{
-                                'aria-labelledby': 'manage-button',
-                            }}
-                            anchorOrigin={{
-                                vertical: 'bottom',
-                                horizontal: 'center', // Center horizontally with respect to button
-                            }}
-                            transformOrigin={{
-                                vertical: 'top',
-                                horizontal: 'center', // Center horizontally with respect to button
-                            }}
-                            disablePortal
-                            PaperProps={{
-                                elevation: 8, // Adds shadow
-                                sx: {
-                                    borderRadius: '12px', // Rounded corners to match sidebar
-                                    minWidth: 120,
-                                    width: 'auto',
-                                    fontSize: '0.75rem',
-                                    padding: 0,
-                                    overflow: 'hidden', // Ensures rounded corners are applied to content
-                                    marginTop: 0.5, // Slightly offset menu so it doesn't cover the button
-                                },
-                            }}
-                        >
-                            {currentUser.role === 'super_admin' && (
-                                <>
-                                    <MenuItem onClick={() => handleMenuItemClick('/admin-management')} sx={{ fontSize: '0.75rem', minHeight: 22 }}>
-                                        <Users width={16} height={16} className="mr-2" /> Admins
-                                    </MenuItem>
-                                    <MenuItem onClick={() => handleMenuItemClick('/engineer-management')} sx={{ fontSize: '0.75rem', minHeight: 22 }}>
-                                        <PeopleIcon fontSize="small" sx={{ fontSize: 16, marginRight: '8px' }} /> Engineers
-                                    </MenuItem>
-                                    <MenuItem onClick={() => handleMenuItemClick('/user-management')} sx={{ fontSize: '0.75rem', minHeight: 22 }}>
-                                        <User width={16} height={16} className="mr-2" /> Users
-                                    </MenuItem>
-                                </>
-                            )}
-                            {currentUser.role === 'admin' && (
-                                <>
-                                    <MenuItem onClick={() => handleMenuItemClick('/engineer-management')} sx={{ fontSize: '0.75rem', minHeight: 22 }}>
-                                        <PeopleIcon fontSize="small" sx={{ fontSize: 16, marginRight: '8px' }} /> Engineers
-                                    </MenuItem>
-                                    <MenuItem onClick={() => handleMenuItemClick('/client-management')} sx={{ fontSize: '0.75rem', minHeight: 22 }}>
-                                        <Users width={16} height={16} className="mr-2" /> Clients
-                                    </MenuItem>
-                                    <MenuItem onClick={() => handleMenuItemClick('/user-management')} sx={{ fontSize: '0.75rem', minHeight: 22 }}>
-                                        <User width={16} height={16} className="mr-2" /> Users
-                                    </MenuItem>
-                                </>
-                            )}
-                        </Menu>
-                    </div>
-                )}
-                <div className="flex-1" />
-                {/* Display mobile number and email for user and site_admin roles */}
-                {currentUser && !isAuthLoading && location.pathname !== '/login' && location.pathname !== '/register' && (currentUser.role === 'user' || currentUser.role === 'site_admin') && (
-                    <div className="flex items-center gap-4 mr-4">
-                        <div className="flex items-center gap-4 text-sm">
-                            <div className="flex items-center gap-2 group cursor-pointer">
-                                <PhoneIcon sx={{ fontSize: '0.9rem', color: '#FFFFFF' }} />
-                                <span className="text-white font-semibold text-xs tracking-wide group-hover:text-white/80 transition-colors duration-200">{'+91 9391930393'}</span>
-                            </div>
-                            <div className="w-px h-5 bg-white/30"></div>
-                            <div className="flex items-center gap-2 group cursor-pointer">
-                                <EmailIcon sx={{ fontSize: '0.9rem', color: '#FFFFFF' }} />
-                                <span className="text-white font-semibold text-xs tracking-wide group-hover:text-white/80 transition-colors duration-200">{'HelloIT@finstackk.com'}</span>
-                            </div>
+                {/* Left side: Dashboard and Manage buttons with search bar */}
+                <div className={`flex items-center gap-3 ${
+                    !(['admin', 'site_admin', 'super_admin'].includes(currentUser.role) || ['super_admin', 'admin'].includes(currentUser.role)) 
+                    ? 'pl-4' 
+                    : ''
+                }`}>
+                    {/* Dashboard button */}
+                    {currentUser && (['admin', 'site_admin', 'super_admin'].includes(currentUser.role)) && (
+                        <Link to="/dashboard" className={`flex items-center px-3 py-1.5 text-sm font-medium transition-all duration-200 hover:bg-white/20 hover:text-white ${location.pathname === '/dashboard' ? 'bg-white/30 text-white' : 'text-white'}`} style={{ textShadow: '0 0 1px #000, 0 0 1px #000, 0 0 1px #000, 0 0 1px #000' }}> 
+                            Dashboard
+                        </Link>
+                    )}
+                    {/* Management Dropdown (right of Dashboard) - Now using Material-UI Menu */}
+                    {currentUser && (['super_admin', 'admin'].includes(currentUser.role)) && (
+                        <div className="relative">
+                            <button
+                                onClick={handleClick} // Use handleClick to open the MUI Menu
+                                className="flex items-center px-3 py-1.5 text-sm font-medium transition-all duration-200 hover:bg-white/20 hover:text-white text-white cursor-pointer"
+                                aria-controls={managementOpen ? 'management-menu' : undefined} // ARIA attributes
+                                aria-haspopup="true"
+                                aria-expanded={managementOpen ? 'true' : undefined}
+                                style={{ textShadow: '0 0 1px #000, 0 0 1px #000, 0 0 1px #000, 0 0 1px #000' }}
+                            >
+                                Manage
+                                {managementOpen ? (
+                                    <ChevronUp className="ml-1 w-4 h-4" />
+                                ) : (
+                                    <ChevronDown className="ml-1 w-4 h-4" />
+                                )}
+                            </button>
+                            <Menu
+                                id="management-menu"
+                                anchorEl={anchorEl}
+                                open={managementOpen}
+                                onClose={handleClose}
+                                MenuListProps={{
+                                    'aria-labelledby': 'manage-button',
+                                }}
+                                anchorOrigin={{
+                                    vertical: 'bottom',
+                                    horizontal: 'center', // Center horizontally with respect to button
+                                }}
+                                transformOrigin={{
+                                    vertical: 'top',
+                                    horizontal: 'center', // Center horizontally with respect to button
+                                }}
+                                disablePortal
+                                PaperProps={{
+                                    elevation: 8, // Adds shadow
+                                    sx: {
+                                        borderRadius: '12px', // Rounded corners to match sidebar
+                                        minWidth: 120,
+                                        width: 'auto',
+                                        fontSize: '0.75rem',
+                                        padding: 0,
+                                        overflow: 'hidden', // Ensures rounded corners are applied to content
+                                        marginTop: 0.5, // Slightly offset menu so it doesn't cover the button
+                                    },
+                                }}
+                            >
+                                {currentUser.role === 'super_admin' && (
+                                    <>
+                                        <MenuItem onClick={() => handleMenuItemClick('/admin-management')} sx={{ fontSize: '0.75rem', minHeight: 22 }}>
+                                            <Users width={16} height={16} className="mr-2" /> Admins
+                                        </MenuItem>
+                                        <MenuItem onClick={() => handleMenuItemClick('/engineer-management')} sx={{ fontSize: '0.75rem', minHeight: 22 }}>
+                                            <PeopleIcon fontSize="small" sx={{ fontSize: 16, marginRight: '8px' }} /> Engineers
+                                        </MenuItem>
+                                        <MenuItem onClick={() => handleMenuItemClick('/user-management')} sx={{ fontSize: '0.75rem', minHeight: 22 }}>
+                                            <User width={16} height={16} className="mr-2" /> Users
+                                        </MenuItem>
+                                    </>
+                                )}
+                                {currentUser.role === 'admin' && (
+                                    <>
+                                        <MenuItem onClick={() => handleMenuItemClick('/engineer-management')} sx={{ fontSize: '0.75rem', minHeight: 22 }}>
+                                            <PeopleIcon fontSize="small" sx={{ fontSize: 16, marginRight: '8px' }} /> Engineers
+                                        </MenuItem>
+                                        <MenuItem onClick={() => handleMenuItemClick('/client-management')} sx={{ fontSize: '0.75rem', minHeight: 22 }}>
+                                            <Users width={16} height={16} className="mr-2" /> Clients
+                                        </MenuItem>
+                                        <MenuItem onClick={() => handleMenuItemClick('/user-management')} sx={{ fontSize: '0.75rem', minHeight: 22 }}>
+                                            <User width={16} height={16} className="mr-2" /> Users
+                                        </MenuItem>
+                                    </>
+                                )}
+                            </Menu>
                         </div>
-                    </div>
-                )}
-                {/* Move search bar, notification bell, and profile dropdown to the far right */}
-                {currentUser && !isAuthLoading && location.pathname !== '/login' && location.pathname !== '/register' && (
-                    <div className="flex items-center gap-3">
+                    )}
+                    
+                    {/* Search bar - positioned to the right of Dashboard/Manage buttons, or to the left if no menu options */}
+                    {currentUser && !isAuthLoading && location.pathname !== '/login' && location.pathname !== '/register' && (
                         <form onSubmit={handleSearchSubmit} className="flex items-center">
                             <div className="relative">
                                 <input
@@ -1132,12 +1122,35 @@ const App = () => {
                                     value={searchKeyword}
                                     onChange={handleSearchChange}
                                     placeholder="Search..."
-                                    className="pl-9 pr-3 py-1 text-sm border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white text-gray-900 placeholder-gray-500 rounded-lg"
+                                    className="pl-9 pr-3 py-1 text-sm border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-gray-100 text-gray-900 placeholder-gray-500"
                                     style={{ width: 220, minHeight: 28 }}
                                 />
                                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-500" />
                             </div>
                         </form>
+                    )}
+                </div>
+                
+                <div className="flex-1" />
+                {/* Display mobile number and email for user and site_admin roles */}
+                {currentUser && !isAuthLoading && location.pathname !== '/login' && location.pathname !== '/register' && (currentUser.role === 'user' || currentUser.role === 'site_admin') && (
+                    <div className="flex items-center gap-4 mr-4">
+                        <div className="flex items-center gap-4 text-sm">
+                            <div className="flex items-center gap-2 group cursor-pointer">
+                                <PhoneIcon sx={{ fontSize: '0.9rem', color: '#FFFFFF' }} />
+                                <span className="text-white font-semibold text-xs tracking-wide group-hover:text-white/80 transition-colors duration-200" style={{ textShadow: '0 0 1px #000, 0 0 1px #000, 0 0 1px #000, 0 0 1px #000' }}>{'+91 9391930393'}</span>
+                            </div>
+                            <div className="w-px h-5 bg-white/30"></div>
+                            <div className="flex items-center gap-2 group cursor-pointer">
+                                <EmailIcon sx={{ fontSize: '0.9rem', color: '#FFFFFF' }} />
+                                <span className="text-white font-semibold text-xs tracking-wide group-hover:text-white/80 transition-colors duration-200" style={{ textShadow: '0 0 1px #000, 0 0 1px #000, 0 0 1px #000, 0 0 1px #000' }}>{'HelloIT@finstackk.com'}</span>
+                            </div>
+                        </div>
+                    </div>
+                )}
+                {/* Notification bell and profile dropdown on the right side */}
+                {currentUser && !isAuthLoading && location.pathname !== '/login' && location.pathname !== '/register' && (
+                    <div className="flex items-center gap-3">
                         {/* Notification Bell */}
                         <div className="relative inline-block">
                             <button 
@@ -1178,7 +1191,7 @@ const App = () => {
                                     {currentUser.email?.charAt(0).toUpperCase()}
                                 </div>
                                 <div className="hidden sm:block text-left">
-                                    <p className="text-xs font-medium text-white truncate">
+                                    <p className="text-xs font-medium text-white truncate" style={{ textShadow: '0 0 1px #000, 0 0 1px #000, 0 0 1px #000, 0 0 1px #000' }}>
                                         {currentUser.email}
                                     </p>
                                     <p className={`text-xs capitalize truncate ${
@@ -1188,7 +1201,7 @@ const App = () => {
                                         currentUser.role === 'engineer' ? 'text-purple-200 font-medium' :
                                         currentUser.role === 'support' ? 'text-orange-200 font-medium' :
                                         'text-white/90 font-normal'
-                                    }`} style={{ fontSize: '0.65rem' }}>
+                                    }`} style={{ fontSize: '0.65rem', textShadow: '0 0 1px #000, 0 0 1px #000, 0 0 1px #000, 0 0 1px #000' }}>
                                         {currentUser.role?.replace('_', ' ')}
                                     </p>
                                 </div>
@@ -1236,12 +1249,12 @@ const App = () => {
                                 alt="Logo" 
                                 className={`transition-all duration-300 ease-in-out ${
                                     isSidebarExpanded 
-                                        ? 'h-8 w-auto max-w-full' 
-                                        : 'h-8 w-8'
+                                        ? 'h-12 w-auto max-w-full' 
+                                        : 'h-10 w-10'
                                 }`}
                                 style={{
                                     objectFit: 'contain',
-                                    maxHeight: isSidebarExpanded ? '32px' : '32px'
+                                    maxHeight: isSidebarExpanded ? '40px' : '40px'
                                 }}
                             />
                         </Link>
@@ -1320,14 +1333,16 @@ const App = () => {
                                         <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">Clients</motion.span>
                                     </Link>
 
-                                    {/* Planning Group */}
+
+                                    
+                                    {/* Reports Group */}
                                     {isSidebarExpanded && (
                                         <motion.div
                                             variants={textVariants}
                                             animate={isSidebarExpanded ? "expanded" : "collapsed"}
                                             className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider mt-6"
                                         >
-                                            Planning
+                                            Reports
                                         </motion.div>
                                     )}
                                     
@@ -1335,16 +1350,17 @@ const App = () => {
                                         { !isSidebarExpanded ? (
                                             <TooltipBubble title="Reports">
                                                 <div className="flex items-center justify-center w-7 h-7">
-                                                    <BarChart2 size={23} className="flex-shrink-0" />
+                                                    <TrendingUp size={23} className="flex-shrink-0" />
                                                 </div>
                                             </TooltipBubble>
                                         ) : (
                                             <div className="flex items-center justify-center w-5 h-5 mr-3">
-                                                <BarChart2 size={18} className="flex-shrink-0" />
+                                                <TrendingUp size={18} className="flex-shrink-0" />
                                             </div>
                                         )}
-                                        <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">Reports</motion.span>
+                                        <span className={`whitespace-nowrap overflow-hidden transition-all duration-200 ${isSidebarExpanded ? 'opacity-100 w-auto' : 'opacity-0 w-0'}`}>Reports & Analytics</span>
                                     </Link>
+                                    
                                 </>
                             ) : currentUser.role === 'admin' ? (
                                 <>
@@ -1360,23 +1376,10 @@ const App = () => {
                                                 <FileText size={18} className="flex-shrink-0" />
                                             </div>
                                         )}
-                                        <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">All Tickets</motion.span>
+                                        <span className={`whitespace-nowrap overflow-hidden transition-all duration-200 ${isSidebarExpanded ? 'opacity-100 w-auto' : 'opacity-0 w-0'}`}>All Tickets</span>
                                     </Link>
                                     
-                                    <Link to="/reports" className={`group flex items-center px-3 py-2  text-sm font-medium transition-all duration-200 hover:bg-orange-50 hover:text-orange-600 ${location.pathname === '/reports' ? ' text-orange-700' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
-                                        { !isSidebarExpanded ? (
-                                            <TooltipBubble title="Reports">
-                                                <div className="flex items-center justify-center w-7 h-7">
-                                                    <BarChart2 size={23} className="flex-shrink-0" />
-                                                </div>
-                                            </TooltipBubble>
-                                        ) : (
-                                            <div className="flex items-center justify-center w-5 h-5 mr-3">
-                                                <BarChart2 size={18} className="flex-shrink-0" />
-                                            </div>
-                                        )}
-                                        <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">Reports</motion.span>
-                                    </Link>
+
                                 </>
                             ) : currentUser.role === 'site_admin' ? (
                                 <>
@@ -1439,6 +1442,36 @@ const App = () => {
                                         )}
                                         <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">Create Ticket</motion.span>
                                     </Link>
+                                    
+                                    {/* Reports Group - Only for super_admin and admin */}
+                                    {(['super_admin', 'admin'].includes(currentUser.role)) && (
+                                        <>
+                                            {isSidebarExpanded && (
+                                                <motion.div
+                                                    variants={textVariants}
+                                                    animate={isSidebarExpanded ? "expanded" : "collapsed"}
+                                                    className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider mt-6"
+                                                >
+                                                    Reports
+                                                </motion.div>
+                                            )}
+                                            
+                                            <Link to="/reports" className={`group flex items-center px-3 py-2  text-sm font-medium transition-all duration-200 hover:bg-orange-50 hover:text-orange-600 ${location.pathname === '/reports' ? ' text-orange-700' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                                { !isSidebarExpanded ? (
+                                                    <TooltipBubble title="Reports & Analytics">
+                                                        <div className="flex items-center justify-center w-7 h-7">
+                                                            <TrendingUp size={23} className="flex-shrink-0" />
+                                                        </div>
+                                                    </TooltipBubble>
+                                                ) : (
+                                                    <div className="flex items-center justify-center w-5 h-5 mr-3">
+                                                        <TrendingUp size={18} className="flex-shrink-0" />
+                                                    </div>
+                                                )}
+                                                <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">Reports & Analytics</motion.span>
+                                            </Link>
+                                        </>
+                                    )}
                                 </>
                             ) : (
                                 <>
@@ -1506,6 +1539,8 @@ const App = () => {
                                         )}
                                         <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">Create Ticket</motion.span>
                                     </Link>
+                                    
+
                                 </>
                             )}
                         </div>
@@ -1664,7 +1699,13 @@ const App = () => {
                                 <Route path="/client-management" element={['admin', 'site_admin', 'super_admin'].includes(currentUser.role) ? <ClientManagementComponent user={currentUser} /> : <AccessDeniedComponent />} />
                                 <Route path="/siteadmin-management" element={['admin', 'site_admin', 'super_admin'].includes(currentUser.role) ? <SiteAdminManagementComponent /> : <AccessDeniedComponent />} />
                                 <Route path="/engineer-management" element={(['admin', 'site_admin', 'super_admin'].includes(currentUser.role)) ? <EngineerManagementComponent user={currentUser} showFlashMessage={showFlashMessage} /> : <AccessDeniedComponent />} />
-                                <Route path="/reports" element={['admin', 'site_admin', 'super_admin'].includes(currentUser.role) ? <ReportsComponent /> : <AccessDeniedComponent />} />
+                                
+                                <Route path="/reports" element={
+                                    (['admin', 'super_admin'].includes(currentUser.role)) ?
+                                        <ReportsComponent user={currentUser} showFlashMessage={showFlashMessage} /> :
+                                        <AccessDeniedComponent />
+                                } />
+                                
                                 <Route path="/clients" element={currentUser.role === 'super_admin' ? <ClientManagementComponent user={currentUser} /> : <AccessDeniedComponent />} />
 
                                 {/* Catch-all for logged-in users if no other route matches */}

@@ -200,7 +200,7 @@ const Timeline = ({ events = [] }) => {
                                             expanded 
                                                 ? 'flex flex-col justify-center items-center w-28 min-h-[140px] p-2' 
                                                 : 'flex justify-center items-center w-10 h-10'
-                                        } rounded border border-gray-200 bg-gray-50 text-gray-700 flex-shrink-0 relative cursor-pointer transition-all duration-300 ${
+                                        } rounded bg-gray-50 text-gray-700 flex-shrink-0 relative cursor-pointer transition-all duration-300 ${
                                             expanded ? 'hover:ring-1 hover:ring-blue-200' : ''
                                         } ${
                                             isAnimating ? expanded ? 'animate-zoomIn' : 'animate-zoomOut' : ''
@@ -252,17 +252,17 @@ const Timeline = ({ events = [] }) => {
                 <button
                     className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold rounded-b-md bg-white text-orange-500 border border-t-0 border-orange-500 hover:bg-orange-50 transition-colors"
                     onClick={handleToggle}
-                    aria-label={expanded ? 'Hide Timeline' : 'Show Timeline'}
+                    aria-label={expanded ? 'Hide ticket workflow' : 'Show ticket workflow'}
                 >
                     {expanded ? (
                         <>
                             <ChevronUp className="w-3 h-3 transition-transform duration-300" />
-                            <span>Hide Timeline</span>
+                            <span>Hide ticket workflow</span>
                         </>
                     ) : (
                         <>
                             <ChevronDown className="w-3 h-3 transition-transform duration-300" />
-                            <span>Show Ticket Timeline</span>
+                            <span>Show ticket workflow</span>
                         </>
                     )}
                 </button>

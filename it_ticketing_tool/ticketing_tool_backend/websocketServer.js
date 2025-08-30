@@ -5,6 +5,7 @@ class WebSocketServer {
     constructor(server) {
         this.wss = new WebSocket.Server({ server });
         this.clients = new Map(); // Map to store client connections
+        this.analyticsSubscriptions = new Map(); // Map to store analytics subscriptions
         this.setupWebSocket();
     }
 
@@ -48,6 +49,12 @@ class WebSocketServer {
                             }));
                             ws.close();
                         }
+                    } else if (data.type === 'subscribe_analytics') {
+                        // Handle analytics subscription
+                        this.handleAnalyticsSubscription(ws, data);
+                    } else if (data.type === 'unsubscribe_analytics') {
+                        // Handle analytics unsubscription
+                        this.handleAnalyticsUnsubscription(ws, data);
                     }
                 } catch (error) {
                     console.error('Error processing WebSocket message:', error);
@@ -59,6 +66,8 @@ class WebSocketServer {
                 const clientInfo = this.clients.get(ws);
                 if (clientInfo) {
                     console.log(`WebSocket client disconnected: ${clientInfo.userId}`);
+                    // Clean up analytics subscriptions
+                    this.cleanupClientSubscriptions(ws);
                     this.clients.delete(ws);
                 }
             });
@@ -66,9 +75,102 @@ class WebSocketServer {
             // Handle errors
             ws.on('error', (error) => {
                 console.error('WebSocket error:', error);
+                this.cleanupClientSubscriptions(ws);
                 this.clients.delete(ws);
             });
         });
+    }
+
+    handleAnalyticsSubscription(ws, data) {
+        const clientInfo = this.clients.get(ws);
+        if (!clientInfo) {
+            ws.send(JSON.stringify({
+                type: 'error',
+                message: 'Client not authenticated'
+            }));
+            return;
+        }
+
+        const { filters, subscriptionId } = data;
+        const subscriptionKey = `${clientInfo.userId}_${subscriptionId}`;
+        
+        // Store subscription
+        this.analyticsSubscriptions.set(subscriptionKey, {
+            ws,
+            filters,
+            clientInfo,
+            lastUpdate: Date.now()
+        });
+
+        console.log(`Analytics subscription created: ${subscriptionKey}`);
+        
+        ws.send(JSON.stringify({
+            type: 'analytics_subscribed',
+            subscriptionId,
+            message: 'Successfully subscribed to analytics updates'
+        }));
+    }
+
+    handleAnalyticsUnsubscription(ws, data) {
+        const clientInfo = this.clients.get(ws);
+        if (!clientInfo) return;
+
+        const { subscriptionId } = data;
+        const subscriptionKey = `${clientInfo.userId}_${subscriptionId}`;
+        
+        if (this.analyticsSubscriptions.has(subscriptionKey)) {
+            this.analyticsSubscriptions.delete(subscriptionKey);
+            console.log(`Analytics subscription removed: ${subscriptionKey}`);
+        }
+    }
+
+    cleanupClientSubscriptions(ws) {
+        // Remove all subscriptions for this client
+        for (const [key, subscription] of this.analyticsSubscriptions.entries()) {
+            if (subscription.ws === ws) {
+                this.analyticsSubscriptions.delete(key);
+                console.log(`Cleaned up analytics subscription: ${key}`);
+            }
+        }
+    }
+
+    // Broadcast analytics updates to subscribed clients
+    broadcastAnalyticsUpdate(updateData) {
+        const { type, data, filters } = updateData;
+        
+        for (const [key, subscription] of this.analyticsSubscriptions.entries()) {
+            try {
+                // Check if this subscription should receive this update
+                if (this.shouldSendUpdate(subscription.filters, filters)) {
+                    subscription.ws.send(JSON.stringify({
+                        type: 'analytics_update',
+                        data: data,
+                        filters: filters,
+                        timestamp: Date.now()
+                    }));
+                    
+                    // Update last update time
+                    subscription.lastUpdate = Date.now();
+                }
+            } catch (error) {
+                console.error(`Error sending analytics update to ${key}:`, error);
+                // Remove broken subscription
+                this.analyticsSubscriptions.delete(key);
+            }
+        }
+    }
+
+    shouldSendUpdate(subscriptionFilters, updateFilters) {
+        // Simple filter matching - can be enhanced based on your needs
+        if (!subscriptionFilters || !updateFilters) return true;
+        
+        // Check if the update matches the subscription filters
+        for (const [key, value] of Object.entries(subscriptionFilters)) {
+            if (value !== 'all' && updateFilters[key] !== value) {
+                return false;
+            }
+        }
+        return true;
     }
 
     // Broadcast to all connected clients
@@ -121,6 +223,20 @@ class WebSocketServer {
                 client.readyState === WebSocket.OPEN
             ).length,
             clients: Array.from(this.clients.values())
+        };
+    }
+
+    // Get analytics subscription stats
+    getAnalyticsStats() {
+        return {
+            totalSubscriptions: this.analyticsSubscriptions.size,
+            subscriptions: Array.from(this.analyticsSubscriptions.entries()).map(([key, sub]) => ({
+                key,
+                userId: sub.clientInfo.userId,
+                userRole: sub.clientInfo.userRole,
+                filters: sub.filters,
+                lastUpdate: sub.lastUpdate
+            }))
         };
     }
 }
