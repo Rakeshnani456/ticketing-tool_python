@@ -441,7 +441,8 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
     let priorityResolutionTimes = {};
     let agentResolutionPerformance = [];
     
-    if (user?.role === 'admin' || user?.role === 'super_admin') {
+    // Allow admin, super_admin, engineer, and site_admin to see resolution analytics
+    if (user?.role === 'admin' || user?.role === 'super_admin' || user?.role === 'engineer' || user?.role === 'site_admin') {
       // Get resolved tickets with proper data and apply filters
       let resolvedTickets = tickets.filter(ticket => 
         (ticket.status === 'Resolved' || ticket.status === 'Closed') && 
@@ -900,7 +901,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                      {/* Total Active Tickets - All roles can see */}
            <div 
              onClick={() => navigateTo('/all-tickets')}
-             className={`${cardClass} rounded-lg p-3 border cursor-pointer transition-all duration-200 hover:scale-105`}
+             className={`${cardClass} rounded-lg p-3 border cursor-pointer transition-all duration-200 hover:shadow-md hover:scale-100 transition duration-100`}
            >
             <div className="flex justify-between items-start">
               <div>
@@ -919,7 +920,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                      {/* Open Tickets - All roles can see */}
            <div 
              onClick={() => navigateTo('/all-tickets?status=Open')}
-             className={`${cardClass} rounded-lg p-3 border cursor-pointer transition-all duration-200 hover:scale-105`}
+             className={`${cardClass} rounded-lg p-3 border cursor-pointer transition-all duration-200 hover:shadow-md hover:scale-100 transition duration-100`}
            >
             <div className="flex justify-between items-start">
               <div>
@@ -938,7 +939,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                      {/* In Progress - All roles can see */}
            <div 
              onClick={() => navigateTo('/all-tickets?status=In Progress')}
-             className={`${cardClass} rounded-lg p-3 border cursor-pointer transition-all duration-200 hover:scale-105`}
+             className={`${cardClass} rounded-lg p-3 border cursor-pointer transition-all duration-200 hover:shadow-md hover:scale-100 transition duration-100`}
            >
             <div className="flex justify-between items-start">
               <div>
@@ -958,7 +959,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
            {(user?.role === 'engineer' || user?.role === 'support') && (
              <div 
                onClick={() => navigateTo('/assigned-to-me')}
-               className={`${cardClass} rounded-lg p-3 border cursor-pointer transition-all duration-200 hover:scale-105`}
+               className={`${cardClass} rounded-lg p-3 border cursor-pointer transition-all duration-200 hover:shadow-md hover:scale-100 transition duration-100`}
              >
               <div className="flex justify-between items-start">
                 <div>
@@ -978,7 +979,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
           {/* Avg Resolution - Only Admin/Super Admin - NOT CLICKABLE */}
           {(user?.role === 'admin' || user?.role === 'super_admin') && (
             <div 
-              className={`${cardClass} rounded-lg p-3 border`}
+              className={`${cardClass} rounded-lg p-3 border hover:scale-100 transition duration-100`}
             >
               <div className="flex justify-between items-start">
                 <div>
@@ -1446,7 +1447,6 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                   </span>
                 )}
               </h2>
-              
               {/* Filters - Organized in rows */}
               <div className="flex flex-wrap items-center gap-3">
                 {/* Time Period Filter */}
@@ -1469,8 +1469,8 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                     <option value="custom">Custom</option>
                   </select>
                 </div>
-                
-                {/* Client Filter */}
+                {/* Client Filter - hide for site_admin */}
+                {(user?.role !== 'site_admin') && (
                 <div className="flex items-center gap-2">
                   <label className="text-xs font-medium text-gray-600">Client:</label>
                   <select
@@ -1491,7 +1491,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                   </select>
                   <span className="text-xs text-gray-400">({availableCompanies.length} companies)</span>
                 </div>
-                
+                )}
                 {/* Clear Filters Button - Only show when filters are changed from defaults */}
                 {(selectedTimePeriod !== '7' || selectedCompany !== 'All' || customStartDate || customEndDate) && (
                   <button
@@ -1506,7 +1506,6 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                   </button>
                 )}
               </div>
-              
               {/* Custom Date Range - Separate row when custom is selected */}
               {selectedTimePeriod === 'custom' && (
                 <div className="flex items-center gap-3 mt-2 pt-2 border-t border-gray-200">
@@ -1639,7 +1638,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
             className={`${cardClass} rounded-lg p-3 border`}
           >
             <div className="mb-4">
-                            <div className="mb-3">
+              <div className="mb-3">
                 <div className="flex items-center justify-between mb-3">
                   <h2 className="text-lg font-bold text-gray-800 flex items-center">
                     <div className="w-6 h-6 bg-gradient-to-br from-purple-500 to-purple-600 rounded-lg flex items-center justify-center mr-2 shadow-sm">
@@ -1665,7 +1664,6 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                     </div>
                   </div>
                 </div>
-                
                 {/* Filters - Organized in rows */}
                 <div className="flex flex-wrap items-center gap-3">
                   {/* Time Period Filter */}
@@ -1688,8 +1686,8 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                       <option value="custom">Custom</option>
                     </select>
                   </div>
-                  
-                  {/* Client Filter */}
+                  {/* Client Filter - hide for site_admin */}
+                  {(user?.role !== 'site_admin') && (
                   <div className="flex items-center gap-2">
                     <label className="text-xs font-medium text-gray-600">Client:</label>
                     <select
@@ -1710,7 +1708,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                     </select>
                     <span className="text-xs text-gray-400">({availableCompanies.length} companies)</span>
                   </div>
-                  
+                  )}
                   {/* Clear Filters Button - Only show when filters are changed from defaults */}
                   {(resolutionTimePeriod !== '7' || resolutionTimeCompany !== 'All' || resolutionTimeStartDate || resolutionTimeEndDate) && (
                     <button
@@ -1723,40 +1721,39 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                     >
                       Clear Filters
                     </button>
-                    )}
-                  </div>
-                  
-                  {/* Custom Date Range - Separate row when custom is selected */}
-                  {resolutionTimePeriod === 'custom' && (
-                    <div className="flex items-center gap-3 mt-2 pt-2 border-t border-gray-200">
-                      <label className="text-xs font-medium text-gray-600">Date Range:</label>
-                      <input
-                        type="date"
-                        value={resolutionTimeStartDate}
-                        onChange={(e) => setResolutionTimeStartDate(e.target.value)}
-                        className={`px-2 py-1 rounded text-xs border ${
-                          darkMode 
-                            ? 'bg-gray-700 border-gray-600 text-white' 
-                            : 'bg-white border-gray-300 text-black'
-                          } focus:outline-none focus:ring-1 focus:ring-blue-500`}
-                      />
-                      <span className="text-xs text-gray-500">to</span>
-                      <input
-                        type="date"
-                        value={resolutionTimeEndDate}
-                        onChange={(e) => setResolutionTimeEndDate(e.target.value)}
-                        className={`px-2 py-1 rounded text-xs border ${
-                          darkMode 
-                            ? 'bg-gray-700 border-gray-600 text-white' 
-                            : 'bg-white border-gray-300 text-black'
-                          } focus:outline-none focus:ring-1 focus:ring-blue-500`}
-                      />
-                    </div>
                   )}
+                </div>
+                {/* Custom Date Range - Separate row when custom is selected */}
+                {resolutionTimePeriod === 'custom' && (
+                  <div className="flex items-center gap-3 mt-2 pt-2 border-t border-gray-200">
+                    <label className="text-xs font-medium text-gray-600">Date Range:</label>
+                    <input
+                      type="date"
+                      value={resolutionTimeStartDate}
+                      onChange={(e) => setResolutionTimeStartDate(e.target.value)}
+                      className={`px-2 py-1 rounded text-xs border ${
+                        darkMode 
+                          ? 'bg-gray-700 border-gray-600 text-white' 
+                          : 'bg-white border-gray-300 text-black'
+                        } focus:outline-none focus:ring-1 focus:ring-blue-500`}
+                    />
+                    <span className="text-xs text-gray-500">to</span>
+                    <input
+                      type="date"
+                      value={resolutionTimeEndDate}
+                      onChange={(e) => setResolutionTimeEndDate(e.target.value)}
+                      className={`px-2 py-1 rounded text-xs border ${
+                        darkMode 
+                          ? 'bg-gray-700 border-gray-600 text-white' 
+                          : 'bg-white border-gray-300 text-black'
+                        } focus:outline-none focus:ring-1 focus:ring-blue-500`}
+                    />
+                  </div>
+                )}
               </div>
-        </div>
+            </div>
 
-                        {/* Summary Metrics */}
+            {/* Summary Metrics */}
             <div className="flex gap-2 mb-4">
               {dashboardData.resolutionTimes.length > 0 ? (
                 dashboardData.resolutionTimes.map((metric, index) => {

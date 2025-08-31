@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Loader2, XCircle, ListFilter, User, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
 import { collection, query, onSnapshot, where, orderBy, getFirestore, limit, getDocs, doc, updateDoc } from 'firebase/firestore';
+import ReactDOM from 'react-dom';
 
 // Import common UI components
 
@@ -87,6 +88,9 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
     const [filterCompany, setFilterCompany] = useState(''); // New state for company filter
     const [companies, setCompanies] = useState([]); // New state for companies list
     const [loadingCompanies, setLoadingCompanies] = useState(false); // New state for companies loading
+    
+    // Ref to track if companies have been fetched to prevent duplicate API calls
+    const companiesFetchedRef = useRef(false);
 
     // Get today's date in ISO-MM-DD format for the max attribute of the end date input
     const today = new Date().toISOString().split('T')[0];
@@ -96,7 +100,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
 
     // Function to fetch companies for filtering
     const fetchCompanies = useCallback(async () => {
-        if (loadingCompanies) return;
+        if (loadingCompanies || companiesFetchedRef.current) return;
         
         setLoadingCompanies(true);
         try {
@@ -107,22 +111,36 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
             }
             const companiesData = await response.json();
             console.log('Fetched companies data:', companiesData);
+            console.log('Number of companies fetched:', companiesData.length);
+            console.log('Companies array after setState:', companiesData);
             setCompanies(companiesData);
+            companiesFetchedRef.current = true; // Mark as fetched
         } catch (error) {
             console.error('Error fetching companies:', error);
-            showFlashMessage('Failed to load companies for filtering', 'error');
+            // Don't call showFlashMessage here to avoid dependency issues
+            console.error('Failed to load companies for filtering');
         } finally {
             setLoadingCompanies(false);
         }
-    }, [loadingCompanies, showFlashMessage]);
+    }, [loadingCompanies]); // Removed showFlashMessage dependency
 
     // Function to fetch available engineers
     const fetchEngineers = useCallback(async () => {
         try {
             // Fetch engineers directly from Firestore users collection
-            // Look for users with role 'support' as specified in the requirements
+            // Look for users with roles 'support', 'admin', and 'site_admin' for assignment
             const usersRef = collection(db, 'users');
-            const engineersQuery = query(usersRef, where('role', '==', 'support'));
+            
+            // For site_admin users, show all available engineers (support, admin, site_admin)
+            // For other users, show only support engineers as before
+            let engineersQuery;
+            if (user && user.role === 'site_admin') {
+                // Site admin can see all engineers for assignment
+                engineersQuery = query(usersRef, where('role', 'in', ['support', 'admin', 'site_admin']));
+            } else {
+                // Other users see only support engineers
+                engineersQuery = query(usersRef, where('role', '==', 'support'));
+            }
             
             const snapshot = await getDocs(engineersQuery);
             
@@ -137,13 +155,17 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                     };
                 });
                 
-                            setAvailableEngineers(engineers);
+                setAvailableEngineers(engineers);
                 console.log('Successfully loaded engineers from Firestore:', engineers);
-                            return;
+                return;
             } else {
-                console.log('No engineers found with role "support" in the database');
+                console.log('No engineers found with required roles in the database');
                 setAvailableEngineers([]);
-                showFlashMessage('No engineers found in the system. Please add users with "support" role.', 'info');
+                if (user && user.role === 'site_admin') {
+                    showFlashMessage('No engineers found in the system. Please add users with support, admin, or site_admin roles.', 'info');
+                } else {
+                    showFlashMessage('No engineers found in the system. Please add users with "support" role.', 'info');
+                }
             }
             
         } catch (error) {
@@ -151,7 +173,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
             setAvailableEngineers([]);
             showFlashMessage('Failed to load engineers. Please check your connection and try again.', 'error');
         }
-    }, [showFlashMessage, db]);
+    }, [showFlashMessage, db, user]);
 
     // Function to handle ticket selection
     const handleTicketSelection = (ticketId) => {
@@ -166,6 +188,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
 
     // Function to enter assign mode
     const enterAssignMode = () => {
+        if (!canAssign || user?.role === 'site_admin') return;
         setAssignMode(true);
         setShowCheckboxes(true);
         setSelectedTickets([]); // Clear previous selections - NO auto-selection
@@ -390,7 +413,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
 
     // Check and reset company filter if user doesn't have permission
     useEffect(() => {
-        const hasCompanyFilterPermission = user?.role === 'super_admin' || user?.role === 'admin' || user?.role === 'support';
+        const hasCompanyFilterPermission = user?.role === 'super_admin' || user?.role === 'admin' || user?.role === 'support' || user?.role === 'site_admin';
         
         console.log('Company filter permission check:', {
             userRole: user?.role,
@@ -401,11 +424,11 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
         if (filterBy === 'company' && !hasCompanyFilterPermission) {
             console.log('User does not have permission for company filtering, resetting to status filter');
             setFilterBy('status');
-            setFilterCompany('');
+            // Don't reset the company filter - preserve the selection for when they switch back
         }
     }, [user?.role, filterBy]);
 
-    // Fetch companies when filterBy changes to 'company'
+    // Fetch companies when component mounts or when filterBy changes to 'company' (if not already loaded)
     useEffect(() => {
         console.log('Company fetch effect triggered:', {
             filterBy,
@@ -414,16 +437,31 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
         });
         
         if (filterBy === 'company' && companies.length === 0) {
-            console.log('Fetching companies...');
+            console.log('Fetching companies for company filter...');
             fetchCompanies();
         }
-    }, [filterBy, companies.length, fetchCompanies]);
+    }, [filterBy, companies.length]);
 
-    // Fetch engineers when component mounts
+    // Fetch companies when component mounts (only once)
     useEffect(() => {
-        console.log('Fetching engineers...');
-        fetchEngineers();
-    }, [fetchEngineers]);
+        // Only fetch if companies haven't been loaded yet
+        if (!companiesFetchedRef.current && !loadingCompanies) {
+            console.log('Fetching companies on component mount...');
+            fetchCompanies();
+        } else {
+            console.log('Companies already loaded or loading, skipping fetch');
+        }
+    }, []); // Empty dependency array - only run once on mount
+
+    // Only allow assign mode and engineer loading for super_admin, admin, engineer (NOT site_admin)
+    const canAssign = user?.role === 'super_admin' || user?.role === 'admin' || user?.role === 'engineer';
+
+    // Replace useEffect for engineer loading
+    useEffect(() => {
+        if (canAssign && user?.role !== 'site_admin') {
+            fetchEngineers();
+        }
+    }, [canAssign, user]);
 
     /**
      * Helper function to convert Firestore Timestamp to ISO string or Date object.
@@ -647,34 +685,12 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
             currentFilteredTickets = currentFilteredTickets.filter(ticket => (ticket.priority || '').toLowerCase() === filterPriority.toLowerCase());
         }
 
-        // Apply company filter (client-side filtering since we're using Firestore directly)
-        if (filterBy === 'company' && filterCompany) {
-            console.log('Applying company filter:', filterCompany);
-            console.log('Available companies:', companies.map(c => c.companyName));
-            console.log('Sample tickets before filtering:', currentFilteredTickets.slice(0, 3).map(t => ({
-                id: t.display_id,
-                client_name: t.client_name,
-                companyName: t.companyName
-            })));
-            
-            const beforeCount = currentFilteredTickets.length;
+        // Always apply company filter if filterCompany is set
+        if (filterCompany) {
             currentFilteredTickets = currentFilteredTickets.filter(ticket => {
                 const ticketCompany = ticket.client_name || ticket.companyName;
-                const matches = ticketCompany === filterCompany;
-                if (!matches) {
-                    console.log("Filtered out ticket:", {
-                        ticketId: ticket.display_id,
-                        ticketCompany: ticketCompany,
-                        filterCompany: filterCompany
-                    });
-                }
-                return matches;
+                return ticketCompany === filterCompany;
             });
-            console.log(`Company filter applied: ${beforeCount} -> ${currentFilteredTickets.length} tickets`);
-        } else if (filterBy === 'company' && !filterCompany) {
-            console.log('Company filter type selected but no company selected - showing all tickets');
-        } else if (filterBy !== 'company') {
-            console.log('Not using company filter - filterBy is:', filterBy);
         }
         
         // Debug: log final filtered tickets count
@@ -897,8 +913,8 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
     const exportSelectedTickets = async () => {
         setLoading(true);
         try {
-            // Get the selected ticket data from the current displayed tickets
-            const selectedTicketData = paginatedTickets.filter(ticket => 
+            // Get the selected ticket data from all displayed tickets (not just current page)
+            const selectedTicketData = displayedTickets.filter(ticket => 
                 selectedTickets.includes(ticket.id)
             );
 
@@ -1021,23 +1037,24 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
         }
     };
 
-    // Calculate counts based on the *allTickets* array, which now contains the full dataset
-    // When searching, include all tickets including resolved and cancelled
+    // Calculate counts based on the tickets after company filtering
+    const ticketsForCounts = filterCompany
+        ? allTickets.filter(ticket => {
+            const ticketCompany = ticket.client_name || ticket.companyName;
+            return ticketCompany === filterCompany;
+        })
+        : allTickets;
     const counts = {
-        // 'All' button shows count of active tickets (Open, In Progress, Hold) or all tickets when searching
         total_tickets: searchKeyword 
-            ? allTickets.length 
-            : allTickets.filter(t => ['Open', 'In Progress', 'Hold'].includes(t.status)).length,
-        open_tickets: allTickets.filter(t => t.status === 'Open').length,
-        in_progress_tickets: allTickets.filter(t => t.status === 'In Progress').length,
-        hold_tickets: allTickets.filter(t => t.status === 'Hold').length,
-        // This count still shows Closed/Resolved for potential future use or specific filter button
-        closed_resolved_tickets: allTickets.filter(t => ['Closed', 'Resolved'].includes(t.status)).length,
-        // Exclude Closed, Resolved, and Cancelled from unassigned count for consistency, unless searching
+            ? ticketsForCounts.length 
+            : ticketsForCounts.filter(t => ['Open', 'In Progress', 'Hold'].includes(t.status)).length,
+        open_tickets: ticketsForCounts.filter(t => t.status === 'Open').length,
+        in_progress_tickets: ticketsForCounts.filter(t => t.status === 'In Progress').length,
+        hold_tickets: ticketsForCounts.filter(t => t.status === 'Hold').length,
+        closed_resolved_tickets: ticketsForCounts.filter(t => ['Closed', 'Resolved'].includes(t.status)).length,
         unassigned: searchKeyword 
-            ? allTickets.filter(t => !t.assigned_to_email).length
-            : allTickets.filter(t => !t.assigned_to_email && !['Closed', 'Resolved', 'Cancelled'].includes(t.status)).length,
-        // Removed assigned_to_me count as the button is being removed
+            ? ticketsForCounts.filter(t => !t.assigned_to_email).length
+            : ticketsForCounts.filter(t => !t.assigned_to_email && !['Closed', 'Resolved', 'Cancelled'].includes(t.status)).length,
     };
     // Function to determine the page heading based on active filters
     const getPageHeading = useCallback(() => {
@@ -1128,178 +1145,332 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
     }
 
     return (
-        <div className="p-4 bg-white flex-1 overflow-auto">
-            {/* Decreased heading size from text-xl to text-lg */}
-            <div className="flex items-center space-x-3 mb-4">
-                <h2 className="text-lg font-extrabold text-gray-800">
-                    {getPageHeading()}
-                </h2>
-                {user && user.role === 'site_admin' && !user.client_name && (
-                    <div className="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded-md">
-                        ⚠️ Missing company info
-                    </div>
-                )}
-            </div>
-            <div className="w-full h-px bg-gray-200 mb-2 mt-0" />
-
-            {/* Filter and Export Section (Conditional Rendering based on `showFilters` prop) */}
-            {showFilters && (
-                <div className="mb-2 p-0 bg-white rounded-md flex flex-wrap gap-2 items-center relative">
-                    <span className="text-sm font-semibold text-gray-700">
-  Filter By:
-</span>
-                    <div className="relative inline-block mr-2">
-                      <select
-                        value={filterBy}
-                        onChange={e => { 
-                          console.log('Filter type changed from', filterBy, 'to', e.target.value);
-                          setFilterBy(e.target.value); 
-                          setFilterStatus(''); 
-                          setFilterPriority(''); 
-                          setFilterCompany(''); 
-                        }}
-                        className="px-2 py-1.5 rounded border border-gray-300 text-xs font-semibold bg-white pr-8 appearance-none h-8"
-                      >
-                        <option value="status">Status</option>
-                        <option value="priority">Priority</option>
-                        {(user?.role === 'super_admin' || user?.role === 'admin' || user?.role === 'support') && (
-                          <option value="company">Company</option>
-                        )}
-                      </select>
-                      <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
-                        {filterBy === 'company' ? (
-                          <ChevronRight className="w-3 h-3 text-gray-500" />
-                        ) : (
-                          <ChevronDown className="w-3 h-3 text-gray-500" />
-                        )}
-                      </div>
-                    </div>
-{filterBy === 'company' && (user?.role === 'super_admin' || user?.role === 'admin' || user?.role === 'support') && (
-  <div>
-    <select
-      value={filterCompany}
-      onChange={e => {
-        console.log('Company filter changed from', filterCompany, 'to', e.target.value);
-        setFilterCompany(e.target.value);
-      }}
-      className="px-2 py-1.5 rounded border border-gray-300 text-xs font-semibold bg-white mr-2 h-8"
-    >
-      <option value="">All</option>
-      {loadingCompanies ? (
-        <option value="" disabled>Loading companies...</option>
-      ) : companies.length === 0 ? (
-        <option value="" disabled>No companies found</option>
-      ) : (
-        companies.map(company => (
-          <option key={company.id} value={company.companyName}>
-            {company.companyName}
-          </option>
-        ))
-      )}
-    </select>
-
-  </div>
-)}
-{filterBy === 'status' && (
-  <div className="inline-flex bg-gray-200 border border-gray-300 rounded-full shadow-sm overflow-hidden">
-    <button 
-      onClick={() => { setFilterStatus(''); setFilterAssignment(''); }} 
-      className={`px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${filterStatus === '' && filterAssignment === '' ? 'bg-blue-600 text-white rounded-l-full' : 'text-gray-700 hover:bg-gray-100'}`}
-    >
-      All <span className={`${filterStatus === '' && filterAssignment === '' ? 'text-white' : 'text-blue-600 font-bold'}`}>({counts.total_tickets})</span>
-    </button>
-    <button 
-      onClick={() => { setFilterStatus('Open'); setFilterAssignment(''); }} 
-      className={`px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${filterStatus === 'Open' && filterAssignment === '' ? 'bg-green-600 text-white' : 'text-gray-700 hover:bg-gray-100'}`}
-    >
-      Open <span className={`${filterStatus === 'Open' && filterAssignment === '' ? 'text-white' : 'text-green-600 font-bold'}`}>({counts.open_tickets})</span>
-    </button>
-    <button 
-      onClick={() => { setFilterStatus('In Progress'); setFilterAssignment(''); }} 
-      className={`px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${filterStatus === 'In Progress' && filterAssignment === '' ? 'bg-yellow-600 text-white' : 'text-gray-700 hover:bg-gray-100'}`}
-    >
-      In Progress <span className={`${filterStatus === 'In Progress' && filterAssignment === '' ? 'text-white' : 'text-yellow-600 font-bold'}`}>({counts.in_progress_tickets})</span>
-    </button>
-    <button 
-      onClick={() => { setFilterStatus('Hold'); setFilterAssignment(''); }} 
-      className={`px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${filterStatus === 'Hold' && filterAssignment === '' ? 'bg-purple-600 text-white' : 'text-gray-700 hover:bg-gray-100'}`}
-    >
-      On Hold <span className={`${filterStatus === 'Hold' && filterAssignment === '' ? 'text-white' : 'text-purple-600 font-bold'}`}>({counts.hold_tickets})</span>
-    </button>
-    <button 
-      onClick={() => { setFilterAssignment('unassigned'); setFilterStatus(''); }} 
-      className={`px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${filterAssignment === 'unassigned' && filterStatus === '' ? 'bg-orange-600 text-white rounded-r-full' : 'text-gray-700 hover:bg-gray-100'}`}
-    >
-      Unassigned <span className={`${filterAssignment === 'unassigned' && filterStatus === '' ? 'text-white' : 'text-orange-600 font-bold'}`}>({counts.unassigned})</span>
-    </button>
-  </div>
-)}
-{filterBy === 'priority' && (
-  <div className="inline-flex bg-gray-200 border border-gray-300 rounded-full shadow-sm overflow-hidden">
-    <button 
-      onClick={() => setFilterPriority('')} 
-      className={`px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${filterPriority === '' ? 'bg-blue-600 text-white rounded-l-full' : 'text-gray-700 hover:bg-gray-100'}`}
-    >
-      All
-    </button>
-    <button 
-      onClick={() => setFilterPriority('Low')} 
-      className={`px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${filterPriority === 'Low' ? 'bg-blue-600 text-white' : 'text-gray-700 hover:bg-gray-100'}`}
-    >
-      Low
-    </button>
-    <button 
-      onClick={() => setFilterPriority('Medium')} 
-      className={`px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${filterPriority === 'Medium' ? 'bg-orange-600 text-white' : 'text-gray-700 hover:bg-gray-100'}`}
-    >
-      Medium
-    </button>
-    <button 
-      onClick={() => setFilterPriority('High')} 
-      className={`px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${filterPriority === 'High' ? 'bg-red-600 text-white' : 'text-gray-700 hover:bg-gray-100'}`}
-    >
-      High
-    </button>
-    <button 
-      onClick={() => setFilterPriority('Critical')} 
-      className={`px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${filterPriority === 'Critical' ? 'bg-red-900 text-white rounded-r-full' : 'text-gray-700 hover:bg-gray-100'}`}
-    >
-      Critical
-    </button>
-  </div>
-)}
-
-                    {/* Clear Filters Button */}
-                    {(filterBy !== 'status' || filterStatus !== '' || filterPriority !== '' || filterAssignment !== '' || filterCompany !== '') && (
+        <>
+            {/* Export Popup Overlay and Modal rendered at document.body level for full coverage */}
+            {showExportPopup && ReactDOM.createPortal(
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+                    <div className="absolute inset-0 bg-black bg-opacity-30" />
+                    <div ref={exportPopupRef} className="relative z-10 bg-white border border-gray-300 rounded-md shadow-lg p-6 w-full max-w-md">
                         <button
-                            onClick={clearAllFilters}
-                            className="px-3 py-1.5 text-xs font-medium text-white bg-gradient-to-r from-red-400 to-red-500 rounded-md shadow-sm hover:from-red-500 hover:to-red-600 hover:shadow-md transition-all duration-200 ease-in-out border-0 focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-1"
+                            onClick={() => setShowExportPopup(false)}
+                            className="absolute top-2 right-2 text-gray-400 hover:text-gray-600"
                         >
-                            <svg className="w-3 h-3 mr-1.5 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                            Clear Filters
+                            ✕
                         </button>
-                    )}
+                        <h3 className="text-lg font-semibold mb-4">Export Tickets</h3>
+                        <div className="mb-4">
+                            <label className="block text-xs font-semibold text-gray-700 mb-1">Start Date</label>
+                            <input
+                                type="date"
+                                value={startDate}
+                                onChange={e => setStartDate(e.target.value)}
+                                className="p-1 border border-gray-300 rounded-md text-xs w-full"
+                                max={today}
+                            />
+                        </div>
+                        <div className="mb-4">
+                            <label className="block text-xs font-semibold text-gray-700 mb-1">End Date</label>
+                            <input
+                                type="date"
+                                value={endDate}
+                                onChange={e => setEndDate(e.target.value)}
+                                className="p-1 border border-gray-300 rounded-md text-xs w-full"
+                                max={today}
+                            />
+                        </div>
+                        <div className="mb-4">
+                            <label className="block text-xs font-semibold text-gray-700 mb-1">Status</label>
+                            <select
+                                value={exportStatus}
+                                onChange={e => setExportStatus(e.target.value)}
+                                className="px-2 py-1.5 text-xs border border-gray-300 rounded-md bg-white w-full"
+                            >
+                                <option value="">All</option>
+                                <option value="Open">Open</option>
+                                <option value="In Progress">In Progress</option>
+                                <option value="Hold">Hold</option>
+                                <option value="Resolved">Resolved</option>
+                                <option value="Cancelled">Cancelled</option>
+                            </select>
+                        </div>
+                        <div className="flex justify-end gap-2">
+                            <button
+                                onClick={() => setShowExportPopup(false)}
+                                className="px-3 py-1.5 text-xs font-medium text-white bg-gradient-to-r from-red-400 to-red-500 rounded-md shadow-sm hover:from-red-500 hover:to-red-600 hover:shadow-md transition-all duration-200 border-0 focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-1"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleExport}
+                                disabled={loading || !startDate || !endDate}
+                                className="px-3 py-1.5 text-xs font-medium text-white bg-gradient-to-r from-blue-600 to-blue-700 rounded-md shadow-sm hover:from-blue-700 hover:to-blue-800 hover:shadow-md transition-all duration-200 border-0 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {loading ? 'Exporting...' : 'Confirm Export'}
+                            </button>
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
+            {showAssignPopup && assignMode && user?.role !== 'site_admin' && ReactDOM.createPortal(
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+                    <div className="absolute inset-0 bg-black bg-opacity-30" />
+                    <div ref={assignPopupRef} className="relative z-10 bg-white border border-gray-300 rounded-md shadow-lg p-6 w-full max-w-md">
+                        <button
+                            onClick={() => setShowAssignPopup(false)}
+                            className="absolute top-2 right-2 text-gray-400 hover:text-gray-600"
+                        >
+                            ✕
+                        </button>
+                        <h3 className="text-lg font-semibold mb-4">Assign Tickets to Engineer</h3>
+                        <div className="mb-4">
+                            <label className="block text-xs font-semibold text-gray-700 mb-1">Select Engineer</label>
+                            <select
+                                value={selectedEngineer}
+                                onChange={e => setSelectedEngineer(e.target.value)}
+                                className="px-2 py-1.5 text-xs border border-gray-300 rounded-md bg-white w-full"
+                            >
+                                <option value="">Choose an engineer...</option>
+                                {availableEngineers.map(engineer => (
+                                    <option key={engineer.id} value={engineer.email}>
+                                        {engineer.name} ({engineer.email})
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                        <div className="flex justify-end gap-2">
+                            <button
+                                onClick={() => setShowAssignPopup(false)}
+                                className="px-3 py-1.5 text-xs font-medium text-white bg-gradient-to-r from-red-400 to-red-500 rounded-md shadow-sm hover:from-red-500 hover:to-red-600 hover:shadow-md transition-all duration-200 border-0 focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-1"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleBulkAssign}
+                                disabled={!selectedEngineer || assignLoading || availableEngineers.length === 0}
+                                className={`px-3 py-1.5 text-xs font-medium text-white bg-gradient-to-r from-blue-600 to-blue-700 rounded-md shadow-sm hover:from-blue-700 hover:to-blue-800 hover:shadow-md transition-all duration-200 border-0 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed`}
+                            >
+                                {assignLoading ? 'Assigning...' : 'Assign Tickets'}
+                            </button>
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
+            {/* Main App Content */}
+            <div className="p-4 bg-white flex-1 overflow-auto">
+                {/* Top Bar: Title, Filter By, Dropdown, Clear Filters (left) | Export Tickets (right) */}
+                <div className="flex flex-wrap items-center justify-between mb-2">
+                    <div className="flex items-center gap-3 flex-wrap">
+                        <h2 className="text-lg font-extrabold text-gray-800">
+                            {getPageHeading()}
+                        </h2>
+                        {/* Companies dropdown moved here */}
+                        {(user?.role === 'super_admin' || user?.role === 'admin' || user?.role === 'support') && (
+                        <div>
+                            {console.log('Rendering first dropdown - filterCompany:', filterCompany, 'filterBy:', filterBy)}
+                            <select
+                                value={filterCompany}
+                                onChange={e => {
+                                    console.log('First dropdown - Setting company filter to:', e.target.value);
+                                    setFilterCompany(e.target.value);
+                                }}
+                                className="px-2 py-1.5 rounded border border-gray-300 text-xs font-semibold bg-white mr-2 h-8 min-w-[120px]"
+                            >
+                                <option value="">All Companies</option>
+                                {loadingCompanies ? (
+                                    <option value="" disabled>Loading companies...</option>
+                                ) : companies.length === 0 ? (
+                                    <option value="" disabled>No companies found</option>
+                                ) : (
+                                    companies.map(company => (
+                                        <option key={company.id} value={company.companyName}>
+                                            {company.companyName}
+                                        </option>
+                                    ))
+                                )}
+                            </select>
+                        </div>
+                        )}
+                        <span className="text-sm font-semibold text-gray-700">Filter By:</span>
+                        <div className="relative inline-block mr-2">
+                            <select
+                                value={filterBy}
+                                onChange={e => { 
+                                    const newFilterBy = e.target.value;
+                                    console.log('Filter By changed to:', newFilterBy, 'Current company filter:', filterCompany);
+                                    setFilterBy(newFilterBy); 
+                                    // Only reset filters that are not compatible with the new filter type
+                                    if (newFilterBy === 'status') {
+                                        setFilterPriority(''); 
+                                        console.log('Keeping company filter:', filterCompany);
+                                    } else if (newFilterBy === 'priority') {
+                                        setFilterStatus(''); 
+                                        console.log('Keeping company filter:', filterCompany);
+                                    }
+                                    // Don't reset filterCompany - preserve the selection
+                                }}
+                                className="px-2 py-1.5 rounded border border-gray-300 text-xs font-semibold bg-white pr-8 appearance-none h-8"
+                            >
+                                <option value="status">Status</option>
+                                <option value="priority">Priority</option>
+                            </select>
+                            <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
+                                {filterBy === 'company' ? (
+                                    <ChevronRight className="w-3 h-3 text-gray-500" />
+                                ) : (
+                                    <ChevronDown className="w-3 h-3 text-gray-500" />
+                                )}
+                            </div>
+                        </div>
+                        {(filterBy !== 'status' || filterStatus !== '' || filterPriority !== '' || filterAssignment !== '' || filterCompany !== '') && (
+                            <button
+                                onClick={clearAllFilters}
+                                className="px-3 py-1.5 text-xs font-medium text-white bg-gradient-to-r from-red-400 to-red-500 rounded-md shadow-sm hover:from-red-500 hover:to-red-600 hover:shadow-md transition-all duration-200 ease-in-out border-0 focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-1"
+                            >
+                                <svg className="w-3 h-3 mr-1.5 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                                Clear Filters
+                            </button>
+                        )}
+                    </div>
+                    <div className="flex items-center ml-auto">
+                        <button
+                            onClick={async () => {
+                                if (!assignMode && selectedTickets.length > 0) {
+                                    await exportSelectedTickets();
+                                } else {
+                                    toggleExportPopup();
+                                }
+                            }}
+                            disabled={loading}
+                            ref={exportButtonRef}
+                            className="group relative inline-flex items-center justify-center px-3 py-1.5 text-xs font-medium text-white bg-gradient-to-r from-emerald-600 to-emerald-700 rounded-md shadow-sm hover:from-emerald-700 hover:to-emerald-800 hover:shadow-md transition-all duration-200 ease-in-out border-0 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
+                        >
+                            <svg className="w-3 h-3 mr-1.5 group-hover:scale-110 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            {!assignMode && selectedTickets.length > 0 
+                                ? `Export Selected (${selectedTickets.length})` 
+                                : 'Export Tickets'
+                            }
+                        </button>
+                    </div>
+                </div>
+                {/* Divider line between workflow/filter bar and filters/action buttons line */}
+                <div className="w-full h-px bg-gray-200 mb-4" />
 
-                    {/* In the filter/export section, move pagination to be just left of Export button */}
-                    <div className="relative ml-auto flex items-center gap-2">
+                {/* Second Line: Filters (left) | Pagination, Assign, Select, Notes (right) */}
+                <div className="flex flex-wrap items-center justify-between mb-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                        {/* Filters Section */}
+                        {filterBy === 'company' && (user?.role === 'super_admin' || user?.role === 'admin' || user?.role === 'support') && (
+                            <div>
+                                <select
+                                    value={filterCompany}
+                                    onChange={e => setFilterCompany(e.target.value)}
+                                    className="px-2 py-1.5 rounded border border-gray-300 text-xs font-semibold bg-white mr-2 h-8"
+                                >
+                                    <option value="">All</option>
+                                    {loadingCompanies ? (
+                                        <option value="" disabled>Loading companies...</option>
+                                    ) : companies.length === 0 ? (
+                                        <option value="" disabled>No companies found</option>
+                                    ) : (
+                                        companies.map(company => (
+                                            <option key={company.id} value={company.companyName}>
+                                                {company.companyName}
+                                            </option>
+                                        ))
+                                    )}
+                                </select>
+                            </div>
+                        )}
+                        {filterBy === 'status' && (
+                            <div className="inline-flex bg-white border border-gray-300 rounded-full shadow-sm overflow-hidden">
+                                <button 
+                                    onClick={() => { setFilterStatus(''); setFilterAssignment(''); }} 
+                                    className={`px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${filterStatus === '' && filterAssignment === '' ? 'bg-blue-600 text-white rounded-l-full' : 'text-gray-700 hover:bg-gray-100'}`}
+                                >
+                                    All <span className={`${filterStatus === '' && filterAssignment === '' ? 'text-white' : 'text-blue-600 font-bold'}`}>({counts.total_tickets})</span>
+                                </button>
+                                <button 
+                                    onClick={() => { setFilterStatus('Open'); setFilterAssignment(''); }} 
+                                    className={`px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${filterStatus === 'Open' && filterAssignment === '' ? 'bg-green-600 text-white' : 'text-gray-700 hover:bg-gray-100'}`}
+                                >
+                                    Open <span className={`${filterStatus === 'Open' && filterAssignment === '' ? 'text-white' : 'text-green-600 font-bold'}`}>({counts.open_tickets})</span>
+                                </button>
+                                <button 
+                                    onClick={() => { setFilterStatus('In Progress'); setFilterAssignment(''); }} 
+                                    className={`px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${filterStatus === 'In Progress' && filterAssignment === '' ? 'bg-yellow-600 text-white' : 'text-gray-700 hover:bg-gray-100'}`}
+                                >
+                                    In Progress <span className={`${filterStatus === 'In Progress' && filterAssignment === '' ? 'text-white' : 'text-yellow-600 font-bold'}`}>({counts.in_progress_tickets})</span>
+                                </button>
+                                <button 
+                                    onClick={() => { setFilterStatus('Hold'); setFilterAssignment(''); }} 
+                                    className={`px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${filterStatus === 'Hold' && filterAssignment === '' ? 'bg-purple-600 text-white' : 'text-gray-700 hover:bg-gray-100'}`}
+                                >
+                                    On Hold <span className={`${filterStatus === 'Hold' && filterAssignment === '' ? 'text-white' : 'text-purple-600 font-bold'}`}>({counts.hold_tickets})</span>
+                                </button>
+                                <button 
+                                    onClick={() => { setFilterAssignment('unassigned'); setFilterStatus(''); }} 
+                                    className={`px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${filterAssignment === 'unassigned' && filterStatus === '' ? 'bg-orange-600 text-white rounded-r-full' : 'text-gray-700 hover:bg-gray-100'}`}
+                                >
+                                    Unassigned <span className={`${filterAssignment === 'unassigned' && filterStatus === '' ? 'text-white' : 'text-orange-600 font-bold'}`}>({counts.unassigned})</span>
+                                </button>
+                            </div>
+                        )}
+                        {filterBy === 'priority' && (
+                            <div className="inline-flex bg-white border border-gray-300 rounded-full shadow-sm overflow-hidden">
+                                <button 
+                                    onClick={() => setFilterPriority('')} 
+                                    className={`px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${filterPriority === '' ? 'bg-blue-600 text-white rounded-l-full' : 'text-gray-700 hover:bg-gray-100'}`}
+                                >
+                                    All
+                                </button>
+                                <button 
+                                    onClick={() => setFilterPriority('Low')} 
+                                    className={`px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${filterPriority === 'Low' ? 'bg-blue-600 text-white' : 'text-gray-700 hover:bg-gray-100'}`}
+                                >
+                                    Low
+                                </button>
+                                <button 
+                                    onClick={() => setFilterPriority('Medium')} 
+                                    className={`px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${filterPriority === 'Medium' ? 'bg-orange-600 text-white' : 'text-gray-700 hover:bg-gray-100'}`}
+                                >
+                                    Medium
+                                </button>
+                                <button 
+                                    onClick={() => setFilterPriority('High')} 
+                                    className={`px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${filterPriority === 'High' ? 'bg-red-600 text-white' : 'text-gray-700 hover:bg-gray-100'}`}
+                                >
+                                    High
+                                </button>
+                                <button 
+                                    onClick={() => setFilterPriority('Critical')} 
+                                    className={`px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${filterPriority === 'Critical' ? 'bg-red-900 text-white rounded-r-full' : 'text-gray-700 hover:bg-gray-100'}`}
+                                >
+                                    Critical
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                    <div className="flex items-center gap-2 ml-auto">
                         {renderPagination()}
-                        
-                        {/* Action Buttons */}
                         <div className="flex items-center gap-2 ml-3">
+                            {/* Action Buttons: Assign, Select, Notes (copy logic from original) */}
+                            {/* Copy from original code, lines 1291-1357 */}
                             {!assignMode && !showCheckboxes ? (
-                                // Normal mode - show Assign and Select buttons
                                 <>
-                                    <button 
-                                        onClick={enterAssignMode}
-                                        className="group relative inline-flex items-center justify-center px-3 py-1.5 text-xs font-medium text-white bg-gradient-to-r from-blue-600 to-blue-700 rounded-md shadow-sm hover:from-blue-700 hover:to-blue-800 hover:shadow-md transition-all duration-200 ease-in-out border-0 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
-                                    >
-                                        <svg className="w-3 h-3 mr-1.5 group-hover:scale-110 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                                        </svg>
-                                        Assign
-                                    </button>
+                                    {canAssign && user?.role !== 'site_admin' && (
+                                        <button 
+                                            onClick={enterAssignMode}
+                                            className="group relative inline-flex items-center justify-center px-3 py-1.5 text-xs font-medium text-gray-700 bg-gradient-to-r from-blue-100 to-blue-200 border border-blue-300 rounded-md shadow-sm hover:from-blue-200 hover:to-blue-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                                        >
+                                            Assign
+                                        </button>
+                                    )}
                                     <button 
                                         onClick={enterExportSelectionMode}
                                         className="group relative inline-flex items-center justify-center px-3 py-1.5 text-xs font-medium text-gray-700 bg-gradient-to-r from-gray-100 to-gray-200 rounded-md shadow-sm hover:from-gray-200 hover:to-gray-300 hover:shadow-md transition-all duration-200 ease-in-out border border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-1"
@@ -1310,34 +1481,34 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                         Select
                                     </button>
                                 </>
-                            ) : assignMode ? (
+                            ) : canAssign && assignMode && user?.role !== 'site_admin' ? (
                                 // Assign mode - show Assign button with count and Cancel button
                                 <>
-                            <button 
-                                onClick={() => setShowAssignPopup(true)}
-                                disabled={selectedTickets.length === 0}
-                                        className={`group relative inline-flex items-center justify-center px-3 py-1.5 text-xs font-medium rounded-md shadow-sm transition-all duration-200 ease-in-out border-0 focus:outline-none focus:ring-2 focus:ring-offset-1 ${
-                                    selectedTickets.length === 0 
-                                                ? 'bg-gray-300 text-gray-500 cursor-not-allowed shadow-none' 
-                                                : 'text-white bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 hover:shadow-md focus:ring-green-500'
-                                }`}
-                            >
-                                        <svg className="w-3 h-3 mr-1.5 group-hover:scale-110 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                        </svg>
-                                Assign {selectedTickets.length > 0 && `(${selectedTickets.length})`}
-                            </button>
-                                    <button 
-                                        onClick={exitAssignMode}
-                                        className="group relative inline-flex items-center justify-center px-3 py-1.5 text-xs font-medium text-white bg-gradient-to-r from-red-400 to-red-500 rounded-md shadow-sm hover:from-red-500 hover:to-red-600 hover:shadow-md transition-all duration-200 ease-in-out border-0 focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-1"
-                                    >
-                                        <svg className="w-3 h-3 mr-1.5 group-hover:scale-110 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                        </svg>
-                                        Cancel
-                            </button>
+                                <button 
+                                    onClick={() => setShowAssignPopup(true)}
+                                    disabled={selectedTickets.length === 0}
+                                            className={`group relative inline-flex items-center justify-center px-3 py-1.5 text-xs font-medium rounded-md shadow-sm transition-all duration-200 ease-in-out border-0 focus:outline-none focus:ring-2 focus:ring-offset-1 ${
+                                        selectedTickets.length === 0 
+                                                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed shadow-none' 
+                                                    : 'text-white bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 hover:shadow-md focus:ring-green-500'
+                                    }`}
+                                >
+                                            <svg className="w-3 h-3 mr-1.5 group-hover:scale-110 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                            </svg>
+                                    Assign {selectedTickets.length > 0 && `(${selectedTickets.length})`}
+                                </button>
+                                        <button 
+                                            onClick={exitAssignMode}
+                                            className="group relative inline-flex items-center justify-center px-3 py-1.5 text-xs font-medium text-white bg-gradient-to-r from-red-400 to-red-500 rounded-md shadow-sm hover:from-red-500 hover:to-red-600 hover:shadow-md transition-all duration-200 ease-in-out border-0 focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-1"
+                                        >
+                                            <svg className="w-3 h-3 mr-1.5 group-hover:scale-110 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                            </svg>
+                                            Cancel
+                                </button>
                                 </>
-                            ) : (
+                            ) : !canAssign && assignMode ? null : (
                                 // Export selection mode - show Cancel button
                                 <button 
                                     onClick={exitExportSelectionMode}
@@ -1349,363 +1520,153 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                     Cancel
                                 </button>
                             )}
-                            <button className="group relative inline-flex items-center justify-center px-3 py-1.5 text-xs font-medium text-white bg-gradient-to-r from-purple-600 to-purple-700 rounded-md shadow-sm hover:from-purple-700 hover:to-purple-800 hover:shadow-md transition-all duration-200 ease-in-out border-0 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-1">
+                            <button className="group relative inline-flex items-center justify-center px-3 py-1.5 text-xs font-medium text-gray-700 bg-gradient-to-r from-gray-100 to-gray-200 rounded-md shadow-sm hover:from-gray-200 hover:to-gray-300 hover:shadow-md transition-all duration-200 ease-in-out border border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-1">
                                 <svg className="w-3 h-3 mr-1.5 group-hover:scale-110 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                                 </svg>
                                 Notes
                             </button>
                         </div>
-                        
-                        <div className="ml-3">
-                            <button
-                            onClick={toggleExportPopup}
-                                disabled={loading}
-                            ref={exportButtonRef}
-                                className="group relative inline-flex items-center justify-center px-3 py-1.5 text-xs font-medium text-white bg-gradient-to-r from-emerald-600 to-emerald-700 rounded-md shadow-sm hover:from-emerald-700 hover:to-emerald-800 hover:shadow-md transition-all duration-200 ease-in-out border-0 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
-                            >
-                                <svg className="w-3 h-3 mr-1.5 group-hover:scale-110 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                </svg>
-                                {!assignMode && selectedTickets.length > 0 
-                                    ? `Export Selected (${selectedTickets.length})` 
-                                    : 'Export Tickets'
-                                }
-                            </button>
-                        </div>
-
-                        {showExportPopup && (
-                            <div ref={exportPopupRef} className="absolute top-full right-0 mt-2 p-3 bg-white border border-gray-300 rounded-md shadow-lg z-10 flex flex-col space-y-2">
-                                {!assignMode && selectedTickets.length > 0 && (
-                                    <div className="p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-800 mb-2">
-                                        📋 {selectedTickets.length} ticket{selectedTickets.length !== 1 ? 's' : ''} selected for export
-                                    </div>
-                                )}
-                                {!assignMode && selectedTickets.length > 0 ? (
-                                    // Show selected tickets info when tickets are selected
-                                    <div className="space-y-2">
-                                        <p className="text-xs font-semibold text-gray-700">Export Selected Tickets:</p>
-                                        <p className="text-xs text-gray-600">
-                                            Ready to export {selectedTickets.length} selected ticket{selectedTickets.length !== 1 ? 's' : ''}
-                                        </p>
-                                    </div>
-                                ) : showCheckboxes && !assignMode ? (
-                                    // Show message when in export selection mode but no tickets selected yet
-                                    <div className="space-y-2">
-                                        <p className="text-xs font-semibold text-gray-700">Select Tickets for Export:</p>
-                                        <p className="text-xs text-gray-600">
-                                            Use the checkboxes to select which tickets you want to export
-                                        </p>
-                                    </div>
-                                ) : (
-                                    // Show date range form when no tickets are selected and not in selection mode
-                                    <>
-                                <p className="text-xs font-semibold text-gray-700">Select Date Range and Status for Export:</p>
-                                <div className="flex items-center space-x-2">
-                                    <input
-                                        type="date"
-                                        value={startDate}
-                                        onChange={(e) => setStartDate(e.target.value)}
-                                        className="p-1 border border-gray-300 rounded-md text-xs w-28"
-                                        max={today}
-                                    />
-                                    <span className="text-sm">to</span>
-                                    <input
-                                        type="date"
-                                        value={endDate}
-                                        onChange={(e) => setEndDate(e.target.value)}
-                                        className="p-1 border border-gray-300 rounded-md text-xs w-28"
-                                        max={today}
-                                    />
-                                </div>
-                                <div className="flex items-center space-x-2">
-                                    <label htmlFor="export-status" className="text-xs font-semibold text-gray-700">Status:</label>
-                                    <select
-                                        id="export-status"
-                                        value={exportStatus}
-                                        onChange={(e) => setExportStatus(e.target.value)}
-                                        className="px-2 py-1.5 text-xs border border-gray-300 rounded-md bg-white h-8 min-w-[110px]"
-                                    >
-                                        <option value="">All</option>
-                                        <option value="Open">Open</option>
-                                        <option value="In Progress">In Progress</option>
-                                        <option value="Hold">Hold</option>
-                                        <option value="Resolved">Resolved</option>
-                                        <option value="Cancelled">Cancelled</option>
-                                    </select>
-                                </div>
-                                    </>
-                                )}
-                                <div className="flex justify-end space-x-3 mt-4">
-                                    <button
-                                        onClick={() => setShowExportPopup(false)}
-                                        className="group relative inline-flex items-center justify-center px-3 py-1.5 text-xs font-medium text-white bg-gradient-to-r from-red-400 to-red-500 rounded-md shadow-sm hover:from-red-500 hover:to-red-600 hover:shadow-md transition-all duration-200 ease-in-out border-0 focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-1"
-                                    >
-                                        <svg className="w-3 h-3 mr-1.5 group-hover:scale-110 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                        </svg>
-                                        Cancel
-                                    </button>
-                                    <button
-                                        onClick={handleExport}
-                                        disabled={loading || ((!startDate || !endDate || (new Date(endDate) > new Date(today)) || (new Date(startDate) > new Date(endDate))) && !selectedTickets.length)}
-                                        className={`group relative inline-flex items-center justify-center px-3 py-1.5 text-xs font-medium rounded-md shadow-sm transition-all duration-200 ease-in-out border-0 focus:outline-none focus:ring-2 focus:ring-offset-1 ${
-                                            exportSuccess 
-                                                ? 'text-white bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700' 
-                                                : 'text-white bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800'
-                                        } ${loading || ((!startDate || !endDate || (new Date(endDate) > new Date(today)) || (new Date(startDate) > new Date(endDate))) && !selectedTickets.length) ? 'opacity-50 cursor-not-allowed shadow-none' : 'hover:shadow-md'}`}
-                                    >
-                                        {exportSuccess ? (
-                                            <>
-                                                <svg className="w-3 h-3 mr-1.5 group-hover:scale-110 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                </svg>
-                                                Exported!
-                                            </>
-                                        ) : loading ? (
-                                            <>
-                                                <svg className="w-3 h-3 mr-1.5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                                </svg>
-                                                Exporting...
-                                            </>
-                                        ) : (
-                                            <>
-                                                <svg className="w-3 h-3 mr-1.5 group-hover:scale-110 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                                </svg>
-                                                Confirm Export
-                                            </>
-                                        )}
-                                    </button>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Assign Popup - Only show when in assign mode */}
-                        {showAssignPopup && assignMode && (
-                            <div ref={assignPopupRef} className="absolute top-full right-0 mt-2 p-4 bg-white border border-gray-300 rounded-md shadow-lg z-10 flex flex-col space-y-3 min-w-80">
-                                <div className="flex items-center justify-between">
-                                    <h3 className="text-sm font-semibold text-gray-700">Assign Tickets to Engineer</h3>
-                                    <button 
-                                        onClick={() => setShowAssignPopup(false)}
-                                        className="text-gray-400 hover:text-gray-600"
-                                    >
-                                        ✕
-                                    </button>
-                                </div>
-                                
-                                <div className="space-y-2">
-                                    <p className="text-xs text-gray-600">
-                                        {assignMode 
-                                            ? `Selected ${selectedTickets.length} unassigned ticket${selectedTickets.length !== 1 ? 's' : ''}`
-                                            : `Selected ${selectedTickets.length} ticket${selectedTickets.length !== 1 ? 's' : ''} for export`
-                                        }
-                                    </p>
-                                    
-                                    {availableEngineers.length === 0 ? (
-                                        <div className="p-3 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-800">
-                                            ⚠️ No engineers available. Please check system configuration.
-                                        </div>
-                                    ) : (
-                                        <div>
-                                            <label className="block text-xs font-semibold text-gray-700 mb-1">
-                                                Select Engineer:
-                                            </label>
-                                            <select
-                                                value={selectedEngineer}
-                                                onChange={(e) => setSelectedEngineer(e.target.value)}
-                                                className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500"
-                                            >
-                                                <option value="">Choose an engineer...</option>
-                                                {availableEngineers.map(engineer => (
-                                                    <option key={engineer.id} value={engineer.email}>
-                                                        {engineer.name} ({engineer.email})
-                                                    </option>
-                                                ))}
-                                            </select>
-                                        </div>
-                                    )}
-                                </div>
-                                
-                                <div className="flex justify-end space-x-3 pt-4">
-                                    <button
-                                        onClick={() => setShowAssignPopup(false)}
-                                        className="group relative inline-flex items-center justify-center px-3 py-1.5 text-xs font-medium text-white bg-gradient-to-r from-red-400 to-red-500 rounded-md shadow-sm hover:from-red-500 hover:to-red-600 hover:shadow-md transition-all duration-200 ease-in-out border-0 focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-1"
-                                    >
-                                        <svg className="w-3 h-3 mr-1.5 group-hover:scale-110 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                        </svg>
-                                        Cancel
-                                    </button>
-                                    <button
-                                        onClick={handleBulkAssign}
-                                        disabled={!selectedEngineer || assignLoading || availableEngineers.length === 0}
-                                        className={`group relative inline-flex items-center justify-center px-3 py-1.5 text-xs font-medium rounded-md shadow-sm transition-all duration-200 ease-in-out border-0 focus:outline-none focus:ring-2 focus:ring-offset-1 ${
-                                            !selectedEngineer || assignLoading || availableEngineers.length === 0
-                                                ? 'bg-gray-300 text-gray-500 cursor-not-allowed shadow-none transform-none'
-                                                : 'text-white bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 hover:shadow-md focus:ring-blue-500'
-                                        }`}
-                                    >
-                                        {assignLoading ? (
-                                            <>
-                                                <svg className="w-3 h-3 mr-1.5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                                </svg>
-                                                Assigning...
-                                            </>
-                                        ) : (
-                                            <>
-                                                <svg className="w-3 h-3 mr-1.5 group-hover:scale-110 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                                </svg>
-                                                Assign Tickets
-                                            </>
-                                        )}
-                                    </button>
-                                </div>
-                            </div>
-                        )}
                     </div>
                 </div>
-            )}
 
-            {displayedTickets.length === 0 ? (
-                <p className="text-gray-600 text-sm text-center p-6 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50">
-                    {searchKeyword ? `No tickets found matching "${searchKeyword}".` : "No tickets found matching the criteria."}
-                </p>
-            ) : (
-                <>
-                    {/* Ticket Count Display */}
-                    <div className="text-[12px] text-gray-500 text-left mb-2 px-0">
-                        Showing {((currentPage - 1) * ticketsPerPage) + 1}-{Math.min(currentPage * ticketsPerPage, displayedTickets.length)} of {displayedTickets.length} Tickets
-                        {filterBy === 'company' && (
-                            <span className="ml-7 text-gray-600">
-                                   Companies: {companies.length}, Selected: {filterCompany || 'None'}
-                            </span>
-                        )}
-                    </div>
-                    <div className="w-full max-w-full overflow-x-auto border border-gray-200 bg-white mt-0">
-                    <table className="w-full min-w-0 bg-white text-xs">
-                        <thead className="hidden sm:table-header-group bg-gray-100 border-b border-gray-200">
-                            <tr>
-                                <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">
-                                    <div className="flex flex-col items-start space-y-1">
-                                        {assignMode && (
-                                            <span className="text-xs text-gray-500 font-normal">
-                                                
-                                            </span>
-                                        )}
-                                    <input 
-                                        type="checkbox" 
-                                        onChange={(e) => {
-                                            if (e.target.checked) {
-                                                    if (assignMode) {
-                                                        // In assign mode, select only unassigned tickets
-                                                const unassignedTicketIds = paginatedTickets
-                                                    .filter(ticket => !ticket.assigned_to_email)
-                                                    .map(ticket => ticket.id);
-                                                setSelectedTickets(unassignedTicketIds);
-                                                    } else if (showCheckboxes) {
-                                                        // In export mode, select all tickets
-                                                        const allTicketIds = paginatedTickets.map(ticket => ticket.id);
-                                                        setSelectedTickets(allTicketIds);
-                                                    }
-                                            } else {
-                                                setSelectedTickets([]);
-                                            }
-                                        }}
-                                            checked={
-                                                assignMode 
-                                                    ? selectedTickets.length > 0 && selectedTickets.length === paginatedTickets.filter(ticket => !ticket.assigned_to_email).length
-                                                    : selectedTickets.length > 0 && selectedTickets.length === paginatedTickets.length
-                                            }
-                                            disabled={!assignMode && !showCheckboxes}
-                                            className={`w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 ${
-                                                !assignMode && !showCheckboxes ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
-                                            }`}
-                                        />
-                                    </div>
-                                </th>
-                                <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">#</th>
-                                <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">Ticket ID</th>
-                                <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">Short Description</th>
-                                <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">Category</th>
-                                <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">Priority</th>
-                                <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">Status</th>
-                                <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">Assigned To</th>
-                                <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">Last Updated</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-200">
-                            {paginatedTickets.map((ticket, index) => (
-                                <tr key={ticket.id} className="block sm:table-row bg-white border-b border-gray-200 hover:bg-gray-50 transition-colors duration-150 text-xs">
-                                    <td className="block sm:table-cell px-2 py-4 text-xs text-gray-800 whitespace-normal break-words border-r border-gray-200">
-                                        <span className="block sm:hidden font-semibold text-gray-600">Select:</span>
+                {displayedTickets.length === 0 ? (
+                    <p className="text-gray-600 text-sm text-center p-6 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50">
+                        {searchKeyword ? `No tickets found matching "${searchKeyword}".` : "No tickets found matching the criteria."}
+                    </p>
+                ) : (
+                    <>
+                        {/* Ticket Count Display */}
+                        <div className="text-[12px] text-gray-500 text-left mb-2 px-0">
+                            Showing {((currentPage - 1) * ticketsPerPage) + 1}-{Math.min(currentPage * ticketsPerPage, displayedTickets.length)} of {displayedTickets.length} Tickets
+                            {filterBy === 'company' && (
+                                <span className="ml-7 text-gray-600">
+                                       Companies: {companies.length}, Selected: {filterCompany || 'None'}
+                                </span>
+                            )}
+                        </div>
+                        <div className="w-full max-w-full overflow-x-auto border border-gray-200 bg-white mt-0">
+                        <table className="w-full min-w-0 bg-white text-xs">
+                            <thead className="hidden sm:table-header-group bg-gray-100 border-b border-gray-200">
+                                <tr>
+                                    <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">
+                                        <div className="flex flex-col items-start space-y-1">
+                                            {assignMode && (
+                                                <span className="text-xs text-gray-500 font-normal">
+                                                    
+                                                </span>
+                                            )}
                                         <input 
                                             type="checkbox" 
-                                            checked={selectedTickets.includes(ticket.id)}
-                                            onChange={() => handleTicketSelection(ticket.id)}
-                                            disabled={(!assignMode && !showCheckboxes) || (assignMode && ticket.assigned_to_email)}
-                                            className={`w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 ${
-                                                (!assignMode && !showCheckboxes) || (assignMode && ticket.assigned_to_email) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
-                                            }`}
-                                        />
-                                    </td>
-                                    <td className="block sm:table-cell px-2 py-4 text-xs text-gray-800 whitespace-normal break-words border-r border-gray-200">
-                                        <span className="block sm:hidden font-semibold text-gray-600">#:</span>
-                                        {index + 1}
-                                    </td>
-                                    <td className="block sm:table-cell px-2 py-4 text-xs text-blue-700 hover:underline font-medium cursor-pointer whitespace-normal break-words border-r border-gray-200" onClick={() => navigateTo('/tickets', ticket.id)}>
-                                        <span className="block sm:hidden font-semibold text-gray-600">Ticket ID:</span>
-                                        {ticket.display_id}
-                                    </td>
-                                    <td className="block sm:table-cell px-2 py-4 text-xs text-gray-800 max-w-xs truncate whitespace-normal break-words border-r border-gray-200" title={ticket.short_description}>
-                                        <span className="block sm:hidden font-semibold text-gray-600">Short Description:</span>
-                                        {ticket.short_description}
-                                    </td>
-                                    <td className="block sm:table-cell px-2 py-4 text-xs text-gray-800 whitespace-normal break-words border-r border-gray-200">
-                                        <span className="block sm:hidden font-semibold text-gray-600">Category:</span>
-                                        {ticket.category}
-                                    </td>
-                                    <td className="block sm:table-cell px-2 py-4 text-xs text-gray-800 whitespace-normal break-words border-r border-gray-200">
-                                        <span className="block sm:hidden font-semibold text-gray-600">Priority:</span>
-                                        <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getPriorityClasses(ticket.priority)}`}>{ticket.priority}</span>
-                                    </td>
-                                    <td className="block sm:table-cell px-2 py-4 whitespace-normal break-words text-xs text-gray-800 border-r border-gray-200">
-                                        <span className="block sm:hidden font-semibold text-gray-600">Status:</span>
-                                        <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getStatusClasses(ticket.status)}`}>{ticket.status}</span>
-                                    </td>
-                                    <td className="block sm:table-cell px-2 py-4 whitespace-normal break-words text-xs text-gray-800 border-r border-gray-200">
-                                        <span className="block sm:hidden font-semibold text-gray-600">Assigned To:</span>
-                                        {ticket.assigned_to_email || 'Unassigned'}
-                                    </td>
-                                    <td className="block sm:table-cell px-2 py-4 whitespace-normal break-words text-xs text-gray-800">
-                                        <span className="block sm:hidden font-semibold text-gray-600">Last Updated:</span>
-                                        {ticket.updated_at ? new Date(ticket.updated_at).toLocaleDateString('en-US', { 
-                                            month: 'short', 
-                                            day: '2-digit', 
-                                            year: 'numeric',
-                                            hour: '2-digit',
-                                            minute: '2-digit',
-                                            hour12: true 
-                                        }) : 'N/A'}
-                                    </td>
+                                            onChange={(e) => {
+                                                if (e.target.checked) {
+                                                        if (assignMode) {
+                                                            // In assign mode, select only unassigned tickets
+                                                    const unassignedTicketIds = paginatedTickets
+                                                        .filter(ticket => !ticket.assigned_to_email)
+                                                        .map(ticket => ticket.id);
+                                                    setSelectedTickets(unassignedTicketIds);
+                                                        } else if (showCheckboxes) {
+                                                            // In export mode, select all tickets
+                                                            const allTicketIds = paginatedTickets.map(ticket => ticket.id);
+                                                            setSelectedTickets(allTicketIds);
+                                                        }
+                                                } else {
+                                                    setSelectedTickets([]);
+                                                }
+                                            }}
+                                                checked={
+                                                    assignMode 
+                                                        ? selectedTickets.length > 0 && selectedTickets.length === paginatedTickets.filter(ticket => !ticket.assigned_to_email).length
+                                                        : selectedTickets.length > 0 && selectedTickets.length === paginatedTickets.length
+                                                }
+                                                disabled={!assignMode && !showCheckboxes}
+                                                className={`w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 ${
+                                                    !assignMode && !showCheckboxes ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+                                                }`}
+                                            />
+                                        </div>
+                                    </th>
+                                    <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">#</th>
+                                    <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">Ticket ID</th>
+                                    <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">Short Description</th>
+                                    <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">Category</th>
+                                    <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">Priority</th>
+                                    <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">Status</th>
+                                    <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">Assigned To</th>
+                                    <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">Last Updated</th>
                                 </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-                </>
-            )}
-            
-            {/* Bottom Pagination */}
-            {displayedTickets.length > 0 && (
-                <div className="flex justify-center items-center mt-4 mb-2 px-4">
-                    {renderPagination()}
-                </div>
-            )}
-        </div>
+                            </thead>
+                            <tbody className="divide-y divide-gray-200">
+                                {paginatedTickets.map((ticket, index) => (
+                                    <tr key={ticket.id} className="block sm:table-row bg-white border-b border-gray-200 hover:bg-gray-50 transition-colors duration-150 text-xs">
+                                        <td className="block sm:table-cell px-2 py-4 text-xs text-gray-800 whitespace-normal break-words border-r border-gray-200">
+                                            <span className="block sm:hidden font-semibold text-gray-600">Select:</span>
+                                            <input 
+                                                type="checkbox" 
+                                                checked={selectedTickets.includes(ticket.id)}
+                                                onChange={() => handleTicketSelection(ticket.id)}
+                                                disabled={(!assignMode && !showCheckboxes) || (assignMode && ticket.assigned_to_email)}
+                                                className={`w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 ${
+                                                    (!assignMode && !showCheckboxes) || (assignMode && ticket.assigned_to_email) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+                                                }`}
+                                            />
+                                        </td>
+                                        <td className="block sm:table-cell px-2 py-4 text-xs text-gray-800 whitespace-normal break-words border-r border-gray-200">
+                                            <span className="block sm:hidden font-semibold text-gray-600">#:</span>
+                                            {index + 1}
+                                        </td>
+                                        <td className="block sm:table-cell px-2 py-4 text-xs text-blue-700 hover:underline font-medium cursor-pointer whitespace-normal break-words border-r border-gray-200" onClick={() => navigateTo('/tickets', ticket.id)}>
+                                            <span className="block sm:hidden font-semibold text-gray-600">Ticket ID:</span>
+                                            {ticket.display_id}
+                                        </td>
+                                        <td className="block sm:table-cell px-2 py-4 text-xs text-gray-800 max-w-xs truncate whitespace-normal break-words border-r border-gray-200" title={ticket.short_description}>
+                                            <span className="block sm:hidden font-semibold text-gray-600">Short Description:</span>
+                                            {ticket.short_description}
+                                        </td>
+                                        <td className="block sm:table-cell px-2 py-4 text-xs text-gray-800 whitespace-normal break-words border-r border-gray-200">
+                                            <span className="block sm:hidden font-semibold text-gray-600">Category:</span>
+                                            {ticket.category}
+                                        </td>
+                                        <td className="block sm:table-cell px-2 py-4 text-xs text-gray-800 whitespace-normal break-words border-r border-gray-200">
+                                            <span className="block sm:hidden font-semibold text-gray-600">Priority:</span>
+                                            <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getPriorityClasses(ticket.priority)}`}>{ticket.priority}</span>
+                                        </td>
+                                        <td className="block sm:table-cell px-2 py-4 whitespace-normal break-words text-xs text-gray-800 border-r border-gray-200">
+                                            <span className="block sm:hidden font-semibold text-gray-600">Status:</span>
+                                            <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getStatusClasses(ticket.status)}`}>{ticket.status}</span>
+                                        </td>
+                                        <td className="block sm:table-cell px-2 py-4 whitespace-normal break-words text-xs text-gray-800 border-r border-gray-200">
+                                            <span className="block sm:hidden font-semibold text-gray-600">Assigned To:</span>
+                                            {ticket.assigned_to_email || 'Unassigned'}
+                                        </td>
+                                        <td className="block sm:table-cell px-2 py-4 whitespace-normal break-words text-xs text-gray-800">
+                                            <span className="block sm:hidden font-semibold text-gray-600">Last Updated:</span>
+                                            {ticket.updated_at ? new Date(ticket.updated_at).toLocaleDateString('en-US', { 
+                                                month: 'short', 
+                                                day: '2-digit', 
+                                                year: 'numeric',
+                                                hour: '2-digit',
+                                                minute: '2-digit',
+                                                hour12: true 
+                                            }) : 'N/A'}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                    </>
+                )}
+                
+                {/* Bottom Pagination */}
+                {displayedTickets.length > 0 && (
+                    <div className="flex justify-center items-center mt-4 mb-2 px-4">
+                        {renderPagination()}
+                    </div>
+                )}
+            </div>
+        </>
     );
 };
 

@@ -56,6 +56,7 @@ import MenuItem from '@mui/material/MenuItem'; // Import Material-UI MenuItem
 import NotificationModal from './components/common/NotificationModal';
 import { BellRing } from './components/common/BellRing';
 import { createPortal } from 'react-dom';
+import ReactDOM from 'react-dom';
 
 
 // Import Firebase auth client and dbClient
@@ -1024,14 +1025,21 @@ const App = () => {
                     }}
                 >
                 {/* Left side: Dashboard and Manage buttons with search bar */}
-                <div className={`flex items-center gap-3 ${
+                <div className={`flex items-center gap-2 ${
                     !(['admin', 'site_admin', 'super_admin'].includes(currentUser.role) || ['super_admin', 'admin'].includes(currentUser.role)) 
                     ? 'pl-4' 
                     : ''
                 }`}>
                     {/* Dashboard button */}
                     {currentUser && (['admin', 'site_admin', 'super_admin'].includes(currentUser.role)) && (
-                        <Link to="/dashboard" className={`flex items-center px-3 py-1.5 text-sm font-medium transition-all duration-200 hover:bg-white/20 hover:text-white ${location.pathname === '/dashboard' ? 'bg-white/30 text-white' : 'text-white'}`} style={{ textShadow: '0 0 1px #000, 0 0 1px #000, 0 0 1px #000, 0 0 1px #000' }}> 
+                        <Link to="/dashboard" className={`flex items-center px-3 text-base font-bold transition-all duration-200 hover:bg-white/20 hover:text-white ${location.pathname === '/dashboard' ? 'bg-white/15 text-white' : 'text-white'}`} style={{
+                            textShadow: '0.5px 0.5px 0px rgba(0,0,0,0.2), 2px 2px 0px rgba(0,0,0,0.1)',
+                            transform: 'translateZ(0)',
+                            letterSpacing: '0.5px',
+                            height: '50.4px',
+                            minHeight: '50.4px',
+                            marginLeft: '-16px'
+                        }}> 
                             Dashboard
                         </Link>
                     )}
@@ -1040,11 +1048,17 @@ const App = () => {
                         <div className="relative">
                             <button
                                 onClick={handleClick} // Use handleClick to open the MUI Menu
-                                className="flex items-center px-3 py-1.5 text-sm font-medium transition-all duration-200 hover:bg-white/20 hover:text-white text-white cursor-pointer"
+                                className="flex items-center px-3 text-base font-bold transition-all duration-200 hover:bg-white/20 hover:text-white text-white cursor-pointer"
                                 aria-controls={managementOpen ? 'management-menu' : undefined} // ARIA attributes
                                 aria-haspopup="true"
                                 aria-expanded={managementOpen ? 'true' : undefined}
-                                style={{ textShadow: '0 0 1px #000, 0 0 1px #000, 0 0 1px #000, 0 0 1px #000' }}
+                                style={{
+                                    textShadow: '0.5px 0.5px 0px rgba(0,0,0,0.2), 2px 2px 0px rgba(0,0,0,0.1)',
+                                    transform: 'translateZ(0)',
+                                    letterSpacing: '0.5px',
+                                    height: '50.4px',
+                                    minHeight: '50.4px'
+                                }}
                             >
                                 Manage
                                 {managementOpen ? (
@@ -1136,14 +1150,22 @@ const App = () => {
                 {currentUser && !isAuthLoading && location.pathname !== '/login' && location.pathname !== '/register' && (currentUser.role === 'user' || currentUser.role === 'site_admin') && (
                     <div className="flex items-center gap-4 mr-4">
                         <div className="flex items-center gap-4 text-sm">
-                            <div className="flex items-center gap-2 group cursor-pointer">
-                                <PhoneIcon sx={{ fontSize: '0.9rem', color: '#FFFFFF' }} />
-                                <span className="text-white font-semibold text-xs tracking-wide group-hover:text-white/80 transition-colors duration-200" style={{ textShadow: '0 0 1px #000, 0 0 1px #000, 0 0 1px #000, 0 0 1px #000' }}>{'+91 9391930393'}</span>
+                            <div className="flex items-center gap-1 group cursor-pointer">
+                                <PhoneIcon sx={{ fontSize: '0.9rem', color: '#2a2a2a' }} />
+                                <span className="text-white font-bold text-sm tracking-wide group-hover:text-white/80 transition-colors duration-200" style={{
+                                    textShadow: '1px 1px 0px rgba(0,0,0,0.2), 2px 2px 0px rgba(0,0,0,0.1)',
+                                    transform: 'translateZ(0)',
+                                    letterSpacing: '0.5px'
+                                }}>{'+91 9391930393'}</span>
                             </div>
                             <div className="w-px h-5 bg-white/30"></div>
-                            <div className="flex items-center gap-2 group cursor-pointer">
-                                <EmailIcon sx={{ fontSize: '0.9rem', color: '#FFFFFF' }} />
-                                <span className="text-white font-semibold text-xs tracking-wide group-hover:text-white/80 transition-colors duration-200" style={{ textShadow: '0 0 1px #000, 0 0 1px #000, 0 0 1px #000, 0 0 1px #000' }}>{'HelloIT@finstackk.com'}</span>
+                            <div className="flex items-center gap-1 group cursor-pointer">
+                                <EmailIcon sx={{ fontSize: '0.9rem', color: '#2a2a2a' }} />
+                                <span className="text-white font-bold text-sm tracking-wide group-hover:text-white/80 transition-colors duration-200" style={{
+                                    textShadow: '1px 1px 0px rgba(0,0,0,0.2), 2px 2px 0px rgba(0,0,0,0.1)',
+                                    transform: 'translateZ(0)',
+                                    letterSpacing: '0.5px'
+                                }}>{'HelloIT@kriasol.com'}</span>
                             </div>
                         </div>
                     </div>
@@ -1191,17 +1213,26 @@ const App = () => {
                                     {currentUser.email?.charAt(0).toUpperCase()}
                                 </div>
                                 <div className="hidden sm:block text-left">
-                                    <p className="text-xs font-medium text-white truncate" style={{ textShadow: '0 0 1px #000, 0 0 1px #000, 0 0 1px #000, 0 0 1px #000' }}>
+                                    <p className="text-sm font-medium text-white truncate" style={{
+                                        textShadow: '0.5px 0.5px 0px rgba(0,0,0,0.15)',
+                                        transform: 'translateZ(0)',
+                                        letterSpacing: '0.25px'
+                                    }}>
                                         {currentUser.email}
                                     </p>
                                     <p className={`text-xs capitalize truncate ${
-                                        currentUser.role === 'super_admin' ? 'text-yellow-200 font-bold' :
-                                        currentUser.role === 'admin' ? 'text-blue-200 font-semibold' :
-                                        currentUser.role === 'site_admin' ? 'text-green-200 font-semibold' :
-                                        currentUser.role === 'engineer' ? 'text-purple-200 font-medium' :
-                                        currentUser.role === 'support' ? 'text-orange-200 font-medium' :
-                                        'text-white/90 font-normal'
-                                    }`} style={{ fontSize: '0.65rem', textShadow: '0 0 1px #000, 0 0 1px #000, 0 0 1px #000, 0 0 1px #000' }}>
+                                        currentUser.role === 'super_admin' ? 'text-yellow-200 font-medium' :
+                                        currentUser.role === 'admin' ? 'text-blue-200 font-medium' :
+                                        currentUser.role === 'site_admin' ? 'text-green-200 font-medium' :
+                                        currentUser.role === 'engineer' ? 'text-purple-200 font-normal' :
+                                        currentUser.role === 'support' ? 'text-orange-200 font-normal' :
+                                        'text-white/80 font-normal'
+                                    }`} style={{ 
+                                        fontSize: '0.75rem',
+                                        textShadow: '0.5px 0.5px 0px rgba(0,0,0,0.1)',
+                                        transform: 'translateZ(0)',
+                                        letterSpacing: '0.25px'
+                                    }}>
                                         {currentUser.role?.replace('_', ' ')}
                                     </p>
                                 </div>

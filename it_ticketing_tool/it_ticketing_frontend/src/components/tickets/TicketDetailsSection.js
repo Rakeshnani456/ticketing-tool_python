@@ -669,7 +669,7 @@ const TicketDetailsSection = ({
                                                             <span className="text-yellow-600 font-normal">Uploading...</span>
                                                         ) : attachment.type === 'transitioning' ? (
                                                             <span className="text-green-600 font-normal">Uploaded!</span>
-                                                        ) : attachment.added_at ? (
+                                                        ) : attachment.added_at && !isNaN(new Date(attachment.added_at).getTime()) ? (
                                                             <div className="flex items-center gap-2">
                                                                 <span className="text-gray-400 font-normal">
                                                                     {new Date(attachment.added_at).toLocaleString()}
@@ -681,7 +681,15 @@ const TicketDetailsSection = ({
                                                                     </span>
                                                                 )}
                                                             </div>
-                                                        ) : 'Unknown date'}
+                                                        ) : ticket.updated_at && !isNaN(new Date(ticket.updated_at).getTime()) ? (
+                                                            <span className="text-gray-400 font-normal">
+                                                                {new Date(ticket.updated_at).toLocaleString()}
+                                                            </span>
+                                                        ) : ticket.created_at && !isNaN(new Date(ticket.created_at).getTime()) ? (
+                                                            <span className="text-gray-400 font-normal">
+                                                                {new Date(ticket.created_at).toLocaleString()}
+                                                            </span>
+                                                        ) : 'Date not available'}
                                                     </span>
                                                 </div>
                                             </div>

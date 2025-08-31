@@ -655,9 +655,25 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                     }
                     const assignedUserDoc = userQuery.docs[0];
                     const assignedUserData = assignedUserDoc.data();
-                    if (!['support', 'admin'].includes(assignedUserData.role)) {
-                        return res.status(400).json({ error: 'User cannot be assigned as they are not a support associate or admin.' });
+                    
+                    // Allow assignment based on user role
+                    let canAssign = false;
+                    if (authenticatedUserRole === 'site_admin') {
+                        // Site admin can assign to support, admin, and site_admin users
+                        canAssign = ['support', 'admin', 'site_admin'].includes(assignedUserData.role);
+                    } else {
+                        // Other users can only assign to support and admin users
+                        canAssign = ['support', 'admin'].includes(assignedUserData.role);
                     }
+                    
+                    if (!canAssign) {
+                        if (authenticatedUserRole === 'site_admin') {
+                            return res.status(400).json({ error: 'User cannot be assigned as they are not a support associate, admin, or site admin.' });
+                        } else {
+                            return res.status(400).json({ error: 'User cannot be assigned as they are not a support associate or admin.' });
+                        }
+                    }
+                    
                     updateData.assigned_to_id = assignedUserDoc.id;
                     updateData.assigned_to_email = assigned_to_email;
 

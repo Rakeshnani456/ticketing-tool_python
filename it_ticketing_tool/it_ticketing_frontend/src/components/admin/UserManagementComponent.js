@@ -193,6 +193,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
         siteAdmins: 0,
         regularUsers: 0
     });
+    const [isRefreshing, setIsRefreshing] = useState(false);
 
     const handleToggleClientCollapse = (client) => {
       setCollapsedClients(prev => ({ ...prev, [client]: !prev[client] }));
@@ -1359,18 +1360,26 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
 
     const handleRefresh = async () => {
         console.log("Manual refresh requested...");
+        setIsRefreshing(true);
         setLoading(true);
         
-        if (user.role === 'site_admin') {
-            // For site admin, force refresh from API
-            await fetchUsersFromAPI(true);
-        } else {
-            // For other roles, clear cache and let Firestore listener handle it
-            const cacheKey = `userManagement_cache_${user.role}`;
-            const cacheTimeKey = `${cacheKey}_time`;
-            localStorage.removeItem(cacheKey);
-            localStorage.removeItem(cacheTimeKey);
-            setLoading(false);
+        try {
+            if (user.role === 'site_admin') {
+                // For site admin, force refresh from API
+                await fetchUsersFromAPI(true);
+            } else {
+                // For other roles, clear cache and let Firestore listener handle it
+                const cacheKey = `userManagement_cache_${user.role}`;
+                const cacheTimeKey = `${cacheKey}_time`;
+                localStorage.removeItem(cacheKey);
+                localStorage.removeItem(cacheTimeKey);
+                setLoading(false);
+                
+                // Add a small delay to ensure the spinner is visible for non-site-admin users
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
+        } finally {
+            setIsRefreshing(false);
         }
     };
 
@@ -1615,8 +1624,8 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                             variant="outlined"
                             color="primary"
                             onClick={handleRefresh}
-                            disabled={loading}
-                            startIcon={<RefreshIcon sx={{ fontSize: '0.75rem' }} />}
+                            disabled={loading || isRefreshing}
+                            startIcon={isRefreshing ? <CircularProgress size={16} color="primary" /> : <RefreshIcon sx={{ fontSize: '0.75rem' }} />}
                             size="small"
                             sx={{
                                 borderRadius: 0.5,
