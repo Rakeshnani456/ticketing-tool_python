@@ -138,8 +138,8 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                 // Site admin can see all engineers for assignment
                 engineersQuery = query(usersRef, where('role', 'in', ['support', 'admin', 'site_admin']));
             } else {
-                // Other users see only support engineers
-                engineersQuery = query(usersRef, where('role', '==', 'support'));
+                // Other users see support engineers and super admins
+                engineersQuery = query(usersRef, where('role', 'in', ['support', 'super_admin']));
             }
             
             const snapshot = await getDocs(engineersQuery);
@@ -164,7 +164,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                 if (user && user.role === 'site_admin') {
                     showFlashMessage('No engineers found in the system. Please add users with support, admin, or site_admin roles.', 'info');
                 } else {
-                    showFlashMessage('No engineers found in the system. Please add users with "support" role.', 'info');
+                    showFlashMessage('No engineers found in the system. Please add users with "support" or "super_admin" role.', 'info');
                 }
             }
             
@@ -453,8 +453,8 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
         }
     }, []); // Empty dependency array - only run once on mount
 
-    // Only allow assign mode and engineer loading for super_admin, admin, engineer (NOT site_admin)
-    const canAssign = user?.role === 'super_admin' || user?.role === 'admin' || user?.role === 'engineer';
+    // Only allow assign mode and engineer loading for super_admin, admin, support (NOT site_admin)
+    const canAssign = user?.role === 'super_admin' || user?.role === 'admin' || user?.role === 'support';
 
     // Replace useEffect for engineer loading
     useEffect(() => {

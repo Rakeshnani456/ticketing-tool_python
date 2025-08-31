@@ -1224,7 +1224,7 @@ const App = () => {
                                         currentUser.role === 'super_admin' ? 'text-yellow-200 font-medium' :
                                         currentUser.role === 'admin' ? 'text-blue-200 font-medium' :
                                         currentUser.role === 'site_admin' ? 'text-green-200 font-medium' :
-                                        currentUser.role === 'engineer' ? 'text-purple-200 font-normal' :
+                                        currentUser.role === 'support' ? 'text-purple-200 font-normal' :
                                         currentUser.role === 'support' ? 'text-orange-200 font-normal' :
                                         'text-white/80 font-normal'
                                     }`} style={{ 
@@ -1274,7 +1274,7 @@ const App = () => {
                 >
                     {/* Logo at the top of the sidebar */}
                     <div className={`flex ${isSidebarExpanded ? 'justify-center px-3 py-2' : 'justify-center pt-2 pb-1'}`}>
-                        <Link to={currentUser ? (['site_admin', 'super_admin', 'engineer', 'support', 'admin'].includes(currentUser.role) ? '/dashboard' : '/my-tickets') : '/login'} className="flex items-center">
+                        <Link to={currentUser ? (['site_admin', 'super_admin', 'support', 'admin'].includes(currentUser.role) ? '/dashboard' : '/my-tickets') : '/login'} className="flex items-center">
                             <img 
                                 src={isSidebarExpanded ? KriasolLogo : FabLogo} 
                                 alt="Logo" 

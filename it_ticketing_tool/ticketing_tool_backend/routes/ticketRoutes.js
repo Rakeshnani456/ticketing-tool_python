@@ -662,15 +662,15 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                         // Site admin can assign to support, admin, and site_admin users
                         canAssign = ['support', 'admin', 'site_admin'].includes(assignedUserData.role);
                     } else {
-                        // Other users can only assign to support and admin users
-                        canAssign = ['support', 'admin'].includes(assignedUserData.role);
+                        // Other users can assign to support, admin, and super_admin users
+                        canAssign = ['support', 'admin', 'super_admin'].includes(assignedUserData.role);
                     }
                     
                     if (!canAssign) {
                         if (authenticatedUserRole === 'site_admin') {
                             return res.status(400).json({ error: 'User cannot be assigned as they are not a support associate, admin, or site admin.' });
                         } else {
-                            return res.status(400).json({ error: 'User cannot be assigned as they are not a support associate or admin.' });
+                            return res.status(400).json({ error: 'User cannot be assigned as they are not a support associate, admin, or super admin.' });
                         }
                     }
                     

@@ -426,8 +426,8 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
     const openTickets = statusCounts['Open'] || 0;
     const inProgressTickets = statusCounts['In Progress'] || 0;
     
-    // Calculate assigned tickets for current engineer or support
-    const assignedToMe = (user?.role === 'engineer' || user?.role === 'support') ? 
+    // Calculate assigned tickets for current support
+    const assignedToMe = (user?.role === 'support') ? 
       tickets.filter(ticket => 
         ticket.assigned_to_email === user.email && 
         ['Open', 'In Progress', 'Hold'].includes(ticket.status)
@@ -441,8 +441,8 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
     let priorityResolutionTimes = {};
     let agentResolutionPerformance = [];
     
-    // Allow admin, super_admin, engineer, and site_admin to see resolution analytics
-    if (user?.role === 'admin' || user?.role === 'super_admin' || user?.role === 'engineer' || user?.role === 'site_admin') {
+    // Allow admin, super_admin, support, and site_admin to see resolution analytics
+    if (user?.role === 'admin' || user?.role === 'super_admin' || user?.role === 'support' || user?.role === 'site_admin') {
       // Get resolved tickets with proper data and apply filters
       let resolvedTickets = tickets.filter(ticket => 
         (ticket.status === 'Resolved' || ticket.status === 'Closed') && 
@@ -864,8 +864,8 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
             </h1>
           </div>
 
-          {/* Company Filter for Super Admin and Engineer - DISABLED */}
-          {/* {(user?.role === 'super_admin' || user?.role === 'engineer') && availableCompanies.length > 0 && (
+          {/* Company Filter for Super Admin and Support - DISABLED */}
+          {/* {(user?.role === 'super_admin' || user?.role === 'support') && availableCompanies.length > 0 && (
             <div className="flex items-center gap-2">
               <label className="text-sm font-medium">Company:</label>
                              <select
@@ -897,7 +897,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
 
         
         {/* Stats Overview */}
-        <div className={`grid grid-cols-1 md:grid-cols-${(user?.role === 'engineer' || user?.role === 'support') ? '4' : user?.role === 'admin' || user?.role === 'super_admin' ? '4' : '3'} gap-3 mb-4`}>
+        <div className={`grid grid-cols-1 md:grid-cols-${(user?.role === 'support') ? '4' : user?.role === 'admin' || user?.role === 'super_admin' ? '4' : '3'} gap-3 mb-4`}>
                      {/* Total Active Tickets - All roles can see */}
            <div 
              onClick={() => navigateTo('/all-tickets')}
@@ -955,8 +955,8 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
             </div>
           </div>
           
-                     {/* Assigned to Me - Only Engineers and Support */}
-           {(user?.role === 'engineer' || user?.role === 'support') && (
+                     {/* Assigned to Me - Only Support */}
+           {(user?.role === 'support') && (
              <div 
                onClick={() => navigateTo('/assigned-to-me')}
                className={`${cardClass} rounded-lg p-3 border cursor-pointer transition-all duration-200 hover:shadow-md hover:scale-100 transition duration-100`}

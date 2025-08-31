@@ -149,7 +149,7 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
     }, [ticket?.short_description, subjectExpanded]);
 
     const isSupportUser = user?.role === 'support' || user?.role === 'admin' || user?.role === 'super_admin' || user?.role === 'site_admin';
-    const isEngineer = user?.role === 'support';
+    const isEngineer = user?.role === 'support' || user?.role === 'super_admin';
 
     const priorities = [
         { value: 'Low', label: 'Low' },
@@ -494,7 +494,7 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                 })
                 .then(res => res.json())
                 .then(data => {
-                    setSupportUsers(Array.isArray(data) ? data.filter(u => u.role === 'support') : []);
+                    setSupportUsers(Array.isArray(data) ? data.filter(u => u.role === 'support' || u.role === 'super_admin') : []);
                     setSupportUsersLoading(false);
                 })
                 .catch(() => {
