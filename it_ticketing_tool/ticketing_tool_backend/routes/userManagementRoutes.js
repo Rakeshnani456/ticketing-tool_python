@@ -173,7 +173,7 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
                 
                 // Send welcome email to the new user
                 if (emailService) {
-                    const portalUrl = process.env.FRONTEND_URL || 'https://ticketing-tool.kriasol.com';
+                    const portalUrl = process.env.FRONTEND_URL || 'https://tt.kriasol.com/';
                     const emailData = {
                         userName: `${firstName} ${lastName}`,
                         clientName: 'Kriasol Technologies',
@@ -249,7 +249,7 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
                 
                 // Send welcome email to the new user
                 if (emailService) {
-                    const portalUrl = process.env.FRONTEND_URL || 'https://ticketing-tool.kriasol.com';
+                    const portalUrl = process.env.FRONTEND_URL || 'https://tt.kriasol.com/';
                     const emailData = {
                         userName: `${firstName} ${lastName}`,
                         clientName: companyName,
@@ -377,7 +377,7 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
             
             // Send the password sharing email
             if (emailService) {
-                const loginUrl = process.env.FRONTEND_URL || 'https://ticketing-tool.kriasol.com';
+                const loginUrl = process.env.FRONTEND_URL || 'https://tt.kriasol.com/';
                 const emailData = {
                     userName,
                     companyName,
@@ -467,7 +467,7 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
                 
                 // Prepare email data for bulk sending
                 if (emailService) {
-                    const portalUrl = process.env.FRONTEND_URL || 'https://ticketing-tool.kriasol.com';
+                    const portalUrl = process.env.FRONTEND_URL || 'https://tt.kriasol.com/';
                     const emailData = {
                         userName: `${firstName} ${lastName}`,
                         clientName: companyName,
