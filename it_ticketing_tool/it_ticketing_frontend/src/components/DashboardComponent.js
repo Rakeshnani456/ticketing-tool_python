@@ -20,9 +20,9 @@ import {
   Activity, Filter, Settings, Sun, Moon, RefreshCw,
   FileText, Plus
 } from 'lucide-react';
-import { collection, query, onSnapshot, orderBy, limit, getFirestore, where } from 'firebase/firestore';
-import { dbClient } from '../config/firebase';
-import { COLORS } from '../config/constants';
+import { supabase } from '../config/supabase';
+import { API_BASE_URL, COLORS } from '../config/constants';
+import { getAccessToken } from '../utils/utils';
 
 // Register Chart.js components
 ChartJS.register(
@@ -49,44 +49,12 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
   const [selectedAgent, setSelectedAgent] = useState(null);
   const [activeTab, setActiveTab] = useState('activity'); // 'activity' or 'tickets'
   
-  // State for activities
-  const [activities, setActivities] = useState([]);
-  
-  // State for company users (for site admin filtering)
-  const [companyUsers, setCompanyUsers] = useState([]);
-  
-  // State for original fetched activities (for re-filtering)
-  const [originalActivities, setOriginalActivities] = useState([]);
-  
-  // State for company filter (for Super Admin and Engineer)
-  const [selectedCompany, setSelectedCompany] = useState('');
-  const [availableCompanies, setAvailableCompanies] = useState([]);
-  
-  // State for time period filter (Ticket Volume Trend)
+  // State for time period filter
   const [selectedTimePeriod, setSelectedTimePeriod] = useState('7');
-  const [customStartDate, setCustomStartDate] = useState('');
-  const [customEndDate, setCustomEndDate] = useState('');
   
-  // State for Resolution Time Analytics filters (separate from Ticket Volume Trend)
-  const [resolutionTimePeriod, setResolutionTimePeriod] = useState('7');
-  const [resolutionTimeStartDate, setResolutionTimeStartDate] = useState('');
-  const [resolutionTimeEndDate, setResolutionTimeEndDate] = useState('');
-  const [resolutionTimeCompany, setResolutionTimeCompany] = useState('All');
-  
-  // Clear filters function for Ticket Volume Trend
+  // Clear filters function
   const clearFilters = () => {
     setSelectedTimePeriod('7');
-    setSelectedCompany('All');
-    setCustomStartDate('');
-    setCustomEndDate('');
-  };
-  
-  // Clear filters function for Resolution Time Analytics
-  const clearResolutionTimeFilters = () => {
-    setResolutionTimePeriod('7');
-    setResolutionTimeCompany('All');
-    setResolutionTimeStartDate('');
-    setResolutionTimeEndDate('');
   };
   
 
@@ -98,291 +66,80 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
     ? 'bg-gray-800/70 backdrop-blur-lg border-gray-700' 
     : 'bg-white/90 backdrop-blur-lg border-gray-300';
 
-  // Fetch data from Firebase
+  // Fetch data from Supabase API
   useEffect(() => {
-    if (!user || !user.firebaseUser) return;
+    if (!user) return;
     
-    // OPTIMIZED: Check cache first
-    const cacheKey = `dashboard_data_${user.uid}`;
-    const cachedData = localStorage.getItem(cacheKey);
-    const cacheTime = localStorage.getItem(`${cacheKey}_time`);
-    const now = Date.now();
-    
-    // Use cached data if it's less than 2 minutes old
-    if (cachedData && cacheTime && (now - parseInt(cacheTime)) < 120000) {
+    const fetchDashboardData = async () => {
       try {
-        const parsedData = JSON.parse(cachedData);
-        setTickets(parsedData.tickets || []);
-        setCompanyUsers(parsedData.companyUsers || []);
-        setLoading(false);
-      } catch (e) {
-        console.warn('Failed to parse cached dashboard data:', e);
-      }
-    }
-    
-    // Fetch tickets with company filtering for site admin
-    const ticketsRef = collection(dbClient, 'tickets');
-    let ticketsQuery;
-    
-    // OPTIMIZED: Apply proper filtering to reduce reads
-    if (user.role === 'site_admin' && user.client_name) {
-      ticketsQuery = query(ticketsRef, where('client_name', '==', user.client_name), orderBy('created_at', 'desc'), limit(100));
-    } else {
-      ticketsQuery = query(ticketsRef, orderBy('created_at', 'desc'), limit(100));
-    }
-    
-    const unsubscribeTickets = onSnapshot(ticketsQuery, (snapshot) => {
-      const fetchedTickets = snapshot.docs.map(doc => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          ...data,
-          created_at: data.created_at?.toDate?.() || new Date(),
-          updated_at: data.updated_at?.toDate?.() || new Date(),
-        };
-      });
-      
-      // Additional client-side filtering for site admin if needed
-      let filteredTickets = fetchedTickets;
-      if (user.role === 'site_admin' && user.client_name) {
-        filteredTickets = fetchedTickets.filter(ticket => {
-          const ticketClientName = ticket.client_name || ticket.companyName;
-          return ticketClientName === user.client_name || ticketClientName === user.companyName;
-        });
-      }
-      
-      setTickets(filteredTickets);
-      setLoading(false);
-      
-      // Cache the data
-      const dataToCache = {
-        tickets: filteredTickets,
-        companyUsers: companyUsers,
-        timestamp: now
-      };
-      localStorage.setItem(cacheKey, JSON.stringify(dataToCache));
-      localStorage.setItem(`${cacheKey}_time`, now.toString());
-    });
-    
-    // Initialize empty agents array (will be populated from real data when available)
-    setAgents([]);
-    
-    // OPTIMIZED: Only fetch company users if needed and not already cached
-    let unsubscribeUsers = null;
-    if (user.role === 'site_admin' && user.client_name) {
-      const usersRef = collection(dbClient, 'users');
-      const usersQuery = query(usersRef, where('client_name', '==', user.client_name), limit(100));
-      
-      unsubscribeUsers = onSnapshot(usersQuery, (snapshot) => {
-        const fetchedUsers = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
-        setCompanyUsers(fetchedUsers);
+        setLoading(true);
         
-        // Update cache with new company users
-        const existingCache = localStorage.getItem(cacheKey);
-        if (existingCache) {
-          try {
-            const parsedCache = JSON.parse(existingCache);
-            parsedCache.companyUsers = fetchedUsers;
-            localStorage.setItem(cacheKey, JSON.stringify(parsedCache));
-          } catch (e) {
-            console.warn('Failed to update cache with company users:', e);
+        // Get the current session token
+        const idToken = await getAccessToken(user);
+
+        // Fetch dashboard stats
+        const statsResponse = await fetch(`${API_BASE_URL}/api/dashboard/stats`, {
+          headers: {
+            'Authorization': `Bearer ${idToken}`,
+            'Content-Type': 'application/json'
           }
+        });
+
+        if (!statsResponse.ok) {
+          throw new Error(`Stats API error: ${statsResponse.status}`);
         }
+
+        const stats = await statsResponse.json();
         
-        console.log(`Fetched ${fetchedUsers.length} users for company: ${user.client_name}`);
-      }, (error) => {
-        console.error('Error fetching company users:', error);
-      });
-    }
-    
-    // OPTIMIZED: Reduce activities fetch and add caching
-    const activitiesRef = collection(dbClient, 'activities');
-    let activitiesQuery;
-    
-    // For site admin, we'll fetch more activities and filter client-side
-    // This handles existing activities that don't have client_name field
-    if (user.role === 'site_admin' && user.client_name) {
-      activitiesQuery = query(activitiesRef, orderBy('timestamp', 'desc'), limit(20));
-    } else {
-      activitiesQuery = query(activitiesRef, orderBy('timestamp', 'desc'), limit(5));
-    }
-    
-    console.log('Setting up activities listener...');
-    const unsubscribeActivities = onSnapshot(activitiesQuery, (snapshot) => {
-      console.log('Activities snapshot received:', snapshot.docs.length, 'documents');
-      const fetchedActivities = snapshot.docs.map(doc => {
-        const data = doc.data();
-        console.log('Activity data:', data);
-        return {
-          id: doc.id,
-          ...data,
-          timestamp: data.timestamp?.toDate?.() || new Date(),
-        };
-      });
-      
-      // Client-side filtering for site admin
-      let filteredActivities = fetchedActivities;
-      
-      if (user.role === 'site_admin' && user.client_name) {
-        console.log('Site admin filtering activities. User client_name:', user.client_name);
-        console.log('Total activities before filtering:', fetchedActivities.length);
-        console.log('Company users available for filtering:', companyUsers.length);
-        
-        // Get list of company user emails for filtering
-        const companyUserEmails = companyUsers.map(u => u.email).filter(Boolean);
-        console.log('Company user emails:', companyUserEmails);
-        
-        filteredActivities = fetchedActivities.filter(activity => {
-          // First, check if activity has direct client information
-          const activityClientName = activity.client_name || activity.companyName;
-          if (activityClientName) {
-            const matches = activityClientName === user.client_name || activityClientName === user.companyName;
-            console.log(`Activity ${activity.id} has client_name: ${activityClientName}, matches: ${matches}`);
-            return matches;
+        // Fetch recent tickets
+        const ticketsResponse = await fetch(`${API_BASE_URL}/api/dashboard/recent-tickets?limit=100`, {
+          headers: {
+            'Authorization': `Bearer ${idToken}`,
+            'Content-Type': 'application/json'
           }
-          
-          // Check if the activity was performed by a company user
-          if (activity.user_email && companyUserEmails.includes(activity.user_email)) {
-            console.log(`Activity ${activity.id} performed by company user: ${activity.user_email}`);
-            return true;
-          }
-          
-          // If no direct client info, look up the associated ticket
-          if (activity.ticket_id) {
-            const associatedTicket = tickets.find(ticket => ticket.id === activity.ticket_id);
-            if (associatedTicket) {
-              const ticketClientName = associatedTicket.client_name || associatedTicket.companyName;
-              const matches = ticketClientName === user.client_name || ticketClientName === user.companyName;
-              console.log(`Activity ${activity.id} linked to ticket ${activity.ticket_id}, ticket client_name: ${ticketClientName}, matches: ${matches}`);
-              return matches;
-            }
-          }
-          
-          // If company users are not loaded yet, be more permissive for existing activities
-          // This prevents activities from disappearing during initial load
-          if (companyUsers.length === 0) {
-            console.log(`Activity ${activity.id} - company users not loaded yet, allowing temporarily`);
-            return true;
-          }
-          
-          // If we can't determine the company, exclude it for security
-          console.log('Activity without client info, excluding for security:', activity);
-          return false;
         });
+
+        if (!ticketsResponse.ok) {
+          throw new Error(`Tickets API error: ${ticketsResponse.status}`);
+        }
+
+        const fetchedTickets = await ticketsResponse.json();
         
-        console.log('Activities after filtering:', filteredActivities.length);
+        // Convert date strings to Date objects
+        const processedTickets = fetchedTickets.map(ticket => ({
+          ...ticket,
+          created_at: ticket.created_at ? new Date(ticket.created_at) : new Date(),
+          updated_at: ticket.updated_at ? new Date(ticket.updated_at) : new Date(),
+        }));
+
+        setTickets(processedTickets);
+        setLoading(false);
         
-        // Limit to 3 most recent after filtering
-        filteredActivities = filteredActivities.slice(0, 3);
-        console.log('Final activities for site admin:', filteredActivities.length);
-      } else {
-        // For non-site admin users, just use the fetched activities
-        filteredActivities = fetchedActivities;
-      }
-      
-      console.log('Setting activities state with:', filteredActivities.length, 'activities');
-      setActivities(filteredActivities);
-      
-      // Store original activities for re-filtering
-      if (user.role === 'site_admin' && user.client_name) {
-        setOriginalActivities(fetchedActivities);
-      }
-    }, (error) => {
-      console.error('Error fetching activities:', error);
-      console.error('Error details:', error.code, error.message);
-    });
-    
-    return () => {
-      unsubscribeTickets();
-      unsubscribeActivities();
-      if (unsubscribeUsers) {
-        unsubscribeUsers();
+        console.log('Dashboard data loaded successfully:', {
+          stats,
+          ticketsCount: processedTickets.length
+        });
+
+      } catch (error) {
+        console.error('Error fetching dashboard data:', error);
+        setLoading(false);
+        // Set empty data to prevent infinite loading
+        setTickets([]);
       }
     };
+
+    fetchDashboardData();
   }, [user]);
 
-  // Re-filter activities when company users are loaded (for site admin)
+  // Initialize default values
   useEffect(() => {
-    if (user?.role === 'site_admin' && user?.client_name && companyUsers.length > 0 && originalActivities.length > 0) {
-      console.log('Re-filtering activities with loaded company users');
-      
-      // Get list of company user emails for filtering
-      const companyUserEmails = companyUsers.map(u => u.email).filter(Boolean);
-      console.log('Re-filtering with company user emails:', companyUserEmails);
-      
-      // Re-filter the original activities with the loaded company users
-      const reFilteredActivities = originalActivities.filter(activity => {
-        // First, check if activity has direct client information
-        const activityClientName = activity.client_name || activity.companyName;
-        if (activityClientName) {
-          const matches = activityClientName === user.client_name || activityClientName === user.companyName;
-          return matches;
-        }
-        
-        // Check if the activity was performed by a company user
-        if (activity.user_email && companyUserEmails.includes(activity.user_email)) {
-          return true;
-        }
-        
-        // If no direct client info, look up the associated ticket
-        if (activity.ticket_id) {
-          const associatedTicket = tickets.find(ticket => ticket.id === activity.ticket_id);
-          if (associatedTicket) {
-            const ticketClientName = associatedTicket.client_name || associatedTicket.companyName;
-            const matches = ticketClientName === user.client_name || ticketClientName === user.companyName;
-            return matches;
-          }
-        }
-        
-        // If we can't determine the company, exclude it for security
-        return false;
-      });
-      
-      console.log('Activities after re-filtering:', reFilteredActivities.length);
-      setActivities(reFilteredActivities.slice(0, 3));
-    }
-  }, [companyUsers, user, originalActivities, tickets]);
-
-  // Fetch available companies for Super Admin, Engineer, and Site Admin
-  useEffect(() => {
-    if (!user || (user.role !== 'super_admin' && user.role !== 'engineer' && user.role !== 'site_admin')) return;
-
-    const usersRef = collection(dbClient, 'users');
-    const unsubscribeCompanies = onSnapshot(usersRef, (snapshot) => {
-      const companies = new Set();
-      snapshot.docs.forEach(doc => {
-        const userData = doc.data();
-        if (userData.client_name) {
-          companies.add(userData.client_name);
-        }
-        if (userData.companyName) {
-          companies.add(userData.companyName);
-        }
-      });
-      
-      const companiesList = Array.from(companies).sort();
-      console.log('Available companies fetched:', companiesList);
-      console.log('User role:', user?.role);
-      setAvailableCompanies(companiesList);
-      
-      // Set "All" as default if none selected
-      if (!selectedCompany) {
-        setSelectedCompany('All');
-      }
-      
-      // Set default time period to 7 days if not already set
+    if (user) {
+      // Set default time period
       if (selectedTimePeriod === '30') {
         setSelectedTimePeriod('7');
       }
-    });
-
-    return () => {
-      unsubscribeCompanies();
-    };
-  }, [user, selectedCompany]);
+    }
+  }, [user, selectedTimePeriod]);
 
   // Create mappings for ticket ID lookups
   const ticketMappings = useMemo(() => {
@@ -403,8 +160,6 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
   const dashboardData = useMemo(() => {
     // Calculate ticket metrics
     const now = new Date();
-    const lastWeek = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    const lastMonth = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
     
     // Use all tickets for dashboard counts (no time filtering)
     let filteredTickets = tickets;
@@ -433,324 +188,108 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
         ['Open', 'In Progress', 'Hold'].includes(ticket.status)
       ).length : 0;
     
-    // Enhanced Resolution Time Analytics
+    // Simplified Resolution Time Analytics
     let avgResolutionTime = 0;
     let resolutionTimeData = [];
     let resolutionTimeDistribution = [];
-    let resolutionTimeTrend = [];
-    let priorityResolutionTimes = {};
-    let agentResolutionPerformance = [];
     
-    // Allow admin, super_admin, support, and site_admin to see resolution analytics
-    if (user?.role === 'admin' || user?.role === 'super_admin' || user?.role === 'support' || user?.role === 'site_admin') {
-      // Get resolved tickets with proper data and apply filters
-      let resolvedTickets = tickets.filter(ticket => 
-        (ticket.status === 'Resolved' || ticket.status === 'Closed') && 
-        ticket.created_at && 
-        ticket.updated_at
-      );
-      
-      // Apply company filter for Resolution Time Analytics
-      if (resolutionTimeCompany && resolutionTimeCompany !== 'All') {
-        resolvedTickets = resolvedTickets.filter(ticket => {
-          const ticketClient = ticket.client_name || ticket.companyName;
-          return ticketClient === resolutionTimeCompany;
-        });
-      }
-      
-      // Apply time period filter for Resolution Time Analytics
-      if (resolutionTimePeriod !== 'custom') {
-        const days = parseInt(resolutionTimePeriod);
-        const cutoffDate = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
-        resolvedTickets = resolvedTickets.filter(ticket => {
-          let ticketDate = ticket.updated_at;
-          
-          // Convert to Date if it's not already
-          if (!(ticketDate instanceof Date)) {
-            if (ticketDate && typeof ticketDate === 'object' && ticketDate.toDate) {
-              ticketDate = ticketDate.toDate();
-            } else if (ticketDate && typeof ticketDate === 'string') {
-              ticketDate = new Date(ticketDate);
-            } else if (ticketDate && typeof ticketDate === 'number') {
-              ticketDate = new Date(ticketDate);
-            } else {
-              return false;
-            }
-          }
-          
-          return ticketDate >= cutoffDate;
-        });
-      } else if (resolutionTimeStartDate && resolutionTimeEndDate) {
-        const startDate = new Date(resolutionTimeStartDate);
-        const endDate = new Date(resolutionTimeEndDate);
-        resolvedTickets = resolvedTickets.filter(ticket => {
-          let ticketDate = ticket.updated_at;
-          
-          // Convert to Date if it's not already
-          if (!(ticketDate instanceof Date)) {
-            if (ticketDate && typeof ticketDate === 'object' && ticketDate.toDate) {
-              ticketDate = ticketDate.toDate();
-            } else if (ticketDate && typeof ticketDate === 'string') {
-              ticketDate = new Date(ticketDate);
-            } else if (ticketDate && typeof ticketDate === 'number') {
-              ticketDate = new Date(ticketDate);
-            } else {
-              return false;
-            }
-          }
-          
-          return ticketDate >= startDate && ticketDate <= endDate;
-        });
-      }
-      
-      if (resolvedTickets.length > 0) {
-        // Calculate resolution times for each ticket
-        const ticketResolutionData = resolvedTickets.map(ticket => {
-          // Ensure dates are proper Date objects
-          let createdDate = ticket.created_at;
-          let resolvedDate = ticket.updated_at;
-          
-          // Convert to Date if they're not already
-          if (!(createdDate instanceof Date)) {
-            if (createdDate && typeof createdDate === 'object' && createdDate.toDate) {
-              createdDate = createdDate.toDate();
-            } else if (createdDate && typeof createdDate === 'string') {
-              createdDate = new Date(createdDate);
-            } else if (createdDate && typeof createdDate === 'number') {
-              createdDate = new Date(createdDate);
-            } else {
-              return null; // Skip invalid tickets
-            }
-          }
-          
-          if (!(resolvedDate instanceof Date)) {
-            if (resolvedDate && typeof resolvedDate === 'object' && resolvedDate.toDate) {
-              resolvedDate = resolvedDate.toDate();
-            } else if (resolvedDate && typeof resolvedDate === 'string') {
-              resolvedDate = new Date(resolvedDate);
-            } else if (resolvedDate && typeof resolvedDate === 'number') {
-              resolvedDate = new Date(resolvedDate);
-            } else {
-              return null; // Skip invalid tickets
-            }
-          }
-          
-          // Validate dates
-          if (isNaN(createdDate.getTime()) || isNaN(resolvedDate.getTime())) {
-            return null;
-          }
-          
-          const resolutionTimeMs = resolvedDate - createdDate;
-          const resolutionTimeMinutes = Math.round(resolutionTimeMs / (1000 * 60));
-          
-          // Use time_spent if available, otherwise calculate from dates
-          const finalResolutionTime = ticket.time_spent && ticket.time_spent > 0 
-            ? ticket.time_spent 
-            : resolutionTimeMinutes;
-          
-          return {
-            ...ticket,
-            resolutionTimeMinutes: finalResolutionTime,
-            resolutionTimeHours: Math.round(finalResolutionTime / 60 * 10) / 10,
-            resolutionTimeDays: Math.round(finalResolutionTime / (24 * 60) * 10) / 10,
-            createdDate: createdDate,
-            resolvedDate: resolvedDate
-          };
-        }).filter(ticket => ticket && ticket.resolutionTimeMinutes > 0); // Filter out invalid tickets and times
+    // Get resolved tickets
+    const resolvedTickets = tickets.filter(ticket => 
+      (ticket.status === 'Resolved' || ticket.status === 'Closed') && 
+      ticket.created_at && 
+      ticket.updated_at
+    );
+    
+    if (resolvedTickets.length > 0) {
+      // Calculate resolution times
+      const ticketResolutionData = resolvedTickets.map(ticket => {
+        const createdDate = new Date(ticket.created_at);
+        const resolvedDate = new Date(ticket.updated_at);
         
-        // Calculate average resolution time
-        if (ticketResolutionData.length > 0) {
-          const totalResolutionTime = ticketResolutionData.reduce((total, ticket) => {
-            return total + ticket.resolutionTimeMinutes;
-          }, 0);
-          avgResolutionTime = Math.round(totalResolutionTime / ticketResolutionData.length);
+        if (isNaN(createdDate.getTime()) || isNaN(resolvedDate.getTime())) {
+          return null;
         }
         
-        // Resolution Time Distribution (buckets)
-        const timeBuckets = {
-          '0-1h': 0,
-          '1-4h': 0,
-          '4-8h': 0,
-          '8-24h': 0,
-          '1-3d': 0,
-          '3-7d': 0,
-          '7d+': 0
+        const resolutionTimeMs = resolvedDate - createdDate;
+        const resolutionTimeMinutes = Math.round(resolutionTimeMs / (1000 * 60));
+        
+        return {
+          ...ticket,
+          resolutionTimeMinutes: resolutionTimeMinutes,
+          resolutionTimeHours: Math.round(resolutionTimeMinutes / 60 * 10) / 10,
+          resolutionTimeDays: Math.round(resolutionTimeMinutes / (24 * 60) * 10) / 10,
         };
-        
-        ticketResolutionData.forEach(ticket => {
-          const hours = ticket.resolutionTimeMinutes / 60;
-          if (hours <= 1) timeBuckets['0-1h']++;
-          else if (hours <= 4) timeBuckets['1-4h']++;
-          else if (hours <= 8) timeBuckets['4-8h']++;
-          else if (hours <= 24) timeBuckets['8-24h']++;
-          else if (hours <= 72) timeBuckets['1-3d']++;
-          else if (hours <= 168) timeBuckets['3-7d']++;
-          else timeBuckets['7d+']++;
-        });
-        
-        resolutionTimeDistribution = Object.entries(timeBuckets).map(([range, count]) => ({
-          range,
-          count,
-          percentage: Math.round((count / ticketResolutionData.length) * 100)
-        }));
-        
-        // Resolution Time Trend (last 30 days)
-        const trendDays = 30;
-      const trendData = [];
+      }).filter(ticket => ticket && ticket.resolutionTimeMinutes > 0);
       
-        for (let i = trendDays - 1; i >= 0; i--) {
-          const date = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
-        const dateStr = date.toISOString().split('T')[0];
-        
-          const ticketsResolvedOnDate = ticketResolutionData.filter(ticket => {
-            const resolvedDateStr = ticket.resolvedDate.toISOString().split('T')[0];
-            return resolvedDateStr === dateStr;
-          });
-          
-          if (ticketsResolvedOnDate.length > 0) {
-            const avgTimeForDate = Math.round(
-              ticketsResolvedOnDate.reduce((sum, ticket) => sum + ticket.resolutionTimeMinutes, 0) / 
-              ticketsResolvedOnDate.length
-            );
-          
-          trendData.push({
-            date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-              avgResolutionTime: avgTimeForDate,
-              ticketsResolved: ticketsResolvedOnDate.length,
-              fullDate: dateStr
-            });
-          } else {
-            trendData.push({
-              date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-              avgResolutionTime: 0,
-              ticketsResolved: 0,
-            fullDate: dateStr
-          });
-        }
+      // Calculate average resolution time
+      if (ticketResolutionData.length > 0) {
+        const totalResolutionTime = ticketResolutionData.reduce((total, ticket) => {
+          return total + ticket.resolutionTimeMinutes;
+        }, 0);
+        avgResolutionTime = Math.round(totalResolutionTime / ticketResolutionData.length);
       }
       
-        resolutionTimeTrend = trendData;
-        
-        // Priority-based Resolution Times
-        const priorityGroups = {};
-        ticketResolutionData.forEach(ticket => {
-          const priority = ticket.priority || 'Unknown';
-          if (!priorityGroups[priority]) {
-            priorityGroups[priority] = [];
-          }
-          priorityGroups[priority].push(ticket.resolutionTimeMinutes);
-        });
-        
-        priorityResolutionTimes = Object.entries(priorityGroups).map(([priority, times]) => ({
-        priority,
-          avgTime: Math.round(times.reduce((sum, time) => sum + time, 0) / times.length),
-          count: times.length,
-          minTime: Math.min(...times),
-          maxTime: Math.max(...times)
-        }));
-        
-        // Agent Performance (if assigned_to_email is available)
-        const agentGroups = {};
-        ticketResolutionData.forEach(ticket => {
-          const agent = ticket.assigned_to_email || 'Unassigned';
-          if (!agentGroups[agent]) {
-            agentGroups[agent] = [];
-          }
-          agentGroups[agent].push(ticket.resolutionTimeMinutes);
-        });
-        
-        agentResolutionPerformance = Object.entries(agentGroups)
-          .map(([agent, times]) => ({
-            agent: agent === 'Unassigned' ? 'Unassigned' : agent.split('@')[0],
-            avgTime: Math.round(times.reduce((sum, time) => sum + time, 0) / times.length),
-            count: times.length,
-            totalTime: times.reduce((sum, time) => sum + time, 0)
-          }))
-          .sort((a, b) => a.avgTime - b.avgTime) // Sort by performance (lower is better)
-          .slice(0, 10); // Top 10 agents
-        
-        // Overall resolution time data for the chart
-        resolutionTimeData = [
-          { metric: 'Average', time: avgResolutionTime, unit: 'minutes' },
-          { metric: 'Fastest', time: Math.min(...ticketResolutionData.map(t => t.resolutionTimeMinutes)), unit: 'minutes' },
-          { metric: 'Slowest', time: Math.max(...ticketResolutionData.map(t => t.resolutionTimeMinutes)), unit: 'minutes' }
-        ];
-      }
+      // Resolution Time Distribution (buckets)
+      const timeBuckets = {
+        '0-1h': 0,
+        '1-4h': 0,
+        '4-8h': 0,
+        '8-24h': 0,
+        '1-3d': 0,
+        '3-7d': 0,
+        '7d+': 0
+      };
+      
+      ticketResolutionData.forEach(ticket => {
+        const hours = ticket.resolutionTimeMinutes / 60;
+        if (hours <= 1) timeBuckets['0-1h']++;
+        else if (hours <= 4) timeBuckets['1-4h']++;
+        else if (hours <= 8) timeBuckets['4-8h']++;
+        else if (hours <= 24) timeBuckets['8-24h']++;
+        else if (hours <= 72) timeBuckets['1-3d']++;
+        else if (hours <= 168) timeBuckets['3-7d']++;
+        else timeBuckets['7d+']++;
+      });
+      
+      resolutionTimeDistribution = Object.entries(timeBuckets).map(([range, count]) => ({
+        range,
+        count,
+        percentage: Math.round((count / ticketResolutionData.length) * 100)
+      }));
+      
+      // Overall resolution time data for the chart
+      resolutionTimeData = [
+        { metric: 'Average', time: avgResolutionTime, unit: 'minutes' },
+        { metric: 'Fastest', time: Math.min(...ticketResolutionData.map(t => t.resolutionTimeMinutes)), unit: 'minutes' },
+        { metric: 'Slowest', time: Math.max(...ticketResolutionData.map(t => t.resolutionTimeMinutes)), unit: 'minutes' }
+      ];
     }
     
-    // Calculate ticket volume trend based on tickets per day
+    // Simplified ticket volume trend
     const volumeTrend = (() => {
-      let days = 30; // Default to 30 days
-      let startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-      let endDate = now;
+      let days = 7; // Default to 7 days
       
       // Calculate time period based on selection
       if (selectedTimePeriod === '1') {
         days = 1;
-        startDate = new Date(now.getTime() - 1 * 24 * 60 * 60 * 1000);
       } else if (selectedTimePeriod === '7') {
         days = 7;
-        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
       } else if (selectedTimePeriod === '30') {
         days = 30;
-        startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-      } else if (selectedTimePeriod === '90') {
-        days = 90;
-        startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
-      } else if (selectedTimePeriod === '180') {
-        days = 180;
-        startDate = new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000);
-      } else if (selectedTimePeriod === 'custom' && customStartDate && customEndDate) {
-        startDate = new Date(customStartDate);
-        endDate = new Date(customEndDate);
-        days = Math.ceil((endDate - startDate) / (24 * 60 * 60 * 1000));
       }
       
       const trendData = [];
+      const now = new Date();
       
-      for (let i = 0; i < days; i++) {
-        const date = new Date(startDate.getTime() + i * 24 * 60 * 60 * 1000);
-        const dateStr = date.toISOString().split('T')[0]; // YYYY-MM-DD format
+      for (let i = days - 1; i >= 0; i--) {
+        const date = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
+        const dateStr = date.toISOString().split('T')[0];
         
-        // Filter tickets for this specific date and client (if selected)
+        // Count tickets created on this date
         const ticketsForDate = filteredTickets.filter(ticket => {
-          // Ensure ticketDate is a proper Date object
-          let ticketDate = ticket.created_at;
-          
-          // Convert to Date if it's not already
-          if (!(ticketDate instanceof Date)) {
-            if (ticketDate && typeof ticketDate === 'object' && ticketDate.toDate) {
-              // Firebase Timestamp
-              ticketDate = ticketDate.toDate();
-            } else if (ticketDate && typeof ticketDate === 'string') {
-              // String date
-              ticketDate = new Date(ticketDate);
-            } else if (ticketDate && typeof ticketDate === 'number') {
-              // Unix timestamp
-              ticketDate = new Date(ticketDate);
-            } else {
-              // Invalid date, skip this ticket
-              return false;
-            }
-          }
-            
-            // Validate the date
-            if (isNaN(ticketDate.getTime())) {
-              return false;
-            }
-            
-            const ticketDateStr = ticketDate.toISOString().split('T')[0];
-            
-            // Match date
-            if (ticketDateStr !== dateStr) return false;
-            
-            // Apply client filter if selected
-            if (selectedCompany && selectedCompany !== 'All') {
-              const ticketClient = ticket.client_name || ticket.companyName;
-              if (ticketClient !== selectedCompany) return false;
-            }
-            
-            return true;
+          const ticketDate = new Date(ticket.created_at);
+          const ticketDateStr = ticketDate.toISOString().split('T')[0];
+          return ticketDateStr === dateStr;
         });
         
         trendData.push({
@@ -764,48 +303,19 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
       return trendData;
     })();
     
-    // Recent tickets logic - get tickets from last 2 days that are unassigned/unresolved
-    const recentTickets = tickets.filter(ticket => {
-      // Ensure ticketDate is a proper Date object
-      let ticketDate = ticket.created_at;
-      
-      // Convert to Date if it's not already
-      if (!(ticketDate instanceof Date)) {
-        if (ticketDate && typeof ticketDate === 'object' && ticketDate.toDate) {
-          // Firebase Timestamp
-          ticketDate = ticketDate.toDate();
-        } else if (ticketDate && typeof ticketDate === 'string') {
-          // String date
-          ticketDate = new Date(ticketDate);
-        } else if (ticketDate && typeof ticketDate === 'number') {
-          // Unix timestamp
-          ticketDate = new Date(ticketDate);
-        } else {
-          // Invalid date, skip this ticket
-          return false;
-        }
-      }
-        
-        // Validate the date
-        if (isNaN(ticketDate.getTime())) {
-          return false;
-        }
-        
-        const twoDaysAgo = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000);
-        
-        return ticketDate >= twoDaysAgo && 
-               (ticket.status === 'Open' || ticket.status === 'In Progress') &&
-               (!ticket.assigned_to_email || ticket.assigned_to_email === '');
-    }).slice(0, 10); // Limit to 10 most recent
+    // Recent tickets - get recent unassigned tickets
+    const recentTickets = tickets
+      .filter(ticket => 
+        (ticket.status === 'Open' || ticket.status === 'In Progress') &&
+        (!ticket.assigned_to_email || ticket.assigned_to_email === '')
+      )
+      .slice(0, 10); // Limit to 10 most recent
     
     return {
       statusCounts,
       priorityCounts,
       resolutionTimes: resolutionTimeData,
       resolutionTimeDistribution,
-      resolutionTimeTrend,
-      priorityResolutionTimes,
-      agentResolutionPerformance,
       volumeTrend,
       recentTickets,
       totalTickets: filteredTickets.length,
@@ -814,16 +324,12 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
       inProgressTickets,
       assignedToMe,
       avgResolutionTime,
-      totalResolvedTickets: (user?.role === 'admin' || user?.role === 'super_admin') ? 
-        tickets.filter(t => t.status === 'Resolved' || t.status === 'Closed').length : 0
+      totalResolvedTickets: tickets.filter(t => t.status === 'Resolved' || t.status === 'Closed').length
     };
-  }, [tickets, agents, timeRange, user, selectedCompany, selectedTimePeriod, customStartDate, customEndDate, resolutionTimePeriod, resolutionTimeCompany, resolutionTimeStartDate, resolutionTimeEndDate]);
+  }, [tickets, user, selectedTimePeriod]);
 
-  // Filter activities by selected company for Super Admin and Engineer - DISABLED
-  const filteredActivities = useMemo(() => {
-    // Company filtering disabled - return all activities
-    return activities;
-  }, [activities]);
+  // Activities are not available in Supabase version - using empty array
+  const filteredActivities = [];
 
   // Status colors for charts
   const statusColors = {
@@ -1007,317 +513,14 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
               style={{ fontFamily: '"Source Sans 3", sans-serif' }}
           >
             <div className="flex justify-between items-center mb-2">
-              <h2 className="text-xl font-semibold">Updates</h2>
-              <div className="relative bg-gray-200 rounded-full p-0.5 flex w-48">
-                <button 
-                  onClick={() => setActiveTab('activity')}
-                  className={`flex-1 py-1 px-2 rounded-full text-xs font-medium transition-all duration-300 ${
-                    activeTab === 'activity' 
-                      ? 'bg-[#e85c34] text-white shadow-sm transform scale-105' 
-                      : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'
-                  }`}
-                >
-                  Activity
-                </button>
-                <button 
-                  onClick={() => setActiveTab('tickets')}
-                  className={`flex-1 py-1 px-2 rounded-full text-xs font-medium transition-all duration-300 ${
-                    activeTab === 'tickets' 
-                      ? 'bg-[#e85c34] text-white shadow-sm transform scale-105' 
-                      : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'
-                  }`}
-                >
-                  Recents ({dashboardData.recentTickets.length})
-                </button>
+              <h2 className="text-xl font-semibold">Recent Tickets</h2>
+              <div className="text-sm text-gray-500">
+                {dashboardData.recentTickets.length} unassigned tickets
               </div>
             </div>
             
-            {activeTab === 'activity' && (
-              <div className="space-y-0 max-h-72 overflow-y-auto">
-                {console.log('Activities array length:', filteredActivities.length)}
-                {filteredActivities.length > 0 ? (
-                  filteredActivities.map((activity, index) => {
-                    // Get activity icon and color based on type
-                    const getActivityIcon = (type) => {
-                      switch (type) {
-                        case 'status_change':
-                          return <AlertCircle size={12} />;
-                        case 'assignment':
-                          return <Users size={12} />;
-                        case 'comment':
-                          return <Activity size={12} />;
-                        case 'resolved':
-                          return <CheckCircle size={12} />;
-                        case 'attachment':
-                          return <FileText size={12} />;
-                        case 'created':
-                          return <Plus size={12} />;
-                        case 'priority_change':
-                          return <TrendingUp size={12} />;
-                        case 'cancelled':
-                          return <AlertCircle size={12} />;
-                        default:
-                          return <Activity size={12} />;
-                      }
-                    };
-
-                    const getActivityColor = (type) => {
-                      switch (type) {
-                        case 'status_change':
-                          return 'bg-amber-100 text-amber-700 border border-amber-200';
-                        case 'assignment':
-                          return 'bg-sky-100 text-sky-700 border border-sky-200';
-                        case 'comment':
-                          return 'bg-emerald-100 text-emerald-700 border border-emerald-200';
-                        case 'resolved':
-                          return 'bg-green-100 text-green-700 border border-green-200';
-                        case 'attachment':
-                          return 'bg-violet-100 text-violet-700 border border-violet-200';
-                        case 'created':
-                          return 'bg-blue-100 text-blue-700 border border-blue-200';
-                        case 'priority_change':
-                          return 'bg-orange-100 text-orange-700 border border-orange-200';
-                        case 'cancelled':
-                          return 'bg-red-100 text-red-700 border border-red-200';
-                        default:
-                          return 'bg-slate-100 text-slate-700 border border-slate-200';
-                      }
-                    };
-
-                    const formatTimeAgo = (timestamp) => {
-                      // Ensure timestamp is a proper Date object
-                      let safeTimestamp = timestamp;
-                      
-                      if (!(safeTimestamp instanceof Date)) {
-                        if (safeTimestamp && typeof safeTimestamp === 'object' && safeTimestamp.toDate) {
-                          // Firebase Timestamp
-                          safeTimestamp = safeTimestamp.toDate();
-                        } else if (safeTimestamp && typeof safeTimestamp === 'string') {
-                          // String date
-                          safeTimestamp = new Date(safeTimestamp);
-                        } else if (safeTimestamp && typeof safeTimestamp === 'number') {
-                          // Unix timestamp
-                          safeTimestamp = new Date(safeTimestamp);
-                        } else {
-                          return 'Invalid date';
-                        }
-                      }
-                      
-                      // Validate the date
-                      if (isNaN(safeTimestamp.getTime())) {
-                        return 'Invalid date';
-                      }
-                      
-                      const now = new Date();
-                      const diffInMinutes = Math.floor((now - safeTimestamp) / (1000 * 60));
-                      
-                      if (diffInMinutes < 1) return 'Just now';
-                      if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
-                      if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}h ago`;
-                      return `${Math.floor(diffInMinutes / 1440)}d ago`;
-                    };
-
-                    const itemBg = darkMode 
-                      ? (index % 2 === 0 ? 'bg-gray-800/50' : 'bg-gray-700/50') 
-                      : (index % 2 === 0 ? 'bg-white' : 'bg-slate-25/40');
-                    
-                    const itemBorder = darkMode
-                      ? (index % 2 === 0 ? 'border-gray-300/50' : 'border-gray-300/50')
-                      : (index % 2 === 0 ? 'border-gray-300/50' : 'border-gray-300/50');
-                    
-                    const itemShadow = index % 2 === 0 
-                      ? 'shadow-xs' 
-                      : 'shadow-none';
-
-                    return (
-                      <div key={activity.id} className={`py-2 px-3 border-b-2 ${itemBorder} last:border-b-0 dark:border-gray-300/50 ${itemBg} ${itemShadow} transition-all duration-200`}>
-                        <div className="flex justify-between">
-                          <div className="flex items-start">
-                            <div className={`w-5 h-5 rounded-full flex items-center justify-center mr-2 mt-0.5 ${getActivityColor(activity.type)}`}>
-                              {getActivityIcon(activity.type)}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              {/* New format: User full name • TicketID : Subjectline */}
-                              <div className="mb-0.5">
-                                <div className="flex items-center text-sm">
-                                  <span className="font-medium text-black">
-                                    {activity.user_name || activity.user || 'System'}
-                                  </span>
-                                  <span className="text-black mx-1">•</span>
-                                  <button
-                                    onClick={() => {
-                                      // Get the ticket ID for navigation
-                                      let ticketIdForNavigation = activity.ticket_id || activity.ticketId;
-                                      
-                                      // If it's a display ID (starts with TT), look up the actual document ID
-                                      if (ticketIdForNavigation && ticketIdForNavigation.startsWith('TT')) {
-                                        const actualDocId = ticketMappings.displayIdToDocIdMap[ticketIdForNavigation];
-                                        if (actualDocId) {
-                                          ticketIdForNavigation = actualDocId;
-                                        }
-                                      }
-                                      
-                                      navigateTo(`/tickets/${ticketIdForNavigation}`);
-                                    }}
-                                    className="font-medium text-blue-700 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded border border-blue-200 cursor-pointer transition-all duration-200"
-                                  >
-                                    {activity.ticket_display_id || 
-                                     (activity.ticket_id && activity.ticket_id.startsWith('TT') ? activity.ticket_id : null) || 
-                                     (activity.ticketId && activity.ticketId.startsWith('TT') ? activity.ticketId : null) ||
-                                     (activity.ticket_id && ticketMappings.docIdToDisplayIdMap[activity.ticket_id]) ||
-                                     (activity.ticketId && ticketMappings.docIdToDisplayIdMap[activity.ticketId]) ||
-                                     'Unknown Ticket'}
-                                  </button>
-                                  <span className="text-black mx-1">•</span>
-                                  <span className="font-medium text-black">
-                                    {activity.ticket_title || 'No title'}
-                                  </span>
-                                </div>
-                              </div>
-                              
-                              {/* Action description */}
-                              <div className="space-y-0.5">
-                                <p className="text-xs text-black">
-                                  {(() => {
-                                    let cleanDescription = activity.description || activity.details || '';
-                                    
-                                    // Remove redundant ticket ID information
-                                    cleanDescription = cleanDescription.replace(/ to ticket TT\d+/gi, '');
-                                    
-                                    // Remove redundant filename information for attachments
-                                    if (activity.type === 'attachment' && activity.filename) {
-                                      cleanDescription = cleanDescription.replace(new RegExp(`: ${activity.filename.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'gi'), '');
-                                    }
-                                    
-                                    return cleanDescription;
-                                  })()}
-                                </p>
-                                
-                                {/* Show comment text for comments */}
-                                {activity.type === 'comment' && activity.comment_text && (
-                                  <div>
-                                    <span className="text-xs italic text-black">
-                                      "{activity.comment_text}"
-                                    </span>
-                                  </div>
-                                )}
-                                
-                                {/* Show status change details */}
-                                {activity.type === 'status_change' && activity.old_status && activity.new_status && (
-                                  <div className="flex items-center gap-1 text-xs">
-                                    <span className="px-1.5 py-0.5 rounded bg-slate-100 text-black border border-slate-200">
-                                      {activity.old_status}
-                                    </span>
-                                    <span className="text-black font-medium">→</span>
-                                    <span className="px-1.5 py-0.5 rounded bg-amber-100 text-black border border-amber-200">
-                                      {activity.new_status}
-                                    </span>
-                                  </div>
-                                )}
-                                
-                                {/* Show priority change details */}
-                                {activity.type === 'priority_change' && activity.old_priority && activity.new_priority && (
-                                  <div className="flex items-center gap-1 text-xs">
-                                    <span className="px-1.5 py-0.5 rounded bg-slate-100 text-black border border-slate-200">
-                                      {activity.old_priority}
-                                    </span>
-                                    <span className="text-black font-medium">→</span>
-                                    <span className="px-1.5 py-0.5 rounded bg-orange-100 text-black border border-orange-200">
-                                      {activity.new_priority}
-                                    </span>
-                                  </div>
-                                )}
-                                
-                                {/* Show assignment details */}
-                                {activity.type === 'assignment' && activity.assigned_to_email && (
-                                  <p className="text-xs text-black bg-sky-50 px-2 py-1 rounded border border-sky-200">
-                                    Assigned to: {activity.assigned_to_email}
-                                  </p>
-                                )}
-                                
-                                {/* Show attachment details */}
-                                {activity.type === 'attachment' && (
-                                  <div className="flex items-center gap-1 text-xs">
-                                    <FileText className="w-3 h-3 text-violet-600" />
-                                    <span className="text-black font-medium">
-                                      {activity.filename || 'Unknown file'}
-                                    </span>
-                                    {activity.file_size && (
-                                      <span className="text-black bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
-                                        ({(activity.file_size / 1024).toFixed(1)} KB)
-                                      </span>
-                                    )}
-                                  </div>
-                                )}
-                                
-                                {/* Show resolution details */}
-                                {activity.type === 'resolved' && activity.resolution_time && (
-                                  <p className="text-xs text-black bg-green-50 px-2 py-1 rounded border border-green-200">
-                                    Resolution time: {Math.round(activity.resolution_time)} minutes
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                          <div className="text-right ml-2 flex-shrink-0">
-                            <p className="text-xs text-black">
-                              {formatTimeAgo(activity.timestamp)}
-                            </p>
-                            <p className="text-xs text-black mt-0.5">
-                              {(() => {
-                                // Ensure timestamp is a proper Date object
-                                let safeTimestamp = activity.timestamp;
-                                
-                                if (!(safeTimestamp instanceof Date)) {
-                                  if (safeTimestamp && typeof safeTimestamp === 'object' && safeTimestamp.toDate) {
-                                    // Firebase Timestamp
-                                    safeTimestamp = safeTimestamp.toDate();
-                                  } else if (safeTimestamp && typeof safeTimestamp === 'string') {
-                                    // String date
-                                    safeTimestamp = new Date(safeTimestamp);
-                                  } else if (safeTimestamp && typeof safeTimestamp === 'number') {
-                                    // Unix timestamp
-                                    safeTimestamp = new Date(safeTimestamp);
-                                  } else {
-                                    return 'Invalid date';
-                                  }
-                                }
-                                
-                                // Validate the date
-                                if (isNaN(safeTimestamp.getTime())) {
-                                  return 'Invalid date';
-                                }
-                                
-                                return `${safeTimestamp.toLocaleDateString()} at ${safeTimestamp.toLocaleTimeString([], { 
-                                hour: '2-digit', 
-                                minute: '2-digit' 
-                                })}`;
-                              })()}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <div className="text-center py-6 opacity-50">
-                    <p className="text-sm text-black">
-                      {user?.role === 'site_admin' && companyUsers.length === 0 
-                        ? 'Loading company activities...' 
-                        : 'No activities found'
-                      }
-                    </p>
-                    {user?.role === 'site_admin' && (
-                      <p className="text-xs mt-1 text-black">Company users loaded: {companyUsers.length}</p>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-            
-            {activeTab === 'tickets' && (
-              <div className="space-y-0 max-h-72 overflow-y-auto">
-                {dashboardData.recentTickets.length > 0 ? (
+            <div className="space-y-0 max-h-72 overflow-y-auto">
+              {dashboardData.recentTickets.length > 0 ? (
                   dashboardData.recentTickets.map((ticket, index) => {
                     const itemBg = darkMode 
                       ? (index % 2 === 0 ? 'bg-gray-800/50' : 'bg-gray-700/50') 
@@ -1420,8 +623,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                     <p className="text-sm text-black">No recent unassigned tickets found</p>
                   </div>
                 )}
-              </div>
-            )}
+            </div>
           </div>
         </div>
 
@@ -1439,61 +641,25 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
             className={`${cardClass} rounded-lg border`}
           >
             <div className="mb-3 px-3 pt-3">
-              <h2 className="text-lg font-bold mb-3">
-                Ticket Volume Trend
-                {selectedCompany && selectedCompany !== 'All' && (
-                  <span className="text-sm font-normal text-gray-600 ml-2">
-                    - {selectedCompany}
-                  </span>
-                )}
-              </h2>
-              {/* Filters - Organized in rows */}
-              <div className="flex flex-wrap items-center gap-3">
-                {/* Time Period Filter */}
-                <div className="flex items-center gap-2">
-                  <label className="text-xs font-medium text-gray-600">Period:</label>
-                  <select
-                    value={selectedTimePeriod}
-                    onChange={(e) => setSelectedTimePeriod(e.target.value)}
-                    className={`px-2 py-1 rounded text-xs border ${
-                      darkMode 
-                        ? 'bg-gray-700 border-gray-600 text-white' 
-                        : 'bg-white border-gray-300 text-black'
-                    } focus:outline-none focus:ring-1 focus:ring-blue-500`}
-                  >
-                    <option value="1">1 Day</option>
-                    <option value="7">7 Days</option>
-                    <option value="30">1 Month</option>
-                    <option value="90">3 Months</option>
-                    <option value="180">6 Months</option>
-                    <option value="custom">Custom</option>
-                  </select>
-                </div>
-                {/* Client Filter - hide for site_admin */}
-                {(user?.role !== 'site_admin') && (
-                <div className="flex items-center gap-2">
-                  <label className="text-xs font-medium text-gray-600">Client:</label>
-                  <select
-                    value={selectedCompany}
-                    onChange={(e) => setSelectedCompany(e.target.value)}
-                    className={`px-2 py-1 rounded text-xs border ${
-                      darkMode 
-                        ? 'bg-gray-700 border-gray-600 text-white' 
-                        : 'bg-white border-gray-300 text-black'
-                    } focus:outline-none focus:ring-1 focus:ring-blue-500`}
-                  >
-                    <option value="All">All</option>
-                    {availableCompanies.map(company => (
-                      <option key={company} value={company}>
-                        {company}
-                      </option>
-                    ))}
-                  </select>
-                  <span className="text-xs text-gray-400">({availableCompanies.length} companies)</span>
-                </div>
-                )}
-                {/* Clear Filters Button - Only show when filters are changed from defaults */}
-                {(selectedTimePeriod !== '7' || selectedCompany !== 'All' || customStartDate || customEndDate) && (
+              <h2 className="text-lg font-bold mb-3">Ticket Volume Trend</h2>
+              {/* Time Period Filter */}
+              <div className="flex items-center gap-3 mb-3">
+                <label className="text-xs font-medium text-gray-600">Period:</label>
+                <select
+                  value={selectedTimePeriod}
+                  onChange={(e) => setSelectedTimePeriod(e.target.value)}
+                  className={`px-2 py-1 rounded text-xs border ${
+                    darkMode 
+                      ? 'bg-gray-700 border-gray-600 text-white' 
+                      : 'bg-white border-gray-300 text-black'
+                  } focus:outline-none focus:ring-1 focus:ring-blue-500`}
+                >
+                  <option value="1">1 Day</option>
+                  <option value="7">7 Days</option>
+                  <option value="30">1 Month</option>
+                </select>
+                {/* Clear Filters Button */}
+                {selectedTimePeriod !== '7' && (
                   <button
                     onClick={clearFilters}
                     className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
@@ -1502,37 +668,10 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                         : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
                     } focus:outline-none focus:ring-1 focus:ring-blue-500`}
                   >
-                    Clear Filters
+                    Reset
                   </button>
                 )}
               </div>
-              {/* Custom Date Range - Separate row when custom is selected */}
-              {selectedTimePeriod === 'custom' && (
-                <div className="flex items-center gap-3 mt-2 pt-2 border-t border-gray-200">
-                  <label className="text-xs font-medium text-gray-600">Date Range:</label>
-                  <input
-                    type="date"
-                    value={customStartDate}
-                    onChange={(e) => setCustomStartDate(e.target.value)}
-                    className={`px-2 py-1 rounded text-xs border ${
-                      darkMode 
-                        ? 'bg-gray-700 border-gray-600 text-white' 
-                        : 'bg-white border-gray-300 text-black'
-                      } focus:outline-none focus:ring-1 focus:ring-blue-500`}
-                  />
-                  <span className="text-xs text-gray-500">to</span>
-                  <input
-                    type="date"
-                    value={customEndDate}
-                    onChange={(e) => setCustomEndDate(e.target.value)}
-                    className={`px-2 py-1 rounded text-xs border ${
-                      darkMode 
-                        ? 'bg-gray-700 border-gray-600 text-white' 
-                        : 'bg-white border-gray-300 text-black'
-                      } focus:outline-none focus:ring-1 focus:ring-blue-500`}
-                  />
-                </div>
-              )}
             </div>
             
             {/* Summary Stats */}
@@ -1617,14 +756,8 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                       if (selectedTimePeriod === '1') periodText = 'in the last day';
                       else if (selectedTimePeriod === '7') periodText = 'in the last 7 days';
                       else if (selectedTimePeriod === '30') periodText = 'in the last month';
-                      else if (selectedTimePeriod === '90') periodText = 'in the last 3 months';
-                      else if (selectedTimePeriod === '180') periodText = 'in the last 6 months';
-                      else if (selectedTimePeriod === 'custom') periodText = 'in the selected period';
                       else periodText = 'in the selected period';
                       
-                      if (selectedCompany && selectedCompany !== 'All') {
-                        return `No tickets found for ${selectedCompany} ${periodText}`;
-                      }
                       return `No tickets found ${periodText}`;
                     })()}
                   </p>
@@ -1647,11 +780,6 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                       </svg>
                     </div>
                     Resolution Time Analytics
-                    {resolutionTimeCompany && resolutionTimeCompany !== 'All' && (
-                      <span className="text-sm font-normal text-gray-600 ml-2">
-                        - {resolutionTimeCompany}
-                      </span>
-                    )}
                   </h2>
                   <div className="flex items-center gap-3 text-xs">
                     <div className="flex items-center gap-1.5 px-2 py-1 bg-green-50 text-green-700 rounded-full border border-green-200">
@@ -1664,92 +792,6 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                     </div>
                   </div>
                 </div>
-                {/* Filters - Organized in rows */}
-                <div className="flex flex-wrap items-center gap-3">
-                  {/* Time Period Filter */}
-                  <div className="flex items-center gap-2">
-                    <label className="text-xs font-medium text-gray-600">Period:</label>
-                    <select
-                      value={resolutionTimePeriod}
-                      onChange={(e) => setResolutionTimePeriod(e.target.value)}
-                      className={`px-2 py-1 rounded text-xs border ${
-                        darkMode 
-                          ? 'bg-gray-700 border-gray-600 text-white' 
-                          : 'bg-white border-gray-300 text-black'
-                      } focus:outline-none focus:ring-1 focus:ring-blue-500`}
-                    >
-                      <option value="1">1 Day</option>
-                      <option value="7">7 Days</option>
-                      <option value="30">1 Month</option>
-                      <option value="90">3 Months</option>
-                      <option value="180">6 Months</option>
-                      <option value="custom">Custom</option>
-                    </select>
-                  </div>
-                  {/* Client Filter - hide for site_admin */}
-                  {(user?.role !== 'site_admin') && (
-                  <div className="flex items-center gap-2">
-                    <label className="text-xs font-medium text-gray-600">Client:</label>
-                    <select
-                      value={resolutionTimeCompany}
-                      onChange={(e) => setResolutionTimeCompany(e.target.value)}
-                      className={`px-2 py-1 rounded text-xs border ${
-                        darkMode 
-                          ? 'bg-gray-700 border-gray-600 text-white' 
-                          : 'bg-white border-gray-300 text-black'
-                      } focus:outline-none focus:ring-1 focus:ring-blue-500`}
-                    >
-                      <option value="All">All</option>
-                      {availableCompanies.map(company => (
-                        <option key={company} value={company}>
-                          {company}
-                        </option>
-                      ))}
-                    </select>
-                    <span className="text-xs text-gray-400">({availableCompanies.length} companies)</span>
-                  </div>
-                  )}
-                  {/* Clear Filters Button - Only show when filters are changed from defaults */}
-                  {(resolutionTimePeriod !== '7' || resolutionTimeCompany !== 'All' || resolutionTimeStartDate || resolutionTimeEndDate) && (
-                    <button
-                      onClick={clearResolutionTimeFilters}
-                      className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
-                        darkMode 
-                          ? 'bg-gray-600 hover:bg-gray-500 text-white' 
-                          : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
-                      } focus:outline-none focus:ring-1 focus:ring-blue-500`}
-                    >
-                      Clear Filters
-                    </button>
-                  )}
-                </div>
-                {/* Custom Date Range - Separate row when custom is selected */}
-                {resolutionTimePeriod === 'custom' && (
-                  <div className="flex items-center gap-3 mt-2 pt-2 border-t border-gray-200">
-                    <label className="text-xs font-medium text-gray-600">Date Range:</label>
-                    <input
-                      type="date"
-                      value={resolutionTimeStartDate}
-                      onChange={(e) => setResolutionTimeStartDate(e.target.value)}
-                      className={`px-2 py-1 rounded text-xs border ${
-                        darkMode 
-                          ? 'bg-gray-700 border-gray-600 text-white' 
-                          : 'bg-white border-gray-300 text-black'
-                        } focus:outline-none focus:ring-1 focus:ring-blue-500`}
-                    />
-                    <span className="text-xs text-gray-500">to</span>
-                    <input
-                      type="date"
-                      value={resolutionTimeEndDate}
-                      onChange={(e) => setResolutionTimeEndDate(e.target.value)}
-                      className={`px-2 py-1 rounded text-xs border ${
-                        darkMode 
-                          ? 'bg-gray-700 border-gray-600 text-white' 
-                          : 'bg-white border-gray-300 text-black'
-                        } focus:outline-none focus:ring-1 focus:ring-blue-500`}
-                    />
-                  </div>
-                )}
               </div>
             </div>
 

@@ -10,8 +10,10 @@ import SecondaryButton from '../common/SecondaryButton';
 
 // Import API Base URL from constants
 import { API_BASE_URL } from '../../config/constants';
-// Import Firebase client
-import { app, dbClient } from '../../config/firebase';
+// Import Supabase client
+import { supabase } from '../../config/supabase';
+// Import utility function for getting access token
+import { getAccessToken } from '../../utils/utils';
 
 /**
  * Component for creating a new support ticket with a compact, non-scrolling layout.
@@ -249,7 +251,7 @@ const CreateTicketComponent = ({ user, onClose, showFlashMessage, onTicketCreate
             formData.append('attachment', file);
 
             try {
-                const idToken = await user.firebaseUser.getIdToken();
+                const idToken = await getAccessToken(user);
                 const response = await fetch(`${API_BASE_URL}/upload-attachment`, {
                     method: 'POST',
                     headers: {
@@ -298,7 +300,9 @@ const CreateTicketComponent = ({ user, onClose, showFlashMessage, onTicketCreate
                 return;
             }
 
-            const idToken = await user.firebaseUser.getIdToken();
+            // Get the access token using the utility function
+            const accessToken = await getAccessToken(user);
+
             const payload = {
                 ...formData,
                 short_description: formData.subject, // Map subject to short_description
@@ -307,11 +311,11 @@ const CreateTicketComponent = ({ user, onClose, showFlashMessage, onTicketCreate
             };
             delete payload.subject; // Remove subject to avoid confusion
 
-            const response = await fetch(`${API_BASE_URL}/tickets`, {
+            const response = await fetch(`${API_BASE_URL}/api/tickets`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${idToken}`
+                    'Authorization': `Bearer ${accessToken}`
                 },
                 body: JSON.stringify(payload),
             });

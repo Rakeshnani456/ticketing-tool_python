@@ -18,6 +18,7 @@ import {
 import { useRealTimeAnalytics } from '../hooks/useRealTimeAnalytics';
 import { websocketClient } from '../utils/websocketClient';
 import { API_BASE_URL } from '../config/constants';
+import { getAccessToken } from '../utils/utils';
 import { Bar } from 'react-chartjs-2';
 import {
     Chart as ChartJS,
@@ -64,7 +65,7 @@ const ReportsComponent = ({ user, showFlashMessage }) => {
     useEffect(() => {
         const fetchClients = async () => {
             try {
-                const idToken = await user.firebaseUser.getIdToken();
+                const idToken = await getAccessToken(user);
                 const response = await fetch(`${API_BASE_URL}/api/clients`, {
                     headers: { 'Authorization': `Bearer ${idToken}` }
                 });

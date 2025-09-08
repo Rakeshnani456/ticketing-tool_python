@@ -62,24 +62,11 @@ app.use(cors());
 app.use(express.json());
 
 // Health check endpoint for Docker
-app.get('/health', async (req, res) => {
-    // Test database connection
-    let dbStatus = 'disconnected';
-    try {
-        if (process.env.SUPABASE_URL && !process.env.SUPABASE_URL.includes('placeholder')) {
-            const { data, error } = await supabase.from('users').select('count').limit(1);
-            if (!error) {
-                dbStatus = 'connected';
-            }
-        }
-    } catch (error) {
-        console.error('Health check database test failed:', error.message);
-    }
-    
+app.get('/health', (req, res) => {
     res.status(200).json({ 
         status: 'OK', 
         timestamp: new Date().toISOString(),
-        database: dbStatus
+        database: dbConnected ? 'connected' : 'disconnected'
     });
 });
 
@@ -197,16 +184,16 @@ app.locals.validUserRoles = validUserRoles;
 app.locals.emailService = emailService;
 
 // Import and use routes
-const authRoutes = require('./routes/authRoutes.supabase')(supabase, verifySupabaseToken, checkRole, validUserRoles);
-const ticketRoutes = require('./routes/ticketRoutes.supabase')(supabase, verifySupabaseToken, checkRole, jsonSerializableTicket, generateDisplayId, emailService);
-const userManagementRoutes = require('./routes/userManagementRoutes.supabase')(supabase, verifySupabaseToken, checkRole, validUserRoles);
-const adminRoutes = require('./routes/adminRoutes.supabase')(supabase, verifySupabaseToken, checkRole);
-const dashboardRoutes = require('./routes/dashboardRoutes.supabase')(supabase, verifySupabaseToken, checkRole);
-const analyticsRoutes = require('./routes/analyticsRoutes.supabase')(supabase, verifySupabaseToken, checkRole);
-const notificationRoutes = require('./routes/notificationRoutes.supabase')(supabase, verifySupabaseToken, jsonSerializableNotification);
-const clientRoutes = require('./routes/clientRoutes.supabase')(supabase, verifySupabaseToken, checkRole);
-const attachmentRoutes = require('./routes/attachmentRoutes.supabase')(supabase, verifySupabaseToken);
-const adminManagementRoutes = require('./routes/adminManagement.supabase')(supabase, verifySupabaseToken, checkRole);
+const authRoutes = require('./routes/authRoutes.supabase');
+const ticketRoutes = require('./routes/ticketRoutes.supabase');
+const userManagementRoutes = require('./routes/userManagementRoutes.supabase');
+const adminRoutes = require('./routes/adminRoutes.supabase');
+const dashboardRoutes = require('./routes/dashboardRoutes.supabase');
+const analyticsRoutes = require('./routes/analyticsRoutes.supabase');
+const notificationRoutes = require('./routes/notificationRoutes.supabase');
+const clientRoutes = require('./routes/clientRoutes.supabase');
+const attachmentRoutes = require('./routes/attachmentRoutes.supabase');
+const adminManagementRoutes = require('./routes/adminManagement.supabase');
 
 // Use routes
 app.use('/api/auth', authRoutes);

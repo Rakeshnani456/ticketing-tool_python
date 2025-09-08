@@ -1,7 +1,6 @@
 // src/components/auth/LoginComponent.js
 
 import React, { useState, useEffect } from 'react';
-import { signInWithEmailAndPassword, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 import { LogIn, AlertCircle, CheckCircle, Eye, EyeOff, Wifi, WifiOff, Shield, Lock } from 'lucide-react';
 
 // Import common UI components
@@ -9,9 +8,8 @@ import FormInput from '../common/FormInput';
 import PrimaryButton from '../common/PrimaryButton';
 import LinkButton from '../common/LinkButton';
 
-// Import Firebase auth client from config
-import { authClient, dbClient } from '../../config/firebase';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+// Import Supabase client from config
+import { supabase } from '../../config/supabase';
 import { API_BASE_URL } from '../../config/constants';
 
 /**
@@ -254,24 +252,30 @@ const LoginComponent = ({ onLoginSuccess, navigateTo, showFlashMessage }) => {
     };
 
     /**
-     * Enhanced error message mapping
+     * Enhanced error message mapping for Supabase
      */
-    const getFirebaseErrorMessage = (errorCode) => {
-        const errorMessages = {
-            'auth/user-not-found': 'No account found with this email address.',
-            'auth/wrong-password': 'Incorrect password. Please try again.',
-            'auth/invalid-credential': 'Invalid email or password. Please check your credentials.',
-            'auth/invalid-email': 'Please enter a valid email address.',
-            'auth/user-disabled': 'This account has been disabled. Contact support for assistance.',
-            'auth/too-many-requests': 'Too many failed attempts. Please try again in a few minutes.',
-            'auth/network-request-failed': 'Network error. Please check your internet connection.',
-            'auth/operation-not-allowed': 'Email/password sign-in is not enabled. Contact support.',
-            'auth/weak-password': 'Password is too weak. Please choose a stronger password.',
-            'auth/email-already-in-use': 'An account with this email already exists.',
-            'auth/requires-recent-login': 'Please log out and log back in to perform this action.',
-        };
+    const getSupabaseErrorMessage = (errorMessage) => {
+        if (errorMessage.includes('Invalid login credentials')) {
+            return 'Invalid email or password. Please check your credentials.';
+        } else if (errorMessage.includes('User not found')) {
+            return 'No account found with this email address.';
+        } else if (errorMessage.includes('Invalid email')) {
+            return 'Please enter a valid email address.';
+        } else if (errorMessage.includes('User not authorized')) {
+            return 'This account has been disabled. Contact support for assistance.';
+        } else if (errorMessage.includes('too many requests')) {
+            return 'Too many failed attempts. Please try again in a few minutes.';
+        } else if (errorMessage.includes('Network error')) {
+            return 'Network error. Please check your internet connection.';
+        } else if (errorMessage.includes('Email not confirmed')) {
+            return 'Please check your email and click the confirmation link.';
+        } else if (errorMessage.includes('Password should be at least')) {
+            return 'Password is too weak. Please choose a stronger password.';
+        } else if (errorMessage.includes('User already registered')) {
+            return 'An account with this email already exists.';
+        }
 
-        return errorMessages[errorCode] || 'An unexpected error occurred. Please try again.';
+        return errorMessage || 'An unexpected error occurred. Please try again.';
     };
 
     /**
@@ -296,7 +300,7 @@ const LoginComponent = ({ onLoginSuccess, navigateTo, showFlashMessage }) => {
         setPassword('');
         setFormError('');
         // Sign out the user since they cancelled
-        authClient.signOut();
+        supabase.auth.signOut();
     };
 
     /**
@@ -326,22 +330,30 @@ const LoginComponent = ({ onLoginSuccess, navigateTo, showFlashMessage }) => {
         setAttemptCount(prev => prev + 1);
 
         try {
-            // 1. Authenticate with Firebase
-            const userCredential = await signInWithEmailAndPassword(authClient, email, password);
-            const firebaseUser = userCredential.user;
-            const idToken = await firebaseUser.getIdToken();
+            // 1. Authenticate with Supabase
+            const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+                email: email,
+                password: password
+            });
+
+            if (authError) {
+                throw authError;
+            }
+
+            const { user, session } = authData;
+            const accessToken = session.access_token;
 
             // 2. Backend verification with timeout
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
 
-            const response = await fetch(`${API_BASE_URL}/login`, {
+            const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${idToken}`
+                    'Authorization': `Bearer ${accessToken}`
                 },
-                body: JSON.stringify({ email: firebaseUser.email }),
+                body: JSON.stringify({ email: user.email }),
                 signal: controller.signal
             });
 
@@ -353,9 +365,10 @@ const LoginComponent = ({ onLoginSuccess, navigateTo, showFlashMessage }) => {
                 showToast('Login successful! Welcome back.', 'success');
                 setTimeout(() => {
                     onLoginSuccess({ 
-                        firebaseUser, 
+                        supabaseUser: user, 
+                        session: session,
                         role: data.user.role, 
-                        email: firebaseUser.email 
+                        email: user.email 
                     });
                 }, 1000);
             } else if (response.status === 403 && data.mustChangePassword) {
@@ -366,7 +379,7 @@ const LoginComponent = ({ onLoginSuccess, navigateTo, showFlashMessage }) => {
             } else {
                 const errorMsg = data.error || 'Login verification failed. Please try again.';
                 setFormError(errorMsg);
-                await authClient.signOut();
+                await supabase.auth.signOut();
                 
                 if (attemptCount >= 2) {
                     showToast('Having trouble? Try resetting your password.', 'info');
@@ -379,16 +392,16 @@ const LoginComponent = ({ onLoginSuccess, navigateTo, showFlashMessage }) => {
             if (error.name === 'AbortError') {
                 setFormError('Request timed out. Please try again.');
                 showToast('Connection timeout. Please try again.', 'error');
-            } else if (error.code) {
-                const errorMessage = getFirebaseErrorMessage(error.code);
+            } else if (error.message) {
+                const errorMessage = getSupabaseErrorMessage(error.message);
                 setFormError(errorMessage);
                 
-                if (['auth/wrong-password', 'auth/invalid-credential'].includes(error.code)) {
+                if (error.message.includes('Invalid login credentials') || error.message.includes('invalid-credential')) {
                     setFieldErrors({ password: 'Incorrect password' });
                     setPassword('');
                 }
                 
-                if (error.code === 'auth/too-many-requests') {
+                if (error.message.includes('too many requests')) {
                     showToast('Account temporarily locked due to multiple failed attempts.', 'warning');
                 }
             } else {

@@ -60,9 +60,7 @@ import ReactDOM from 'react-dom';
 
 
 // Import Firebase auth client and dbClient
-import { authClient, dbClient } from './config/firebase';
-import { onAuthStateChanged, signOut } from 'firebase/auth'; // Firebase authentication methods
-import { collection, query, onSnapshot, where, doc, getDoc } from 'firebase/firestore'; // Firestore imports and 'where'
+import { supabase } from './config/supabase';
 
 // Import API Base URL from constants
 import { API_BASE_URL } from './config/constants';
@@ -328,14 +326,14 @@ const App = () => {
      * @returns {void}
      */
     const fetchNotifications = useCallback(async (user) => {
-        if (!user || !user.firebaseUser) {
+        if (!user || !user.supabaseUser) {
             setNotifications([]);
             setHasNewNotifications(false);
             return;
         }
         try {
-            const idToken = await user.firebaseUser.getIdToken();
-            const response = await fetch(`${API_BASE_URL}/notifications/my`, {
+            const idToken = user.session.access_token;
+            const response = await fetch(`${API_BASE_URL}/api/notifications`, {
                 headers: { 'Authorization': `Bearer ${idToken}` }
             });
             if (response.ok) {
@@ -396,49 +394,53 @@ const App = () => {
         return formatted;
     };
 
-    // Effect hook to listen for Firebase authentication state changes.
+    // Effect hook to listen for Supabase authentication state changes.
     // This is crucial for maintaining user session and fetching user roles from backend.
     useEffect(() => {
-        const unsubscribeAuth = onAuthStateChanged(authClient, async (firebaseUser) => {
-            if (firebaseUser) {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+            if (session?.user) {
                 try {
-                    const idToken = await firebaseUser.getIdToken(); // Get Firebase ID token
-                    // Verify ID token with backend to get user's custom role
-                    const response = await fetch(`${API_BASE_URL}/login`, {
+                    const accessToken = session.access_token;
+                    // Verify access token with backend to get user's custom role
+                    const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${idToken}`
+                            'Authorization': `Bearer ${accessToken}`
                         },
-                        body: JSON.stringify({ email: firebaseUser.email }),
+                        body: JSON.stringify({ email: session.user.email }),
                     });
                     const data = await response.json();
                     if (response.ok) {
-                        // On successful verification, set currentUser state with Firebase user and role
-                        let userProfile = { firebaseUser, role: data.user.role, email: firebaseUser.email, uid: firebaseUser.uid };
+                        // On successful verification, set currentUser state with Supabase user and role
+                        let userProfile = { supabaseUser: session.user, session: session, role: data.user.role, email: session.user.email, uid: session.user.id };
                         
-                        // For site_admin users, fetch complete profile from Firestore to get client_name
+                        // For site_admin users, fetch complete profile from Supabase to get client_name
                         if (data.user.role === 'site_admin') {
                             try {
-                                const userDocRef = doc(dbClient, 'users', firebaseUser.uid);
-                                const userDoc = await getDoc(userDocRef);
-                                if (userDoc.exists()) {
-                                    const userData = userDoc.data();
+                                const { data: userData, error } = await supabase
+                                    .from('users')
+                                    .select('client_name, company_name')
+                                    .eq('id', session.user.id)
+                                    .single();
+                                
+                                if (userData && !error) {
                                     console.log("Site admin user data:", userData);
                                     userProfile = {
                                         ...userProfile,
-                                        client_name: userData.client_name || userData.companyName,
-                                        companyName: userData.client_name || userData.companyName
+                                        client_name: userData.client_name || userData.company_name,
+                                        companyName: userData.client_name || userData.company_name
                                     };
                                     console.log("Site admin profile after enhancement:", userProfile);
                                 } else {
-                                    console.error("Site admin user document not found in Firestore");
+                                    console.error("Site admin user document not found in Supabase:", error);
                                 }
                             } catch (error) {
                                 console.error('Error fetching site admin profile:', error);
                             }
                         }
                         
+                        console.log('App.js - Setting current user:', userProfile);
                         setCurrentUser(userProfile);
                         fetchNotifications(userProfile); // Fetch notifications for logged-in user
 
@@ -450,17 +452,16 @@ const App = () => {
                             fetchNotifications(userProfile);
                         }, 120000); // Poll every 2 minutes instead of 30 seconds
 
-                        // OPTIMIZED: Set up Firestore listener for ticket counts with caching
-                        const ticketsCollectionRef = collection(dbClient, 'tickets');
+                        // OPTIMIZED: Set up Supabase listener for ticket counts with caching
                         let ticketsQuery;
 
-                        // Adjust the Firestore query based on user role to match security rules
+                        // Adjust the Supabase query based on user role to match security rules
                         if (userProfile.role === 'support' || userProfile.role === 'admin' || userProfile.role === 'super_admin' || userProfile.role === 'site_admin') {
                             // Admins and Support can read all tickets (as per your rules)
-                            ticketsQuery = query(ticketsCollectionRef);
+                            ticketsQuery = supabase.from('tickets').select('*');
                         } else {
                             // Regular users can only read their own tickets
-                            ticketsQuery = query(ticketsCollectionRef, where('reporter_id', '==', userProfile.uid));
+                            ticketsQuery = supabase.from('tickets').select('*').eq('reporter_id', userProfile.uid);
                         }
 
                         // OPTIMIZED: Check cache before setting up listener
@@ -479,11 +480,16 @@ const App = () => {
                             }
                         }
 
-                        const unsubscribeTickets = onSnapshot(ticketsQuery, (snapshot) => {
-                            const fetchedTickets = snapshot.docs.map(doc => ({
-                                id: doc.id,
-                                ...doc.data() // Get raw data; no need to format timestamps for counts
-                            }));
+                        // Set up Supabase realtime subscription for ticket counts
+                        const channel = supabase
+                            .channel('ticket-counts')
+                            .on('postgres_changes', 
+                                { event: '*', schema: 'public', table: 'tickets' },
+                                async () => {
+                                    // Fetch updated ticket counts when tickets change
+                                    try {
+                                        const { data: fetchedTickets, error } = await ticketsQuery;
+                                        if (error) throw error;
 
                             // These counts are now based on the tickets the *current user is allowed to see*
                             const totalTickets = fetchedTickets.length;
@@ -500,10 +506,36 @@ const App = () => {
                             
                             // Cache the counts for 5 minutes
                             localStorage.setItem(cacheKey, JSON.stringify(newCounts));
-                            localStorage.setItem(`${cacheKey}_time`, now.toString());
-                        }, (err) => {
-                            console.error("Firestore onSnapshot error for ticket counts:", err);
-                            // Optionally show a flash message for count errors
+                                        localStorage.setItem(`${cacheKey}_time`, Date.now().toString());
+                                    } catch (err) {
+                                        console.error("Supabase error for ticket counts:", err);
+                                    }
+                                }
+                            )
+                            .subscribe();
+
+                        // Initial fetch of ticket counts
+                        ticketsQuery.then(({ data: fetchedTickets, error }) => {
+                            if (error) {
+                                console.error("Error fetching initial ticket counts:", error);
+                                return;
+                            }
+
+                            const totalTickets = fetchedTickets.length;
+                            const activeTickets = fetchedTickets.filter(t => ['Open', 'In Progress', 'Hold'].includes(t.status)).length;
+                            const assignedToMeTickets = fetchedTickets.filter(t => t.assigned_to_id === userProfile.uid && !['Closed', 'Resolved'].includes(t.status)).length;
+
+                            const newCounts = {
+                                total_tickets: totalTickets,
+                                active_tickets: activeTickets,
+                                assigned_to_me: assignedToMeTickets
+                            };
+
+                            setTicketCounts(newCounts);
+                            
+                            // Cache the counts for 5 minutes
+                            localStorage.setItem(cacheKey, JSON.stringify(newCounts));
+                            localStorage.setItem(`${cacheKey}_time`, Date.now().toString());
                         });
 
                         // Navigate based on user role
@@ -521,12 +553,12 @@ const App = () => {
                         // Set loading to false after successful authentication
                         setIsAuthLoading(false);
                         
-                        return () => { // Cleanup for tickets listener if auth state changes again
-                           unsubscribeTickets();
+                        return () => { // Cleanup for Supabase realtime subscription if auth state changes again
+                           supabase.removeChannel(channel);
                         };
                     } else if (response.status === 403 && data.mustChangePassword) {
                         // Password change required - allow user to stay on password change route
-                        console.log("Password change required for user:", firebaseUser.email);
+                        console.log("Password change required for user:", session.user.email);
                         
                         // If user is already on the password change route, don't sign them out
                         if (location.pathname === '/initial-password-change') {
@@ -535,16 +567,16 @@ const App = () => {
                             // Don't navigate - let them stay on password change page
                         } else {
                             // If they're on any other route, sign them out and redirect to login
-                            authClient.signOut();
+                            supabase.auth.signOut();
                             setCurrentUser(null);
                             setIsAuthLoading(false);
                             navigate('/login');
                         }
                     } else {
-                        // If backend verification fails, show error and log out from Firebase
+                        // If backend verification fails, show error and log out from Supabase
                         console.error("Backend login verification failed:", data.error);
                         showFlashMessage(data.error || "Authentication failed during login.", 'error');
-                        authClient.signOut();
+                        supabase.auth.signOut();
                         setCurrentUser(null);
                         setIsAuthLoading(false);
                         navigate('/login'); // Redirect to login
@@ -553,13 +585,14 @@ const App = () => {
                     // Handle network or other errors during auth state change processing
                     console.error("Error during authentication state change:", error);
                     showFlashMessage("Network error during re-authentication. Please log in again.", 'error');
-                    authClient.signOut();
+                    supabase.auth.signOut();
                     setCurrentUser(null);
                     setIsAuthLoading(false);
                     navigate('/login'); // Redirect to login
                 }
             } else {
-                // If no Firebase user is logged in, clear currentUser state and go to login page
+                // If no Supabase user is logged in, clear currentUser state and go to login page
+                console.log('App.js - No user session, clearing currentUser');
                 setCurrentUser(null);
                 setIsAuthLoading(false);
                 // Ensure we are on a public route if no user is logged in
@@ -575,11 +608,11 @@ const App = () => {
             }
         });
         return () => {
-            unsubscribeAuth(); // Cleanup the auth state listener on component unmount
+            subscription.unsubscribe(); // Cleanup the Supabase auth state listener on component unmount
             if (notificationPollingIntervalRef.current) {
                 clearInterval(notificationPollingIntervalRef.current); // Clear polling on unmount
             }
-            // No need to clean up ticket listener here, it's handled within the if (firebaseUser) block
+            // No need to clean up ticket listener here, it's handled within the if (session?.user) block
         };
     }, [fetchNotifications, navigate, location.pathname]); // Added navigate and location.pathname to dependency array
 
@@ -602,7 +635,7 @@ const App = () => {
 
     // Real-time notification polling for live bell animation
     useEffect(() => {
-        if (!currentUser || !currentUser.firebaseUser) {
+        if (!currentUser || !currentUser.supabaseUser) {
             return;
         }
 
@@ -657,7 +690,7 @@ const App = () => {
      */
     const handleLogout = async () => {
         try {
-            await signOut(authClient); // Sign out from Firebase
+            await supabase.auth.signOut(); // Sign out from Supabase
             setCurrentUser(null); // Clear current user state
             setIsAuthLoading(false);
             showFlashMessage('Logged out successfully.', 'success');
@@ -794,8 +827,8 @@ const App = () => {
      */
     const markNotificationAsRead = useCallback(async (notificationId, ticketId = null) => {
         try {
-            const idToken = await currentUser.firebaseUser.getIdToken();
-            const response = await fetch(`${API_BASE_URL}/notifications/${notificationId}/read`, {
+            const idToken = currentUser.session.access_token;
+            const response = await fetch(`${API_BASE_URL}/api/notifications/${notificationId}/read`, {
                 method: 'PATCH',
                 headers: { 'Authorization': `Bearer ${idToken}` }
             });
@@ -836,9 +869,9 @@ const App = () => {
      */
     const clearAllNotifications = useCallback(async () => {
         try {
-            const idToken = await currentUser.firebaseUser.getIdToken();
-            const response = await fetch(`${API_BASE_URL}/notifications/clear-all`, {
-                method: 'DELETE',
+            const idToken = currentUser.session.access_token;
+            const response = await fetch(`${API_BASE_URL}/api/notifications/mark-all-read`, {
+                method: 'PATCH',
                 headers: { 'Authorization': `Bearer ${idToken}` }
             });
 

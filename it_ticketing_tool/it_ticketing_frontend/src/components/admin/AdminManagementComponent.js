@@ -9,6 +9,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import { notification } from 'antd';
 import { API_BASE_URL } from '../../config/constants';
+import { getAccessToken } from '../../utils/utils';
 import { useReactTable, getCoreRowModel, flexRender, getSortedRowModel } from '@tanstack/react-table';
 import ArrowDropUpIcon from '@mui/icons-material/ArrowDropUp';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
@@ -45,7 +46,7 @@ const AdminManagementComponent = ({ currentUser }) => {
   const fetchAdmins = async () => {
     setLoading(true);
     try {
-      const idToken = await currentUser.firebaseUser.getIdToken();
+      const idToken = await getAccessToken(currentUser);
       const res = await fetch(`${API_BASE_URL}/admin-management`, { headers: { Authorization: `Bearer ${idToken}` } });
       const data = await res.json();
       setAdmins(data.admins || []);
@@ -59,7 +60,7 @@ const AdminManagementComponent = ({ currentUser }) => {
   const fetchLoginActivity = async () => {
     setActivityOpen(true);
     try {
-      const idToken = await currentUser.firebaseUser.getIdToken();
+      const idToken = await getAccessToken(currentUser);
       const res = await fetch(`${API_BASE_URL}/admin-management/login-activity`, { headers: { Authorization: `Bearer ${idToken}` } });
       const data = await res.json();
       setLoginActivity(data.activity || []);
@@ -91,7 +92,7 @@ const AdminManagementComponent = ({ currentUser }) => {
     e.preventDefault();
     setLoading(true);
     try {
-      const idToken = await currentUser.firebaseUser.getIdToken();
+      const idToken = await getAccessToken(currentUser);
       if (editMode) {
         const res = await fetch(`${API_BASE_URL}/admin-management/${selectedAdmin.uid}`, {
           method: 'PUT',
@@ -130,7 +131,7 @@ const AdminManagementComponent = ({ currentUser }) => {
     if (!window.confirm('Are you sure you want to delete this admin?')) return;
     setLoading(true);
     try {
-      const idToken = await currentUser.firebaseUser.getIdToken();
+      const idToken = await getAccessToken(currentUser);
       const res = await fetch(`${API_BASE_URL}/admin-management/${uid}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${idToken}` },

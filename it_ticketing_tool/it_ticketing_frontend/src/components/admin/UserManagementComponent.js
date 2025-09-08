@@ -41,8 +41,8 @@ import {
 import { API_BASE_URL, FRONTEND_URL } from '../../config/constants';
 import './UserManagementComponent.css';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { getFirestore, collection, onSnapshot, query, where, orderBy } from 'firebase/firestore';
-import { app } from '../../config/firebase';
+import { supabase } from '../../config/supabase';
+import { getAccessToken } from '../../utils/utils';
 import * as XLSX from 'xlsx';
 import { useTheme } from '@mui/material/styles';
 // For Material-UI v5 and above
@@ -137,7 +137,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
     const navigate = useNavigate();
     const location = useLocation();
-    const db = getFirestore(app);
+    // Using Supabase instead of Firebase
     const [addUserModalOpen, setAddUserModalOpen] = useState(false);
     const [addUserData, setAddUserData] = useState(initialUserState);
     const theme = useTheme();
@@ -316,7 +316,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
 
     // Load initial data from cache if available
     useEffect(() => {
-        if (!user || !user.firebaseUser) return;
+        if (!user) return;
         
         const cacheKey = user.role === 'site_admin' ? 
             `userManagement_cache_${user.role}_${user.companyName}` : 
@@ -356,8 +356,8 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
     }, [users]);
 
     useEffect(() => {
-        if (!user || !user.firebaseUser) {
-            console.log("No user or firebaseUser available, skipping listener setup");
+        if (!user) {
+            console.log("No user available, skipping listener setup");
             return;
         }
         
@@ -394,9 +394,13 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                     
                 } else {
                     // For other admin roles, use Firestore real-time listener
-                    const usersRef = collection(db, 'users');
+                    // const usersRef = collection(db, 'users'); // Firebase - disabled for Supabase
                     console.log("Setting up Firestore listener for real-time updates...");
                     
+                    // Firebase listener disabled for Supabase migration
+                    // TODO: Implement Supabase real-time subscription
+                    unsubscribe = () => {}; // Placeholder
+                    /*
                     unsubscribe = onSnapshot(usersRef, 
                         async (snapshot) => {
                             try {
@@ -460,6 +464,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                             setLoading(false);
                         }
                     );
+                    */
                 }
             } catch (error) {
                 console.error("Error setting up data fetching:", error);
@@ -476,7 +481,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                 unsubscribe();
             }
         };
-    }, [user?.uid, user?.role, user?.companyName, db]); // Only depend on specific user properties, not the entire user object
+    }, [user?.uid, user?.role, user?.companyName]); // Only depend on specific user properties, not the entire user object
 
     const handleAdd = () => {
         setAddMode(true);
@@ -622,7 +627,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                 }
             });
             
-            const idToken = await user.firebaseUser.getIdToken();
+            const idToken = await getAccessToken(user);
             const res = await fetch(`${API_BASE_URL}/api/users/${uid}`, {
                 method: 'PUT',
                 headers: { 
@@ -685,7 +690,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
         if (!uid) return;
         
         try {
-            const idToken = await user.firebaseUser.getIdToken();
+            const idToken = await getAccessToken(user);
             const res = await fetch(`${API_BASE_URL}/api/users/${uid}`, {
                 method: 'DELETE',
                 headers: {
@@ -804,7 +809,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
           payload.client_name = user.companyName;
         }
         
-        const idToken = await user.firebaseUser.getIdToken();
+        const idToken = await getAccessToken(user);
         const res = await fetch(`${API_BASE_URL}/api/users`, {
           method: 'POST',
           headers: { 
@@ -873,7 +878,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
       
       try {
         // First, update the password
-        const idToken = await user.firebaseUser.getIdToken();
+        const idToken = await getAccessToken(user);
         const res = await fetch(`${API_BASE_URL}/api/users/${pwdUserId}/password`, {
           method: 'PUT',
           headers: { 
@@ -1290,7 +1295,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                 await fetchClients();
             }
             
-            const idToken = await user.firebaseUser.getIdToken();
+            const idToken = await getAccessToken(user);
             const response = await fetch(`${API_BASE_URL}/api/users`, {
                 headers: {
                     'Authorization': `Bearer ${idToken}`,
@@ -1419,7 +1424,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
         if (selectedUsers.length === 0) return;
         
         try {
-            const idToken = await user.firebaseUser.getIdToken();
+            const idToken = await getAccessToken(user);
             
             if (bulkAction === 'delete') {
                 // Bulk delete

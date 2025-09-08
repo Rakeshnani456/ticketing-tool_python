@@ -22,6 +22,7 @@ import {
   Close as CloseIcon
 } from '@mui/icons-material';
 import { API_BASE_URL } from '../../config/constants';
+import { getAccessToken } from '../../utils/utils';
 import { useNavigate } from 'react-router-dom';
 
 const initialUserState = {
@@ -92,7 +93,7 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
     
     const fetchEngineers = async () => {
       try {
-        const idToken = await user.firebaseUser.getIdToken();
+        const idToken = await getAccessToken(user);
         
         const res = await fetch(`${API_BASE_URL}/api/users`, {
           headers: {
@@ -190,7 +191,7 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
       // Refresh engineers list
       const fetchEngineers = async () => {
         try {
-          const idToken = await user.firebaseUser.getIdToken();
+          const idToken = await getAccessToken(user);
           
           const res = await fetch(`${API_BASE_URL}/api/users`, {
             headers: {
@@ -314,7 +315,7 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
       // Refresh engineers list
       const fetchEngineers = async () => {
         try {
-          const idToken = await user.firebaseUser.getIdToken();
+          const idToken = await getAccessToken(user);
           
           const res = await fetch(`${API_BASE_URL}/api/users`, {
             headers: {
@@ -400,7 +401,7 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
       // Refresh engineers list
       const fetchEngineers = async () => {
         try {
-          const idToken = await user.firebaseUser.getIdToken();
+          const idToken = await getAccessToken(user);
           
           const res = await fetch(`${API_BASE_URL}/api/users`, {
             headers: {

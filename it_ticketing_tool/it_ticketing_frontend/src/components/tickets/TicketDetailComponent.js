@@ -28,11 +28,10 @@ import {
 } from 'lucide-react';
 import { Paperclip } from '../common/AnimatedPaperclip';
 import { Activity } from '../common/AnimatedActivity';
-import { doc, onSnapshot, getFirestore } from 'firebase/firestore';
 import { useParams } from 'react-router-dom';
-import { getFileNameFromUrl } from '../../utils/utils';
+import { getFileNameFromUrl, getAccessToken } from '../../utils/utils';
 import { API_BASE_URL } from '../../config/constants';
-import { app, dbClient } from '../../config/firebase';
+import { supabase } from '../../config/supabase';
 
 import PdfIcon from '../../assets/icons/PdfIcon.svg';
 import DocIcon from '../../assets/icons/DocIcon.svg';
@@ -166,7 +165,7 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
         { value: 'Cancelled', label: 'Cancelled' },
     ];
 
-    const db = dbClient;
+    // Using Supabase instead of Firebase
 
     const formatTicketData = (data) => {
         const newData = { ...data };
@@ -385,7 +384,7 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
     }, []);
 
     useEffect(() => {
-        if (!ticketId || !user?.firebaseUser || !db) {
+        if (!ticketId || !user) {
             setLoading(false);
             showFlashMessage('Authentication or ticket ID missing to view details.', 'info');
             return () => { };
@@ -415,54 +414,91 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
             }
         }
 
-        const ticketDocRef = doc(db, 'tickets', ticketId);
+        // Using Supabase instead of Firebase Firestore
 
-        const unsubscribe = onSnapshot(ticketDocRef, (docSnapshot) => {
-            if (docSnapshot.exists()) {
-                const fetchedTicket = { id: docSnapshot.id, ...formatTicketData(docSnapshot.data()) };
+        // Fetch ticket data using Supabase
+        const fetchTicket = async () => {
+            try {
+                const { data: ticketData, error } = await supabase
+                    .from('tickets')
+                    .select('*')
+                    .eq('id', ticketId)
+                    .single();
 
-                if (fetchedTicket.reporter_id !== user.firebaseUser.uid && !isSupportUser) {
-                    setError('Forbidden: You do not have permission to view this ticket.');
-                    showFlashMessage('Forbidden: You do not have permission to view this ticket.', 'error');
+                if (error) {
+                    throw error;
+                }
+
+                if (ticketData) {
+                    const fetchedTicket = { id: ticketData.id, ...formatTicketData(ticketData) };
+
+                    if (fetchedTicket.reporter_id !== user.uid && !isSupportUser) {
+                        setError('Forbidden: You do not have permission to view this ticket.');
+                        showFlashMessage('Forbidden: You do not have permission to view this ticket.', 'error');
+                        setTicket(null);
+                        setLoading(false);
+                        return;
+                    }
+
+                    setTicket(fetchedTicket);
+                    const timelineEventsData = generateTimelineEvents(fetchedTicket);
+                    setTimelineEvents(timelineEventsData);
+                    
+                    if (['Resolved', 'Cancelled'].includes(fetchedTicket.status)) {
+                        setIsEditing(false);
+                    }
+                    
+                    // Cache the data
+                    const dataToCache = {
+                        ticket: fetchedTicket,
+                        timelineEvents: timelineEventsData,
+                        timestamp: now
+                    };
+                    localStorage.setItem(cacheKey, JSON.stringify(dataToCache));
+                    localStorage.setItem(`${cacheKey}_time`, now.toString());
+                    
+                    setLoading(false);
+                    setError(null);
+                } else {
+                    setError('Ticket not found.');
+                    showFlashMessage('Ticket not found.', 'error');
                     setTicket(null);
                     setLoading(false);
-                    return;
                 }
-
-                setTicket(fetchedTicket);
-                const timelineEventsData = generateTimelineEvents(fetchedTicket);
-                setTimelineEvents(timelineEventsData);
-                
-                if (['Resolved', 'Cancelled'].includes(fetchedTicket.status)) {
-                    setIsEditing(false);
-                }
-                
-                // Cache the data
-                const dataToCache = {
-                    ticket: fetchedTicket,
-                    timelineEvents: timelineEventsData,
-                    timestamp: now
-                };
-                localStorage.setItem(cacheKey, JSON.stringify(dataToCache));
-                localStorage.setItem(`${cacheKey}_time`, now.toString());
-                
-                setLoading(false);
-                setError(null);
-            } else {
-                setError('Ticket not found.');
-                showFlashMessage('Ticket not found.', 'error');
-                setTicket(null);
+            } catch (err) {
+                console.error("Supabase error (TicketDetailComponent):", err);
+                setError(`Failed to load ticket details: ${err.message}`);
+                showFlashMessage(`Failed to load ticket details: ${err.message}`, 'error');
                 setLoading(false);
             }
-        }, (err) => {
-            console.error("Firestore onSnapshot error (TicketDetailComponent):", err);
-            setError(`Failed to load ticket details: ${err.message}`);
-            showFlashMessage(`Failed to load ticket details: ${err.message}`, 'error');
-            setLoading(false);
-        });
+        };
+
+        fetchTicket();
+
+        // Set up real-time subscription for ticket updates
+        const subscription = supabase
+            .channel('ticket-updates')
+            .on('postgres_changes', 
+                { 
+                    event: '*', 
+                    schema: 'public', 
+                    table: 'tickets',
+                    filter: `id=eq.${ticketId}`
+                }, 
+                (payload) => {
+                    console.log('Ticket updated:', payload);
+                    // Refetch ticket data when changes occur
+                    fetchTicket();
+                }
+            )
+            .subscribe();
+
+        const unsubscribe = () => {
+            subscription.unsubscribe();
+        };
 
         return () => unsubscribe();
-    }, [ticketId, user, db, isSupportUser]);
+    }, [ticketId, user, isSupportUser]);
 
     useEffect(() => {
         if (isEditing && ticket) {
@@ -483,8 +519,8 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
     useEffect(() => {
         if (isEditing && (isSupportUser || isEngineer)) {
             setSupportUsersLoading(true);
-            user.firebaseUser.getIdToken()
-                .then(idToken => {
+            getAccessToken(user)
+                .then((idToken) => {
                     return fetch(`${API_BASE_URL}/api/users`, {
                         headers: {
                             'Authorization': `Bearer ${idToken}`,
@@ -592,7 +628,7 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
         setClosureNotesErrorMessage('');
 
         try {
-            const idToken = await user.firebaseUser.getIdToken();
+            const idToken = await getAccessToken(user);
             const payload = { ...editableFields };
 
             if (actionType === 'close') {
@@ -800,7 +836,7 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
         }
         setCommentLoading(true);
         try {
-            const idToken = await user.firebaseUser.getIdToken();
+            const idToken = await getAccessToken(user);
             const response = await fetch(`${API_BASE_URL}/tickets/${ticketId}/add_comment`, {
                 method: 'POST',
                 headers: {
@@ -898,7 +934,7 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
         setUploadButtonState('uploading');
         const uploadedAttachmentData = [];
         let anyUploadFailed = false;
-        const idToken = await user.firebaseUser.getIdToken();
+        const idToken = await getAccessToken(user);
         const uploadPromises = filesToUpload.map((file, idx) => {
             return uploadFileWithProgress(file, (percent) => {
                 setUploadProgress(prev => ({ ...prev, [file.name]: percent }));

@@ -11,8 +11,7 @@ import {
   createColumnHelper,
 } from '@tanstack/react-table';
 import { API_BASE_URL } from '../../config/constants';
-import { getFirestore, collection, onSnapshot } from 'firebase/firestore';
-import { app } from '../../config/firebase';
+import { supabase } from '../../config/supabase';
 import ClientInfoModal from '../common/ClientInfoModal';
 import PrimaryButton from '../common/PrimaryButton';
 import ClientCard from './ClientCard';
@@ -96,7 +95,7 @@ const ClientManagementComponent = ({ user }) => {
   const handleMenuClose = () => setMenuAnchorEl(null);
   const handleActionMode = (mode) => { setActionMode(mode); setMenuAnchorEl(null); };
 
-  const db = getFirestore(app);
+  // Using Supabase instead of Firebase
 
   // Calculate user counts per client
   const userCounts = useMemo(() => {
@@ -122,24 +121,63 @@ const ClientManagementComponent = ({ user }) => {
     let unsubClients = null;
     let unsubUsers = null;
     
-    // Set up Firestore snapshot listeners for both clients and users
-    unsubClients = onSnapshot(collection(db, 'clients'), (snapshot) => {
-      setClients(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      setLoading(false);
-    }, (err) => {
-      setError('Could not load clients.');
-      setClients([]);
-      setLoading(false);
-    });
+    // Fetch clients using Supabase
+    const fetchClients = async () => {
+      try {
+        const { data: clientsData, error } = await supabase
+          .from('clients')
+          .select('*');
+        
+        if (error) throw error;
+        
+        setClients(clientsData || []);
+        setLoading(false);
+      } catch (err) {
+        setError('Could not load clients.');
+        setClients([]);
+        setLoading(false);
+      }
+    };
 
-    // Set up Firestore snapshot listener for users
-    unsubUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
-      const fetchedUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setUsers(fetchedUsers);
-    }, (err) => {
-      console.error('Error fetching users:', err);
-      // Don't set error here as it's not critical for client management
-    });
+    // Fetch users using Supabase
+    const fetchUsers = async () => {
+      try {
+        const { data: usersData, error } = await supabase
+          .from('users')
+          .select('*');
+        
+        if (error) throw error;
+        
+        setUsers(usersData || []);
+      } catch (err) {
+        console.error('Error fetching users:', err);
+        // Don't set error here as it's not critical for client management
+      }
+    };
+
+    // Fetch data
+    fetchClients();
+    fetchUsers();
+
+    // Set up real-time subscriptions
+    const clientsSubscription = supabase
+      .channel('clients-changes')
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'clients' }, 
+        () => fetchClients()
+      )
+      .subscribe();
+
+    const usersSubscription = supabase
+      .channel('users-changes')
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'users' }, 
+        () => fetchUsers()
+      )
+      .subscribe();
+
+    unsubClients = () => clientsSubscription.unsubscribe();
+    unsubUsers = () => usersSubscription.unsubscribe();
     
     return () => {
       if (unsubClients) unsubClients();

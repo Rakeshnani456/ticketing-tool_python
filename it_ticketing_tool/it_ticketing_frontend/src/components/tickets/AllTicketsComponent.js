@@ -3,16 +3,16 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Loader2, XCircle, ListFilter, User, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
-import { collection, query, onSnapshot, where, orderBy, getFirestore, limit, getDocs, doc, updateDoc } from 'firebase/firestore';
 import ReactDOM from 'react-dom';
 
 // Import common UI components
 
 // Import API Base URL from constants
 import { API_BASE_URL } from '../../config/constants';
+import { getAccessToken } from '../../utils/utils';
 
-// Import Firebase client (now including dbClient)
-import { app, dbClient } from '../../config/firebase';
+// Import Supabase client
+import { supabase } from '../../config/supabase';
 
 
 /**
@@ -20,7 +20,7 @@ import { app, dbClient } from '../../config/firebase';
  * Includes filtering capabilities by status, assignment, and date range, and an export function.
  * 
  * ENGINEER CONFIGURATION:
- * Engineers are automatically fetched from the Firestore 'users' collection
+ * Engineers are automatically fetched from the Supabase 'users' table
  * where users have the role 'support'. No manual configuration needed.
  * 
  * @param {object} props - Component props.
@@ -34,7 +34,7 @@ import { app, dbClient } from '../../config/firebase';
  * @returns {JSX.Element} The list of all tickets or a loading/error message.
  */
 const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword, refreshKey, initialFilterAssignment = '', showFilters = true }) => {
-    // State to hold ALL tickets fetched from Firestore (before client-side filtering)
+    // State to hold ALL tickets fetched from Supabase (before client-side filtering)
     const [allTickets, setAllTickets] = useState([]);
     // State for the tickets currently being displayed in the table (after client-side filtering)
     const [displayedTickets, setDisplayedTickets] = useState([]);
@@ -95,8 +95,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
     // Get today's date in ISO-MM-DD format for the max attribute of the end date input
     const today = new Date().toISOString().split('T')[0];
 
-    // Initialize Firestore DB client. This will be the same instance as exported from firebase.js.
-    const db = dbClient; // Use the already initialized dbClient
+    // Using Supabase instead of Firebase
 
     // Function to fetch companies for filtering
     const fetchCompanies = useCallback(async () => {
@@ -127,53 +126,24 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
     // Function to fetch available engineers
     const fetchEngineers = useCallback(async () => {
         try {
-            // Fetch engineers directly from Firestore users collection
-            // Look for users with roles 'support', 'admin', and 'site_admin' for assignment
-            const usersRef = collection(db, 'users');
-            
-            // For site_admin users, show all available engineers (support, admin, site_admin)
-            // For other users, show only support engineers as before
-            let engineersQuery;
-            if (user && user.role === 'site_admin') {
-                // Site admin can see all engineers for assignment
-                engineersQuery = query(usersRef, where('role', 'in', ['support', 'admin', 'site_admin']));
-            } else {
-                // Other users see support engineers and super admins
-                engineersQuery = query(usersRef, where('role', 'in', ['support', 'super_admin']));
+            // Fetch engineers from Supabase
+            const { data: engineers, error } = await supabase
+                .from('users')
+                .select('id, name, email')
+                .eq('role', 'support')
+                .order('name');
+
+            if (error) {
+                throw error;
             }
-            
-            const snapshot = await getDocs(engineersQuery);
-            
-            if (!snapshot.empty) {
-                const engineers = snapshot.docs.map(doc => {
-                    const userData = doc.data();
-                    return {
-                        id: doc.id,
-                        name: userData.name || (userData.firstName && userData.lastName ? `${userData.firstName} ${userData.lastName}` : userData.email),
-                        email: userData.email,
-                        role: userData.role
-                    };
-                });
-                
-                setAvailableEngineers(engineers);
-                console.log('Successfully loaded engineers from Firestore:', engineers);
-                return;
-            } else {
-                console.log('No engineers found with required roles in the database');
-                setAvailableEngineers([]);
-                if (user && user.role === 'site_admin') {
-                    showFlashMessage('No engineers found in the system. Please add users with support, admin, or site_admin roles.', 'info');
-                } else {
-                    showFlashMessage('No engineers found in the system. Please add users with "support" or "super_admin" role.', 'info');
-                }
-            }
-            
+
+            setAvailableEngineers(engineers || []);
         } catch (error) {
             console.error('Error in fetchEngineers:', error);
             setAvailableEngineers([]);
             showFlashMessage('Failed to load engineers. Please check your connection and try again.', 'error');
         }
-    }, [showFlashMessage, db, user]);
+    }, [showFlashMessage, user]);
 
     // Function to handle ticket selection
     const handleTicketSelection = (ticketId) => {
@@ -243,7 +213,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
 
         setAssignLoading(true);
         try {
-            // Firebase SDK handles authentication automatically when user is signed in
+            // Supabase handles authentication automatically when user is signed in
             // No need to manually check for tokens
             
             // First, test if the backend is reachable
@@ -257,7 +227,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                 const testResponse = await fetch(`${API_BASE_URL}/tickets/summary-counts`, {
                     method: 'GET',
                     headers: {
-                        'Authorization': `Bearer ${await user.firebaseUser.getIdToken()}`
+                        'Authorization': `Bearer ${await getAccessToken(user)}`
                     }
                 });
                 console.log('Backend connectivity test result:', testResponse.status, testResponse.statusText);
@@ -277,22 +247,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                         return { success: false, ticketId, error: 'Ticket not found' };
                     }
 
-                    // Update the ticket assignment in Firestore directly
-                    const ticketRef = doc(db, 'tickets', ticketId);
-                    
-                    // First, get the assigned user's ID from the users collection
-                    const usersRef = collection(db, 'users');
-                    const userQuery = query(usersRef, where('email', '==', selectedEngineer));
-                    const userSnapshot = await getDocs(userQuery);
-                    
-                    if (userSnapshot.empty) {
-                        throw new Error(`Engineer ${selectedEngineer} not found in users collection`);
-                    }
-                    
-                    const assignedUser = userSnapshot.docs[0];
-                    
-                    // Trigger the existing backend assignment email system FIRST (before updating Firestore)
-                    // This ensures the backend sees the original assignment value and can detect the change
+                    // Update the ticket assignment via Supabase
                     try {
                         console.log(`Attempting to trigger email for ticket ${ticket.display_id}...`);
                         console.log(`Current assignment: ${ticket.assigned_to_email || 'unassigned'}`);
@@ -305,19 +260,19 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                             current_assigned: ticket.assigned_to_email
                         });
                         
-                        const token = await user.firebaseUser.getIdToken();
+                        const token = await getAccessToken(user);
                         console.log(`Got token, calling backend for ticket ${ticket.display_id}...`);
                         
                         const response = await fetch(`${API_BASE_URL}/tickets/${ticketId}`, {
                             method: 'PATCH',
-                headers: {
-                    'Content-Type': 'application/json',
+                            headers: {
+                                'Content-Type': 'application/json',
                                 'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({
+                            },
+                            body: JSON.stringify({
                                 assigned_to_email: selectedEngineer
-                })
-            });
+                            })
+                        });
 
                         console.log(`Backend response for ticket ${ticket.display_id}:`, response.status, response.statusText);
                         
@@ -332,13 +287,6 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                         console.error(`Error triggering email for ticket ${ticket.display_id}:`, emailError);
                         // Don't fail the assignment if email fails
                     }
-
-                    // Now update the ticket in Firestore
-                    await updateDoc(ticketRef, {
-                        assigned_to_email: selectedEngineer,
-                        assigned_to_id: assignedUser.id,
-                        updated_at: new Date()
-                    });
 
                     return { success: true, ticketId };
                 } catch (error) {
@@ -371,8 +319,8 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
             // Exit assign mode after successful assignment
             exitAssignMode();
             
-            // The real-time listener will automatically update the UI
-            // since we're updating the Firestore documents directly
+            // The real-time subscription will automatically update the UI
+            // since we're updating the Supabase records directly
             
         } catch (error) {
             console.error('Error in bulk assignment:', error);
@@ -464,9 +412,9 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
     }, [canAssign, user]);
 
     /**
-     * Helper function to convert Firestore Timestamp to ISO string or Date object.
+     * Helper function to convert Supabase Timestamp to ISO string or Date object.
      * This ensures consistency for display and client-side sorting/filtering.
-     * @param {object} data - The raw data from Firestore document.
+     * @param {object} data - The raw data from Supabase record.
      * @returns {object} Data with timestamps converted.
      */
     const formatTicketData = (data) => {
@@ -492,11 +440,11 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
     };
 
     /**
-     * Effect hook to set up real-time Firestore listener for all tickets.
+     * Effect hook to set up real-time Supabase subscription for all tickets.
      * This ensures 'allTickets' state contains the comprehensive dataset for accurate counts.
      */
     useEffect(() => {
-        if (!user || !user.firebaseUser || !db) {
+        if (!user || !user.supabaseUser) {
             setLoading(false);
             showFlashMessage('Authentication required to view tickets.', 'info');
             return () => {};
@@ -528,67 +476,86 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                 email: user.email,
                 client_name: user.client_name,
                 companyName: user.companyName,
-                firebaseUser: user.firebaseUser ? 'present' : 'missing'
+                supabaseUser: user.supabaseUser ? 'present' : 'missing'
             });
         }
 
-        let ticketsRef = collection(db, 'tickets');
-        let q;
+        // Fetch tickets from Supabase
+        const fetchTickets = async () => {
+            try {
+                let query = supabase
+                    .from('tickets')
+                    .select('*')
+                    .order('created_at', { ascending: false })
+                    .limit(100);
 
-        // If there's an exact search keyword that looks like a TICKET-ID,
-        // apply that filter directly in the Firestore query for efficiency.
-        if (searchKeyword && searchKeyword.toUpperCase().startsWith('TICKET-')) {
-            const exactId = searchKeyword.toUpperCase();
-            q = query(ticketsRef, where('display_id', '==', exactId), orderBy('created_at', 'desc'), limit(10));
-        } else if (user && user.role === 'site_admin' && user.client_name) {
-            // Only fetch tickets for this site_admin's company
-            q = query(ticketsRef, where('client_name', '==', user.client_name), orderBy('created_at', 'desc'), limit(100));
-        } else if (user && user.role === 'site_admin') {
-            // Fallback: if site admin doesn't have client_name, fetch all tickets and filter client-side
-            console.warn("Site admin user doesn't have client_name field, falling back to client-side filtering");
-            q = query(ticketsRef, orderBy('created_at', 'desc'), limit(100));
-        } else {
-            // Otherwise, fetch all tickets ordered by creation date.
-            q = query(ticketsRef, orderBy('created_at', 'desc'), limit(100));
-        }
+                // Apply filters based on user role and search criteria
+                if (searchKeyword && searchKeyword.toUpperCase().startsWith('TICKET-')) {
+                    const exactId = searchKeyword.toUpperCase();
+                    query = query.eq('display_id', exactId).limit(10);
+                } else if (user && user.role === 'site_admin' && user.client_name) {
+                    query = query.eq('client_name', user.client_name);
+                }
 
-        // Set up the real-time listener
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const fetchedTickets = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...formatTicketData(doc.data()) // Format timestamps
-            }));
-            setAllTickets(fetchedTickets); // Update the raw fetched tickets (full dataset or exact search result)
-            setLoading(false);
-            setError(null);
-            
-            // Cache the data
-            localStorage.setItem(cacheKey, JSON.stringify(fetchedTickets));
-            localStorage.setItem(`${cacheKey}_time`, now.toString());
-        }, (err) => {
-            console.error("Firestore onSnapshot error:", err);
-            // Add more specific error handling for site admin
-            if (user && user.role === 'site_admin') {
-                console.error("Site admin ticket fetch error details:", {
-                    userClientName: user.client_name,
-                    userCompanyName: user.companyName,
-                    error: err.message,
-                    code: err.code
-                });
+                const { data: tickets, error } = await query;
+
+                if (error) {
+                    throw error;
+                }
+
+                const fetchedTickets = tickets.map(ticket => ({
+                    id: ticket.id,
+                    ...formatTicketData(ticket) // Format timestamps
+                }));
+
+                setAllTickets(fetchedTickets);
+                setLoading(false);
+                setError(null);
+                
+                // Cache the data
+                localStorage.setItem(cacheKey, JSON.stringify(fetchedTickets));
+                localStorage.setItem(`${cacheKey}_time`, now.toString());
+            } catch (err) {
+                console.error("Supabase ticket fetch error:", err);
+                if (user && user.role === 'site_admin') {
+                    console.error("Site admin ticket fetch error details:", {
+                        userClientName: user.client_name,
+                        userCompanyName: user.companyName,
+                        error: err.message,
+                        code: err.code
+                    });
+                }
+                setError(`Failed to load tickets: ${err.message}`);
+                showFlashMessage(`Failed to load tickets: ${err.message}`, 'error');
+                setLoading(false);
             }
-            setError(`Failed to load tickets: ${err.message}`);
-            showFlashMessage(`Failed to load tickets: ${err.message}`, 'error');
-            setLoading(false);
-        });
+        };
 
-        // Cleanup function: unsubscribe from the listener when the component unmounts
-        return () => unsubscribe();
-    }, [db, searchKeyword, user, filterBy, filterCompany]);
+        fetchTickets();
+
+        // Set up real-time subscription for ticket updates
+        const subscription = supabase
+            .channel('tickets_changes')
+            .on('postgres_changes', 
+                { event: '*', schema: 'public', table: 'tickets' },
+                (payload) => {
+                    console.log('Ticket change detected:', payload);
+                    // Refetch tickets when changes occur
+                    fetchTickets();
+                }
+            )
+            .subscribe();
+
+        // Cleanup function: unsubscribe from the subscription when the component unmounts
+        return () => {
+            subscription.unsubscribe();
+        };
+    }, [searchKeyword, user, filterBy, filterCompany]);
 
 
     /**
      * Effect hook to apply client-side filtering (status, assignment, general search)
-     * whenever `allTickets` (the raw data from Firestore) or filter states change.
+     * whenever `allTickets` (the raw data from Supabase) or filter states change.
      */
     useEffect(() => {
         console.log('Filtering effect triggered with:', {
@@ -600,7 +567,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
             totalTickets: allTickets.length
         });
         
-        let currentFilteredTickets = [...allTickets]; // Start with all tickets fetched by Firestore
+        let currentFilteredTickets = [...allTickets]; // Start with all tickets fetched by Supabase
 
         // If user is a site_admin, filter tickets by their company/client
         if (user && user.role === 'site_admin') {
@@ -653,11 +620,11 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
             if (filterAssignment === 'unassigned') {
                 currentFilteredTickets = currentFilteredTickets.filter(ticket => !ticket.assigned_to_email);
             } else if (filterAssignment === 'assigned_to_me') {
-                currentFilteredTickets = currentFilteredTickets.filter(ticket => ticket.assigned_to_id === user?.firebaseUser?.uid);
+                currentFilteredTickets = currentFilteredTickets.filter(ticket => ticket.assigned_to_id === user?.uid);
             }
         }
 
-        // Apply client-side search keyword filter (only if it wasn't handled fully by Firestore query)
+        // Apply client-side search keyword filter (only if it wasn't handled fully by Supabase query)
         if (searchKeyword && !searchKeyword.toUpperCase().startsWith('TICKET-')) {
             const lowercasedKeyword = searchKeyword.toLowerCase();
             currentFilteredTickets = currentFilteredTickets.filter(ticket => {
@@ -845,14 +812,14 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
 
         setLoading(true); // Indicate loading for export
         try {
-            const idToken = await user.firebaseUser.getIdToken();
+            const idToken = await getAccessToken(user);
             const queryParams = new URLSearchParams();
             if (startDate) queryParams.append('start_date', startDate);
             if (endDate) queryParams.append('end_date', endDate);
             if (exportStatus) queryParams.append('status', exportStatus);
 
             // Note: The backend endpoint '/tickets/export' still uses HTTP fetch,
-            // as real-time export directly from Firestore client is not a typical use case.
+            // as real-time export directly from Supabase client is not a typical use case.
             const response = await fetch(`${API_BASE_URL}/tickets/export?${queryParams.toString()}`, {
                 method: 'GET',
                 headers: {

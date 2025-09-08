@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Loader2, XCircle, FilePenLine, User, Mail, Shield, Briefcase, LogOut } from 'lucide-react';
 import PrimaryButton from './common/PrimaryButton';
 import { API_BASE_URL } from '../config/constants';
+import { getAccessToken } from '../utils/utils';
 
 /**
  * Displays user's profile info and allows password change navigation.
@@ -18,12 +19,12 @@ const ProfileComponent = ({ user, showFlashMessage, navigateTo, handleLogout }) 
     const [error, setError] = useState(null);
     
     const fetchProfile = useCallback(async () => {
-        if (!user?.firebaseUser) return;
+        if (!user?.supabaseUser) return;
         setLoading(true);
         setError(null);
         try {
-            const idToken = await user.firebaseUser.getIdToken();
-            const res = await fetch(`${API_BASE_URL}/profile/${user.firebaseUser.uid}`, {
+            const idToken = await getAccessToken(user);
+            const res = await fetch(`${API_BASE_URL}/profile/${user.uid}`, {
                 headers: { Authorization: `Bearer ${idToken}` },
             });
             const data = await res.json();

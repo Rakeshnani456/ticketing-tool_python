@@ -1,9 +1,9 @@
-// Firebase optimization utilities
+// Supabase optimization utilities
 
 /**
- * Cache management for Firebase data
+ * Cache management for Supabase data
  */
-export class FirebaseCache {
+export class SupabaseCache {
     static CACHE_DURATIONS = {
         TICKET_COUNTS: 5 * 60 * 1000,      // 5 minutes
         DASHBOARD_DATA: 2 * 60 * 1000,     // 2 minutes
@@ -81,13 +81,13 @@ export class FirebaseCache {
 }
 
 /**
- * Query optimization utilities
+ * Query optimization utilities for Supabase
  */
 export class QueryOptimizer {
     /**
      * Create optimized query with proper limits and filters
      */
-    static createOptimizedQuery(collectionRef, options = {}) {
+    static createOptimizedQuery(supabaseClient, table, options = {}) {
         const {
             filters = [],
             orderByField = 'created_at',
@@ -96,18 +96,46 @@ export class QueryOptimizer {
             includeDeleted = false
         } = options;
 
-        let query = collectionRef;
+        let query = supabaseClient.from(table);
 
         // Apply filters
         filters.forEach(filter => {
             if (filter.field && filter.operator && filter.value !== undefined) {
-                query = query.where(filter.field, filter.operator, filter.value);
+                switch (filter.operator) {
+                    case '==':
+                        query = query.eq(filter.field, filter.value);
+                        break;
+                    case '!=':
+                        query = query.neq(filter.field, filter.value);
+                        break;
+                    case '>':
+                        query = query.gt(filter.field, filter.value);
+                        break;
+                    case '>=':
+                        query = query.gte(filter.field, filter.value);
+                        break;
+                    case '<':
+                        query = query.lt(filter.field, filter.value);
+                        break;
+                    case '<=':
+                        query = query.lte(filter.field, filter.value);
+                        break;
+                    case 'in':
+                        query = query.in(filter.field, filter.value);
+                        break;
+                    case 'like':
+                        query = query.like(filter.field, filter.value);
+                        break;
+                    case 'ilike':
+                        query = query.ilike(filter.field, filter.value);
+                        break;
+                }
             }
         });
 
         // Apply ordering
         if (orderByField) {
-            query = query.orderBy(orderByField, orderDirection);
+            query = query.order(orderByField, { ascending: orderDirection === 'asc' });
         }
 
         // Apply limit
@@ -121,11 +149,11 @@ export class QueryOptimizer {
     /**
      * Create paginated query
      */
-    static createPaginatedQuery(collectionRef, pageSize = 20, lastDoc = null, options = {}) {
-        let query = this.createOptimizedQuery(collectionRef, { ...options, limitCount: pageSize });
-
-        if (lastDoc) {
-            query = query.startAfter(lastDoc);
+    static createPaginatedQuery(supabaseClient, table, pageSize = 20, offset = 0, options = {}) {
+        let query = this.createOptimizedQuery(supabaseClient, table, { ...options, limitCount: pageSize });
+        
+        if (offset > 0) {
+            query = query.range(offset, offset + pageSize - 1);
         }
 
         return query;
@@ -172,9 +200,9 @@ export class RateLimiter {
 }
 
 /**
- * Firebase performance monitoring
+ * Supabase performance monitoring
  */
-export class FirebasePerformance {
+export class SupabasePerformance {
     static readCounts = new Map();
 
     /**
@@ -210,7 +238,7 @@ export class FirebasePerformance {
      */
     static logReadStats() {
         const stats = this.getReadStats();
-        console.log('Firebase Read Statistics:', stats);
+        console.log('Supabase Read Statistics:', stats);
         return stats;
     }
 }
@@ -218,7 +246,7 @@ export class FirebasePerformance {
 /**
  * Main optimization class
  */
-export class FirebaseOptimizer {
+export class SupabaseOptimizer {
     /**
      * Optimize query based on user role and context
      */
@@ -274,10 +302,9 @@ export class FirebaseOptimizer {
 }
 
 export default {
-    FirebaseCache,
+    SupabaseCache,
     QueryOptimizer,
     RateLimiter,
-    FirebasePerformance,
-    FirebaseOptimizer
+    SupabasePerformance,
+    SupabaseOptimizer
 };
-

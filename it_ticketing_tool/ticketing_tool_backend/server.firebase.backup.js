@@ -19,13 +19,6 @@ let dbConnected = false;
 // Test Supabase connection
 async function testSupabaseConnection() {
     try {
-        // Check if we're using placeholder credentials
-        if (process.env.SUPABASE_URL === 'https://placeholder-project.supabase.co' || !process.env.SUPABASE_URL) {
-            console.warn("⚠️  Supabase not configured. Please set up your .env file with real Supabase credentials.");
-            dbConnected = false;
-            return false;
-        }
-        
         const { data, error } = await supabase.from('users').select('count').limit(1);
         if (error) {
             throw error;
@@ -35,7 +28,6 @@ async function testSupabaseConnection() {
         return true;
     } catch (error) {
         console.error(`Error connecting to Supabase: ${error.message}`);
-        console.error("Please check your Supabase credentials and ensure the database schema is set up.");
         dbConnected = false;
         return false;
     }
@@ -45,7 +37,7 @@ async function testSupabaseConnection() {
 testSupabaseConnection();
 
 // Office365 SMTP transporter for sending as TT.Support@kriasol.com via testing@kriasol.com
-const transporter = nodemailer.createTransport({
+const transporter = nodemailer.createTransporter({
     host: 'smtp.office365.com',
     port: 587,
     secure: false, // use TLS
@@ -62,24 +54,11 @@ app.use(cors());
 app.use(express.json());
 
 // Health check endpoint for Docker
-app.get('/health', async (req, res) => {
-    // Test database connection
-    let dbStatus = 'disconnected';
-    try {
-        if (process.env.SUPABASE_URL && !process.env.SUPABASE_URL.includes('placeholder')) {
-            const { data, error } = await supabase.from('users').select('count').limit(1);
-            if (!error) {
-                dbStatus = 'connected';
-            }
-        }
-    } catch (error) {
-        console.error('Health check database test failed:', error.message);
-    }
-    
+app.get('/health', (req, res) => {
     res.status(200).json({ 
         status: 'OK', 
         timestamp: new Date().toISOString(),
-        database: dbStatus
+        database: dbConnected ? 'connected' : 'disconnected'
     });
 });
 
@@ -197,16 +176,16 @@ app.locals.validUserRoles = validUserRoles;
 app.locals.emailService = emailService;
 
 // Import and use routes
-const authRoutes = require('./routes/authRoutes.supabase')(supabase, verifySupabaseToken, checkRole, validUserRoles);
-const ticketRoutes = require('./routes/ticketRoutes.supabase')(supabase, verifySupabaseToken, checkRole, jsonSerializableTicket, generateDisplayId, emailService);
-const userManagementRoutes = require('./routes/userManagementRoutes.supabase')(supabase, verifySupabaseToken, checkRole, validUserRoles);
-const adminRoutes = require('./routes/adminRoutes.supabase')(supabase, verifySupabaseToken, checkRole);
-const dashboardRoutes = require('./routes/dashboardRoutes.supabase')(supabase, verifySupabaseToken, checkRole);
-const analyticsRoutes = require('./routes/analyticsRoutes.supabase')(supabase, verifySupabaseToken, checkRole);
-const notificationRoutes = require('./routes/notificationRoutes.supabase')(supabase, verifySupabaseToken, jsonSerializableNotification);
-const clientRoutes = require('./routes/clientRoutes.supabase')(supabase, verifySupabaseToken, checkRole);
-const attachmentRoutes = require('./routes/attachmentRoutes.supabase')(supabase, verifySupabaseToken);
-const adminManagementRoutes = require('./routes/adminManagement.supabase')(supabase, verifySupabaseToken, checkRole);
+const authRoutes = require('./routes/authRoutes.supabase');
+const ticketRoutes = require('./routes/ticketRoutes.supabase');
+const userManagementRoutes = require('./routes/userManagementRoutes.supabase');
+const adminRoutes = require('./routes/adminRoutes.supabase');
+const dashboardRoutes = require('./routes/dashboardRoutes.supabase');
+const analyticsRoutes = require('./routes/analyticsRoutes.supabase');
+const notificationRoutes = require('./routes/notificationRoutes.supabase');
+const clientRoutes = require('./routes/clientRoutes.supabase');
+const attachmentRoutes = require('./routes/attachmentRoutes.supabase');
+const adminManagementRoutes = require('./routes/adminManagement.supabase');
 
 // Use routes
 app.use('/api/auth', authRoutes);
@@ -226,7 +205,8 @@ const http = require('http');
 
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ 
-    server
+    server,
+    port: process.env.WEBSOCKET_PORT || 5001
 });
 
 // WebSocket connection handling

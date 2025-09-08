@@ -2,15 +2,14 @@
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { signOut } from 'firebase/auth';
 import { Shield, Lock, Eye, EyeOff } from 'lucide-react';
 
 // Import common UI components
 import FormInput from '../common/FormInput';
 import PrimaryButton from '../common/PrimaryButton';
 
-// Import Firebase auth client from config
-import { authClient } from '../../config/firebase';
+// Import Supabase client from config
+import { supabase } from '../../config/supabase';
 import { API_BASE_URL } from '../../config/constants';
 
 /**
@@ -255,7 +254,7 @@ const InitialPasswordChangeComponent = ({ navigateTo, showFlashMessage }) => {
                 showStatus('Password updated successfully! You can now log in.', 'success');
                 
                 // Sign out and redirect to login
-                await signOut(authClient);
+                await supabase.auth.signOut();
                 
                 // Redirect to login after a short delay
                 setTimeout(() => {

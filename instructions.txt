@@ -1,5 +1,6 @@
 
 
+
 cd it_ticketing_tool/ticketing_tool_backend
 node server.js
 
@@ -10,7 +11,7 @@ npm start
 
 
 ### Frontend Deployment
-```bash
+```bashnow supabae
 
 cd it_ticketing_tool/it_ticketing_frontend
 npm run build

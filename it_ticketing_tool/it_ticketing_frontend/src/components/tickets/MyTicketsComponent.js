@@ -2,13 +2,11 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Loader2, XCircle, PlusCircle, User, ChevronLeft, ChevronRight } from 'lucide-react'; // Icons
-import { collection, query, onSnapshot, where, orderBy, getFirestore, limit } from 'firebase/firestore'; // NEW: Firestore imports
-
 // Import common UI components
 import LinkButton from '../common/LinkButton';
 
-// Import Firebase client (now including dbClient)
-import { app, dbClient } from '../../config/firebase'; // Import 'app' and 'dbClient'
+// Import Supabase client
+import { supabase } from '../../config/supabase';
 
 /**
  * Component to display a list of tickets created by the current user.
@@ -29,146 +27,95 @@ const MyTicketsComponent = ({ user, navigateTo, showFlashMessage, searchKeyword,
     const totalPages = Math.ceil(tickets.length / ticketsPerPage);
     const paginatedTickets = tickets.slice((currentPage - 1) * ticketsPerPage, currentPage * ticketsPerPage);
 
-    // Initialize Firestore DB client.
-    const db = dbClient; // Use the already initialized dbClient
-
     /**
-     * Helper function to convert Firestore Timestamp to ISO string or Date object.
-     * This ensures consistency for display and client-side sorting/filtering.
-     * @param {object} data - The raw data from Firestore document.
-     * @returns {object} Data with timestamps converted.
+     * Helper function to format ticket data for display.
+     * @param {object} data - The raw data from Supabase.
+     * @returns {object} Data with timestamps formatted.
      */
     const formatTicketData = (data) => {
         const newData = { ...data };
-        if (newData.created_at && newData.created_at.toDate) {
-            newData.created_at = newData.created_at.toDate().toISOString();
-        }
-        if (newData.updated_at && newData.updated_at.toDate) {
-            newData.updated_at = newData.updated_at.toDate().toISOString();
-        }
-        if (newData.resolved_at && newData.resolved_at.toDate) {
-            newData.resolved_at = newData.resolved_at.toDate().toISOString();
-        }
-        if (newData.comments && Array.isArray(newData.comments)) {
-            newData.comments = newData.comments.map(comment => {
-                if (comment.timestamp && comment.timestamp.toDate) {
-                    return { ...comment, timestamp: comment.timestamp.toDate().toISOString() };
-                }
-                return comment;
-            });
-        }
+        // Supabase already returns ISO strings for timestamps, so no conversion needed
         return newData;
     };
 
     /**
-     * Effect hook to set up real-time Firestore listener for tickets created by the current user.
-     * This replaces the traditional HTTP fetch for continuous updates.
+     * Effect hook to fetch tickets created by the current user using Supabase.
      */
     useEffect(() => {
-        const firebaseUser = user?.firebaseUser;
-        if (!firebaseUser || !db) {
+        console.log('MyTicketsComponent - User object:', user);
+        console.log('MyTicketsComponent - User UID:', user?.uid);
+        console.log('MyTicketsComponent - User ID:', user?.id);
+        
+        if (!user?.uid) {
             setLoading(false);
             showFlashMessage('Please log in to view your tickets.', 'info');
-            return () => {}; // Return empty cleanup function
+            return;
         }
 
         setError(null);
+        setLoading(true);
 
-        // OPTIMIZED: Check cache first
-        const cacheKey = `my_tickets_${firebaseUser.uid}_${searchKeyword || 'default'}`;
-        const cachedData = localStorage.getItem(cacheKey);
-        const cacheTime = localStorage.getItem(`${cacheKey}_time`);
-        const now = Date.now();
-        
-        // Use cached data if it's less than 2 minutes old
-        if (cachedData && cacheTime && (now - parseInt(cacheTime)) < 120000) {
+        const fetchMyTickets = async () => {
             try {
-                const parsedData = JSON.parse(cachedData);
-                setTickets(parsedData);
+                let query = supabase
+                    .from('tickets')
+                    .select('*')
+                    .eq('reporter_id', user.uid)
+                    .order('created_at', { ascending: false });
+
+                // Apply search filter if provided
+                if (searchKeyword) {
+                    if (searchKeyword.toUpperCase().startsWith('TICKET-')) {
+                        // Exact ID search
+                        query = query.eq('display_id', searchKeyword.toUpperCase());
+                    } else {
+                        // General search - we'll filter client-side for better performance
+                        query = query.limit(100);
+                    }
+                } else {
+                    // Default filter: show active tickets only
+                    query = query.in('status', ['Open', 'In Progress', 'Hold']).limit(50);
+                }
+
+                const { data: tickets, error } = await query;
+
+                if (error) {
+                    throw error;
+                }
+
+                let fetchedTickets = tickets || [];
+
+                // Apply client-side search keyword filter for general keywords if not an exact ID search
+                if (searchKeyword && !searchKeyword.toUpperCase().startsWith('TICKET-')) {
+                    const lowercasedKeyword = searchKeyword.toLowerCase();
+                    fetchedTickets = fetchedTickets.filter(ticket => {
+                        const displayId = (ticket.display_id || '').toLowerCase();
+                        const shortDescription = (ticket.short_description || '').toLowerCase();
+                        const reporterEmail = (ticket.reporter_email || '').toLowerCase();
+                        const category = (ticket.category || '').toLowerCase();
+
+                        return (
+                            displayId.includes(lowercasedKeyword) ||
+                            shortDescription.includes(lowercasedKeyword) ||
+                            reporterEmail.includes(lowercasedKeyword) ||
+                            category.includes(lowercasedKeyword)
+                        );
+                    });
+                }
+
+                setTickets(fetchedTickets);
                 setLoading(false);
-            } catch (e) {
-                console.warn('Failed to parse cached my tickets data:', e);
+                setError(null);
+            } catch (err) {
+                console.error("Error fetching my tickets:", err);
+                setError(`Failed to load your tickets: ${err.message}`);
+                showFlashMessage(`Failed to load your tickets: ${err.message}`, 'error');
+                setLoading(false);
             }
-        }
+        };
 
-        let ticketsRef = collection(db, 'tickets');
-        let q;
-        
-        // OPTIMIZED: Apply proper filtering and limits
-        if (searchKeyword) {
-            q = query(
-                ticketsRef,
-                where('reporter_id', '==', firebaseUser.uid), // Filter by current user's ID
-                orderBy('created_at', 'desc'), // Order by creation date
-                limit(100) // Limit to prevent excessive reads
-            );
-        } else {
-            // Default filter: show active tickets only (Open, In Progress, Hold)
-            q = query(
-                ticketsRef,
-                where('reporter_id', '==', firebaseUser.uid), // Filter by current user's ID
-                where('status', 'in', ['Open', 'In Progress', 'Hold']), // Default filter: show active tickets only
-                orderBy('created_at', 'desc'), // Order by creation date
-                limit(50) // Limit to prevent excessive reads
-            );
-        }
-
-        // If there's an exact search keyword that looks like a TICKET-ID,
-        // we can try to apply that server-side for an exact match.
-        // For 'My Tickets', if an exact ID is searched, it should also show resolved/closed tickets.
-        if (searchKeyword && searchKeyword.toUpperCase().startsWith('TICKET-')) {
-            const exactId = searchKeyword.toUpperCase();
-            q = query(
-                ticketsRef,
-                where('reporter_id', '==', firebaseUser.uid),
-                where('display_id', '==', exactId),
-                orderBy('created_at', 'desc'),
-                limit(10) // Limit for exact searches
-            );
-        }
-
-        // Set up the real-time listener
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            let fetchedTickets = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...formatTicketData(doc.data())
-            }));
-
-            // Apply client-side search keyword filter for general keywords if not an exact ID search
-            if (searchKeyword && !searchKeyword.toUpperCase().startsWith('TICKET-')) {
-                const lowercasedKeyword = searchKeyword.toLowerCase();
-                fetchedTickets = fetchedTickets.filter(ticket => {
-                    const displayId = (ticket.display_id || '').toLowerCase();
-                    const shortDescription = (ticket.short_description || '').toLowerCase();
-                    const reporterEmail = (ticket.reporter_email || '').toLowerCase();
-                    const category = (ticket.category || '').toLowerCase();
-
-                    return (
-                        displayId.includes(lowercasedKeyword) ||
-                        shortDescription.includes(lowercasedKeyword) ||
-                        reporterEmail.includes(lowercasedKeyword) ||
-                        category.includes(lowercasedKeyword)
-                    );
-                });
-            }
-
-            setTickets(fetchedTickets);
-            setLoading(false);
-            setError(null);
-            
-            // Cache the data
-            localStorage.setItem(cacheKey, JSON.stringify(fetchedTickets));
-            localStorage.setItem(`${cacheKey}_time`, now.toString());
-        }, (err) => {
-            console.error("Firestore onSnapshot error (MyTicketsComponent):", err);
-            setError(`Failed to load your tickets: ${err.message}`);
-            showFlashMessage(`Failed to load your tickets: ${err.message}`, 'error');
-            setLoading(false);
-        });
-
-        // Cleanup function
-        return () => unsubscribe();
-    }, [db, searchKeyword, showFlashMessage]); // Dependencies for the effect
+        fetchMyTickets();
+    }, [user?.id, searchKeyword, showFlashMessage]);
 
     const handlePageChange = (page) => {
       if (page >= 1 && page <= totalPages) setCurrentPage(page);

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import websocketClient from '../utils/websocketClient';
 import { API_BASE_URL } from '../config/constants';
+import { getAccessToken } from '../utils/utils';
 
 export const useRealTimeAnalytics = (user, filters) => {
   const [data, setData] = useState(null);
@@ -37,12 +38,12 @@ export const useRealTimeAnalytics = (user, filters) => {
 
   // Fallback function to fetch data via regular API
   const fetchDataViaAPI = useCallback(async () => {
-    if (!user?.firebaseUser?.getIdToken) {
+    if (!user?.supabaseUser) {
       throw new Error('User authentication not available');
     }
 
     try {
-      const idToken = await user.firebaseUser.getIdToken();
+      const idToken = await getAccessToken(user);
       const params = new URLSearchParams({
         dateRange: memoizedFilters.dateRange || '30d',
         clients: memoizedFilters.clients ? memoizedFilters.clients.join(',') : '',

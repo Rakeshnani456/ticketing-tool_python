@@ -1,10 +1,8 @@
 // src/components/ChangePasswordComponent.js
 
 import React, { useState } from 'react';
-import { updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth'; // Import reauthenticateWithCredential and EmailAuthProvider
-import { doc, updateDoc } from 'firebase/firestore'; // Import Firestore helpers
 import { FilePenLine, Loader2, XCircle } from 'lucide-react'; // Icons
-import { dbClient } from '../config/firebase'; // Import dbClient
+import { supabase } from '../config/supabase'; // Import Supabase client
 
 // Import common UI components
 import FormInput from './common/FormInput';
@@ -53,15 +51,25 @@ const ChangePasswordComponent = ({ user, showFlashMessage, navigateTo }) => {
 
         setPasswordChangeLoading(true);
         try {
-            // Step 1: Re-authenticate the user with their current password
-            const credential = EmailAuthProvider.credential(user.firebaseUser.email, currentPassword);
-            await reauthenticateWithCredential(user.firebaseUser, credential);
+            // Update password using Supabase
+            const { error } = await supabase.auth.updateUser({
+                password: newPassword
+            });
 
-            // Step 2: If re-authentication is successful, proceed with password update
-            await updatePassword(user.firebaseUser, newPassword);
-            // Update mustChangePassword in Firestore
-            const userDocRef = doc(dbClient, 'users', user.firebaseUser.uid);
-            await updateDoc(userDocRef, { mustChangePassword: false });
+            if (error) {
+                throw error;
+            }
+
+            // Update mustChangePassword in Supabase
+            const { error: updateError } = await supabase
+                .from('users')
+                .update({ mustChangePassword: false })
+                .eq('id', user.uid);
+
+            if (updateError) {
+                console.warn('Could not update mustChangePassword flag:', updateError);
+            }
+
             showFlashMessage('Password updated successfully!', 'success');
             setCurrentPassword('');
             setNewPassword('');
@@ -70,14 +78,12 @@ const ChangePasswordComponent = ({ user, showFlashMessage, navigateTo }) => {
         } catch (err) {
             console.error('Password change error:', err);
             let errorMessage = 'Failed to update password.';
-            if (err.code === 'auth/wrong-password') {
-                errorMessage = 'Incorrect current password. Please try again.';
-            } else if (err.code === 'auth/invalid-email') { // Should not happen if user is logged in
-                errorMessage = 'Invalid email address.';
-            } else if (err.code === 'auth/too-many-requests') {
+            if (err.message && err.message.includes('password')) {
+                errorMessage = 'Password does not meet requirements.';
+            } else if (err.message && err.message.includes('too many')) {
                 errorMessage = 'Too many attempts. Please try again later.';
             } else {
-                errorMessage = err.message; // Generic Firebase error message
+                errorMessage = err.message || 'Failed to update password.';
             }
             setPasswordError(errorMessage);
             showFlashMessage(errorMessage, 'error');

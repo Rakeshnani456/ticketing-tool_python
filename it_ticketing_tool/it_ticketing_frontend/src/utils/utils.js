@@ -25,5 +25,30 @@ export function getFileNameFromUrl(url) {
     }
 }
 
+/**
+ * Gets the access token from the user object for API authentication.
+ * Works with both Firebase and Supabase authentication.
+ * @param {object} user - The user object containing authentication information.
+ * @returns {Promise<string>} The access token for API authentication.
+ * @throws {Error} If no access token is available.
+ */
+export async function getAccessToken(user) {
+    if (!user) {
+        throw new Error('User not authenticated');
+    }
+
+    // For Supabase authentication
+    if (user.session?.access_token) {
+        return user.session.access_token;
+    }
+
+    // For Firebase authentication (fallback)
+    if (user.firebaseUser?.getIdToken) {
+        return await user.firebaseUser.getIdToken();
+    }
+
+    throw new Error('No access token available. Please log in again.');
+}
+
 // This file contains general utility functions that can be reused across the application.
 // Centralizing such functions helps in maintaining a cleaner codebase and promoting reusability.

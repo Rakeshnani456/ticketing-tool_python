@@ -22,7 +22,7 @@
     "chart.js": "^4.5.0",
     "date-fns": "^4.1.0",
     "downshift": "^9.0.10",
-    "firebase": "^11.9.1",
+    "@supabase/supabase-js": "^2.39.0",
     "formik": "^2.4.6",
     "framer-motion": "^12.19.1",
     "lucide-react": "^0.518.0",
