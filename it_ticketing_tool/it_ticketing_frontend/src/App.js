@@ -75,10 +75,6 @@ import { collection, query, onSnapshot, where, doc, getDoc } from 'firebase/fire
 // Import API Base URL from constants
 import { API_BASE_URL } from './config/constants';
 
-// Import cookie management
-import cookieManager from './utils/cookieManager';
-import CookieConsentBanner from './components/common/CookieConsentBanner';
-
 // Import local logo image
 import KriasolLogo from './assets/logo/logo.png';
 import FabLogo from './assets/logo/FabLogo.png';
@@ -521,9 +517,6 @@ const AppContent = () => {
                             }
                         }
                         
-                        // Store user session in cookies
-                        cookieManager.setUserSession(userProfile);
-                        
                         setCurrentUser(userProfile);
                         fetchNotifications(userProfile); // Fetch notifications for logged-in user
 
@@ -743,7 +736,6 @@ const AppContent = () => {
     const handleLogout = async () => {
         try {
             await signOut(authClient); // Sign out from Firebase
-            cookieManager.clearUserSession(); // Clear user session from cookies
             setCurrentUser(null); // Clear current user state
             setIsAuthLoading(false);
             showFlashMessage('Logged out successfully.', 'success');
@@ -2094,7 +2086,6 @@ const App = () => {
     return (
         <NotificationProvider>
             <AppContent />
-            <CookieConsentBanner />
         </NotificationProvider>
     );
 };
