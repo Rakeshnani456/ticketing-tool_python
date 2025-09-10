@@ -1,19 +1,337 @@
 // src/components/tickets/AllTicketsComponent.js
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Loader2, XCircle, ListFilter, User, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
+import { Loader2, XCircle, ListFilter, User, ChevronLeft, ChevronRight, ChevronDown, Plus, Search, Pin, PinOff, Edit3, Trash2, Save, X, FileText, Calendar, ExternalLink, Copy, Link, Eye, ArrowRight } from 'lucide-react';
 import { collection, query, onSnapshot, where, orderBy, getFirestore, limit, getDocs, doc, updateDoc } from 'firebase/firestore';
-import ReactDOM from 'react-dom';
-
-// Import common UI components
-
-// Import API Base URL from constants
+import ReactDOM, { createPortal } from 'react-dom';
 import { API_BASE_URL } from '../../config/constants';
-
-// Import Firebase client (now including dbClient)
 import { app, dbClient } from '../../config/firebase';
+import CustomDropdown from '../common/CustomDropdown';
+import SelectButton from '../common/SelectButton';
 
+// TooltipBubble component for hover tooltips
+function TooltipBubble({ title, children }) {
+    const [show, setShow] = useState(false);
+    const [coords, setCoords] = useState({ top: 0, left: 0 });
+    const iconRef = useRef(null);
+
+    useEffect(() => {
+        if (show && iconRef.current) {
+            const rect = iconRef.current.getBoundingClientRect();
+            const viewportWidth = window.innerWidth;
+            const tooltipWidth = 200; // Approximate tooltip width
+            
+            // Position tooltip directly under the text (left-aligned)
+            let leftPosition = rect.left;
+            
+            // Ensure tooltip doesn't go off-screen to the right
+            if (leftPosition + tooltipWidth > viewportWidth - 10) {
+                leftPosition = viewportWidth - tooltipWidth - 10;
+            }
+            
+            // Ensure tooltip doesn't go off-screen to the left
+            if (leftPosition < 10) {
+                leftPosition = 10;
+            }
+            
+            setCoords({
+                top: rect.bottom + 8, // Position directly under the element
+                left: leftPosition,
+            });
+        }
+    }, [show]);
+
+    return (
+        <div
+            style={{ position: 'relative', display: 'inline-block' }}
+            onMouseEnter={() => setShow(true)}
+            onMouseLeave={() => setShow(false)}
+            ref={iconRef}
+        >
+            {children}
+            {show && createPortal(
+                <div
+                    className="fade-in"
+                    style={{
+                        position: 'fixed',
+                        left: coords.left,
+                        top: coords.top,
+                        background: '#000000',
+                        color: '#ffffff',
+                        borderRadius: 8,
+                        padding: '6px 12px',
+                        fontSize: 11,
+                        fontWeight: 500,
+                        whiteSpace: 'nowrap',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                        zIndex: 9999,
+                        pointerEvents: 'none',
+                        // No transform needed - positioned directly under text
+                    }}
+                >
+                    {/* Arrow pointing up */}
+                    <div
+                        style={{
+                            position: 'absolute',
+                            top: '-6px',
+                            left: '12px', // Position arrow near the left edge
+                            width: 0,
+                            height: 0,
+                            borderLeft: '6px solid transparent',
+                            borderRight: '6px solid transparent',
+                            borderBottom: '6px solid #000000',
+                        }}
+                    />
+                    {title}
+                </div>,
+                document.body
+            )}
+        </div>
+    );
+}
+
+// Add custom styles for line clamping and dropdown animations
+const styles = `
+    .line-clamp-2 {
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+    .line-clamp-4 {
+        display: -webkit-box;
+        -webkit-line-clamp: 4;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+    
+    @keyframes fadeInDown {
+        from {
+            opacity: 0;
+            transform: translateY(-10px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+    
+    @keyframes fadeIn {
+        from {
+            opacity: 0;
+        }
+        to {
+            opacity: 1;
+        }
+    }
+    
+    .fade-in {
+        animation: fadeIn 0.3s ease-in-out;
+    }
+    
+    .mr-160 {
+        margin-right: 160px;
+    }
+`;
+
+// ProfilePopup Component
+const ProfilePopup = ({ visible, position, user, copyStatus, onMouseEnter, onMouseLeave, onCopyEmail, onCopyName }) => {
+    if (!visible || !user) return null;
+
+    const getStatusMessage = () => {
+        switch (copyStatus) {
+            case 'email_copied':
+                return '✓ Email Copied!';
+            case 'email_error':
+                return '✗ Copy Failed';
+            case 'name_copied':
+                return '✓ Name Copied!';
+            case 'name_error':
+                return '✗ Copy Failed';
+            default:
+                return null;
+        }
+    };
+
+    const getStatusColor = () => {
+        if (copyStatus && copyStatus.includes('copied')) {
+            return 'text-green-600';
+        } else if (copyStatus && copyStatus.includes('error')) {
+            return 'text-red-600';
+        }
+        return 'text-gray-500';
+    };
+
+    return ReactDOM.createPortal(
+        <div
+            data-profile-popup
+            className="fixed z-50 bg-white border border-gray-200 rounded-lg shadow-lg py-2 min-w-[200px]"
+            style={{
+                left: position.x - 100, // Center the popup
+                top: position.y, // Position below the element
+                zIndex: 9999
+            }}
+            onMouseEnter={onMouseEnter}
+            onMouseLeave={onMouseLeave}
+        >
+            {/* Arrow pointing up to the element */}
+            <div 
+                className="absolute -top-2 left-1/2 transform -translate-x-1/2 w-0 h-0"
+                style={{
+                    borderLeft: '8px solid transparent',
+                    borderRight: '8px solid transparent',
+                    borderBottom: '8px solid #e5e7eb' // border-gray-200
+                }}
+            />
+            <div 
+                className="absolute -top-1.5 left-1/2 transform -translate-x-1/2 w-0 h-0"
+                style={{
+                    borderLeft: '7px solid transparent',
+                    borderRight: '7px solid transparent',
+                    borderBottom: '7px solid white'
+                }}
+            />
+            
+            <div className="px-3 py-2 text-xs font-medium text-gray-500 border-b border-gray-100">
+                User Profile
+            </div>
+            <div className="px-3 py-2 text-sm space-y-3">
+                <div className="flex items-center justify-between group">
+                    <span className="font-semibold text-gray-900">{user.fullName || 'Unknown'}</span>
+                    <button
+                        onClick={() => onCopyName(user.fullName || 'Unknown')}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-gray-100 rounded"
+                        title="Copy name"
+                    >
+                        <Copy className="w-3 h-3 text-gray-500" />
+                    </button>
+                </div>
+                <div className="flex items-center justify-between group">
+                    <span className="text-gray-600">{user.email}</span>
+                    <button
+                        onClick={() => onCopyEmail(user.email)}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-gray-100 rounded"
+                        title="Copy email"
+                    >
+                        <Copy className="w-3 h-3 text-gray-500" />
+                    </button>
+                </div>
+                {user.clientName && (
+                    <div className="text-gray-700">
+                        <span className="font-medium">Client:</span> {user.clientName}
+                    </div>
+                )}
+                {user.contactNumber && (
+                    <div className="text-gray-700">
+                        <span className="font-medium">Contact:</span> {user.contactNumber}
+                    </div>
+                )}
+                {copyStatus && (
+                    <div className={`text-xs text-center ${getStatusColor()}`}>
+                        {getStatusMessage()}
+                    </div>
+                )}
+            </div>
+        </div>,
+        document.body
+    );
+};
+
+// TicketIdPopup Component
+const TicketIdPopup = ({ visible, position, ticketId, documentId, copyStatus, onOpen, onCopyId, onCopyUrl, onMouseEnter, onMouseLeave }) => {
+    if (!visible || !ticketId) return null;
+
+    const getStatusMessage = () => {
+        switch (copyStatus) {
+            case 'id_copied':
+                return '✓ ID Copied!';
+            case 'id_error':
+                return '✗ Copy Failed';
+            case 'url_copied':
+                return '✓ URL Copied!';
+            case 'url_error':
+                return '✗ Copy Failed';
+            default:
+                return null;
+        }
+    };
+
+    const getStatusColor = () => {
+        if (copyStatus && copyStatus.includes('copied')) {
+            return 'text-green-600';
+        } else if (copyStatus && copyStatus.includes('error')) {
+            return 'text-red-600';
+        }
+        return 'text-gray-500';
+    };
+
+    return ReactDOM.createPortal(
+        <div
+            data-ticket-id-popup
+            className="fixed z-50 bg-white border border-gray-200 rounded-lg shadow-lg py-2 min-w-[180px]"
+            style={{
+                left: position.x - 90, // Center the popup
+                top: position.y, // Position below the ticket ID
+                zIndex: 9999
+            }}
+            onMouseEnter={onMouseEnter}
+            onMouseLeave={onMouseLeave}
+        >
+            {/* Arrow pointing up to ticket ID */}
+            <div 
+                className="absolute -top-2 left-1/2 transform -translate-x-1/2 w-0 h-0"
+                style={{
+                    borderLeft: '8px solid transparent',
+                    borderRight: '8px solid transparent',
+                    borderBottom: '8px solid #e5e7eb' // border-gray-200
+                }}
+            />
+            <div 
+                className="absolute -top-1.5 left-1/2 transform -translate-x-1/2 w-0 h-0"
+                style={{
+                    borderLeft: '7px solid transparent',
+                    borderRight: '7px solid transparent',
+                    borderBottom: '7px solid white'
+                }}
+            />
+            
+            <div className="py-1">
+                <a
+                    href={`/tickets/${documentId}`}
+                    onClick={(e) => {
+                        e.preventDefault();
+                        onOpen(documentId);
+                    }}
+                    className="w-full flex items-center px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                >
+                    <ExternalLink className="w-4 h-4 mr-2" />
+                    Open
+                </a>
+                <button
+                    onClick={() => onCopyId(ticketId)}
+                    className="w-full flex items-center px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                >
+                    <Copy className="w-4 h-4 mr-2" />
+                    Copy Ticket ID
+                </button>
+                <button
+                    onClick={() => onCopyUrl(documentId)}
+                    className="w-full flex items-center px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                >
+                    <Link className="w-4 h-4 mr-2" />
+                    Copy Ticket URL
+                </button>
+                {copyStatus && (
+                    <div className={`px-3 py-1 text-xs font-medium ${getStatusColor()} text-center`}>
+                        {getStatusMessage()}
+                    </div>
+                )}
+            </div>
+        </div>,
+        document.body
+    );
+};
 
 /**
  * Component to display all tickets, primarily for support users.
@@ -74,16 +392,59 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
     const [selectedTickets, setSelectedTickets] = useState([]);
     const [showAssignPopup, setShowAssignPopup] = useState(false);
     const [availableEngineers, setAvailableEngineers] = useState([]);
+    const [engineersLoading, setEngineersLoading] = useState(false);
     const [selectedEngineer, setSelectedEngineer] = useState('');
     const [assignLoading, setAssignLoading] = useState(false);
     const [assignPopupRef] = useState(useRef(null));
+    // State to track loading for individual ticket assignments
+    const [assigningTickets, setAssigningTickets] = useState(new Set());
+    // State to track loading for individual ticket status changes
+    const [changingStatusTickets, setChangingStatusTickets] = useState(new Set());
+    
+    // Add state for profile popup functionality
+    const [profilePopup, setProfilePopup] = useState({ visible: false, user: null, position: { x: 0, y: 0 }, copyStatus: null });
+    const [popupHovered, setPopupHovered] = useState(false);
+    const popupHideTimeout = useRef(null);
+    const popupShowTimeout = useRef(null);
+    
+    // Add state for ticket ID popup functionality
+    const [ticketIdPopup, setTicketIdPopup] = useState({ visible: false, ticketId: null, documentId: null, copyStatus: null, position: { x: 0, y: 0 } });
+    const [ticketIdPopupHovered, setTicketIdPopupHovered] = useState(false);
+    const ticketIdPopupHideTimeout = useRef(null);
+    const ticketIdPopupShowTimeout = useRef(null);
     
     // New state for dynamic checkbox behavior
     const [showCheckboxes, setShowCheckboxes] = useState(false);
     const [assignMode, setAssignMode] = useState(false);
+    
+    // State for notes panel
+    const [showNotesPanel, setShowNotesPanel] = useState(false);
+    
+    // State for ticket peek panel
+    const [showPeekPanel, setShowPeekPanel] = useState(false);
+    const [peekedTicket, setPeekedTicket] = useState(null);
+    
+    // Ref to track if engineers have been fetched to prevent unnecessary re-fetching
+    const engineersFetchedRef = useRef(false);
+    const engineersCacheRef = useRef(null);
+    const [notes, setNotes] = useState([]);
+    const [notesLoading, setNotesLoading] = useState(false);
+    const [notesSearchTerm, setNotesSearchTerm] = useState('');
+    const [notesSelectedCategory, setNotesSelectedCategory] = useState('all');
+    const [showAddNoteForm, setShowAddNoteForm] = useState(false);
+    const [editingNote, setEditingNote] = useState(null);
+    const [viewingNote, setViewingNote] = useState(null);
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
+    const [addingNote, setAddingNote] = useState(false);
+    const [noteFormData, setNoteFormData] = useState({
+        title: '',
+        content: '',
+        category: 'general'
+    });
+    
 
     // Add at the top of the component (after useState declarations)
-    const [filterBy, setFilterBy] = useState('status'); // 'status', 'priority', or 'company'
+    const [filterBy, setFilterBy] = useState('status'); // 'status', 'priority', 'company', or 'history'
     const [filterPriority, setFilterPriority] = useState('');
     const [filterCompany, setFilterCompany] = useState(''); // New state for company filter
     const [companies, setCompanies] = useState([]); // New state for companies list
@@ -95,8 +456,300 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
     // Get today's date in ISO-MM-DD format for the max attribute of the end date input
     const today = new Date().toISOString().split('T')[0];
 
+    // Notes categories
+    const noteCategories = [
+        { value: 'all', label: 'All Categories' },
+        { value: 'general', label: 'General' },
+        { value: 'technical', label: 'Technical' },
+        { value: 'meeting', label: 'Meeting Notes' },
+        { value: 'todo', label: 'To-Do' },
+        { value: 'reference', label: 'Reference' }
+    ];
+
+    // Helper function to get category color
+    const getCategoryColor = (category) => {
+        const colors = {
+            general: 'bg-yellow-100 text-black-800',
+            technical: 'bg-blue-100 text-blue-800',
+            meeting: 'bg-green-100 text-green-800',
+            todo: 'bg-orange-100 text-orange-800',
+            reference: 'bg-purple-100 text-purple-800'
+        };
+        return colors[category] || colors.general;
+    };
+
+    // Format date helper
+    const formatDate = (dateString) => {
+        try {
+            // Handle null/undefined
+            if (!dateString) {
+                return 'No date';
+            }
+            
+            // Handle different date formats
+            let date;
+            if (dateString instanceof Date) {
+                date = dateString;
+            } else if (typeof dateString === 'string') {
+                // Try parsing the string
+                date = new Date(dateString);
+            } else if (dateString && dateString._seconds) {
+                // Handle Firestore timestamp format (with underscores)
+                date = new Date(dateString._seconds * 1000);
+            } else if (dateString && dateString.seconds) {
+                // Handle Firestore timestamp format (without underscores)
+                date = new Date(dateString.seconds * 1000);
+            } else if (dateString && dateString.toDate) {
+                // Handle Firestore Timestamp object
+                date = dateString.toDate();
+            } else {
+                console.warn('Unknown date format:', dateString);
+                return 'Invalid Date';
+            }
+            
+            // Check if date is valid
+            if (isNaN(date.getTime())) {
+                console.warn('Invalid date:', dateString);
+                return 'Invalid Date';
+            }
+            
+            return date.toLocaleString('en-US', {
+                month: 'short',
+                day: '2-digit',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true
+            });
+        } catch (error) {
+            console.error('Error formatting date:', error, dateString);
+            return 'Invalid Date';
+        }
+    };
+
     // Initialize Firestore DB client. This will be the same instance as exported from firebase.js.
     const db = dbClient; // Use the already initialized dbClient
+
+    // Notes API functions
+    const fetchNotes = async () => {
+        try {
+            setNotesLoading(true);
+            console.log('Fetching notes...');
+            const response = await fetch(`${API_BASE_URL}/api/personal-notes`, {
+                headers: {
+                    'Authorization': `Bearer ${await user.firebaseUser.getIdToken()}`
+                }
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                console.log('Notes fetched successfully:', data.notes);
+                // Debug: Check date formats
+                if (data.notes && data.notes.length > 0) {
+                    console.log('Sample note date formats:', data.notes[0]);
+                }
+                setNotes(data.notes || []);
+            } else {
+                console.error('Failed to fetch notes:', response.status, response.statusText);
+                showFlashMessage('Failed to fetch notes', 'error');
+            }
+        } catch (error) {
+            console.error('Error fetching notes:', error);
+            showFlashMessage('Failed to fetch notes', 'error');
+        } finally {
+            setNotesLoading(false);
+        }
+    };
+
+    const handleAddNote = async (e) => {
+        e.preventDefault();
+        if (!noteFormData.title.trim() || !noteFormData.content.trim()) {
+            showFlashMessage('Title and content are required', 'error');
+            return;
+        }
+
+        setAddingNote(true);
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/personal-notes`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${await user.firebaseUser.getIdToken()}`
+                },
+                body: JSON.stringify(noteFormData)
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                console.log('Note added successfully:', data.note);
+                // Update local state instead of refetching
+                setNotes(prevNotes => [data.note, ...prevNotes]);
+                setNoteFormData({ title: '', content: '', category: 'general' });
+                setShowAddNoteForm(false);
+                showFlashMessage('Note added successfully!', 'success');
+            } else {
+                const errorData = await response.json();
+                console.error('Failed to add note:', response.status, errorData);
+                showFlashMessage(errorData.error || 'Failed to add note', 'error');
+            }
+        } catch (error) {
+            console.error('Error adding note:', error);
+            showFlashMessage('Failed to add note', 'error');
+        } finally {
+            setAddingNote(false);
+        }
+    };
+
+    const handleUpdateNote = async (e) => {
+        e.preventDefault();
+        if (!noteFormData.title.trim() || !noteFormData.content.trim()) {
+            showFlashMessage('Title and content are required', 'error');
+            return;
+        }
+
+        setAddingNote(true);
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/personal-notes/${editingNote.id}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${await user.firebaseUser.getIdToken()}`
+                },
+                body: JSON.stringify(noteFormData)
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                console.log('Note updated successfully:', data.note);
+                // Update local state instead of refetching
+                setNotes(prevNotes => 
+                    prevNotes.map(note => 
+                        note.id === editingNote.id 
+                            ? { ...note, ...data.note }
+                            : note
+                    )
+                );
+                setEditingNote(null);
+                setNoteFormData({ title: '', content: '', category: 'general' });
+                setShowAddNoteForm(false);
+                showFlashMessage('Note updated successfully!', 'success');
+            } else {
+                const errorData = await response.json();
+                showFlashMessage(errorData.error || 'Failed to update note', 'error');
+            }
+        } catch (error) {
+            console.error('Error updating note:', error);
+            showFlashMessage('Failed to update note', 'error');
+        } finally {
+            setAddingNote(false);
+        }
+    };
+
+    const handleDeleteNote = async (noteId) => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/personal-notes/${noteId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${await user.firebaseUser.getIdToken()}`
+                }
+            });
+
+            if (response.ok) {
+                console.log('Note deleted successfully');
+                // Update local state instead of refetching
+                setNotes(prevNotes => prevNotes.filter(note => note.id !== noteId));
+                showFlashMessage('Note deleted successfully!', 'success');
+            } else {
+                const errorData = await response.json();
+                showFlashMessage(errorData.error || 'Failed to delete note', 'error');
+            }
+        } catch (error) {
+            console.error('Error deleting note:', error);
+            showFlashMessage('Failed to delete note', 'error');
+        }
+    };
+
+    const handleTogglePin = async (noteId) => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/personal-notes/${noteId}/pin`, {
+                method: 'PATCH',
+                headers: {
+                    'Authorization': `Bearer ${await user.firebaseUser.getIdToken()}`
+                }
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                console.log('Note pin toggled successfully:', data.note);
+                // Update local state instead of refetching
+                setNotes(prevNotes => 
+                    prevNotes.map(note => 
+                        note.id === noteId 
+                            ? { ...note, is_pinned: data.note.is_pinned, updated_at: data.note.updated_at }
+                            : note
+                    )
+                );
+                showFlashMessage(data.note.is_pinned ? 'Note pinned!' : 'Note unpinned!', 'success');
+            } else {
+                const errorData = await response.json();
+                showFlashMessage(errorData.error || 'Failed to toggle pin status', 'error');
+            }
+        } catch (error) {
+            console.error('Error toggling pin status:', error);
+            showFlashMessage('Failed to toggle pin status', 'error');
+        }
+    };
+
+    const startEditing = (note) => {
+        setEditingNote(note);
+        setNoteFormData({
+            title: note.title,
+            content: note.content,
+            category: note.category
+        });
+        setShowAddNoteForm(true);
+    };
+
+    const cancelEditing = () => {
+        setEditingNote(null);
+        setNoteFormData({ title: '', content: '', category: 'general' });
+        setShowAddNoteForm(false);
+    };
+
+    const handleViewNote = (note) => {
+        setViewingNote(note);
+    };
+
+    const handleBackToList = () => {
+        setViewingNote(null);
+    };
+
+    const handleDeleteClick = (noteId) => {
+        setShowDeleteConfirm(noteId);
+    };
+
+    const handleDeleteConfirm = async (noteId) => {
+        await handleDeleteNote(noteId);
+        setShowDeleteConfirm(null);
+    };
+
+    const handleDeleteCancel = () => {
+        setShowDeleteConfirm(null);
+    };
+
+    // Close delete confirmation when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (showDeleteConfirm && !event.target.closest('.delete-confirmation-container')) {
+                setShowDeleteConfirm(null);
+            }
+        };
+
+        if (showDeleteConfirm) {
+            document.addEventListener('mousedown', handleClickOutside);
+            return () => document.removeEventListener('mousedown', handleClickOutside);
+        }
+    }, [showDeleteConfirm]);
 
     // Function to fetch companies for filtering
     const fetchCompanies = useCallback(async () => {
@@ -126,7 +779,21 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
 
     // Function to fetch available engineers
     const fetchEngineers = useCallback(async () => {
+        // Check cache first
+        if (engineersCacheRef.current && engineersCacheRef.current.length > 0) {
+            console.log('Using cached engineers from fetchEngineers');
+            setAvailableEngineers(engineersCacheRef.current);
+            return;
+        }
+
+        // Prevent unnecessary re-fetching if engineers are already loaded
+        if (engineersFetchedRef.current) {
+            console.log('Engineers already fetched, skipping fetch');
+            return;
+        }
+
         try {
+            setEngineersLoading(true);
             // Fetch engineers directly from Firestore users collection
             // Look for users with roles 'support', 'admin', and 'site_admin' for assignment
             const usersRef = collection(db, 'users');
@@ -156,6 +823,8 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                 });
                 
                 setAvailableEngineers(engineers);
+                engineersCacheRef.current = engineers; // Cache the engineers
+                engineersFetchedRef.current = true;
                 console.log('Successfully loaded engineers from Firestore:', engineers);
                 return;
             } else {
@@ -172,8 +841,10 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
             console.error('Error in fetchEngineers:', error);
             setAvailableEngineers([]);
             showFlashMessage('Failed to load engineers. Please check your connection and try again.', 'error');
+        } finally {
+            setEngineersLoading(false);
         }
-    }, [showFlashMessage, db, user]);
+    }, [showFlashMessage, db, user?.role]);
 
     // Function to handle ticket selection
     const handleTicketSelection = (ticketId) => {
@@ -185,6 +856,109 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
             }
         });
     };
+
+    // Function to handle individual ticket assignment
+    const handleTicketAssignment = async (ticketId, assignedToEmail) => {
+        try {
+            // Add ticket to loading set
+            setAssigningTickets(prev => new Set(prev).add(ticketId));
+            
+            // If unassigned, set to null
+            const assignmentValue = assignedToEmail === 'unassigned' ? null : assignedToEmail;
+            
+            // Update the ticket assignment via API
+            const response = await fetch(`${API_BASE_URL}/tickets/${ticketId}`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${await user.firebaseUser.getIdToken()}`
+                },
+                body: JSON.stringify({
+                    assigned_to_email: assignmentValue
+                })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to assign ticket');
+            }
+
+            // Update local state immediately for better UX
+            setAllTickets(prevTickets => 
+                prevTickets.map(ticket => 
+                    ticket.id === ticketId 
+                        ? { ...ticket, assigned_to_email: assignmentValue, updated_at: new Date().toISOString() }
+                        : ticket
+                )
+            );
+
+            showFlashMessage(
+                assignmentValue 
+                    ? `Ticket assigned to ${assignedToEmail}` 
+                    : 'Ticket unassigned successfully', 
+                'success'
+            );
+
+        } catch (error) {
+            console.error('Error assigning ticket:', error);
+            showFlashMessage(`Failed to assign ticket: ${error.message}`, 'error');
+        } finally {
+            // Remove ticket from loading set
+            setAssigningTickets(prev => {
+                const newSet = new Set(prev);
+                newSet.delete(ticketId);
+                return newSet;
+            });
+        }
+    };
+
+    // Function to handle individual ticket status change
+    const handleTicketStatusChange = async (ticketId, newStatus) => {
+        try {
+            // Add ticket to loading set
+            setChangingStatusTickets(prev => new Set(prev).add(ticketId));
+            
+            // Update the ticket status via API
+            const response = await fetch(`${API_BASE_URL}/tickets/${ticketId}`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${await user.firebaseUser.getIdToken()}`
+                },
+                body: JSON.stringify({
+                    status: newStatus
+                })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to update ticket status');
+            }
+
+            // Update local state immediately for better UX
+            setAllTickets(prevTickets => 
+                prevTickets.map(ticket => 
+                    ticket.id === ticketId 
+                        ? { ...ticket, status: newStatus, updated_at: new Date().toISOString() }
+                        : ticket
+                )
+            );
+
+            showFlashMessage(`Ticket status updated to ${newStatus}`, 'success');
+
+        } catch (error) {
+            console.error('Error updating ticket status:', error);
+            showFlashMessage(`Failed to update ticket status: ${error.message}`, 'error');
+        } finally {
+            // Remove ticket from loading set
+            setChangingStatusTickets(prev => {
+                const newSet = new Set(prev);
+                newSet.delete(ticketId);
+                return newSet;
+            });
+        }
+    };
+
 
     // Function to enter assign mode
     const enterAssignMode = () => {
@@ -202,6 +976,149 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
         setShowAssignPopup(false);
     };
 
+    // Function to copy ticket ID to clipboard
+    const copyTicketId = async (ticketId) => {
+        try {
+            await navigator.clipboard.writeText(ticketId);
+            // Update popup state to show success
+            setTicketIdPopup(prev => ({ ...prev, copyStatus: 'id_copied' }));
+            setTimeout(() => {
+                setTicketIdPopup(prev => ({ ...prev, copyStatus: null }));
+            }, 2000);
+        } catch (err) {
+            console.error('Failed to copy ticket ID:', err);
+            setTicketIdPopup(prev => ({ ...prev, copyStatus: 'id_error' }));
+            setTimeout(() => {
+                setTicketIdPopup(prev => ({ ...prev, copyStatus: null }));
+            }, 2000);
+        }
+    };
+
+    // Function to copy ticket URL to clipboard
+    const copyTicketUrl = async (documentId) => {
+        try {
+            const ticketUrl = `${window.location.origin}/tickets/${documentId}`;
+            await navigator.clipboard.writeText(ticketUrl);
+            // Update popup state to show success
+            setTicketIdPopup(prev => ({ ...prev, copyStatus: 'url_copied' }));
+            setTimeout(() => {
+                setTicketIdPopup(prev => ({ ...prev, copyStatus: null }));
+            }, 2000);
+        } catch (err) {
+            console.error('Failed to copy ticket URL:', err);
+            setTicketIdPopup(prev => ({ ...prev, copyStatus: 'url_error' }));
+            setTimeout(() => {
+                setTicketIdPopup(prev => ({ ...prev, copyStatus: null }));
+            }, 2000);
+        }
+    };
+
+    // Function to open ticket
+    const openTicket = (documentId) => {
+        navigateTo(`/tickets/${documentId}`);
+    };
+
+    // Function to copy user email to clipboard
+    const copyUserEmail = async (email) => {
+        try {
+            await navigator.clipboard.writeText(email);
+            // Update popup state to show success
+            setProfilePopup(prev => ({ ...prev, copyStatus: 'email_copied' }));
+            setTimeout(() => {
+                setProfilePopup(prev => ({ ...prev, copyStatus: null }));
+            }, 2000);
+        } catch (err) {
+            console.error('Failed to copy email:', err);
+            setProfilePopup(prev => ({ ...prev, copyStatus: 'email_error' }));
+            setTimeout(() => {
+                setProfilePopup(prev => ({ ...prev, copyStatus: null }));
+            }, 2000);
+        }
+    };
+
+    // Function to copy user full name to clipboard
+    const copyUserName = async (fullName) => {
+        try {
+            await navigator.clipboard.writeText(fullName);
+            // Update popup state to show success
+            setProfilePopup(prev => ({ ...prev, copyStatus: 'name_copied' }));
+            setTimeout(() => {
+                setProfilePopup(prev => ({ ...prev, copyStatus: null }));
+            }, 2000);
+        } catch (err) {
+            console.error('Failed to copy name:', err);
+            setProfilePopup(prev => ({ ...prev, copyStatus: 'name_error' }));
+            setTimeout(() => {
+                setProfilePopup(prev => ({ ...prev, copyStatus: null }));
+            }, 2000);
+        }
+    };
+
+    // Function to show ticket ID popup
+    const showTicketIdPopup = (ticketId, documentId, event) => {
+        if (ticketIdPopupHideTimeout.current) {
+            clearTimeout(ticketIdPopupHideTimeout.current);
+        }
+        
+        // Store the event target reference to avoid null reference errors
+        const targetElement = event.currentTarget;
+        
+        // Show popup immediately on hover
+        // Check if the element still exists and is in the DOM
+        if (!targetElement || !document.contains(targetElement)) {
+            return;
+        }
+        
+        try {
+            const rect = targetElement.getBoundingClientRect();
+            setTicketIdPopup({
+                visible: true,
+                ticketId: ticketId,
+                documentId: documentId,
+                position: {
+                    x: rect.left + rect.width / 2,
+                    y: rect.bottom - 10// Position very close to the ticket ID
+                }
+            });
+        } catch (error) {
+            console.warn('Error getting bounding rect for popup:', error);
+        }
+    };
+
+    // Function to hide ticket ID popup
+    const hideTicketIdPopup = () => {
+        // Clear the show timeout if it exists
+        if (ticketIdPopupShowTimeout.current) {
+            clearTimeout(ticketIdPopupShowTimeout.current);
+            ticketIdPopupShowTimeout.current = null;
+        }
+        
+        ticketIdPopupHideTimeout.current = setTimeout(() => {
+            if (!ticketIdPopupHovered) {
+                setTicketIdPopup(prev => ({ ...prev, visible: false }));
+            }
+        }, 150);
+    };
+
+    // Function to handle popup hover
+    const handleTicketIdPopupHover = () => {
+        setTicketIdPopupHovered(true);
+        if (ticketIdPopupHideTimeout.current) {
+            clearTimeout(ticketIdPopupHideTimeout.current);
+        }
+        // Also clear any pending show timeout
+        if (ticketIdPopupShowTimeout.current) {
+            clearTimeout(ticketIdPopupShowTimeout.current);
+            ticketIdPopupShowTimeout.current = null;
+        }
+    };
+
+    // Function to handle popup leave
+    const handleTicketIdPopupLeave = () => {
+        setTicketIdPopupHovered(false);
+        hideTicketIdPopup();
+    };
+
     // Function to exit export selection mode
     const exitExportSelectionMode = () => {
         setAssignMode(false);
@@ -217,6 +1134,34 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
         setFilterPriority('');
         setFilterAssignment('');
         setFilterCompany('');
+    };
+
+    // Profile popup functions
+    const showProfilePopup = (user, event) => {
+        if (popupHideTimeout.current) clearTimeout(popupHideTimeout.current);
+        if (popupShowTimeout.current) clearTimeout(popupShowTimeout.current);
+        // Show popup immediately on hover
+        const rect = event.target.getBoundingClientRect();
+        setProfilePopup({ 
+            visible: true, 
+            user, 
+            position: { 
+                x: rect.left + rect.width / 2, 
+                y: rect.bottom + 8 // Position further away from the element
+            } 
+        });
+    };
+
+    const cancelShowProfilePopup = () => {
+        if (popupShowTimeout.current) clearTimeout(popupShowTimeout.current);
+    };
+
+    const hideProfilePopup = () => {
+        popupHideTimeout.current = setTimeout(() => {
+            if (!popupHovered) {
+                setProfilePopup((prev) => ({ ...prev, visible: false }));
+            }
+        }, 150);
     };
 
     // Function to enter export selection mode
@@ -456,12 +1401,93 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
     // Only allow assign mode and engineer loading for super_admin, admin, support (NOT site_admin)
     const canAssign = user?.role === 'super_admin' || user?.role === 'admin' || user?.role === 'support';
 
-    // Replace useEffect for engineer loading
+    // Fetch notes when panel opens
     useEffect(() => {
-        if (canAssign && user?.role !== 'site_admin') {
-            fetchEngineers();
+        if (showNotesPanel && user?.firebaseUser) {
+            fetchNotes();
         }
-    }, [canAssign, user]);
+    }, [showNotesPanel, user]);
+
+    // Filter notes
+    const filteredNotes = notes.filter(note => {
+        const matchesSearch = note.title.toLowerCase().includes(notesSearchTerm.toLowerCase()) ||
+                            note.content.toLowerCase().includes(notesSearchTerm.toLowerCase());
+        const matchesCategory = notesSelectedCategory === 'all' || note.category === notesSelectedCategory;
+        return matchesSearch && matchesCategory;
+    });
+
+    // Separate pinned and unpinned notes
+    const pinnedNotes = filteredNotes.filter(note => note.is_pinned).sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
+    const unpinnedNotes = filteredNotes.filter(note => !note.is_pinned).sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
+
+    // Peek functionality
+    const handlePeekTicket = (ticket) => {
+        setPeekedTicket(ticket);
+        setShowPeekPanel(true);
+    };
+
+    const handleClosePeek = () => {
+        setShowPeekPanel(false);
+        setPeekedTicket(null);
+    };
+
+    // Debug logging
+    console.log('Notes state:', { 
+        notesCount: notes.length, 
+        filteredCount: filteredNotes.length, 
+        pinnedCount: pinnedNotes.length,
+        unpinnedCount: unpinnedNotes.length,
+        searchTerm: notesSearchTerm,
+        selectedCategory: notesSelectedCategory
+    });
+
+    // Fetch engineers for assignment dropdowns - single useEffect with better caching
+    useEffect(() => {
+        console.log('Engineer fetch useEffect triggered:', {
+            userRole: user?.role,
+            hasCache: !!engineersCacheRef.current,
+            isFetched: engineersFetchedRef.current,
+            currentEngineers: availableEngineers.length
+        });
+
+        if (user?.role === 'support' || user?.role === 'admin' || user?.role === 'super_admin') {
+            // Check if we have cached engineers first
+            if (engineersCacheRef.current && engineersCacheRef.current.length > 0) {
+                console.log('Using cached engineers from ref');
+                setAvailableEngineers(engineersCacheRef.current);
+                engineersFetchedRef.current = true; // Mark as fetched
+                return;
+            }
+            
+            // Only fetch if not already fetched and no cache
+            if (!engineersFetchedRef.current) {
+                console.log('Fetching engineers for role:', user.role);
+                fetchEngineers();
+            } else {
+                console.log('Engineers already fetched, skipping fetch');
+            }
+        }
+    }, [user?.role]); // Only depend on user role
+
+    // Cleanup cache only when component unmounts (not on every render)
+    useEffect(() => {
+        return () => {
+            // Only reset cache when component actually unmounts
+            console.log('Component unmounting, resetting cache');
+            engineersFetchedRef.current = false;
+            engineersCacheRef.current = null;
+        };
+    }, []);
+
+    // Status options for dropdown
+    const statusOptions = [
+        { value: 'Open', label: 'Open' },
+        { value: 'In Progress', label: 'In Progress' },
+        { value: 'Hold', label: 'Hold' },
+        { value: 'Cancelled', label: 'Cancelled' }
+    ];
+
+
 
     /**
      * Helper function to convert Firestore Timestamp to ISO string or Date object.
@@ -635,8 +1661,8 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
         }
 
         // Always filter out 'Closed', 'Resolved', and 'Cancelled' tickets from being displayed in the grid
-        // UNLESS there's a search keyword, in which case include all tickets for search results
-        if (!searchKeyword) {
+        // UNLESS there's a search keyword or history filter is active, in which case include all tickets
+        if (!searchKeyword && filterBy !== 'history') {
             currentFilteredTickets = currentFilteredTickets.filter(ticket => !['Closed', 'Resolved', 'Cancelled'].includes(ticket.status));
         }
         // Apply status filter based on filterStatus state
@@ -664,14 +1690,12 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                 const displayId = (ticket.display_id || '').toLowerCase();
                 const shortDescription = (ticket.short_description || '').toLowerCase();
                 const reporterEmail = (ticket.reporter_email || '').toLowerCase();
-                const category = (ticket.category || '').toLowerCase();
                 const assignedToEmail = (ticket.assigned_to_email || '').toLowerCase();
 
                 return (
                     displayId.includes(lowercasedKeyword) ||
                     shortDescription.includes(lowercasedKeyword) || // Corrected typo here
                     reporterEmail.includes(lowercasedKeyword) ||
-                    category.includes(lowercasedKeyword) ||
                     assignedToEmail.includes(lowercasedKeyword)
                 );
             });
@@ -683,6 +1707,14 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
             console.log('Filtering by priority:', filterPriority);
             console.log('Ticket priorities:', currentFilteredTickets.map(t => t.priority));
             currentFilteredTickets = currentFilteredTickets.filter(ticket => (ticket.priority || '').toLowerCase() === filterPriority.toLowerCase());
+        }
+
+        // Apply history filter - show only closed and cancelled tickets
+        if (filterBy === 'history') {
+            console.log('Applying history filter - showing closed and cancelled tickets only');
+            const beforeCount = currentFilteredTickets.length;
+            currentFilteredTickets = currentFilteredTickets.filter(ticket => ['Closed', 'Resolved', 'Cancelled'].includes(ticket.status));
+            console.log(`History filter applied: ${beforeCount} -> ${currentFilteredTickets.length} tickets`);
         }
 
         // Always apply company filter if filterCompany is set
@@ -791,6 +1823,66 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
             document.removeEventListener('mousedown', handleClickOutside);
         };
     }, [showAssignPopup]);
+
+    // Effect hook to handle clicks outside the profile popup to close it
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            // Close profile popup if clicking outside
+            if (profilePopup.visible) {
+                // Check if the click is on the popup itself
+                const popupElement = document.querySelector('[data-profile-popup]');
+                if (popupElement && popupElement.contains(event.target)) {
+                    return; // Don't close if clicking on the popup
+                }
+                setProfilePopup(prev => ({ ...prev, visible: false }));
+            }
+        };
+
+        if (profilePopup.visible) {
+            document.addEventListener('mousedown', handleClickOutside);
+        }
+
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [profilePopup.visible]);
+
+    // Cleanup effect for ticket ID popup timeouts
+    useEffect(() => {
+        return () => {
+            if (ticketIdPopupHideTimeout.current) {
+                clearTimeout(ticketIdPopupHideTimeout.current);
+                ticketIdPopupHideTimeout.current = null;
+            }
+            if (ticketIdPopupShowTimeout.current) {
+                clearTimeout(ticketIdPopupShowTimeout.current);
+                ticketIdPopupShowTimeout.current = null;
+            }
+        };
+    }, []);
+
+    // Effect hook to handle clicks outside the ticket ID popup to close it
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            // Close ticket ID popup if clicking outside
+            if (ticketIdPopup.visible) {
+                // Check if the click is on the popup itself
+                const popupElement = document.querySelector('[data-ticket-id-popup]');
+                if (popupElement && popupElement.contains(event.target)) {
+                    return; // Don't close if clicking on the popup
+                }
+                setTicketIdPopup(prev => ({ ...prev, visible: false }));
+            }
+        };
+
+        if (ticketIdPopup.visible) {
+            document.addEventListener('mousedown', handleClickOutside);
+        }
+
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [ticketIdPopup.visible]);
 
     /**
      * Helper function to safely get a date string in ISO-MM-DD format.
@@ -963,14 +2055,13 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
         const headers = [
             'Ticket ID',
             'Short Description',
-            'Category',
+            'Created Date',
             'Priority',
             'Status',
             'Assigned To',
             'Reporter Email',
             'Request For Email',
-            'Created At',
-            'Last Updated'
+            'Created At'
         ];
 
         const csvRows = [headers.join(',')];
@@ -979,14 +2070,13 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
             const row = [
                 ticket.display_id || '',
                 `"${(ticket.short_description || '').replace(/"/g, '""')}"`, // Escape quotes in description
-                ticket.category || '',
+                ticket.created_at ? new Date(ticket.created_at).toLocaleString() : '',
                 ticket.priority || '',
                 ticket.status || '',
                 ticket.assigned_to_email || 'Unassigned',
                 ticket.reporter_email || '',
                 ticket.request_for_email || '',
-                ticket.created_at ? new Date(ticket.created_at).toLocaleString() : '',
-                ticket.updated_at ? new Date(ticket.updated_at).toLocaleString() : ''
+                ticket.created_at ? new Date(ticket.created_at).toLocaleString() : ''
             ];
             csvRows.push(row.join(','));
         });
@@ -1037,6 +2127,28 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
         }
     };
 
+    // Memoize assignment options to prevent re-rendering
+    const assignmentOptions = useMemo(() => [
+        { value: 'unassigned', label: 'Unassigned' },
+        ...availableEngineers.map(engineer => ({
+            value: engineer.email,
+            label: engineer.name || engineer.email.split('@')[0], // Show name or username part of email
+            fullLabel: engineer.name ? `${engineer.name} (${engineer.email})` : engineer.email // Full label for tooltip
+        }))
+    ], [availableEngineers]);
+
+    // Memoize status options to prevent re-rendering
+    const memoizedStatusOptions = useMemo(() => 
+        statusOptions.map(option => ({
+            ...option,
+            label: (
+                <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getStatusClasses(option.value)}`}>
+                    {option.label}
+                </span>
+            )
+        }))
+    , [statusOptions]);
+
     // Calculate counts based on the tickets after company filtering
     const ticketsForCounts = filterCompany
         ? allTickets.filter(ticket => {
@@ -1061,20 +2173,8 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
         if (searchKeyword) {
             return `Search Results for "${searchKeyword}" (including resolved and cancelled tickets)`;
         }
-        if (filterAssignment === 'assigned_to_me') {
-            return 'Tickets Assigned To Me';
-        }
-        if (filterAssignment === 'unassigned') {
-            return 'Unassigned Tickets';
-        }
-        if (filterStatus) {
-            if (filterStatus === 'Closed') {
-                return 'Closed/Resolved Tickets';
-            }
-            return `${filterStatus} Tickets`;
-        }
-        return 'Workflow'; // Default if no specific filter is active
-    }, [filterStatus, filterAssignment, searchKeyword]);
+        return 'Workflow'; // Always show Workflow as the main title
+    }, [searchKeyword]);
 
     // Function to handle closing the message with a fade-out effect and upward movement
     const handleCloseMessage = useCallback(() => {
@@ -1146,6 +2246,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
 
     return (
         <>
+            <style>{styles}</style>
             {/* Export Popup Overlay and Modal rendered at document.body level for full coverage */}
             {showExportPopup && ReactDOM.createPortal(
                 <div className="fixed inset-0 z-[9999] flex items-center justify-center">
@@ -1180,18 +2281,19 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                         </div>
                         <div className="mb-4">
                             <label className="block text-xs font-semibold text-gray-700 mb-1">Status</label>
-                            <select
+                            <CustomDropdown
                                 value={exportStatus}
-                                onChange={e => setExportStatus(e.target.value)}
-                                className="px-2 py-1.5 text-xs border border-gray-300 rounded-md bg-white w-full"
-                            >
-                                <option value="">All</option>
-                                <option value="Open">Open</option>
-                                <option value="In Progress">In Progress</option>
-                                <option value="Hold">Hold</option>
-                                <option value="Resolved">Resolved</option>
-                                <option value="Cancelled">Cancelled</option>
-                            </select>
+                                onChange={value => setExportStatus(value)}
+                                options={[
+                                    { value: '', label: 'All' },
+                                    { value: 'Open', label: 'Open' },
+                                    { value: 'In Progress', label: 'In Progress' },
+                                    { value: 'Hold', label: 'Hold' },
+                                    { value: 'Resolved', label: 'Resolved' },
+                                    { value: 'Cancelled', label: 'Cancelled' }
+                                ]}
+                                className="w-full"
+                            />
                         </div>
                         <div className="flex justify-end gap-2">
                             <button
@@ -1203,7 +2305,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                             <button
                                 onClick={handleExport}
                                 disabled={loading || !startDate || !endDate}
-                                className="px-3 py-1.5 text-xs font-medium text-white bg-gradient-to-r from-blue-600 to-blue-700 rounded-md shadow-sm hover:from-blue-700 hover:to-blue-800 hover:shadow-md transition-all duration-200 border-0 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="px-3 py-1.5 text-xs font-bold text-green-600 bg-white border border-green-600 rounded-md shadow-sm hover:bg-green-50 hover:border-green-700 hover:text-green-700 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 {loading ? 'Exporting...' : 'Confirm Export'}
                             </button>
@@ -1225,18 +2327,18 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                         <h3 className="text-lg font-semibold mb-4">Assign Tickets to Engineer</h3>
                         <div className="mb-4">
                             <label className="block text-xs font-semibold text-gray-700 mb-1">Select Engineer</label>
-                            <select
+                            <CustomDropdown
                                 value={selectedEngineer}
-                                onChange={e => setSelectedEngineer(e.target.value)}
-                                className="px-2 py-1.5 text-xs border border-gray-300 rounded-md bg-white w-full"
-                            >
-                                <option value="">Choose an engineer...</option>
-                                {availableEngineers.map(engineer => (
-                                    <option key={engineer.id} value={engineer.email}>
-                                        {engineer.name} ({engineer.email})
-                                    </option>
-                                ))}
-                            </select>
+                                onChange={value => setSelectedEngineer(value)}
+                                options={[
+                                    { value: '', label: 'Choose an engineer...' },
+                                    ...availableEngineers.map(engineer => ({
+                                        value: engineer.email,
+                                        label: `${engineer.name} (${engineer.email})`
+                                    }))
+                                ]}
+                                className="w-full"
+                            />
                         </div>
                         <div className="flex justify-end gap-2">
                             <button
@@ -1258,7 +2360,10 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                 document.body
             )}
             {/* Main App Content */}
-            <div className="p-4 bg-white flex-1 overflow-auto">
+            <div className={`p-4 bg-white flex-1 overflow-auto transition-all duration-300 ${
+                showNotesPanel && showPeekPanel ? 'mr-160' : 
+                showNotesPanel || showPeekPanel ? 'mr-80' : ''
+            }`}>
                 {/* Top Bar: Title, Filter By, Dropdown, Clear Filters (left) | Export Tickets (right) */}
                 <div className="flex flex-wrap items-center justify-between mb-2">
                     <div className="flex items-center gap-3 flex-wrap">
@@ -1269,35 +2374,34 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                         {(user?.role === 'super_admin' || user?.role === 'admin' || user?.role === 'support') && (
                         <div>
                             {console.log('Rendering first dropdown - filterCompany:', filterCompany, 'filterBy:', filterBy)}
-                            <select
+                            <CustomDropdown
                                 value={filterCompany}
-                                onChange={e => {
-                                    console.log('First dropdown - Setting company filter to:', e.target.value);
-                                    setFilterCompany(e.target.value);
+                                onChange={value => {
+                                    console.log('First dropdown - Setting company filter to:', value);
+                                    setFilterCompany(value);
                                 }}
-                                className="px-2 py-1.5 rounded border border-gray-300 text-xs font-semibold bg-white mr-2 h-8 min-w-[120px]"
-                            >
-                                <option value="">All Companies</option>
-                                {loadingCompanies ? (
-                                    <option value="" disabled>Loading companies...</option>
-                                ) : companies.length === 0 ? (
-                                    <option value="" disabled>No companies found</option>
-                                ) : (
-                                    companies.map(company => (
-                                        <option key={company.id} value={company.companyName}>
-                                            {company.companyName}
-                                        </option>
-                                    ))
-                                )}
-                            </select>
+                                options={[
+                                    { value: '', label: 'All Companies' },
+                                    ...(loadingCompanies ? 
+                                        [{ value: '', label: 'Loading companies...', disabled: true }] :
+                                        companies.length === 0 ? 
+                                        [{ value: '', label: 'No companies found', disabled: true }] :
+                                        companies.map(company => ({
+                                            value: company.companyName,
+                                            label: company.companyName
+                                        }))
+                                    )
+                                ]}
+                                className="w-48 h-8 mr-2"
+                            />
                         </div>
                         )}
                         <span className="text-sm font-semibold text-gray-700">Filter By:</span>
-                        <div className="relative inline-block mr-2">
-                            <select
+                        <div className="mr-2">
+                            <CustomDropdown
                                 value={filterBy}
-                                onChange={e => { 
-                                    const newFilterBy = e.target.value;
+                                onChange={value => { 
+                                    const newFilterBy = value;
                                     console.log('Filter By changed to:', newFilterBy, 'Current company filter:', filterCompany);
                                     setFilterBy(newFilterBy); 
                                     // Only reset filters that are not compatible with the new filter type
@@ -1310,23 +2414,18 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                     }
                                     // Don't reset filterCompany - preserve the selection
                                 }}
-                                className="px-2 py-1.5 rounded border border-gray-300 text-xs font-semibold bg-white pr-8 appearance-none h-8"
-                            >
-                                <option value="status">Status</option>
-                                <option value="priority">Priority</option>
-                            </select>
-                            <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
-                                {filterBy === 'company' ? (
-                                    <ChevronRight className="w-3 h-3 text-gray-500" />
-                                ) : (
-                                    <ChevronDown className="w-3 h-3 text-gray-500" />
-                                )}
-                            </div>
+                                options={[
+                                    { value: 'status', label: 'Status' },
+                                    { value: 'priority', label: 'Priority' },
+                                    { value: 'history', label: 'History' }
+                                ]}
+                                className="w-24 h-8"
+                            />
                         </div>
-                        {(filterBy !== 'status' || filterStatus !== '' || filterPriority !== '' || filterAssignment !== '' || filterCompany !== '') && (
+                        {(filterBy !== 'status' || filterStatus !== '' || filterPriority !== '' || filterAssignment !== '' || filterCompany !== '' || filterBy === 'history') && (
                             <button
                                 onClick={clearAllFilters}
-                                className="px-3 py-1.5 text-xs font-medium text-white bg-gradient-to-r from-red-400 to-red-500 rounded-md shadow-sm hover:from-red-500 hover:to-red-600 hover:shadow-md transition-all duration-200 ease-in-out border-0 focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-1"
+                                className="px-3 py-1.5 text-xs font-medium text-red-500 bg-transparent rounded-md border border-red-300 hover:bg-red-50 hover:border-red-400 transition-all duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-red-200 focus:ring-offset-1"
                             >
                                 <svg className="w-3 h-3 mr-1.5 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -1346,11 +2445,8 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                             }}
                             disabled={loading}
                             ref={exportButtonRef}
-                            className="group relative inline-flex items-center justify-center px-3 py-1.5 text-xs font-medium text-white bg-gradient-to-r from-emerald-600 to-emerald-700 rounded-md shadow-sm hover:from-emerald-700 hover:to-emerald-800 hover:shadow-md transition-all duration-200 ease-in-out border-0 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
+                            className="group relative inline-flex items-center justify-center px-3 py-1.5 text-xs font-bold text-green-800 bg-white border rounded-md shadow-sm hover:bg-green-50 hover:border-green-700 hover:text-green-700 transition-all duration-200 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
                         >
-                            <svg className="w-3 h-3 mr-1.5 group-hover:scale-110 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                            </svg>
                             {!assignMode && selectedTickets.length > 0 
                                 ? `Export Selected (${selectedTickets.length})` 
                                 : 'Export Tickets'
@@ -1366,25 +2462,24 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                     <div className="flex items-center gap-2 flex-wrap">
                         {/* Filters Section */}
                         {filterBy === 'company' && (user?.role === 'super_admin' || user?.role === 'admin' || user?.role === 'support') && (
-                            <div>
-                                <select
+                            <div className="mr-2">
+                                <CustomDropdown
                                     value={filterCompany}
-                                    onChange={e => setFilterCompany(e.target.value)}
-                                    className="px-2 py-1.5 rounded border border-gray-300 text-xs font-semibold bg-white mr-2 h-8"
-                                >
-                                    <option value="">All</option>
-                                    {loadingCompanies ? (
-                                        <option value="" disabled>Loading companies...</option>
-                                    ) : companies.length === 0 ? (
-                                        <option value="" disabled>No companies found</option>
-                                    ) : (
-                                        companies.map(company => (
-                                            <option key={company.id} value={company.companyName}>
-                                                {company.companyName}
-                                            </option>
-                                        ))
-                                    )}
-                                </select>
+                                    onChange={value => setFilterCompany(value)}
+                                    options={[
+                                        { value: '', label: 'All' },
+                                        ...(loadingCompanies ? 
+                                            [{ value: '', label: 'Loading companies...', disabled: true }] :
+                                            companies.length === 0 ? 
+                                            [{ value: '', label: 'No companies found', disabled: true }] :
+                                            companies.map(company => ({
+                                                value: company.companyName,
+                                                label: company.companyName
+                                            }))
+                                        )
+                                    ]}
+                                    className="w-48 h-8"
+                                />
                             </div>
                         )}
                         {filterBy === 'status' && (
@@ -1455,6 +2550,15 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                 </button>
                             </div>
                         )}
+                        {filterBy === 'history' && (
+                            <div className="inline-flex bg-white border border-gray-300 rounded-full shadow-sm overflow-hidden">
+                                <button 
+                                    className="px-3 py-1.5 text-xs font-semibold border-blue-300 text-blue rounded-full"
+                                >
+                                    Resolved & Cancelled Tickets
+                                </button>
+                            </div>
+                        )}
                     </div>
                     <div className="flex items-center gap-2 ml-auto">
                         {renderPagination()}
@@ -1463,23 +2567,55 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                             {/* Copy from original code, lines 1291-1357 */}
                             {!assignMode && !showCheckboxes ? (
                                 <>
-                                    {canAssign && user?.role !== 'site_admin' && (
+                                    {canAssign && user?.role !== 'site_admin' && filterBy !== 'history' && (
                                         <button 
                                             onClick={enterAssignMode}
-                                            className="group relative inline-flex items-center justify-center px-3 py-1.5 text-xs font-medium text-gray-700 bg-gradient-to-r from-blue-100 to-blue-200 border border-blue-300 rounded-md shadow-sm hover:from-blue-200 hover:to-blue-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                                            className="px-3 py-1.5 
+                rounded-md 
+                text-xs 
+                font-semibold 
+                inline-flex 
+                items-center 
+                justify-center 
+                cursor-pointer 
+                transition-all 
+                duration-200 
+                ease-in-out 
+                text-center 
+                min-w-[80px]
+                font-['Source_Sans_Pro']
+                bg-white 
+                text-gray-800 
+                border
+                border-orange-400
+                hover:bg-gray-50 
+                hover:border-orange-500 
+                
+                hover:shadow-md
+                focus:outline-none 
+                focus:border-orange-500 
+                focus:ring-2 
+                focus:ring-orange-400
+                active:bg-gray-100 
+                active:border-gray-600 
+                active:translate-y-0.5 
+                active:shadow-sm
+                disabled:bg-white 
+                disabled:text-gray-400 
+                disabled:border-gray-300 
+                disabled:cursor-not-allowed
+                disabled:hover:transform-none
+                disabled:hover:shadow-none"
                                         >
-                                            Assign
+                                            Bulk-Assign
                                         </button>
                                     )}
-                                    <button 
+                                    <SelectButton 
                                         onClick={enterExportSelectionMode}
-                                        className="group relative inline-flex items-center justify-center px-3 py-1.5 text-xs font-medium text-gray-700 bg-gradient-to-r from-gray-100 to-gray-200 rounded-md shadow-sm hover:from-gray-200 hover:to-gray-300 hover:shadow-md transition-all duration-200 ease-in-out border border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-1"
+                                        className="text-sm"
                                     >
-                                        <svg className="w-3 h-3 mr-1.5 group-hover:scale-110 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                                        </svg>
                                         Select
-                                    </button>
+                                    </SelectButton>
                                 </>
                             ) : canAssign && assignMode && user?.role !== 'site_admin' ? (
                                 // Assign mode - show Assign button with count and Cancel button
@@ -1520,11 +2656,51 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                     Cancel
                                 </button>
                             )}
-                            <button className="group relative inline-flex items-center justify-center px-3 py-1.5 text-xs font-medium text-gray-700 bg-gradient-to-r from-gray-100 to-gray-200 rounded-md shadow-sm hover:from-gray-200 hover:to-gray-300 hover:shadow-md transition-all duration-200 ease-in-out border border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-1">
-                                <svg className="w-3 h-3 mr-1.5 group-hover:scale-110 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                </svg>
-                                Notes
+                            <button 
+                                onClick={() => setShowNotesPanel(!showNotesPanel)}
+                                className={`px-3 py-1.5 
+                rounded-md 
+                text-xs 
+                font-semibold 
+                inline-flex 
+                items-center 
+                justify-center 
+                cursor-pointer 
+                transition-all 
+                duration-200 
+                ease-in-out 
+                text-center 
+                min-w-[80px]
+                font-['Source_Sans_Pro']
+                bg-white 
+                text-gray-800 
+                border
+                border-orange-400
+                hover:bg-gray-50 
+                hover:border-orange-500 
+                
+                hover:shadow-md
+                focus:outline-none 
+                focus:border-orange-500 
+                focus:ring-2 
+                focus:ring-orange-400
+                active:bg-gray-100 
+                active:border-gray-600 
+                active:translate-y-0.5 
+                active:shadow-sm
+                disabled:bg-white 
+                disabled:text-gray-400 
+                disabled:border-gray-300 
+                disabled:cursor-not-allowed
+                disabled:hover:transform-none
+                disabled:hover:shadow-nonei ${
+                                    showNotesPanel 
+                                        ? 'text-white bg-gradient-to-r from-blue-600 to-blue-700 border-orange-300 hover:from-blue-700 hover:to-blue-800 focus:ring-orange-500' 
+                                        : 'text-gray-700 bg-gradient-to-r from-gray-100 to-gray-200 border-orange-300 hover:from-gray-200 hover:to-gray-300 focus:ring-orange-500'
+                                }`}
+                            >
+                                
+                                My Notes
                             </button>
                         </div>
                     </div>
@@ -1546,7 +2722,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                             )}
                         </div>
                         <div className="w-full max-w-full overflow-x-auto border border-gray-200 bg-white mt-0">
-                        <table className="w-full min-w-0 bg-white text-xs">
+                        <table className={`w-full min-w-0 bg-white text-xs ${(showCheckboxes || assignMode) ? 'border border-orange-400' : ''}`}>
                             <thead className="hidden sm:table-header-group bg-gray-100 border-b border-gray-200">
                                 <tr>
                                     <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">
@@ -1590,17 +2766,22 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                     <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">#</th>
                                     <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">Ticket ID</th>
                                     <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">Short Description</th>
-                                    <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">Category</th>
+                                    <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">Created Date</th>
                                     <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">Priority</th>
                                     <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">Status</th>
+                                    <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">Requested by</th>
                                     <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">Assigned To</th>
-                                    <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">Last Updated</th>
+                                    <th className="px-2 py-2 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words w-16">Peek</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-200">
                                 {paginatedTickets.map((ticket, index) => (
-                                    <tr key={ticket.id} className="block sm:table-row bg-white border-b border-gray-200 hover:bg-gray-50 transition-colors duration-150 text-xs">
-                                        <td className="block sm:table-cell px-2 py-4 text-xs text-gray-800 whitespace-normal break-words border-r border-gray-200">
+                                    <tr key={ticket.id} className={`block sm:table-row border-b border-gray-200 hover:bg-gray-50 transition-colors duration-150 text-xs h-16 ${
+                                        showPeekPanel && peekedTicket && peekedTicket.id === ticket.id 
+                                            ? 'bg-orange-50 border-orange-200' 
+                                            : 'bg-white'
+                                    }`}>
+                                        <td className="block sm:table-cell px-2 py-4 text-xs text-gray-800 whitespace-normal break-words">
                                             <span className="block sm:hidden font-semibold text-gray-600">Select:</span>
                                             <input 
                                                 type="checkbox" 
@@ -1612,44 +2793,168 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                                 }`}
                                             />
                                         </td>
-                                        <td className="block sm:table-cell px-2 py-4 text-xs text-gray-800 whitespace-normal break-words border-r border-gray-200">
+                                        <td className="block sm:table-cell px-2 py-4 text-xs text-gray-800 whitespace-normal break-words">
                                             <span className="block sm:hidden font-semibold text-gray-600">#:</span>
                                             {index + 1}
                                         </td>
-                                        <td className="block sm:table-cell px-2 py-4 text-xs text-blue-700 hover:underline font-medium cursor-pointer whitespace-normal break-words border-r border-gray-200" onClick={() => navigateTo('/tickets', ticket.id)}>
+                                        <td className="block sm:table-cell px-2 py-4 text-xs text-blue-700 hover:underline font-medium cursor-pointer whitespace-normal break-words" 
+                                            onMouseEnter={(e) => showTicketIdPopup(ticket.display_id, ticket.id, e)}
+                                            onMouseLeave={hideTicketIdPopup}
+                                        >
                                             <span className="block sm:hidden font-semibold text-gray-600">Ticket ID:</span>
-                                            {ticket.display_id}
+                                            <a
+                                                href={`/tickets/${ticket.id}`}
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    navigateTo('/tickets', ticket.id);
+                                                }}
+                                            >
+                                                {ticket.display_id}
+                                            </a>
                                         </td>
-                                        <td className="block sm:table-cell px-2 py-4 text-xs text-gray-800 max-w-xs truncate whitespace-normal break-words border-r border-gray-200" title={ticket.short_description}>
+                                        <td className="block sm:table-cell px-2 py-4 text-xs text-gray-800 max-w-xs" title={ticket.short_description}>
                                             <span className="block sm:hidden font-semibold text-gray-600">Short Description:</span>
+                                            <div className="line-clamp-2 text-ellipsis overflow-hidden">
                                             {ticket.short_description}
+                                            </div>
                                         </td>
-                                        <td className="block sm:table-cell px-2 py-4 text-xs text-gray-800 whitespace-normal break-words border-r border-gray-200">
-                                            <span className="block sm:hidden font-semibold text-gray-600">Category:</span>
-                                            {ticket.category}
+                                        <td className="block sm:table-cell px-2 py-4 text-xs text-gray-800 max-w-32">
+                                            <span className="block sm:hidden font-semibold text-gray-600">Created Date:</span>
+                                            <div className="truncate">
+                                                {ticket.created_at ? (
+                                                    <TooltipBubble title={`Created on ${new Date(ticket.created_at).toLocaleDateString('en-US', { 
+                                                        weekday: 'short', 
+                                                        month: 'short', 
+                                                        day: '2-digit', 
+                                                        year: 'numeric'
+                                                    })} at ${new Date(ticket.created_at).toLocaleTimeString('en-US', { 
+                                                        hour: '2-digit', 
+                                                        minute: '2-digit', 
+                                                        hour12: true 
+                                                    })}`}>
+                                                        <span className="cursor-pointer">
+                                                            {new Date(ticket.created_at).toLocaleDateString('en-US', { 
+                                                                weekday: 'short', 
+                                                                month: 'short', 
+                                                                day: '2-digit', 
+                                                                year: 'numeric'
+                                                            }).replace(',', '-')}
+                                                        </span>
+                                                    </TooltipBubble>
+                                                ) : 'N/A'}
+                                            </div>
                                         </td>
-                                        <td className="block sm:table-cell px-2 py-4 text-xs text-gray-800 whitespace-normal break-words border-r border-gray-200">
+                                        <td className="block sm:table-cell px-2 py-4 text-xs text-gray-800 whitespace-normal break-words">
                                             <span className="block sm:hidden font-semibold text-gray-600">Priority:</span>
                                             <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getPriorityClasses(ticket.priority)}`}>{ticket.priority}</span>
                                         </td>
-                                        <td className="block sm:table-cell px-2 py-4 whitespace-normal break-words text-xs text-gray-800 border-r border-gray-200">
-                                            <span className="block sm:hidden font-semibold text-gray-600">Status:</span>
-                                            <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getStatusClasses(ticket.status)}`}>{ticket.status}</span>
-                                        </td>
-                                        <td className="block sm:table-cell px-2 py-4 whitespace-normal break-words text-xs text-gray-800 border-r border-gray-200">
-                                            <span className="block sm:hidden font-semibold text-gray-600">Assigned To:</span>
-                                            {ticket.assigned_to_email || 'Unassigned'}
-                                        </td>
                                         <td className="block sm:table-cell px-2 py-4 whitespace-normal break-words text-xs text-gray-800">
-                                            <span className="block sm:hidden font-semibold text-gray-600">Last Updated:</span>
-                                            {ticket.updated_at ? new Date(ticket.updated_at).toLocaleDateString('en-US', { 
-                                                month: 'short', 
-                                                day: '2-digit', 
-                                                year: 'numeric',
-                                                hour: '2-digit',
-                                                minute: '2-digit',
-                                                hour12: true 
-                                            }) : 'N/A'}
+                                            <span className="block sm:hidden font-semibold text-gray-600">Status:</span>
+                                            {/* Show status dropdown for engineers and super admins */}
+                                            {(user?.role === 'support' || user?.role === 'admin' || user?.role === 'super_admin') ? (
+                                                <div className="min-w-[120px] max-w-[160px] overflow-hidden">
+                                                    {changingStatusTickets.has(ticket.id) ? (
+                                                        <div className="flex items-center gap-1 text-xs text-blue-600">
+                                                            <Loader2 className="w-3 h-3 animate-spin" />
+                                                            <span>Updating...</span>
+                                                        </div>
+                                                    ) : (
+                                                        <CustomDropdown
+                                                            value={ticket.status}
+                                                            onChange={(value) => handleTicketStatusChange(ticket.id, value)}
+                                                            options={memoizedStatusOptions}
+                                                            placeholder={ticket.status}
+                                                            className="text-xs w-full"
+                                                            disabled={['Resolved', 'Cancelled', 'Closed'].includes(ticket.status)}
+                                                            variant="minimal"
+                                                            customDisplay={(
+                                                                <span className={`px-2 py-0.5 text-xs font-semibold rounded-full truncate ${getStatusClasses(ticket.status)}`}>
+                                                                    {ticket.status}
+                                                                </span>
+                                                            )}
+                                                        />
+                                                    )}
+                                                </div>
+                                            ) : (
+                                                <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getStatusClasses(ticket.status)}`}>{ticket.status}</span>
+                                            )}
+                                        </td>
+                                        <td className="block sm:table-cell px-2 py-4 text-xs text-gray-800 max-w-32">
+                                            <span className="block sm:hidden font-semibold text-gray-600">Requested by:</span>
+                                            <div className="truncate">
+                                            <span 
+                                                className="text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
+                                                onMouseEnter={(e) => {
+                                                    if (ticket.reporter_email) {
+                                                        showProfilePopup(
+                                                            { 
+                                                                email: ticket.reporter_email, 
+                                                                fullName: ticket.reporter_name,
+                                                                clientName: ticket.client_name || ticket.companyName,
+                                                                contactNumber: ticket.contact_number
+                                                            },
+                                                            e
+                                                        );
+                                                    }
+                                                }}
+                                                onMouseLeave={() => {
+                                                    cancelShowProfilePopup();
+                                                    hideProfilePopup();
+                                                }}
+                                            >
+                                                {ticket.reporter_email || 'N/A'}
+                                            </span>
+                                            </div>
+                                        </td>
+                                        <td className="block sm:table-cell px-2 py-4 text-xs text-gray-800 max-w-32">
+                                            <span className="block sm:hidden font-semibold text-gray-600">Assigned To:</span>
+                                            {/* Show assignment dropdown for engineers and super admins */}
+                                            {(user?.role === 'support' || user?.role === 'admin' || user?.role === 'super_admin') ? (
+                                                <div className="min-w-[120px] max-w-[128px] overflow-hidden">
+                                                    {engineersLoading && availableEngineers.length === 0 ? (
+                                                        <span className="text-xs text-gray-500">Loading...</span>
+                                                    ) : assigningTickets.has(ticket.id) ? (
+                                                        <div className="flex items-center gap-1 text-xs text-blue-600">
+                                                            <Loader2 className="w-3 h-3 animate-spin" />
+                                                            <span>Assigning...</span>
+                                                        </div>
+                                                    ) : (
+                                                        <CustomDropdown
+                                                            value={ticket.assigned_to_email || 'unassigned'}
+                                                            onChange={(value) => handleTicketAssignment(ticket.id, value)}
+                                                            options={assignmentOptions}
+                                                            placeholder={ticket.assigned_to_email || 'Unassigned'}
+                                                            className="text-xs w-full"
+                                                            disabled={['Resolved', 'Cancelled', 'Closed'].includes(ticket.status)}
+                                                            variant="minimal"
+                                                        />
+                                                    )}
+                                                </div>
+                                            ) : (
+                                                <div className="truncate">
+                                                <span>{ticket.assigned_to_email || 'Unassigned'}</span>
+                                                </div>
+                                            )}
+                                        </td>
+                                        <td className="block sm:table-cell px-2 py-4 text-center whitespace-normal break-words">
+                                            <span className="block sm:hidden font-semibold text-gray-600">Peek:</span>
+                                            {showPeekPanel && peekedTicket && peekedTicket.id === ticket.id ? (
+                                                <button
+                                                    onClick={handleClosePeek}
+                                                    className="inline-flex items-center justify-center w-8 h-8 text-orange-600 hover:text-orange-700 hover:bg-orange-50 rounded-full transition-colors duration-200"
+                                                    title="Close preview"
+                                                >
+                                                    <X className="w-4 h-4" />
+                                                </button>
+                                            ) : (
+                                                <button
+                                                    onClick={() => handlePeekTicket(ticket)}
+                                                    className="inline-flex items-center justify-center w-8 h-8 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors duration-200"
+                                                    title="Peek at ticket details"
+                                                >
+                                                    <Eye className="w-4 h-4" />
+                                                </button>
+                                            )}
                                         </td>
                                     </tr>
                                 ))}
@@ -1666,6 +2971,673 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                     </div>
                 )}
             </div>
+            
+            {/* Notes Panel */}
+            <div className={`fixed top-16 right-0 h-[calc(100vh-4rem)] w-80 bg-white border-l border-gray-200 shadow-lg z-40 flex flex-col transform transition-all duration-300 ease-in-out ${
+                showNotesPanel 
+                    ? 'translate-x-0 opacity-100' 
+                    : 'translate-x-full opacity-0 pointer-events-none'
+            }`}>
+                    {/* Notes Panel Header */}
+                    <div className="p-4 border-b border-gray-200 bg-gray-50">
+                        <div className="flex items-center justify-between mb-3">
+                            <h3 className="text-lg font-semibold text-gray-900">My Notes</h3>
+                            <button
+                                onClick={() => setShowNotesPanel(false)}
+                                className="text-gray-400 hover:text-gray-600 p-1"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        
+                        {/* Search and Filter - Hide when adding/editing/viewing note */}
+                        {!showAddNoteForm && !editingNote && !viewingNote && (
+                            <div className="space-y-2">
+                                <div className="relative">
+                                    <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                                    <input
+                                        type="text"
+                                        placeholder="Search notes..."
+                                        value={notesSearchTerm}
+                                        onChange={(e) => setNotesSearchTerm(e.target.value)}
+                                        className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                    />
+                                </div>
+                                <CustomDropdown
+                                    value={notesSelectedCategory}
+                                    onChange={(value) => setNotesSelectedCategory(value)}
+                                    options={noteCategories}
+                                    placeholder="All Categories"
+                                    className="w-full"
+                                />
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Notes Content */}
+                    <div className="flex-1 overflow-y-auto p-4">
+                        {/* Add Note Form */}
+                        {showAddNoteForm && (
+                            <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-md">
+                                <div className="flex items-center justify-between mb-2">
+                                    <h4 className="text-sm font-semibold text-gray-800">
+                                        {editingNote ? 'Edit Note' : 'Add New Note'}
+                                    </h4>
+                                    <button
+                                        onClick={cancelEditing}
+                                        className="text-gray-400 hover:text-gray-600 p-1"
+                                    >
+                                        <X className="w-4 h-4" />
+                                    </button>
+                                </div>
+                                <form onSubmit={editingNote ? handleUpdateNote : handleAddNote}>
+                                    <div className="space-y-2">
+                                        <input
+                                            type="text"
+                                            value={noteFormData.title}
+                                            onChange={(e) => setNoteFormData(prev => ({ ...prev, title: e.target.value }))}
+                                            className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-60 disabled:cursor-not-allowed"
+                                            placeholder="Note title..."
+                                            disabled={addingNote}
+                                            required
+                                        />
+                                        <CustomDropdown
+                                            value={noteFormData.category}
+                                            onChange={(value) => setNoteFormData(prev => ({ ...prev, category: value }))}
+                                            options={noteCategories.slice(1)}
+                                            placeholder="Select category..."
+                                            className="w-full"
+                                            disabled={addingNote}
+                                        />
+                                        <textarea
+                                            value={noteFormData.content}
+                                            onChange={(e) => setNoteFormData(prev => ({ ...prev, content: e.target.value }))}
+                                            rows={3}
+                                            className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-60 disabled:cursor-not-allowed"
+                                            placeholder="Enter note content..."
+                                            disabled={addingNote}
+                                            required
+                                        />
+                                        <div className="flex gap-1">
+                                            <button
+                                                type="button"
+                                                onClick={cancelEditing}
+                                                disabled={addingNote}
+                                                className="px-2 py-1 text-xs text-gray-600 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-60 disabled:cursor-not-allowed"
+                                            >
+                                                Cancel
+                                            </button>
+                                            <button
+                                                type="submit"
+                                                disabled={addingNote}
+                                                className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center disabled:opacity-60 disabled:cursor-not-allowed"
+                                            >
+                                                {addingNote ? (
+                                                    <>
+                                                        <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                                                        {editingNote ? 'Updating...' : 'Adding...'}
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <Save className="w-3 h-3 mr-1" />
+                                                        {editingNote ? 'Update' : 'Add'}
+                                                    </>
+                                                )}
+                                            </button>
+                                        </div>
+                                    </div>
+                                </form>
+                            </div>
+                        )}
+
+                        {/* Add Note Button */}
+                        {!showAddNoteForm && !viewingNote && (
+                            <button
+                                onClick={() => setShowAddNoteForm(true)}
+                                className="w-full mb-4 px-3 py-2 text-xs font-medium text-white bg-orange-500 rounded-md hover:bg-orange-600 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 transition-all duration-200 flex items-center justify-center shadow-sm hover:shadow-md transform hover:scale-[1.01]"
+                            >
+                                <Plus className="w-3 h-3 mr-1.5" />
+                                Add Note
+                            </button>
+                        )}
+
+                        {/* Note Detail View */}
+                       {viewingNote && (
+  <div className="mb-6">
+    {/* Back Button */}
+    <div className="flex items-center justify-between mb-4">
+      <button
+        onClick={handleBackToList}
+        className="flex items-center text-sm text-gray-600 hover:text-gray-800 transition-colors"
+      >
+        <ChevronLeft className="w-4 h-4 mr-1" />
+        Back to Notes
+      </button>
+    </div>
+
+    {/* Note Card */}
+    <div
+      className={`p-6 border rounded-2xl shadow-sm transition-shadow bg-white ${
+        viewingNote.is_pinned
+          ? "border-orange-300 hover:shadow-md"
+          : "border-gray-200 hover:shadow-md"
+      }`}
+    >
+      {/* Title */}
+      <h3 className="text-l font-semibold text-gray-900 leading-tight mb-3">
+        {viewingNote.title}
+      </h3>
+
+      {/* Category + Actions */}
+      <div className="flex items-center justify-between mb-5">
+        {/* Category Tag */}
+        <div className="flex items-center gap-2">
+          <span
+            className={`inline-flex items-center px-3 py-1 rounded-md text-xs font-medium ${getCategoryColor(
+              viewingNote.category
+            )}`}
+          >
+            {
+              noteCategories.find((c) => c.value === viewingNote.category)
+                ?.label
+            }
+          </span>
+          {viewingNote.is_pinned && (
+            <Pin className="w-4 h-4 text-orange-600 flex-shrink-0" />
+          )}
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => handleTogglePin(viewingNote.id)}
+            className={`p-1.5 rounded-md border text-gray-400 hover:text-orange-600 hover:border-orange-300 transition`}
+            title={viewingNote.is_pinned ? "Unpin note" : "Pin note"}
+          >
+            {viewingNote.is_pinned ? (
+              <Pin className="w-4 h-4" />
+            ) : (
+              <PinOff className="w-4 h-4" />
+            )}
+          </button>
+
+          <button
+            onClick={() => startEditing(viewingNote)}
+            className="p-1.5 rounded-md border text-gray-400 hover:text-blue-600 hover:border-blue-300 transition"
+            title="Edit note"
+          >
+            <Edit3 className="w-4 h-4" />
+          </button>
+
+           <div className="relative">
+             <button
+               onClick={() => handleDeleteClick(viewingNote.id)}
+               className="p-1.5 rounded-md border text-gray-400 hover:text-red-600 hover:border-red-300 transition"
+               title="Delete note"
+             >
+               <Trash2 className="w-4 h-4" />
+             </button>
+             
+             {/* Delete Confirmation Popup */}
+             {showDeleteConfirm === viewingNote.id && (
+               <div className="delete-confirmation-container absolute top-8 right-0 z-50 bg-white border border-gray-200 rounded-lg shadow-lg p-3 min-w-[200px]">
+                 <div className="text-sm text-gray-700 mb-3">
+                   Are you sure you want to delete this note?
+                 </div>
+                 <div className="flex gap-2">
+                   <button
+                     onClick={(e) => {
+                       e.stopPropagation();
+                       handleDeleteConfirm(viewingNote.id);
+                     }}
+                     className="px-3 py-1.5 bg-red-600 text-white text-xs rounded-md hover:bg-red-700 transition-colors"
+                   >
+                     Delete
+                   </button>
+                   <button
+                     onClick={(e) => {
+                       e.stopPropagation();
+                       handleDeleteCancel();
+                     }}
+                     className="px-3 py-1.5 bg-gray-100 text-gray-700 text-xs rounded-md hover:bg-gray-200 transition-colors"
+                   >
+                     Cancel
+                   </button>
+                 </div>
+               </div>
+             )}
+           </div>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="whitespace-pre-wrap text-gray-700 text-[13px] mb-6">
+        {viewingNote.content}
+      </div>
+
+      {/* Date (bottom with separator) */}
+      <div className="flex justify-end pt-4 mt-4 border-t text-xs text-gray-400">
+        <Calendar className="w-4 h-4 mr-1.5" />
+        {formatDate(viewingNote.updated_at)}
+      </div>
+    </div>
+  </div>
+)}
+
+
+
+                        {/* Notes List - Hide when adding/editing/viewing note */}
+                        {!showAddNoteForm && !editingNote && !viewingNote && (
+                            <>
+                                {notesLoading ? (
+                                    <div className="flex items-center justify-center py-8">
+                                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                                    </div>
+                                ) : (pinnedNotes.length === 0 && unpinnedNotes.length === 0) ? (
+                                    <div className="text-center py-8">
+                                        <FileText className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                                        <p className="text-xs text-gray-500">No notes found</p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-4">
+                                        {/* Pinned Notes Section */}
+                                        {pinnedNotes.length > 0 && (
+                                            <div>
+                                                <div className="flex items-center gap-2 mb-3 px-1">
+                                                    <Pin className="w-4 h-4 text-yellow-600" />
+                                                    <h3 className="text-sm font-semibold text-gray-700">Pinned Notes</h3>
+                                                    <div className="flex-1 h-px bg-yellow-200"></div>
+                                                </div>
+                                    <div className="space-y-2">
+                                                    {pinnedNotes.map((note) => (
+                                    <div
+                                        key={note.id}
+                                                            onClick={() => handleViewNote(note)}
+                                                            className="p-3 border border-orange-400 bg-white rounded-md hover:shadow-sm transition-all duration-200 cursor-pointer"
+                                    >
+                                        <div className="flex items-start justify-between">
+                                            <div className="flex-1 min-w-0 mr-2">
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${getCategoryColor(note.category)}`}>
+                                                        {noteCategories.find(c => c.value === note.category)?.label}
+                                                    </span>
+                                                </div>
+                                                                    <div className="flex items-center text-[10px] text-gray-500 mb-2">
+                                                                        <Calendar className="w-3 h-3 mr-1" />
+                                                                        {formatDate(note.updated_at)}
+                                                                    </div>
+                                                                    <h4 className="font-medium text-sm text-gray-900 mb-2">
+                                                                        {note.title}
+                                                                    </h4>
+                                                                    <p className="text-xs text-gray-600 line-clamp-4 mb-1">
+                                                    {note.content}
+                                                </p>
+                                                                </div>
+                                                                <div className="flex items-center space-x-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                                                                    <button
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            handleTogglePin(note.id);
+                                                                        }}
+                                                                        className="p-1.5 text-yellow-600 bg-yellow-50 border border-yellow-200 rounded-md hover:bg-yellow-100 hover:border-yellow-300 transition-all duration-200"
+                                                                        title="Unpin note"
+                                                                    >
+                                                                        <Pin className="w-3.5 h-3.5" />
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            startEditing(note);
+                                                                        }}
+                                                                        className="p-1.5 text-gray-400 bg-gray-50 border border-gray-200 rounded-md hover:text-blue-600 hover:bg-blue-50 hover:border-blue-200 transition-all duration-200"
+                                                                        title="Edit note"
+                                                                    >
+                                                                        <Edit3 className="w-3.5 h-3.5" />
+                                                                    </button>
+                                                                    <div className="relative">
+                                                                        <button
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                handleDeleteClick(note.id);
+                                                                            }}
+                                                                            className="p-1.5 text-gray-400 bg-gray-50 border border-gray-200 rounded-md hover:text-red-600 hover:bg-red-50 hover:border-red-200 transition-all duration-200"
+                                                                            title="Delete note"
+                                                                        >
+                                                                            <Trash2 className="w-3.5 h-3.5" />
+                                                                        </button>
+                                                                        
+                                                                        {/* Delete Confirmation Popup */}
+                                                                        {showDeleteConfirm === note.id && (
+                                                                            <div className="delete-confirmation-container absolute top-8 right-0 z-50 bg-white border border-gray-200 rounded-lg shadow-lg p-3 min-w-[180px]">
+                                                                                <div className="text-xs text-gray-700 mb-2">
+                                                                                    Delete this note?
+                                                                                </div>
+                                                                                <div className="flex gap-1.5">
+                                                                                    <button
+                                                                                        onClick={() => handleDeleteConfirm(note.id)}
+                                                                                        className="px-2.5 py-1 bg-red-600 text-white text-xs rounded-md hover:bg-red-700 transition-colors"
+                                                                                    >
+                                                                                        Delete
+                                                                                    </button>
+                                                                                    <button
+                                                                                        onClick={handleDeleteCancel}
+                                                                                        className="px-2.5 py-1 bg-gray-100 text-gray-700 text-xs rounded-md hover:bg-gray-200 transition-colors"
+                                                                                    >
+                                                                                        Cancel
+                                                                                    </button>
+                                                                                </div>
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Other Notes Section */}
+                                        {unpinnedNotes.length > 0 && (
+                                            <div>
+                                                <div className="flex items-center gap-2 mb-3 px-1">
+                                                    <FileText className="w-4 h-4 text-gray-500" />
+                                                    <h3 className="text-sm font-semibold text-gray-700">Other Notes</h3>
+                                                    <div className="flex-1 h-px bg-gray-200"></div>
+                                                </div>
+                                                <div className="space-y-2">
+                                                    {unpinnedNotes.map((note) => (
+                                                        <div
+                                                            key={note.id}
+                                                            onClick={() => handleViewNote(note)}
+                                                            className="p-3 border border-gray-200 bg-white rounded-md hover:shadow-sm transition-all duration-200 cursor-pointer"
+                                                        >
+                                                            <div className="flex items-start justify-between">
+                                                                <div className="flex-1 min-w-0 mr-2">
+                                                                    <div className="flex items-center gap-2 mb-1">
+                                                                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${getCategoryColor(note.category)}`}>
+                                                                            {noteCategories.find(c => c.value === note.category)?.label}
+                                                                        </span>
+                                                                    </div>
+                                                                    <div className="flex items-center text-[10px] text-gray-500 mb-2">
+                                                    <Calendar className="w-3 h-3 mr-1" />
+                                                    {formatDate(note.updated_at)}
+                                                </div>
+                                                                    <h4 className="font-medium text-sm text-gray-900 mb-2">
+                                                                        {note.title}
+                                                                    </h4>
+                                                                    <p className="text-xs text-gray-600 line-clamp-4 mb-1">
+                                                                        {note.content}
+                                                                    </p>
+                                            </div>
+                                             <div className="flex items-center space-x-1 flex-shrink-0">
+                                                 <button
+                                                     onClick={(e) => {
+                                                         e.stopPropagation();
+                                                         handleTogglePin(note.id);
+                                                     }}
+                                                                        className="p-1.5 text-gray-400 bg-gray-50 border border-gray-200 rounded-md hover:text-yellow-600 hover:bg-yellow-50 hover:border-yellow-200 transition-all duration-200"
+                                                                        title="Pin note"
+                                                                    >
+                                                                        <PinOff className="w-3.5 h-3.5" />
+                                                  </button>
+                                                 <button
+                                                     onClick={(e) => {
+                                                         e.stopPropagation();
+                                                         startEditing(note);
+                                                     }}
+                                                     className="p-1.5 text-gray-400 bg-gray-50 border border-gray-200 rounded-md hover:text-blue-600 hover:bg-blue-50 hover:border-blue-200 transition-all duration-200"
+                                                     title="Edit note"
+                                                 >
+                                                     <Edit3 className="w-3.5 h-3.5" />
+                                                 </button>
+                                                 <div className="relative">
+                                                 <button
+                                                         onClick={(e) => {
+                                                             e.stopPropagation();
+                                                             handleDeleteClick(note.id);
+                                                         }}
+                                                     className="p-1.5 text-gray-400 bg-gray-50 border border-gray-200 rounded-md hover:text-red-600 hover:bg-red-50 hover:border-red-200 transition-all duration-200"
+                                                     title="Delete note"
+                                                 >
+                                                     <Trash2 className="w-3.5 h-3.5" />
+                                                 </button>
+                                                     
+                                                     {/* Delete Confirmation Popup */}
+                                                     {showDeleteConfirm === note.id && (
+                                                         <div className="delete-confirmation-container absolute top-8 right-0 z-50 bg-white border border-gray-200 rounded-lg shadow-lg p-3 min-w-[180px]">
+                                                             <div className="text-xs text-gray-700 mb-2">
+                                                                 Delete this note?
+                                                             </div>
+                                                             <div className="flex gap-1.5">
+                                                                 <button
+                                                                     onClick={(e) => {
+                                                                         e.stopPropagation();
+                                                                         handleDeleteConfirm(note.id);
+                                                                     }}
+                                                                     className="px-2.5 py-1 bg-red-600 text-white text-xs rounded-md hover:bg-red-700 transition-colors"
+                                                                 >
+                                                                     Delete
+                                                                 </button>
+                                                                 <button
+                                                                     onClick={(e) => {
+                                                                         e.stopPropagation();
+                                                                         handleDeleteCancel();
+                                                                     }}
+                                                                     className="px-2.5 py-1 bg-gray-100 text-gray-700 text-xs rounded-md hover:bg-gray-200 transition-colors"
+                                                                 >
+                                                                     Cancel
+                                                                 </button>
+                                                             </div>
+                                                         </div>
+                                                     )}
+                                                 </div>
+                                             </div>
+                                        </div>
+                                    </div>
+                                        ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </>
+                        )}
+                    </div>
+                </div>
+            
+            {/* Ticket Peek Panel */}
+            <div className={`fixed top-16 right-0 h-[calc(100vh-4rem)] w-80 bg-white border-l border-gray-200 shadow-lg z-40 flex flex-col transform transition-all duration-300 ease-in-out ${
+                showPeekPanel 
+                    ? 'translate-x-0 opacity-100' 
+                    : 'translate-x-full opacity-0 pointer-events-none'
+            }`} style={{ right: showNotesPanel ? '320px' : '0px' }}>
+                {/* Peek Panel Header */}
+                <div className="p-4 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50">
+                    <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                            <h3 className="text-sm font-semibold text-gray-900">Preview</h3>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            {peekedTicket && (
+                                <a
+                                    href={`/tickets/${peekedTicket.id}`}
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        navigateTo('/tickets', peekedTicket.id);
+                                    }}
+                                    className="bg-gradient-to-r from-orange-500 to-orange-600 text-white px-3 py-1.5 rounded-md text-xs font-medium hover:from-orange-600 hover:to-orange-700 transition-all duration-200 shadow-sm hover:shadow-md flex items-center gap-1"
+                                >
+                                    <ExternalLink className="w-3 h-3" />
+                                    View Full Details
+                                </a>
+                            )}
+                            <button
+                                onClick={handleClosePeek}
+                                className="text-gray-400 hover:text-gray-600 hover:bg-gray-100 p-2 rounded-full transition-colors duration-200"
+                            >
+                                <X className="w-4 h-4" />
+                            </button>
+                        </div>
+                    </div>
+                    {peekedTicket && (
+                        <div className="flex items-center gap-2 text-sm text-gray-600">
+                            <span className="font-medium">#{peekedTicket.display_id}</span>
+                            <span className="text-gray-400">•</span>
+                            <span>{peekedTicket.created_at ? new Date(peekedTicket.created_at).toLocaleDateString('en-US', { 
+                                weekday: 'short', 
+                                month: 'short', 
+                                day: '2-digit', 
+                                year: 'numeric'
+                            }).replace(',', '-') : 'N/A'}</span>
+                        </div>
+                    )}
+                </div>
+
+                {/* Peek Panel Content */}
+                <div className="flex-1 overflow-y-auto p-4 bg-gray-50">
+                    {peekedTicket ? (
+                        <div className="space-y-6">
+                            {/* Status & Priority Row */}
+                            <div className="flex gap-3">
+                                <div className="flex-1">
+                                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Status</label>
+                                    <span className={`inline-flex items-center px-3 py-1.5 text-xs font-bold rounded-full ${getStatusClasses(peekedTicket.status)}`}>
+                                        {peekedTicket.status}
+                                    </span>
+                                </div>
+                                <div className="flex-1">
+                                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Priority</label>
+                                    <span className={`inline-flex items-center px-3 py-1.5 text-xs font-bold rounded-full ${getPriorityClasses(peekedTicket.priority)}`}>
+                                        {peekedTicket.priority}
+                                    </span>
+                                </div>
+                            </div>
+
+                            {/* Description Card */}
+                            <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
+                                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Description</label>
+                                <p className="text-sm text-gray-900 leading-relaxed">{peekedTicket.short_description}</p>
+                            </div>
+
+                            {/* People Section */}
+                            <div className="space-y-4">
+                                <h4 className="text-sm font-semibold text-gray-700 border-b border-gray-200 pb-2">People</h4>
+                                
+                                <div className="space-y-3">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                                            <User className="w-4 h-4 text-blue-600" />
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-xs font-medium text-gray-500">Requested by</p>
+                                            <p className="text-sm text-gray-900 truncate">{peekedTicket.reporter_email || 'N/A'}</p>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                                            <User className="w-4 h-4 text-green-600" />
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-xs font-medium text-gray-500">Assigned to</p>
+                                            <p className="text-sm text-gray-900 truncate">{peekedTicket.assigned_to_email || 'Unassigned'}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Timeline Section */}
+                            <div className="space-y-4">
+                                <h4 className="text-sm font-semibold text-gray-700 border-b border-gray-200 pb-2">Timeline</h4>
+                                
+                                <div className="space-y-3">
+                                    <div className="flex items-start gap-3">
+                                        <div className="w-2 h-2 bg-green-500 rounded-full mt-2 flex-shrink-0"></div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-xs font-medium text-gray-500">Created</p>
+                                            <p className="text-sm text-gray-900">
+                                                {peekedTicket.created_at ? new Date(peekedTicket.created_at).toLocaleDateString('en-US', { 
+                                                    month: 'short', 
+                                                    day: '2-digit', 
+                                                    year: 'numeric',
+                                                    hour: '2-digit',
+                                                    minute: '2-digit',
+                                                    hour12: true 
+                                                }) : 'N/A'}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex items-start gap-3">
+                                        <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 flex-shrink-0"></div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-xs font-medium text-gray-500">Last Updated</p>
+                                            <p className="text-sm text-gray-900">
+                                                {peekedTicket.updated_at ? new Date(peekedTicket.updated_at).toLocaleDateString('en-US', { 
+                                                    month: 'short', 
+                                                    day: '2-digit', 
+                                                    year: 'numeric',
+                                                    hour: '2-digit',
+                                                    minute: '2-digit',
+                                                    hour12: true 
+                                                }) : 'N/A'}
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Full Description */}
+                            {peekedTicket.description && (
+                                <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
+                                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Full Description</label>
+                                    <div className="text-sm text-gray-700 leading-relaxed max-h-32 overflow-y-auto">
+                                        {peekedTicket.description}
+                                    </div>
+                                </div>
+                            )}
+
+                        </div>
+                    ) : (
+                        <div className="text-center py-8">
+                            <FileText className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                            <p className="text-sm text-gray-500">No ticket selected</p>
+                        </div>
+                    )}
+                </div>
+            </div>
+            
+            {/* Profile Popup */}
+            <ProfilePopup
+                visible={profilePopup.visible}
+                position={profilePopup.position}
+                user={profilePopup.user}
+                copyStatus={profilePopup.copyStatus}
+                onMouseEnter={() => setPopupHovered(true)}
+                onMouseLeave={() => {
+                    setPopupHovered(false);
+                    hideProfilePopup();
+                }}
+                onCopyEmail={copyUserEmail}
+                onCopyName={copyUserName}
+            />
+            
+            {/* Ticket ID Popup */}
+            <TicketIdPopup
+                visible={ticketIdPopup.visible}
+                position={ticketIdPopup.position}
+                ticketId={ticketIdPopup.ticketId}
+                documentId={ticketIdPopup.documentId}
+                copyStatus={ticketIdPopup.copyStatus}
+                onOpen={openTicket}
+                onCopyId={copyTicketId}
+                onCopyUrl={copyTicketUrl}
+                onMouseEnter={handleTicketIdPopupHover}
+                onMouseLeave={handleTicketIdPopupLeave}
+            />
+            
         </>
     );
 };

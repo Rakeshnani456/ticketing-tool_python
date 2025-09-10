@@ -1,6 +1,186 @@
 /* --- Global Scrollbar Styles (apply to all scrollable elements) --- */
 @import url('https://fonts.googleapis.com/css2?family=Source+Sans+3:ital,wght@0,200..900;1,200..900&display=swap');
 
+/* --- Theme Color Variables --- */
+:root {
+  --theme-color-elevation-shadow-rgb: 0, 0, 0;
+}
+
+/* --- Custom Shadow Classes --- */
+.theme-elevation-shadow {
+  box-shadow: 0px 0px 1px 0px rgba(var(--theme-color-elevation-shadow-rgb), 0.3), 0px 1px 3px 1px rgba(var(--theme-color-elevation-shadow-rgb), 0.15);
+  -webkit-box-shadow: 0px 0px 1px 0px rgba(var(--theme-color-elevation-shadow-rgb), 0.3), 0px 1px 3px 1px rgba(var(--theme-color-elevation-shadow-rgb), 0.15);
+}
+
+/* --- Advanced Search Component Styles --- */
+@keyframes slideInFromTop {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+.animate-in {
+    animation: slideInFromTop 0.2s ease-out;
+}
+
+.slide-in-from-top-2 {
+    animation: slideInFromTop 0.2s ease-out;
+}
+
+.duration-200 {
+    animation-duration: 200ms;
+}
+
+.line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+/* Search highlight styles */
+.search-highlight {
+    background-color: #fef3c7;
+    color: #92400e;
+    padding: 1px 2px;
+    border-radius: 2px;
+    font-weight: 500;
+}
+
+/* Search dropdown scrollbar */
+.search-dropdown::-webkit-scrollbar {
+    width: 6px;
+}
+
+.search-dropdown::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    border-radius: 3px;
+}
+
+.search-dropdown::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 3px;
+}
+
+.search-dropdown::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
+
+/* --- Knowledge Base Styles --- */
+.line-clamp-3 {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.kb-card-hover {
+    transition: all 0.2s ease-in-out;
+}
+
+.kb-card-hover:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+}
+
+.kb-search-highlight {
+    background-color: #fef3c7;
+    padding: 2px 4px;
+    border-radius: 4px;
+}
+
+.kb-tag {
+    display: inline-block;
+    padding: 2px 8px;
+    background-color: #f3f4f6;
+    color: #374151;
+    font-size: 0.75rem;
+    border-radius: 9999px;
+    margin-right: 4px;
+    margin-bottom: 4px;
+}
+
+.kb-category-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    background-color: #dbeafe;
+    color: #1e40af;
+    font-size: 0.75rem;
+    font-weight: 500;
+    border-radius: 9999px;
+}
+
+.kb-public-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    background-color: #dcfce7;
+    color: #166534;
+    font-size: 0.75rem;
+    font-weight: 500;
+    border-radius: 9999px;
+}
+
+.kb-modal-overlay {
+    backdrop-filter: blur(4px);
+}
+
+.kb-search-input:focus {
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.kb-tab-active {
+    position: relative;
+}
+
+.kb-tab-active::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background-color: #3b82f6;
+}
+
+.kb-empty-state {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: #6b7280;
+}
+
+.kb-empty-state svg {
+    margin: 0 auto 1rem;
+    color: #d1d5db;
+}
+
+.kb-loading-spinner {
+    border: 2px solid #f3f4f6;
+    border-top: 2px solid #3b82f6;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
 /* --- Fast Popup Animations --- */
 @keyframes fastZoomIn {
     0% {
@@ -366,7 +546,7 @@ textarea.max-w-none.w-full::-webkit-scrollbar-corner {
 
 /* Main app header - fixed top header */
 header.fixed.top-0 {
-  background: #e85c34 !important; /* Main app header color */
+  background: #f44c23 !important; /* Main app header color */
   box-shadow: none !important;
   border-bottom: none !important;
 }

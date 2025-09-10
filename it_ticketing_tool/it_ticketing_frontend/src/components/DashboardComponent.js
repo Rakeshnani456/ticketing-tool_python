@@ -18,8 +18,9 @@ import { Bar as ChartBar, Doughnut } from 'react-chartjs-2';
 import { 
   TrendingUp, Users, Clock, AlertCircle, CheckCircle, 
   Activity, Filter, Settings, Sun, Moon, RefreshCw,
-  FileText, Plus
+  FileText, Plus, ExternalLink
 } from 'lucide-react';
+import CustomDropdown from './common/CustomDropdown';
 import { collection, query, onSnapshot, orderBy, limit, getFirestore, where } from 'firebase/firestore';
 import { dbClient } from '../config/firebase';
 import { COLORS } from '../config/constants';
@@ -42,6 +43,98 @@ ChartJS.defaults.responsiveAnimationDuration = 0;
 const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
   // State management
   const [tickets, setTickets] = useState([]);
+
+  // Utility function for timestamp formatting to avoid duplication
+  const formatTimestamp = (timestamp, format = 'relative') => {
+    // Ensure timestamp is a proper Date object
+    let safeTimestamp = timestamp;
+    
+    if (!(safeTimestamp instanceof Date)) {
+      if (safeTimestamp && typeof safeTimestamp === 'object' && safeTimestamp.toDate) {
+        // Firebase Timestamp
+        safeTimestamp = safeTimestamp.toDate();
+      } else if (safeTimestamp && typeof safeTimestamp === 'string') {
+        // String date
+        safeTimestamp = new Date(safeTimestamp);
+      } else if (safeTimestamp && typeof safeTimestamp === 'number') {
+        // Unix timestamp
+        safeTimestamp = new Date(safeTimestamp);
+      } else {
+        return 'Invalid date';
+      }
+    }
+    
+    // Validate the date
+    if (isNaN(safeTimestamp.getTime())) {
+      return 'Invalid date';
+    }
+    
+    if (format === 'relative') {
+      const now = new Date();
+      const diffInMinutes = Math.floor((now - safeTimestamp) / (1000 * 60));
+      
+      if (diffInMinutes < 1) return 'Just now';
+      if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
+      if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}h ago`;
+      return `${Math.floor(diffInMinutes / 1440)}d ago`;
+    } else {
+      return `${safeTimestamp.toLocaleDateString()} at ${safeTimestamp.toLocaleTimeString([], { 
+        hour: '2-digit', 
+        minute: '2-digit' 
+      })}`;
+    }
+  };
+
+  // Utility function to clean activity descriptions
+  const cleanActivityDescription = (activity) => {
+    let cleanDescription = activity.description || activity.details || '';
+    
+    // Remove redundant ticket ID information
+    cleanDescription = cleanDescription.replace(/ to ticket TT\d+/gi, '');
+    cleanDescription = cleanDescription.replace(/ for ticket TT\d+/gi, '');
+    cleanDescription = cleanDescription.replace(/ on ticket TT\d+/gi, '');
+    
+    // Remove redundant filename information for attachments
+    if (activity.type === 'attachment' && activity.filename) {
+      cleanDescription = cleanDescription.replace(new RegExp(`: ${activity.filename.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'gi'), '');
+    }
+    
+    // Remove redundant user information if it's already shown in the header
+    if (activity.user_name || activity.user) {
+      const userName = activity.user_name || activity.user;
+      cleanDescription = cleanDescription.replace(new RegExp(`by ${userName}`, 'gi'), '');
+      cleanDescription = cleanDescription.replace(new RegExp(`${userName} `, 'gi'), '');
+    }
+    
+    // For assignment activities, ensure we have a clean description
+    if (activity.type === 'assignment' && activity.assigned_to_email) {
+      // If description doesn't contain the email, add it
+      if (!cleanDescription.includes(activity.assigned_to_email)) {
+        cleanDescription = `Assigned to ${activity.assigned_to_email}`;
+      }
+    }
+    
+    return cleanDescription.trim();
+  };
+
+  // Utility function to highlight email addresses in text
+  const highlightEmails = (text) => {
+    if (!text) return text;
+    
+    // Email regex pattern
+    const emailRegex = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g;
+    
+    return text.split(emailRegex).map((part, index) => {
+      if (emailRegex.test(part)) {
+        return (
+          <span key={index} className="bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded-md font-medium border border-blue-200">
+            {part}
+          </span>
+        );
+      }
+      return part;
+    });
+  };
   const [agents, setAgents] = useState([]);
   const [timeRange, setTimeRange] = useState('week');
   const [darkMode, setDarkMode] = useState(false);
@@ -92,7 +185,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
 
   
   // Theme classes
-  const bgClass = darkMode ? 'bg-gray-900' : 'bg-gray-100';
+  const bgClass = darkMode ? 'bg-gray-900' : 'bg-white';
   const textClass = darkMode ? 'text-white' : 'text-gray-900';
   const cardClass = darkMode 
     ? 'bg-gray-800/70 backdrop-blur-lg border-gray-700' 
@@ -854,54 +947,23 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
 
   return (
     <div className={`min-h-screen ${bgClass} ${textClass} transition-colors duration-300`}>
-      {/* Header */}
-      <header className={`px-3 py-6 ${bgClass}`}>
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-xl font-medium flex items-center" style={{ color: '#6b7280', marginBottom: '0.125rem' }}>
-              Service Insights
-              <TrendingUp className="ml-3 text-[#e85c34]" size={20} />
-            </h1>
-          </div>
-
-          {/* Company Filter for Super Admin and Support - DISABLED */}
-          {/* {(user?.role === 'super_admin' || user?.role === 'support') && availableCompanies.length > 0 && (
-            <div className="flex items-center gap-2">
-              <label className="text-sm font-medium">Company:</label>
-                             <select
-                 value={selectedCompany}
-                 onChange={(e) => setSelectedCompany(e.target.value)}
-                 className={`px-3 py-1 rounded-md text-sm border ${
-                   darkMode 
-                     ? 'bg-gray-700 border-gray-600 text-white' 
-                     : 'bg-white border-gray-300 text-gray-900'
-                 } focus:outline-none focus:ring-2 focus:ring-blue-500`}
-               >
-                 <option value="All">All</option>
-                 {availableCompanies.map(company => (
-                   <option key={company} value={company}>
-                     {company}
-                   </option>
-                 ))}
-               </select>
-            </div>
-          )} */}
-          
-
+      {/* Main content with top padding to account for fixed header */}
+      <main className={`px-6 py-8 ${bgClass}`} style={{ paddingTop: '5px' }}>
+        {/* Header Section */}
+        <div className="mb-3">
+          <h1 className="text-xl font-bold text-gray-800">Overview</h1>
         </div>
-      </header>
-
-      <main className={`px-3 pb-1 ${bgClass}`}>
-
-        
-
         
         {/* Stats Overview */}
         <div className={`grid grid-cols-1 md:grid-cols-${(user?.role === 'support') ? '4' : user?.role === 'admin' || user?.role === 'super_admin' ? '4' : '3'} gap-3 mb-4`}>
                      {/* Total Active Tickets - All roles can see */}
-           <div 
-             onClick={() => navigateTo('/all-tickets')}
-             className={`${cardClass} rounded-lg p-3 border cursor-pointer transition-all duration-200 hover:shadow-md hover:scale-100 transition duration-100`}
+           <a 
+             href="/all-tickets"
+             onClick={(e) => {
+               e.preventDefault();
+               navigateTo('/all-tickets');
+             }}
+             className={`rounded-lg p-3 border cursor-pointer transition-all duration-200 hover:scale-100 transition duration-100 group relative theme-elevation-shadow block ${darkMode ? 'bg-blue-900/70 border-gray-700' : 'bg-blue-50/70 border-gray-300'}`}
            >
             <div className="flex justify-between items-start">
               <div>
@@ -915,12 +977,20 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                 <Activity size={18} />
               </div>
             </div>
-          </div>
+            {/* Hover indicator */}
+            <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+              <ExternalLink size={16} className="text-gray-500" />
+            </div>
+          </a>
           
                      {/* Open Tickets - All roles can see */}
-           <div 
-             onClick={() => navigateTo('/all-tickets?status=Open')}
-             className={`${cardClass} rounded-lg p-3 border cursor-pointer transition-all duration-200 hover:shadow-md hover:scale-100 transition duration-100`}
+           <a 
+             href="/all-tickets?status=Open"
+             onClick={(e) => {
+               e.preventDefault();
+               navigateTo('/all-tickets?status=Open');
+             }}
+             className={`rounded-lg p-3 border cursor-pointer transition-all duration-200 hover:scale-100 transition duration-100 group relative theme-elevation-shadow block ${darkMode ? 'bg-orange-900/70 border-gray-700' : 'bg-orange-50/70 border-gray-300'}`}
            >
             <div className="flex justify-between items-start">
               <div>
@@ -934,12 +1004,20 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                 <AlertCircle size={18} />
               </div>
             </div>
-          </div>
+            {/* Hover indicator */}
+            <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+              <ExternalLink size={16} className="text-gray-500" />
+            </div>
+          </a>
           
                      {/* In Progress - All roles can see */}
-           <div 
-             onClick={() => navigateTo('/all-tickets?status=In Progress')}
-             className={`${cardClass} rounded-lg p-3 border cursor-pointer transition-all duration-200 hover:shadow-md hover:scale-100 transition duration-100`}
+           <a 
+             href="/all-tickets?status=In Progress"
+             onClick={(e) => {
+               e.preventDefault();
+               navigateTo('/all-tickets?status=In Progress');
+             }}
+             className={`rounded-lg p-3 border cursor-pointer transition-all duration-200 hover:scale-100 transition duration-100 group relative theme-elevation-shadow block ${darkMode ? 'bg-yellow-900/70 border-gray-700' : 'bg-yellow-50/70 border-gray-300'}`}
            >
             <div className="flex justify-between items-start">
               <div>
@@ -953,13 +1031,21 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                 <Clock size={18} />
               </div>
             </div>
-          </div>
+            {/* Hover indicator */}
+            <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+              <ExternalLink size={16} className="text-gray-500" />
+            </div>
+          </a>
           
                      {/* Assigned to Me - Only Support */}
            {(user?.role === 'support') && (
-             <div 
-               onClick={() => navigateTo('/assigned-to-me')}
-               className={`${cardClass} rounded-lg p-3 border cursor-pointer transition-all duration-200 hover:shadow-md hover:scale-100 transition duration-100`}
+             <a 
+               href="/assigned-to-me"
+               onClick={(e) => {
+                 e.preventDefault();
+                 navigateTo('/assigned-to-me');
+               }}
+               className={`rounded-lg p-3 border cursor-pointer transition-all duration-200 hover:scale-100 transition duration-100 group relative theme-elevation-shadow block ${darkMode ? 'bg-green-900/70 border-gray-700' : 'bg-green-50/70 border-gray-300'}`}
              >
               <div className="flex justify-between items-start">
                 <div>
@@ -973,13 +1059,17 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                   <Users size={18} />
                 </div>
               </div>
-            </div>
+              {/* Hover indicator */}
+              <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                <ExternalLink size={16} className="text-gray-500" />
+              </div>
+            </a>
           )}
           
           {/* Avg Resolution - Only Admin/Super Admin - NOT CLICKABLE */}
           {(user?.role === 'admin' || user?.role === 'super_admin') && (
             <div 
-              className={`${cardClass} rounded-lg p-3 border hover:scale-100 transition duration-100`}
+              className={`rounded-lg p-3 border hover:scale-100 transition duration-100 theme-elevation-shadow ${darkMode ? 'bg-purple-900/70 border-gray-700' : 'bg-purple-50/70 border-gray-300'}`}
             >
               <div className="flex justify-between items-start">
                 <div>
@@ -1003,17 +1093,19 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-4">
           {/* Activity & Tickets Tabs */}
           <div 
-            className={`${cardClass} rounded-lg p-2 border lg:col-span-2`}
-              style={{ fontFamily: '"Source Sans 3", sans-serif' }}
+            className={`${cardClass} rounded-lg p-2 border lg:col-span-2 theme-elevation-shadow`}
+              style={{ 
+                fontFamily: '"Source Sans 3", sans-serif'
+              }}
           >
             <div className="flex justify-between items-center mb-2">
-              <h2 className="text-xl font-semibold">Updates</h2>
+              <h2 className="text-l font-medium text-gray-600">Updates</h2>
               <div className="relative bg-gray-200 rounded-full p-0.5 flex w-48">
                 <button 
                   onClick={() => setActiveTab('activity')}
                   className={`flex-1 py-1 px-2 rounded-full text-xs font-medium transition-all duration-300 ${
                     activeTab === 'activity' 
-                      ? 'bg-[#e85c34] text-white shadow-sm transform scale-105' 
+                      ? 'bg-[#e85c34] text-white theme-elevation-shadow transform scale-105' 
                       : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'
                   }`}
                 >
@@ -1023,7 +1115,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                   onClick={() => setActiveTab('tickets')}
                   className={`flex-1 py-1 px-2 rounded-full text-xs font-medium transition-all duration-300 ${
                     activeTab === 'tickets' 
-                      ? 'bg-[#e85c34] text-white shadow-sm transform scale-105' 
+                      ? 'bg-[#e85c34] text-white theme-elevation-shadow transform scale-105' 
                       : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'
                   }`}
                 >
@@ -1034,7 +1126,6 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
             
             {activeTab === 'activity' && (
               <div className="space-y-0 max-h-72 overflow-y-auto">
-                {console.log('Activities array length:', filteredActivities.length)}
                 {filteredActivities.length > 0 ? (
                   filteredActivities.map((activity, index) => {
                     // Get activity icon and color based on type
@@ -1084,68 +1175,50 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                       }
                     };
 
-                    const formatTimeAgo = (timestamp) => {
-                      // Ensure timestamp is a proper Date object
-                      let safeTimestamp = timestamp;
-                      
-                      if (!(safeTimestamp instanceof Date)) {
-                        if (safeTimestamp && typeof safeTimestamp === 'object' && safeTimestamp.toDate) {
-                          // Firebase Timestamp
-                          safeTimestamp = safeTimestamp.toDate();
-                        } else if (safeTimestamp && typeof safeTimestamp === 'string') {
-                          // String date
-                          safeTimestamp = new Date(safeTimestamp);
-                        } else if (safeTimestamp && typeof safeTimestamp === 'number') {
-                          // Unix timestamp
-                          safeTimestamp = new Date(safeTimestamp);
-                        } else {
-                          return 'Invalid date';
-                        }
-                      }
-                      
-                      // Validate the date
-                      if (isNaN(safeTimestamp.getTime())) {
-                        return 'Invalid date';
-                      }
-                      
-                      const now = new Date();
-                      const diffInMinutes = Math.floor((now - safeTimestamp) / (1000 * 60));
-                      
-                      if (diffInMinutes < 1) return 'Just now';
-                      if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
-                      if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}h ago`;
-                      return `${Math.floor(diffInMinutes / 1440)}d ago`;
-                    };
-
+                    // Enhanced zebra effect with better contrast
+                    const isEven = index % 2 === 0;
                     const itemBg = darkMode 
-                      ? (index % 2 === 0 ? 'bg-gray-800/50' : 'bg-gray-700/50') 
-                      : (index % 2 === 0 ? 'bg-white' : 'bg-slate-25/40');
+                      ? (isEven ? 'bg-gray-800/60' : 'bg-gray-700/60') 
+                      : (isEven ? 'bg-white' : 'bg-gray-50/80');
                     
                     const itemBorder = darkMode
-                      ? (index % 2 === 0 ? 'border-gray-300/50' : 'border-gray-300/50')
-                      : (index % 2 === 0 ? 'border-gray-300/50' : 'border-gray-300/50');
+                      ? 'border-gray-600/30'
+                      : 'border-gray-200/60';
                     
-                    const itemShadow = index % 2 === 0 
-                      ? 'shadow-xs' 
-                      : 'shadow-none';
+                    const itemHover = 'hover:bg-opacity-80 transition-all duration-200';
 
                     return (
-                      <div key={activity.id} className={`py-2 px-3 border-b-2 ${itemBorder} last:border-b-0 dark:border-gray-300/50 ${itemBg} ${itemShadow} transition-all duration-200`}>
-                        <div className="flex justify-between">
+                      <div key={activity.id} className={`h-24 px-3 border-b ${itemBorder} last:border-b-0 ${itemBg} ${itemHover} flex items-center`}>
+                        <div className="flex justify-between w-full">
                           <div className="flex items-start">
                             <div className={`w-5 h-5 rounded-full flex items-center justify-center mr-2 mt-0.5 ${getActivityColor(activity.type)}`}>
                               {getActivityIcon(activity.type)}
                             </div>
                             <div className="flex-1 min-w-0">
                               {/* New format: User full name • TicketID : Subjectline */}
-                              <div className="mb-0.5">
-                                <div className="flex items-center text-sm">
-                                  <span className="font-medium text-black">
+                              <div className="mb-1">
+                                <div className="flex items-center text-base">
+                                  <span className="text-gray-600">
                                     {activity.user_name || activity.user || 'System'}
                                   </span>
-                                  <span className="text-black mx-1">•</span>
-                                  <button
-                                    onClick={() => {
+                                  <span className="text-gray-600 mx-1.5">•</span>
+                                  <a
+                                    href={`/tickets/${(() => {
+                                      // Get the ticket ID for navigation
+                                      let ticketIdForNavigation = activity.ticket_id || activity.ticketId;
+                                      
+                                      // If it's a display ID (starts with TT), look up the actual document ID
+                                      if (ticketIdForNavigation && ticketIdForNavigation.startsWith('TT')) {
+                                        const actualDocId = ticketMappings.displayIdToDocIdMap[ticketIdForNavigation];
+                                        if (actualDocId) {
+                                          ticketIdForNavigation = actualDocId;
+                                        }
+                                      }
+                                      
+                                      return ticketIdForNavigation;
+                                    })()}`}
+                                    onClick={(e) => {
+                                      e.preventDefault();
                                       // Get the ticket ID for navigation
                                       let ticketIdForNavigation = activity.ticket_id || activity.ticketId;
                                       
@@ -1159,7 +1232,8 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                                       
                                       navigateTo(`/tickets/${ticketIdForNavigation}`);
                                     }}
-                                    className="font-medium text-blue-700 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded border border-blue-200 cursor-pointer transition-all duration-200"
+                                    className="text-orange-600 hover:text-orange-700 cursor-pointer transition-all duration-200 underline hover:no-underline"
+                                    style={{ color: '#f44c23' }}
                                   >
                                     {activity.ticket_display_id || 
                                      (activity.ticket_id && activity.ticket_id.startsWith('TT') ? activity.ticket_id : null) || 
@@ -1167,49 +1241,37 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                                      (activity.ticket_id && ticketMappings.docIdToDisplayIdMap[activity.ticket_id]) ||
                                      (activity.ticketId && ticketMappings.docIdToDisplayIdMap[activity.ticketId]) ||
                                      'Unknown Ticket'}
-                                  </button>
-                                  <span className="text-black mx-1">•</span>
-                                  <span className="font-medium text-black">
+                                  </a>
+                                  <span className="text-gray-600 mx-1.5">•</span>
+                                  <span className="text-gray-600 truncate max-w-xs" title={activity.ticket_title || 'No title'}>
                                     {activity.ticket_title || 'No title'}
                                   </span>
                                 </div>
                               </div>
                               
                               {/* Action description */}
-                              <div className="space-y-0.5">
-                                <p className="text-xs text-black">
-                                  {(() => {
-                                    let cleanDescription = activity.description || activity.details || '';
-                                    
-                                    // Remove redundant ticket ID information
-                                    cleanDescription = cleanDescription.replace(/ to ticket TT\d+/gi, '');
-                                    
-                                    // Remove redundant filename information for attachments
-                                    if (activity.type === 'attachment' && activity.filename) {
-                                      cleanDescription = cleanDescription.replace(new RegExp(`: ${activity.filename.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'gi'), '');
-                                    }
-                                    
-                                    return cleanDescription;
-                                  })()}
+                              <div className="space-y-1">
+                                <p className="text-sm text-gray-600 line-clamp-2" title={cleanActivityDescription(activity)}>
+                                  {highlightEmails(cleanActivityDescription(activity))}
                                 </p>
                                 
                                 {/* Show comment text for comments */}
                                 {activity.type === 'comment' && activity.comment_text && (
                                   <div>
-                                    <span className="text-xs italic text-black">
-                                      "{activity.comment_text}"
+                                    <span className="text-sm italic text-gray-600 line-clamp-2" title={activity.comment_text}>
+                                      "{highlightEmails(activity.comment_text)}"
                                     </span>
                                   </div>
                                 )}
                                 
                                 {/* Show status change details */}
                                 {activity.type === 'status_change' && activity.old_status && activity.new_status && (
-                                  <div className="flex items-center gap-1 text-xs">
-                                    <span className="px-1.5 py-0.5 rounded bg-slate-100 text-black border border-slate-200">
+                                  <div className="flex items-center gap-1.5 text-sm">
+                                    <span className="px-2 py-1 rounded-md bg-slate-100 text-gray-600 border border-slate-200">
                                       {activity.old_status}
                                     </span>
-                                    <span className="text-black font-medium">→</span>
-                                    <span className="px-1.5 py-0.5 rounded bg-amber-100 text-black border border-amber-200">
+                                    <span className="text-gray-600">→</span>
+                                    <span className="px-2 py-1 rounded-md bg-amber-100 text-gray-600 border border-amber-200">
                                       {activity.new_status}
                                     </span>
                                   </div>
@@ -1217,33 +1279,27 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                                 
                                 {/* Show priority change details */}
                                 {activity.type === 'priority_change' && activity.old_priority && activity.new_priority && (
-                                  <div className="flex items-center gap-1 text-xs">
-                                    <span className="px-1.5 py-0.5 rounded bg-slate-100 text-black border border-slate-200">
+                                  <div className="flex items-center gap-1.5 text-sm">
+                                    <span className="px-2 py-1 rounded-md bg-slate-100 text-gray-600 border border-slate-200">
                                       {activity.old_priority}
                                     </span>
-                                    <span className="text-black font-medium">→</span>
-                                    <span className="px-1.5 py-0.5 rounded bg-orange-100 text-black border border-orange-200">
+                                    <span className="text-gray-600">→</span>
+                                    <span className="px-2 py-1 rounded-md bg-orange-100 text-gray-600 border border-orange-200">
                                       {activity.new_priority}
                                     </span>
                                   </div>
                                 )}
                                 
-                                {/* Show assignment details */}
-                                {activity.type === 'assignment' && activity.assigned_to_email && (
-                                  <p className="text-xs text-black bg-sky-50 px-2 py-1 rounded border border-sky-200">
-                                    Assigned to: {activity.assigned_to_email}
-                                  </p>
-                                )}
                                 
                                 {/* Show attachment details */}
                                 {activity.type === 'attachment' && (
-                                  <div className="flex items-center gap-1 text-xs">
-                                    <FileText className="w-3 h-3 text-violet-600" />
-                                    <span className="text-black font-medium">
+                                  <div className="flex items-center gap-1.5 text-sm">
+                                    <FileText className="w-4 h-4 text-violet-600" />
+                                    <span className="text-gray-600">
                                       {activity.filename || 'Unknown file'}
                                     </span>
                                     {activity.file_size && (
-                                      <span className="text-black bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                                      <span className="text-gray-600 bg-slate-100 px-2 py-1 rounded-md border border-slate-200">
                                         ({(activity.file_size / 1024).toFixed(1)} KB)
                                       </span>
                                     )}
@@ -1252,7 +1308,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                                 
                                 {/* Show resolution details */}
                                 {activity.type === 'resolved' && activity.resolution_time && (
-                                  <p className="text-xs text-black bg-green-50 px-2 py-1 rounded border border-green-200">
+                                  <p className="text-sm text-gray-600 bg-green-50 px-3 py-1.5 rounded-md border border-green-200">
                                     Resolution time: {Math.round(activity.resolution_time)} minutes
                                   </p>
                                 )}
@@ -1260,39 +1316,11 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                             </div>
                           </div>
                           <div className="text-right ml-2 flex-shrink-0">
-                            <p className="text-xs text-black">
-                              {formatTimeAgo(activity.timestamp)}
+                            <p className="text-sm text-gray-600 font-medium">
+                              {formatTimestamp(activity.timestamp, 'relative')}
                             </p>
-                            <p className="text-xs text-black mt-0.5">
-                              {(() => {
-                                // Ensure timestamp is a proper Date object
-                                let safeTimestamp = activity.timestamp;
-                                
-                                if (!(safeTimestamp instanceof Date)) {
-                                  if (safeTimestamp && typeof safeTimestamp === 'object' && safeTimestamp.toDate) {
-                                    // Firebase Timestamp
-                                    safeTimestamp = safeTimestamp.toDate();
-                                  } else if (safeTimestamp && typeof safeTimestamp === 'string') {
-                                    // String date
-                                    safeTimestamp = new Date(safeTimestamp);
-                                  } else if (safeTimestamp && typeof safeTimestamp === 'number') {
-                                    // Unix timestamp
-                                    safeTimestamp = new Date(safeTimestamp);
-                                  } else {
-                                    return 'Invalid date';
-                                  }
-                                }
-                                
-                                // Validate the date
-                                if (isNaN(safeTimestamp.getTime())) {
-                                  return 'Invalid date';
-                                }
-                                
-                                return `${safeTimestamp.toLocaleDateString()} at ${safeTimestamp.toLocaleTimeString([], { 
-                                hour: '2-digit', 
-                                minute: '2-digit' 
-                                })}`;
-                              })()}
+                            <p className="text-xs text-gray-600 mt-1 opacity-75">
+                              {formatTimestamp(activity.timestamp, 'absolute')}
                             </p>
                           </div>
                         </div>
@@ -1301,14 +1329,14 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                   })
                 ) : (
                   <div className="text-center py-6 opacity-50">
-                    <p className="text-sm text-black">
+                    <p className="text-sm text-gray-600">
                       {user?.role === 'site_admin' && companyUsers.length === 0 
                         ? 'Loading company activities...' 
                         : 'No activities found'
                       }
                     </p>
                     {user?.role === 'site_admin' && (
-                      <p className="text-xs mt-1 text-black">Company users loaded: {companyUsers.length}</p>
+                      <p className="text-xs mt-1 text-gray-600">Company users loaded: {companyUsers.length}</p>
                     )}
                   </div>
                 )}
@@ -1328,7 +1356,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                       : (index % 2 === 0 ? 'border-gray-300/50' : 'border-gray-300/50');
                     
                     const itemShadow = index % 2 === 0 
-                      ? 'shadow-xs' 
+                      ? 'theme-elevation-shadow' 
                       : 'shadow-none';
 
                     return (
@@ -1337,7 +1365,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                           <div className="flex-1">
                             {/* Full Name • Ticket ID • Subject Line */}
                             <div className="flex items-center mb-0.5 text-sm">
-                              <span className="font-medium text-black">
+                              <span className="font-medium text-gray-600">
                                 {(() => {
                                   // Construct full name from firstName and lastName
                                   if (ticket.reporter_firstName || ticket.reporter_lastName) {
@@ -1348,12 +1376,16 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                                 })()}
                               </span>
                               <span className="text-black mx-1">•</span>
-                              <button
-                                onClick={() => navigateTo(`/tickets/${ticket.id}`)}
+                              <a
+                                href={`/tickets/${ticket.id}`}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  navigateTo(`/tickets/${ticket.id}`);
+                                }}
                                 className="font-medium text-blue-600 hover:text-blue-800 underline cursor-pointer transition-colors"
                               >
                                 {ticket.display_id || ticket.ticket_id || ticket.id}
-                              </button>
+                              </a>
                               <span className="text-black mx-1">•</span>
                               <span className="font-medium text-black">
                                 {ticket.short_description || ticket.subject || ticket.title || 'No description'}
@@ -1436,10 +1468,10 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-4">
           {/* Ticket Volume Trend */}
           <div 
-            className={`${cardClass} rounded-lg border`}
+            className={`${cardClass} rounded-lg border theme-elevation-shadow`}
           >
             <div className="mb-3 px-3 pt-3">
-              <h2 className="text-lg font-bold mb-3">
+              <h2 className="font-medium text-gray-600 mb-3">
                 Ticket Volume Trend
                 {selectedCompany && selectedCompany !== 'All' && (
                   <span className="text-sm font-normal text-gray-600 ml-2">
@@ -1452,43 +1484,36 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                 {/* Time Period Filter */}
                 <div className="flex items-center gap-2">
                   <label className="text-xs font-medium text-gray-600">Period:</label>
-                  <select
+                  <CustomDropdown
                     value={selectedTimePeriod}
-                    onChange={(e) => setSelectedTimePeriod(e.target.value)}
-                    className={`px-2 py-1 rounded text-xs border ${
-                      darkMode 
-                        ? 'bg-gray-700 border-gray-600 text-white' 
-                        : 'bg-white border-gray-300 text-black'
-                    } focus:outline-none focus:ring-1 focus:ring-blue-500`}
-                  >
-                    <option value="1">1 Day</option>
-                    <option value="7">7 Days</option>
-                    <option value="30">1 Month</option>
-                    <option value="90">3 Months</option>
-                    <option value="180">6 Months</option>
-                    <option value="custom">Custom</option>
-                  </select>
+                    onChange={setSelectedTimePeriod}
+                    options={[
+                      { value: "1", label: "1 Day" },
+                      { value: "7", label: "7 Days" },
+                      { value: "30", label: "1 Month" },
+                      { value: "90", label: "3 Months" },
+                      { value: "180", label: "6 Months" },
+                      { value: "custom", label: "Custom" }
+                    ]}
+                    className="min-w-[120px]"
+                  />
                 </div>
                 {/* Client Filter - hide for site_admin */}
                 {(user?.role !== 'site_admin') && (
                 <div className="flex items-center gap-2">
                   <label className="text-xs font-medium text-gray-600">Client:</label>
-                  <select
+                  <CustomDropdown
                     value={selectedCompany}
-                    onChange={(e) => setSelectedCompany(e.target.value)}
-                    className={`px-2 py-1 rounded text-xs border ${
-                      darkMode 
-                        ? 'bg-gray-700 border-gray-600 text-white' 
-                        : 'bg-white border-gray-300 text-black'
-                    } focus:outline-none focus:ring-1 focus:ring-blue-500`}
-                  >
-                    <option value="All">All</option>
-                    {availableCompanies.map(company => (
-                      <option key={company} value={company}>
-                        {company}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={setSelectedCompany}
+                    options={[
+                      { value: "All", label: "All" },
+                      ...availableCompanies.map(company => ({
+                        value: company,
+                        label: company
+                      }))
+                    ]}
+                    className="min-w-[150px]"
+                  />
                   <span className="text-xs text-gray-400">({availableCompanies.length} companies)</span>
                 </div>
                 )}
@@ -1585,12 +1610,12 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                       backgroundColor: '#1f2937', 
                       borderColor: '#374151',
                       borderRadius: '8px',
-                      boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
+                      boxShadow: '0px 0px 1px 0px rgba(var(--theme-color-elevation-shadow-rgb), 0.3), 0px 1px 3px 1px rgba(var(--theme-color-elevation-shadow-rgb), 0.15)'
                     } : {
                       backgroundColor: 'white',
                       borderColor: '#e5e7eb',
                       borderRadius: '8px',
-                      boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
+                      boxShadow: '0px 0px 1px 0px rgba(var(--theme-color-elevation-shadow-rgb), 0.3), 0px 1px 3px 1px rgba(var(--theme-color-elevation-shadow-rgb), 0.15)'
                     }}
                     labelStyle={darkMode ? { color: '#fff' } : { color: '#374151' }}
                     formatter={(value, name) => [
@@ -1635,17 +1660,13 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
 
           {/* Enhanced Resolution Time Analytics */}
           <div 
-            className={`${cardClass} rounded-lg p-3 border`}
+            className={`${cardClass} rounded-lg p-3 border theme-elevation-shadow`}
           >
             <div className="mb-4">
               <div className="mb-3">
                 <div className="flex items-center justify-between mb-3">
-                  <h2 className="text-lg font-bold text-gray-800 flex items-center">
-                    <div className="w-6 h-6 bg-gradient-to-br from-purple-500 to-purple-600 rounded-lg flex items-center justify-center mr-2 shadow-sm">
-                      <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                    </div>
+                  <h2 className="font-medium text-gray-600 mb-3">
+                    
                     Resolution Time Analytics
                     {resolutionTimeCompany && resolutionTimeCompany !== 'All' && (
                       <span className="text-sm font-normal text-gray-600 ml-2">
@@ -1669,43 +1690,36 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                   {/* Time Period Filter */}
                   <div className="flex items-center gap-2">
                     <label className="text-xs font-medium text-gray-600">Period:</label>
-                    <select
+                    <CustomDropdown
                       value={resolutionTimePeriod}
-                      onChange={(e) => setResolutionTimePeriod(e.target.value)}
-                      className={`px-2 py-1 rounded text-xs border ${
-                        darkMode 
-                          ? 'bg-gray-700 border-gray-600 text-white' 
-                          : 'bg-white border-gray-300 text-black'
-                      } focus:outline-none focus:ring-1 focus:ring-blue-500`}
-                    >
-                      <option value="1">1 Day</option>
-                      <option value="7">7 Days</option>
-                      <option value="30">1 Month</option>
-                      <option value="90">3 Months</option>
-                      <option value="180">6 Months</option>
-                      <option value="custom">Custom</option>
-                    </select>
+                      onChange={setResolutionTimePeriod}
+                      options={[
+                        { value: "1", label: "1 Day" },
+                        { value: "7", label: "7 Days" },
+                        { value: "30", label: "1 Month" },
+                        { value: "90", label: "3 Months" },
+                        { value: "180", label: "6 Months" },
+                        { value: "custom", label: "Custom" }
+                      ]}
+                      className="min-w-[120px]"
+                    />
                   </div>
                   {/* Client Filter - hide for site_admin */}
                   {(user?.role !== 'site_admin') && (
                   <div className="flex items-center gap-2">
                     <label className="text-xs font-medium text-gray-600">Client:</label>
-                    <select
+                    <CustomDropdown
                       value={resolutionTimeCompany}
-                      onChange={(e) => setResolutionTimeCompany(e.target.value)}
-                      className={`px-2 py-1 rounded text-xs border ${
-                        darkMode 
-                          ? 'bg-gray-700 border-gray-600 text-white' 
-                          : 'bg-white border-gray-300 text-black'
-                      } focus:outline-none focus:ring-1 focus:ring-blue-500`}
-                    >
-                      <option value="All">All</option>
-                      {availableCompanies.map(company => (
-                        <option key={company} value={company}>
-                          {company}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={setResolutionTimeCompany}
+                      options={[
+                        { value: "All", label: "All" },
+                        ...availableCompanies.map(company => ({
+                          value: company,
+                          label: company
+                        }))
+                      ]}
+                      className="min-w-[150px]"
+                    />
                     <span className="text-xs text-gray-400">({availableCompanies.length} companies)</span>
                   </div>
                   )}
@@ -1764,13 +1778,13 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                   ];
                   
                   return (
-                    <div key={index} className="flex-1 relative overflow-hidden bg-gradient-to-br from-white to-gray-50 rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-all duration-300 group">
+                    <div key={index} className="flex-1 relative overflow-hidden bg-gradient-to-br from-white to-gray-50 rounded-lg border border-gray-200 theme-elevation-shadow hover:shadow-md transition-all duration-300 group">
                       <div className="p-2">
                         <div className="flex items-center justify-between mb-1">
                           <div className={`text-[10px] font-semibold uppercase tracking-wide text-gray-500`}>
                             {metric.metric}
                           </div>
-                          <div className={`w-5 h-5 rounded-full bg-gradient-to-br ${colors[index]} flex items-center justify-center shadow-sm`}>
+                          <div className={`w-5 h-5 rounded-full bg-gradient-to-br ${colors[index]} flex items-center justify-center theme-elevation-shadow`}>
                             <span className="text-white text-[8px] font-bold">
                               {metric.metric.charAt(0)}
                             </span>

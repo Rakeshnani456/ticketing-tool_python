@@ -217,9 +217,13 @@ const ClientCard = ({ client, index, onEdit, onRemove, showEdit, showRemove, use
         borderRadius: 0,
         boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
         transition: 'box-shadow 0.2s',
-        width: '100%',
+        width: 'calc(100% - 32px)',
         borderLeft: 'none',
         borderRight: 'none',
+        mx: 2,
+        '&:hover': {
+          boxShadow: '0px 1px 2px 0px rgba(var(--theme-color-elevation-shadow-rgb), 0.3), 0px 1px 3px 1px rgba(var(--theme-color-elevation-shadow-rgb), 0.15) !important',
+        },
       }}
     >
       <Box

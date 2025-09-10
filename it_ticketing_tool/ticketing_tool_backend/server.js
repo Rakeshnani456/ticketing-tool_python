@@ -57,7 +57,7 @@ try {
     dbConnected = false;
 }
 
-// Office365 SMTP transporter for sending as TT.Support@kriasol.com via testing@kriasol.com
+// Office365 SMTP transporter for sending as process.env.DISTRIBUTION_EMAIL via testing@kriasol.com
 const transporter = nodemailer.createTransport({
     host: 'smtp.office365.com',
     port: 587,
@@ -116,6 +116,17 @@ function jsonSerializableTicket(docId, ticketData) {
                 return { ...history, timestamp: history.timestamp.toDate().toISOString() };
             }
             return history;
+        });
+    }
+    if (data.notes && Array.isArray(data.notes)) {
+        data.notes = data.notes.map(note => {
+            if (note.timestamp && note.timestamp.toDate) {
+                return { ...note, timestamp: note.timestamp.toDate().toISOString() };
+            }
+            if (note.created_at && note.created_at.toDate) {
+                return { ...note, created_at: note.created_at.toDate().toISOString() };
+            }
+            return note;
         });
     }
     return data;
@@ -248,7 +259,7 @@ const requireSuperAdmin = (req, res, next) => {
 async function sendEmailAlert(toEmail, subject, text, html, cc = null) {
     try {
         const mailOptions = {
-            from: 'TT.Support@kriasol.com',
+            from: process.env.DISTRIBUTION_EMAIL,
             to: toEmail,
             subject: subject,
             text: text,
@@ -298,6 +309,9 @@ const dashboardRoutes = require('./routes/dashboardRoutes');
 const attachmentRoutes = require('./routes/attachmentRoutes');
 const adminManagementRouter = require('./routes/adminManagement');
 const analyticsRoutes = require('./routes/analyticsRoutes');
+const knowledgeBaseRoutes = require('./routes/knowledgeBaseRoutes');
+const personalNotesRoutes = require('./routes/personalNotesRoutes');
+const searchRoutes = require('./routes/searchRoutes');
 
 
 app.use('/', authRoutes(db, admin, usersCollection, authenticateToken));
@@ -310,6 +324,9 @@ app.use('/dashboard', dashboardRoutes(db, ticketsCollection, clientsCollection, 
 app.use('/upload-attachment', attachmentRoutes(admin, authenticateToken));
 app.use('/admin-management', adminManagementRouter(db, usersCollection, authenticateToken, requireSuperAdmin));
 app.use('/analytics', analyticsRoutes(db, admin, authenticateToken, checkRole));
+app.use('/api/knowledge-base', knowledgeBaseRoutes(db, admin, authenticateToken, checkRole));
+app.use('/api/personal-notes', personalNotesRoutes(db, admin, usersCollection, authenticateToken, checkRole, jsonSerializableNotification));
+app.use('/api/search', searchRoutes);
 
 // Add cache statistics endpoint
 app.get('/api/cache/stats', (req, res) => {

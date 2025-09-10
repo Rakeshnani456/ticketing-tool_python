@@ -1,6 +1,6 @@
 // src/components/tickets/TicketUpdatesSection.js
 
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { MessageSquare, CheckCircle2, Loader2, XCircle } from 'lucide-react';
 import UserProfilePopup from '../common/UserProfilePopup';
 
@@ -42,6 +42,7 @@ const TicketUpdatesSection = ({
     timeSpentHasError,
     closureNotesHasError: closureNotesError,
     user,
+    showFlashMessage,
     profilePopup,
     showProfilePopup,
     cancelShowProfilePopup,
@@ -51,10 +52,15 @@ const TicketUpdatesSection = ({
     const commentsSectionRef = useRef(null);
     const [showAllComments, setShowAllComments] = React.useState(false);
 
+    // Debug logging
+    console.log('TicketUpdatesSection - isSupportUser:', isSupportUser, 'user role:', user?.role, 'activeTab:', activeTab);
+    
+
     return (
         <div className="max-w-full w-full mx-auto py-1 space-y-1 min-w-0 overflow-x-hidden">
             <div ref={commentsSectionRef} id="comments-section" className="bg-white p-3 sm:p-4 w-full min-w-0 max-w-full overflow-x-hidden">
                 <div className="border-b border-gray-200 mb-2 sm:mb-3 w-full min-w-0 max-w-full overflow-x-hidden">
+                    
                     <nav className="flex flex-col sm:flex-row space-y-1 sm:space-y-0 sm:space-x-4 w-full min-w-0 max-w-full overflow-x-hidden">
                         <button
                             onClick={() => setActiveTab('comments')}
@@ -217,6 +223,7 @@ const TicketUpdatesSection = ({
                     </>
                 )}
 
+
                 {activeTab === 'closure' && (
                     <div className="bg-white border border-gray-300 rounded-lg p-2 sm:p-3 w-full min-w-0 max-w-full overflow-x-hidden">
                         <label className="block text-xs font-bold text-gray-800 mb-1 sm:mb-1.5">
@@ -273,5 +280,6 @@ const TicketUpdatesSection = ({
         </div>
     );
 };
+
 
 export default TicketUpdatesSection; 

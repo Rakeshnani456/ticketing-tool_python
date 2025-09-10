@@ -175,10 +175,25 @@ const NotificationModal = ({ isOpen, onClose, notifications = [], onClearAll, on
                                                 </span>
                                             </div>
                                             
+                                            {/* TicketID . Requested by email */}
+                                            <div className="text-[11px] text-gray-700 mb-1">
+                                                {notification.ticket_id && (
+                                                    <span className="font-mono text-blue-600">
+                                                        {notification.ticket_id}
+                                                    </span>
+                                                )}
+                                                {notification.reporter_email && (
+                                                    <span className="text-gray-500">
+                                                        . Requested by {notification.reporter_email}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            
+                                            {/* Ticket update activity */}
                                             {notification.body && (
-                                                <p className="text-[11px] text-gray-600 leading-relaxed mb-2">
+                                                <div className="text-[11px] text-gray-600 leading-relaxed mb-2">
                                                     {notification.body}
-                                                </p>
+                                                </div>
                                             )}
                                             
                                             <div className="flex items-center gap-2">
@@ -192,13 +207,17 @@ const NotificationModal = ({ isOpen, onClose, notifications = [], onClearAll, on
                                                     </button>
                                                 )}
                                                 {notification.ticket_id && onViewTicket && (
-                                                    <button
-                                                        onClick={() => onViewTicket(notification.ticket_id)}
+                                                    <a
+                                                        href={`/tickets/${notification.ticket_id}`}
+                                                        onClick={(e) => {
+                                                            e.preventDefault();
+                                                            onViewTicket(notification.ticket_id);
+                                                        }}
                                                         className="flex items-center gap-1 text-[11px] font-medium text-gray-600 hover:text-gray-800 transition-colors group"
                                                     >
                                                         <Eye size={10} className="group-hover:scale-110 transition-transform" />
                                                         View details
-                                                    </button>
+                                                    </a>
                                                 )}
                                             </div>
                                         </div>

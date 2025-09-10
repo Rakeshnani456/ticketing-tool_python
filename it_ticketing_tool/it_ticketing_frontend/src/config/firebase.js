@@ -8,13 +8,13 @@ import { getStorage } from 'firebase/storage';
 // --- Firebase Client-Side Configuration ---
 // Replace these with your actual Firebase project configuration
 const firebaseConfig = {
-    apiKey: "AIzaSyDZVwd_WHUw8RzUfkVklT7_9U6Mc-FNL-o",
-    authDomain: "it-ticketing-tool-dd679.firebaseapp.com",
-    projectId: "it-ticketing-tool-dd679",
-    storageBucket: "it-ticketing-tool-dd679.firebasestorage.app",
-    messagingSenderId: "919553361675",
-    appId: "1:919553361675:web:ae1be7140926013786840e",
-    measurementId: "G-HCVXC67K86"
+  apiKey: "AIzaSyA4DwcAsBEYQ2utGOuz1hxL9YpsDRb_sh8",
+  authDomain: "ticketingtoolv2.firebaseapp.com",
+  projectId: "ticketingtoolv2",
+  storageBucket: "ticketingtoolv2.firebasestorage.app",
+  messagingSenderId: "198990329414",
+  appId: "1:198990329414:web:a9baeca96cad0409a47c47",
+  measurementId: "G-EK2M3KY9CJ"
 };
 
 // Initialize Firebase

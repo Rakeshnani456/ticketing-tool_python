@@ -16,7 +16,6 @@ import { app } from '../../config/firebase';
 import ClientInfoModal from '../common/ClientInfoModal';
 import PrimaryButton from '../common/PrimaryButton';
 import ClientCard from './ClientCard';
-import MoreVertIcon from '@mui/icons-material/MoreVert';
 
 // Helper to get initials from email or name
 const getInitials = (nameOrEmail) => {
@@ -90,11 +89,7 @@ const ClientManagementComponent = ({ user }) => {
   const [editClient, setEditClient] = useState(null);
   const [removeClient, setRemoveClient] = useState(null);
   const [removing, setRemoving] = useState(false);
-  const [actionMode, setActionMode] = useState(null); // 'edit' | 'delete' | null
-  const [menuAnchorEl, setMenuAnchorEl] = useState(null);
-  const handleMenuOpen = (e) => setMenuAnchorEl(e.currentTarget);
-  const handleMenuClose = () => setMenuAnchorEl(null);
-  const handleActionMode = (mode) => { setActionMode(mode); setMenuAnchorEl(null); };
+  const [actionMode, setActionMode] = useState(null); // 'manage' | null
 
   const db = getFirestore(app);
 
@@ -203,43 +198,52 @@ const ClientManagementComponent = ({ user }) => {
 
   return (
     <div className="client-management-page" style={{ width: '100%', minHeight: '100vh', overflowX: 'hidden', overflowY: 'auto', boxSizing: 'border-box', background: '#fff', padding: 0 }}>
-      {/* Title and Add Client Button side by side, left-aligned */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, paddingTop: 24, paddingLeft: 24 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      {/* Title and buttons */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, paddingTop: 24, paddingLeft: 24, paddingRight: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <h2 className="text-2xl font-bold" style={{ marginBottom: 0, wordBreak: 'break-word', maxWidth: '100%', fontSize: '1.1rem' }}>Client Management</h2>
           <Button
-            variant="contained"
-            color="primary"
-            onClick={() => setShowClientModal(true)}
+            variant={actionMode ? "contained" : "outlined"}
+            color={actionMode ? "secondary" : "primary"}
+            onClick={() => setActionMode(actionMode ? null : 'manage')}
             size="small"
-            sx={{ fontSize: '0.6rem', textTransform: 'none', minWidth: 'auto', padding: '2px 10px', height: 24, lineHeight: 1, boxShadow: 'none', borderRadius: 1 }}
+            sx={{ 
+              fontSize: '0.7rem', 
+              textTransform: 'none', 
+              minWidth: 'auto', 
+              padding: '6px 16px', 
+              height: 32, 
+              lineHeight: 1, 
+              borderRadius: 2,
+              fontWeight: 600
+            }}
           >
-            Add Client
-          </Button>
-          <Button
-            variant="text"
-            size="small"
-            sx={{ minWidth: 0, padding: '2px', height: 24, borderRadius: 1 }}
-            onClick={handleMenuOpen}
-          >
-            <MoreVertIcon fontSize="small" />
+            {actionMode ? 'Cancel' : 'Manage Clients'}
           </Button>
         </div>
-        {actionMode && (
-          <Button
-            variant="outlined"
-            color="secondary"
-            size="small"
-            sx={{ fontSize: '0.6rem', textTransform: 'none', minWidth: 'auto', padding: '2px 10px', height: 24, lineHeight: 1, borderRadius: 1, mr: 4 }}
-            onClick={() => setActionMode(null)}
-          >
-            Cancel
-          </Button>
-        )}
-        <Menu anchorEl={menuAnchorEl} open={!!menuAnchorEl} onClose={handleMenuClose}>
-          <MenuItem onClick={() => handleActionMode('edit')} sx={{ fontSize: '0.85rem' }}>Edit Client</MenuItem>
-          <MenuItem onClick={() => handleActionMode('delete')} sx={{ fontSize: '0.85rem' }}>Delete Client</MenuItem>
-        </Menu>
+        <Button
+          variant="contained"
+          color="primary"
+          onClick={() => setShowClientModal(true)}
+          size="small"
+          startIcon={<AddIcon />}
+          sx={{ 
+            fontSize: '0.7rem', 
+            textTransform: 'none', 
+            minWidth: 'auto', 
+            padding: '6px 16px', 
+            height: 32, 
+            lineHeight: 1, 
+            boxShadow: '0px 1px 2px 0px rgba(var(--theme-color-elevation-shadow-rgb), 0.3), 0px 1px 3px 1px rgba(var(--theme-color-elevation-shadow-rgb), 0.15)',
+            borderRadius: 2,
+            fontWeight: 600,
+            '&:hover': {
+              boxShadow: '0px 2px 4px 0px rgba(var(--theme-color-elevation-shadow-rgb), 0.4), 0px 2px 6px 1px rgba(var(--theme-color-elevation-shadow-rgb), 0.2)',
+            }
+          }}
+        >
+          Add Client
+        </Button>
       </div>
       {error && <div className="text-red-600 mb-2">{error}</div>}
       {loading ? (
@@ -254,10 +258,10 @@ const ClientManagementComponent = ({ user }) => {
                 key={client.id}
                 client={client}
                 index={index + 1}
-                onEdit={actionMode === 'edit' ? handleEditClient : undefined}
-                onRemove={actionMode === 'delete' ? handleRemoveClient : undefined}
-                showEdit={actionMode === 'edit' && ['admin', 'site_admin', 'super_admin'].includes(user?.role)}
-                showRemove={actionMode === 'delete' && ['admin', 'site_admin', 'super_admin'].includes(user?.role)}
+                onEdit={actionMode === 'manage' ? handleEditClient : undefined}
+                onRemove={actionMode === 'manage' ? handleRemoveClient : undefined}
+                showEdit={actionMode === 'manage' && ['admin', 'site_admin', 'super_admin'].includes(user?.role)}
+                showRemove={actionMode === 'manage' && ['admin', 'site_admin', 'super_admin'].includes(user?.role)}
                 userCount={userCounts[client.companyName] || 0}
               />
             ))

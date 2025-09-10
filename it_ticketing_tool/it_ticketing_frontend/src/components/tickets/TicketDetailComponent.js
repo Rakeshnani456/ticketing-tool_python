@@ -226,6 +226,19 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
             });
         }
 
+        // Handle notes timestamps
+        if (newData.notes && Array.isArray(newData.notes)) {
+            newData.notes = newData.notes.map(note => {
+                if (note.timestamp && note.timestamp.toDate) {
+                    return { ...note, timestamp: note.timestamp.toDate().toISOString() };
+                }
+                if (note.created_at && note.created_at.toDate) {
+                    return { ...note, created_at: note.created_at.toDate().toISOString() };
+                }
+                return note;
+            });
+        }
+
         return newData;
     };
 
@@ -479,6 +492,14 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
             setTimeSpent(ticket.time_spent || '');
         }
     }, [isEditing, ticket]);
+
+    // Initialize time_spent and closure_notes when ticket loads (regardless of editing mode)
+    useEffect(() => {
+        if (ticket) {
+            setTimeSpent(ticket.time_spent || '');
+            setClosureNotes(ticket.closure_notes || '');
+        }
+    }, [ticket]);
 
     useEffect(() => {
         if (isEditing && (isSupportUser || isEngineer)) {
@@ -1111,6 +1132,7 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                         isAtBottom={isAtBottom}
                         setIsAtBottom={setIsAtBottom}
                         user={user}
+                        showFlashMessage={showFlashMessage}
                         profilePopup={profilePopup}
                         showProfilePopup={showProfilePopup}
                         cancelShowProfilePopup={cancelShowProfilePopup}

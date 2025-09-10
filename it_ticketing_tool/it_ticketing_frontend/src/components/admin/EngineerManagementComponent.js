@@ -19,7 +19,8 @@ import {
   Work as WorkIcon,
   Badge as BadgeIcon,
   AdminPanelSettings as AdminIcon,
-  Close as CloseIcon
+  Close as CloseIcon,
+  Refresh as RefreshIcon
 } from '@mui/icons-material';
 import { API_BASE_URL } from '../../config/constants';
 import { useNavigate } from 'react-router-dom';
@@ -71,21 +72,23 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
   const [passwordChangeNotifications, setPasswordChangeNotifications] = useState({});
   const [actionNotifications, setActionNotifications] = useState({});
   const [changePwdError, setChangePwdError] = useState('');
+  const [showActionsColumn, setShowActionsColumn] = useState(false);
+  const hasFetchedData = useRef(false);
 
   const fetchClients = useCallback(async () => {
     try {
       const res = await fetch(`${API_BASE_URL}/api/clients`);
       if (!res.ok) throw new Error('Failed to fetch clients');
       const data = await res.json();
-      if (JSON.stringify(clients) !== JSON.stringify(data)) {
-        setClients(data);
-      }
+      setClients(data);
     } catch (err) {
       console.error("Error fetching clients:", err);
     }
-  }, [clients]);
+  }, []);
 
   useEffect(() => {
+    if (hasFetchedData.current) return;
+    
     setLoading(true);
     setError(null);
     fetchClients();
@@ -105,11 +108,13 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
         const data = await res.json();
         setUsers(data.filter(u => u.role === 'support'));
         setLoading(false);
+        hasFetchedData.current = true;
       } catch (err) {
         console.error('Error fetching engineers:', err);
         setError('Could not load engineers. Please check if the backend server is running and Firebase is configured.');
         setUsers([]);
         setLoading(false);
+        hasFetchedData.current = true;
       }
     };
     
@@ -523,21 +528,33 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
   };
 
   return (
-    <div className="engineer-management" style={{ width: '100%', maxWidth: '1200px', margin: '0 auto', padding: '16px' }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-                 <Typography variant="h6" component="h1" sx={{ fontWeight: 500, color: '#2c3e50' }}>
+    <div className="engineer-management" style={{ width: '100%', padding: '16px' }}>
+      <Box sx={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: { xs: 'flex-start', sm: 'center' }, 
+        mb: 3,
+        flexDirection: { xs: 'column', sm: 'row' },
+        gap: { xs: 2, sm: 0 }
+      }}>
+                 <Typography variant="h6" component="h1" sx={{ 
+                   fontWeight: 500, 
+                   color: '#2c3e50',
+                   fontSize: { xs: '1.1rem', sm: '1.25rem' }
+                 }}>
            Engineer Management
          </Typography>
       </Box>
       
-      <Box sx={{ mb: 1, display: 'flex', alignItems: 'center' }}>
+      <Box sx={{ mb: 1, display: 'flex', alignItems: 'center', width: '100%' }}>
         <TextField
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Search engineers..."
           size="small"
           sx={{
-            width: 300,
+            width: { xs: '100%', sm: '300px' },
+            maxWidth: '400px',
             '& .MuiOutlinedInput-root': {
               borderRadius: '6px',
               '& fieldset': { borderColor: '#e0e0e0' },
@@ -581,34 +598,61 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
       
       {!loading && !error && (
         <>
-          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
-            <Button
-              variant="contained"
-              startIcon={<AddIcon />}
-              onClick={handleAdd}
-              size="small"
-              sx={{
-                borderRadius: '6px',
-                textTransform: 'none',
-                boxShadow: 'none',
-                fontSize: '0.75rem',
-                px: 1.5,
-                py: 0.5
-              }}
+          <div className="flex justify-center sm:justify-end mb-4 w-full gap-2 flex-wrap">
+            <button
+              onClick={() => setShowActionsColumn(!showActionsColumn)}
+              className={`
+                px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200 ease-in-out
+                flex items-center gap-1.5 w-full sm:w-auto max-w-[200px] sm:max-w-none
+                ${showActionsColumn 
+                  ? 'border border-orange-500 text-orange-500 bg-transparent hover:bg-orange-500 hover:text-white' 
+                  : 'bg-orange-500 text-white hover:bg-orange-600'
+                }
+              `}
             >
+              <AdminIcon sx={{ fontSize: '14px' }} />
+              {showActionsColumn ? 'Cancel' : 'Manage Engineers'}
+            </button>
+            <button
+              onClick={handleAdd}
+              className="px-3 py-1.5 text-xs font-medium bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-all duration-200 ease-in-out flex items-center gap-1.5 w-full sm:w-auto max-w-[200px] sm:max-w-none"
+            >
+              <AddIcon sx={{ fontSize: '14px' }} />
               Add Engineer
-            </Button>
-          </Box>
+            </button>
+          </div>
           <Paper 
             elevation={0} 
             sx={{ 
               borderRadius: '8px', 
               overflow: 'hidden',
-              border: '1px solid #e0e0e0'
+              border: '1px solid #e0e0e0',
+              width: '100%'
             }}
           >
-                     <TableContainer>
-             <Table size="small" sx={{ minWidth: 700, borderCollapse: 'collapse' }}>
+                     <TableContainer sx={{ 
+                       width: '100%',
+                       overflowX: 'auto',
+                       '&::-webkit-scrollbar': {
+                         height: '8px',
+                       },
+                       '&::-webkit-scrollbar-track': {
+                         backgroundColor: '#f1f1f1',
+                         borderRadius: '4px',
+                       },
+                       '&::-webkit-scrollbar-thumb': {
+                         backgroundColor: '#c1c1c1',
+                         borderRadius: '4px',
+                         '&:hover': {
+                           backgroundColor: '#a8a8a8',
+                         },
+                       },
+                     }}>
+             <Table size="small" sx={{ 
+               minWidth: { xs: '800px', sm: '900px', md: '1000px' }, 
+               borderCollapse: 'collapse',
+               width: '100%'
+             }}>
               <TableHead sx={{ bgcolor: '#ffffff' }}>
                 <TableRow>
                                      <TableCell sx={{ py: 0.4, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
@@ -635,15 +679,17 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
                    <TableCell sx={{ py: 0.4, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
                      Role
                    </TableCell>
-                   <TableCell align="right" sx={{ py: 0.4, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem' }}>
-                     Actions
-                   </TableCell>
+                   {showActionsColumn && (
+                     <TableCell align="right" sx={{ py: 0.4, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem' }}>
+                       Actions
+                     </TableCell>
+                   )}
                 </TableRow>
               </TableHead>
               <TableBody>
                 {filteredUsers.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={9} align="center" sx={{ py: 4 }}>
+                    <TableCell colSpan={showActionsColumn ? 9 : 8} align="center" sx={{ py: 4 }}>
                       <Typography variant="body2" color="textSecondary">
                         No engineer profiles found.
                       </Typography>
@@ -704,64 +750,66 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
                              }} 
                            />
                          </TableCell>
-                         <TableCell align="right" sx={{ py: 0.4, px: 2 }}>
-                          {actionNotifications[u.uid] ? (
-                            <Typography 
-                              variant="body2" 
-                              sx={{ 
-                                fontSize: '0.7rem',
-                                color: actionNotifications[u.uid].type === 'success' ? '#2e7d32' : '#d32f2f',
-                                fontWeight: 500,
-                                textAlign: 'right',
-                                py: 0.5
-                              }}
-                            >
-                              {actionNotifications[u.uid].message}
-                            </Typography>
-                          ) : (
-                            <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-                              <Tooltip title="Reset Password">
-                                <IconButton 
-                                  onClick={() => openChangePwdModal(u.uid)} 
-                                  size="small" 
-                                  sx={{ 
-                                    p: 0.7,
-                                    color: '#607d8b',
-                                    '&:hover': { color: '#455a64', bgcolor: 'rgba(96, 125, 139, 0.1)' }
-                                  }}
-                                >
-                                  <LockResetIcon fontSize="small" />
-                                </IconButton>
-                              </Tooltip>
-                              <Tooltip title="Edit">
-                                <IconButton 
-                                  onClick={() => handleEditClick(u)} 
-                                  size="small" 
-                                  sx={{ 
-                                    p: 0.7,
-                                    color: '#607d8b',
-                                    '&:hover': { color: '#455a64', bgcolor: 'rgba(96, 125, 139, 0.1)' }
-                                  }}
-                                >
-                                  <EditIcon fontSize="small" />
-                                </IconButton>
-                              </Tooltip>
-                              <Tooltip title="Delete">
-                                <IconButton 
-                                  onClick={(event) => handleDeleteClick(event, u.id || u.uid, u.email)} 
-                                  size="small" 
-                                  sx={{ 
-                                    p: 0.7,
-                                    color: '#e57373',
-                                    '&:hover': { color: '#f44336', bgcolor: 'rgba(244, 67, 54, 0.1)' }
-                                  }}
-                                >
-                                  <DeleteIcon fontSize="small" />
-                                </IconButton>
-                              </Tooltip>
-                            </Box>
-                          )}
-                        </TableCell>
+                         {showActionsColumn && (
+                           <TableCell align="right" sx={{ py: 0.4, px: 2 }}>
+                            {actionNotifications[u.uid] ? (
+                              <Typography 
+                                variant="body2" 
+                                sx={{ 
+                                  fontSize: '0.7rem',
+                                  color: actionNotifications[u.uid].type === 'success' ? '#2e7d32' : '#d32f2f',
+                                  fontWeight: 500,
+                                  textAlign: 'right',
+                                  py: 0.5
+                                }}
+                              >
+                                {actionNotifications[u.uid].message}
+                              </Typography>
+                            ) : (
+                              <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+                                <Tooltip title="Reset Password">
+                                  <IconButton 
+                                    onClick={() => openChangePwdModal(u.uid)} 
+                                    size="small" 
+                                    sx={{ 
+                                      p: 0.7,
+                                      color: '#607d8b',
+                                      '&:hover': { color: '#455a64', bgcolor: 'rgba(96, 125, 139, 0.1)' }
+                                    }}
+                                  >
+                                    <LockResetIcon fontSize="small" />
+                                  </IconButton>
+                                </Tooltip>
+                                <Tooltip title="Edit">
+                                  <IconButton 
+                                    onClick={() => handleEditClick(u)} 
+                                    size="small" 
+                                    sx={{ 
+                                      p: 0.7,
+                                      color: '#607d8b',
+                                      '&:hover': { color: '#455a64', bgcolor: 'rgba(96, 125, 139, 0.1)' }
+                                    }}
+                                  >
+                                    <EditIcon fontSize="small" />
+                                  </IconButton>
+                                </Tooltip>
+                                <Tooltip title="Delete">
+                                  <IconButton 
+                                    onClick={(event) => handleDeleteClick(event, u.id || u.uid, u.email)} 
+                                    size="small" 
+                                    sx={{ 
+                                      p: 0.7,
+                                      color: '#e57373',
+                                      '&:hover': { color: '#f44336', bgcolor: 'rgba(244, 67, 54, 0.1)' }
+                                    }}
+                                  >
+                                    <DeleteIcon fontSize="small" />
+                                  </IconButton>
+                                </Tooltip>
+                              </Box>
+                            )}
+                          </TableCell>
+                         )}
                       </TableRow>
                     ))
                 )}
@@ -780,10 +828,15 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
                onRowsPerPageChange={handleChangeRowsPerPage}
                sx={{
                  '.MuiTablePagination-selectLabel, .MuiTablePagination-displayedRows': {
-                   fontSize: '0.8rem'
+                   fontSize: { xs: '0.7rem', sm: '0.8rem' }
                  },
                  '.MuiTablePagination-toolbar': {
-                   minHeight: '40px'
+                   minHeight: '40px',
+                   flexWrap: 'wrap',
+                   gap: 1
+                 },
+                 '.MuiTablePagination-actions': {
+                   flexWrap: 'wrap'
                  }
                }}
              />
@@ -800,216 +853,272 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
         fullWidth
         PaperProps={{
           sx: {
-            borderRadius: 0,
-            boxShadow: '0 8px 30px rgba(0,0,0,0.1)',
-            bgcolor: '#ffffff',
+            borderRadius: 2,
+            boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
+            maxHeight: '90vh'
           }
         }}
       >
         <DialogTitle
-          className="flex justify-between items-center text-white px-5 py-4 border-b border-gray-200"
           sx={{
-            background: '#283149',
-            minHeight: '50px',
+            background: 'linear-gradient(135deg, #ff6b35 0%, #f7931e 100%)',
+            minHeight: '60px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            color: 'white',
+            px: 3,
+            py: 2
           }}
         >
-          <Typography variant="h6" component="div" className="font-semibold" sx={{ fontSize: '1rem' }}>
-            Add Engineer
-          </Typography>
-          <IconButton onClick={handleAddCancel} className="text-white hover:bg-white hover:bg-opacity-10 transition-colors">
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Box sx={{ 
+              p: 1, 
+              bgcolor: 'rgba(255,255,255,0.2)', 
+              borderRadius: 1,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <PersonIcon sx={{ fontSize: '1.2rem' }} />
+            </Box>
+            <Box>
+           
+              <Typography variant="body2" sx={{ fontSize: '1rem', opacity: 0.9 }}>
+                Create a new engineer profile
+              </Typography>
+            </Box>
+          </Box>
+          <IconButton onClick={handleAddCancel} sx={{ color: 'white', '&:hover': { bgcolor: 'rgba(255,255,255,0.1)' } }}>
             <CloseIcon fontSize="small" />
           </IconButton>
         </DialogTitle>
-
-        <DialogContent className="p-4 sm:p-5 bg-gray-50">
-          <Box component="form" onSubmit={handleAddSave} className="space-y-4" autoComplete="off">
-            {/* Hidden password field to trick Chrome autofill */}
-            <input type="password" style={{ display: 'none' }} autoComplete="new-password" />
-
-            {/* Engineer Information Section */}
-            <Box className="bg-white p-4 border border-gray-200">
-              <div className="flex items-center mb-3">
-                <PersonIcon className="text-gray-600 mr-2" fontSize="small" />
-                <Typography variant="subtitle1" className="font-semibold text-gray-800" sx={{ fontSize: '0.9rem' }}>Engineer Information</Typography>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <TextField 
-                  label="Employee ID" 
-                  name="employeeid" 
-                  value={addRowData.employeeid} 
-                  onChange={handleAddChange} 
-                  required 
+        
+        <DialogContent sx={{ p: { xs: 2, sm: 3 }, bgcolor: '#f8f9fa' }}>
+          <Box component="form" onSubmit={handleAddSave} sx={{ display: 'flex', flexDirection: 'column', gap: 3 }} autoComplete="off">
+            {/* Contact Information Section */}
+            <Box sx={{ bgcolor: 'white', p: 2.5, border: '1px solid #e0e0e0', borderRadius: 1.5 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                <Box sx={{ width: 3, height: 20, bgcolor: '#ff6b35', borderRadius: 1.5, mr: 1.5 }} />
+                <Typography variant="subtitle1" sx={{ fontSize: '1rem', fontWeight: 600, color: '#666' }}>
+                  Contact Information
+                </Typography>
+              </Box>
+              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr 1fr' }, gap: 2 }}>
+                <TextField
+                  label="Employee ID"
+                  name="employeeid"
+                  value={addRowData.employeeid}
+                  onChange={handleAddChange}
+                  required
                   size="small"
                   fullWidth
+                  placeholder="Enter employee ID"
                   InputProps={{
                     startAdornment: <InputAdornment position="start"><BadgeIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
                   }}
                   InputLabelProps={{ 
                     shrink: true, 
                     sx: { 
-                      fontSize: '1rem',
-                      color: '#1976d2',
-                      fontWeight: 600,
+                      fontSize: '0.9rem',
+                      color: '#666',
+                      fontWeight: 500,
                       '&.Mui-focused': {
-                        color: '#1565c0'
+                        color: '#333'
                       }
                     } 
                   }}
-                  sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                  sx={{ 
+                    '& .MuiInputBase-input': { fontSize: '0.9rem' },
+                    '& .MuiOutlinedInput-root': {
+                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                        borderColor: '#ff6b35',
+                      }
+                    }
+                  }}
                 />
-                
-                <TextField 
-                  label="First Name" 
-                  name="firstName" 
-                  value={addRowData.firstName} 
-                  onChange={handleAddChange} 
-                  required 
+                <TextField
+                  label="First Name"
+                  name="firstName"
+                  value={addRowData.firstName}
+                  onChange={handleAddChange}
+                  required
                   size="small"
                   fullWidth
+                  placeholder="Enter first name"
+                  InputProps={{
+                    startAdornment: <InputAdornment position="start"><PersonIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
+                  }}
                   InputLabelProps={{ 
                     shrink: true, 
                     sx: { 
-                      fontSize: '1rem',
-                      color: '#1976d2',
-                      fontWeight: 600,
+                      fontSize: '0.9rem',
+                      color: '#666',
+                      fontWeight: 500,
                       '&.Mui-focused': {
-                        color: '#1565c0'
+                        color: '#333'
                       }
                     } 
                   }}
-                  sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                  sx={{ 
+                    '& .MuiInputBase-input': { fontSize: '0.9rem' },
+                    '& .MuiOutlinedInput-root': {
+                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                        borderColor: '#ff6b35',
+                      }
+                    }
+                  }}
                 />
-                
-                <TextField 
-                  label="Last Name" 
-                  name="lastName" 
-                  value={addRowData.lastName} 
-                  onChange={handleAddChange} 
-                  required 
+                <TextField
+                  label="Last Name"
+                  name="lastName"
+                  value={addRowData.lastName}
+                  onChange={handleAddChange}
+                  required
                   size="small"
                   fullWidth
+                  placeholder="Enter last name"
+                  InputProps={{
+                    startAdornment: <InputAdornment position="start"><PersonIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
+                  }}
                   InputLabelProps={{ 
                     shrink: true, 
                     sx: { 
-                      fontSize: '1rem',
-                      color: '#1976d2',
-                      fontWeight: 600,
+                      fontSize: '0.9rem',
+                      color: '#666',
+                      fontWeight: 500,
                       '&.Mui-focused': {
-                        color: '#1565c0'
+                        color: '#333'
                       }
                     } 
                   }}
-                  sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                  sx={{ 
+                    '& .MuiInputBase-input': { fontSize: '0.9rem' },
+                    '& .MuiOutlinedInput-root': {
+                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                        borderColor: '#ff6b35',
+                      }
+                    }
+                  }}
                 />
-                
-                <TextField 
-                  label="Email" 
-                  name="email" 
-                  value={addRowData.email} 
-                  onChange={handleAddChange} 
-                  required 
+                <TextField
+                  label="Email"
+                  name="email"
+                  type="email"
+                  value={addRowData.email}
+                  onChange={handleAddChange}
+                  required
                   size="small"
                   fullWidth
+                  placeholder="Enter email address"
                   InputProps={{
                     startAdornment: <InputAdornment position="start"><EmailIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
                   }}
                   InputLabelProps={{ 
                     shrink: true, 
                     sx: { 
-                      fontSize: '1rem',
-                      color: '#1976d2',
-                      fontWeight: 600,
+                      fontSize: '0.9rem',
+                      color: '#666',
+                      fontWeight: 500,
                       '&.Mui-focused': {
-                        color: '#1565c0'
+                        color: '#333'
                       }
                     } 
                   }}
-                  sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
-                />
-                
-                <TextField 
-                  label="Password" 
-                  name="password" 
-                  value={addRowData.password} 
-                  InputProps={{ 
-                    readOnly: true,
-                    startAdornment: <InputAdornment position="start"><LockIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
-                  }} 
-                  required 
-                  size="small"
-                  fullWidth
-                  helperText="Auto-generated password"
-                  InputLabelProps={{ 
-                    shrink: true, 
-                    sx: { 
-                      fontSize: '1rem',
-                      color: '#1976d2',
-                      fontWeight: 600,
-                      '&.Mui-focused': {
-                        color: '#1565c0'
+                  sx={{ 
+                    '& .MuiInputBase-input': { fontSize: '0.9rem' },
+                    '& .MuiOutlinedInput-root': {
+                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                        borderColor: '#ff6b35',
                       }
-                    } 
+                    }
                   }}
-                  sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
                 />
-                
-                <TextField 
-                  label="Contact Number" 
-                  name="contactNumber" 
-                  value={addRowData.contactNumber} 
-                  onChange={handleAddChange} 
-                  required 
+                <TextField
+                  label="Contact Number"
+                  name="contactNumber"
+                  type="tel"
+                  value={addRowData.contactNumber}
+                  onChange={handleAddChange}
+                  required
                   size="small"
                   fullWidth
+                  placeholder="Enter contact number"
                   InputProps={{
                     startAdornment: <InputAdornment position="start"><PhoneIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
                   }}
                   InputLabelProps={{ 
                     shrink: true, 
                     sx: { 
-                      fontSize: '1rem',
-                      color: '#1976d2',
-                      fontWeight: 600,
+                      fontSize: '0.9rem',
+                      color: '#666',
+                      fontWeight: 500,
                       '&.Mui-focused': {
-                        color: '#1565c0'
+                        color: '#333'
                       }
                     } 
                   }}
-                  sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                  sx={{ 
+                    '& .MuiInputBase-input': { fontSize: '0.9rem' },
+                    '& .MuiOutlinedInput-root': {
+                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                        borderColor: '#ff6b35',
+                      }
+                    }
+                  }}
                 />
-                
-                <TextField 
-                  label="Manager Email" 
-                  name="managerEmail" 
-                  value={addRowData.managerEmail} 
-                  onChange={handleAddChange} 
-                  required 
+                <TextField
+                  label="Manager Email"
+                  name="managerEmail"
+                  type="email"
+                  value={addRowData.managerEmail}
+                  onChange={handleAddChange}
+                  required
                   size="small"
                   fullWidth
+                  placeholder="Enter manager email"
                   InputProps={{
                     startAdornment: <InputAdornment position="start"><SupervisorAccountIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
                   }}
                   InputLabelProps={{ 
                     shrink: true, 
                     sx: { 
-                      fontSize: '1rem',
-                      color: '#1976d2',
-                      fontWeight: 600,
+                      fontSize: '0.9rem',
+                      color: '#666',
+                      fontWeight: 500,
                       '&.Mui-focused': {
-                        color: '#1565c0'
+                        color: '#333'
                       }
                     } 
                   }}
-                  sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                  sx={{ 
+                    '& .MuiInputBase-input': { fontSize: '0.9rem' },
+                    '& .MuiOutlinedInput-root': {
+                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                        borderColor: '#ff6b35',
+                      }
+                    }
+                  }}
                 />
-                
-                <TextField 
-                  select 
-                  label="Employment Type" 
-                  name="employmentType" 
-                  value={addRowData.employmentType} 
-                  onChange={handleAddChange} 
-                  required 
+              </Box>
+            </Box>
+
+            {/* Professional Information Section */}
+            <Box sx={{ bgcolor: 'white', p: 2.5, border: '1px solid #e0e0e0', borderRadius: 1.5 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                <Box sx={{ width: 3, height: 20, bgcolor: '#ff6b35', borderRadius: 1.5, mr: 1.5 }} />
+                <Typography variant="subtitle1" sx={{ fontSize: '1rem', fontWeight: 600, color: '#666' }}>
+                  Professional Information
+                </Typography>
+              </Box>
+              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr 1fr' }, gap: 2 }}>
+                <TextField
+                  select
+                  label="Employment Type"
+                  name="employmentType"
+                  value={addRowData.employmentType}
+                  onChange={handleAddChange}
+                  required
                   size="small"
                   fullWidth
                   InputProps={{
@@ -1018,46 +1127,112 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
                   InputLabelProps={{ 
                     shrink: true, 
                     sx: { 
-                      fontSize: '1rem',
-                      color: '#1976d2',
-                      fontWeight: 600,
+                      fontSize: '0.9rem',
+                      color: '#666',
+                      fontWeight: 500,
                       '&.Mui-focused': {
-                        color: '#1565c0'
+                        color: '#333'
                       }
                     } 
                   }}
-                  sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                  sx={{ 
+                    '& .MuiInputBase-input': { fontSize: '0.9rem' },
+                    '& .MuiOutlinedInput-root': {
+                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                        borderColor: '#ff6b35',
+                      }
+                    }
+                  }}
                 >
-                  <MenuItem value="contract" sx={{ fontSize: '0.85rem' }}>Contract</MenuItem>
-                  <MenuItem value="permanent" sx={{ fontSize: '0.85rem' }}>Permanent</MenuItem>
-                  <MenuItem value="intern" sx={{ fontSize: '0.85rem' }}>Intern</MenuItem>
+                  <MenuItem value="" disabled sx={{ fontSize: '0.9rem' }}>Select employment type</MenuItem>
+                  <MenuItem value="contract" sx={{ fontSize: '0.9rem' }}>Contract</MenuItem>
+                  <MenuItem value="permanent" sx={{ fontSize: '0.9rem' }}>Permanent</MenuItem>
+                  <MenuItem value="intern" sx={{ fontSize: '0.9rem' }}>Intern</MenuItem>
                 </TextField>
-                
-                <TextField 
-                  label="Designation" 
-                  name="designation" 
-                  value={addRowData.designation} 
-                  onChange={handleAddChange} 
-                  required 
+                <TextField
+                  label="Designation"
+                  name="designation"
+                  value={addRowData.designation}
+                  onChange={handleAddChange}
+                  required
                   size="small"
                   fullWidth
+                  placeholder="Enter designation"
                   InputProps={{
                     startAdornment: <InputAdornment position="start"><AdminIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
                   }}
                   InputLabelProps={{ 
                     shrink: true, 
                     sx: { 
-                      fontSize: '1rem',
-                      color: '#1976d2',
-                      fontWeight: 600,
+                      fontSize: '0.9rem',
+                      color: '#666',
+                      fontWeight: 500,
                       '&.Mui-focused': {
-                        color: '#1565c0'
+                        color: '#333'
                       }
                     } 
                   }}
-                  sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                  sx={{ 
+                    '& .MuiInputBase-input': { fontSize: '0.9rem' },
+                    '& .MuiOutlinedInput-root': {
+                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                        borderColor: '#ff6b35',
+                      }
+                    }
+                  }}
                 />
-              </div>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                  <TextField
+                    label="Password"
+                    name="password"
+                    type="text"
+                    value={addRowData.password}
+                    readOnly
+                    size="small"
+                    fullWidth
+                    InputProps={{
+                      startAdornment: <InputAdornment position="start"><LockIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
+                      endAdornment: (
+                        <InputAdornment position="end">
+                          <IconButton
+                            size="small"
+                            onClick={() => setAddRowData({...addRowData, password: generatePassword()})}
+                            sx={{ 
+                              color: '#ff6b35',
+                              '&:hover': { bgcolor: '#fff3e0' }
+                            }}
+                          >
+                            <RefreshIcon fontSize="small" />
+                          </IconButton>
+                        </InputAdornment>
+                      )
+                    }}
+                    InputLabelProps={{ 
+                      shrink: true, 
+                      sx: { 
+                        fontSize: '0.9rem',
+                        color: '#666',
+                        fontWeight: 500
+                      } 
+                    }}
+                    sx={{ 
+                      '& .MuiInputBase-input': { 
+                        fontSize: '0.9rem',
+                        bgcolor: '#f5f5f5',
+                        color: '#666'
+                      },
+                      '& .MuiOutlinedInput-root': {
+                        '& fieldset': {
+                          borderColor: '#e0e0e0',
+                        }
+                      }
+                    }}
+                  />
+                  <Typography variant="caption" sx={{ fontSize: '0.75rem', color: '#666', ml: 1 }}>
+                    Auto-generated password
+                  </Typography>
+                </Box>
+              </Box>
             </Box>
           </Box>
         </DialogContent>
@@ -1068,28 +1243,41 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
             variant="outlined" 
             size="small"
             sx={{ 
-              textTransform: 'none', 
-              fontSize: '0.85rem',
-              borderRadius: 1,
-              px: 2
+              borderColor: '#ff6b35',
+              color: '#ff6b35',
+              '&:hover': {
+                borderColor: '#e55a2b',
+                bgcolor: '#fff3e0'
+              }
             }}
           >
             Cancel
           </Button>
           <Button 
-            type="submit" 
-            variant="contained" 
-            color="primary" 
+            onClick={() => setAddRowData({...initialUserState, password: generatePassword()})}
+            variant="outlined" 
             size="small"
-            onClick={handleAddSave}
+            startIcon={<RefreshIcon />}
             sx={{ 
-              textTransform: 'none', 
-              fontSize: '0.85rem',
-              borderRadius: 1,
-              px: 2,
-              boxShadow: 'none',
+              borderColor: '#ff6b35',
+              color: '#ff6b35',
               '&:hover': {
-                boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                borderColor: '#e55a2b',
+                bgcolor: '#fff3e0'
+              }
+            }}
+          >
+            Reset
+          </Button>
+          <Button 
+            onClick={handleAddSave}
+            variant="contained"
+            size="small"
+            startIcon={<PersonIcon />}
+            sx={{ 
+              bgcolor: '#ff6b35',
+              '&:hover': {
+                bgcolor: '#e55a2b'
               }
             }}
           >

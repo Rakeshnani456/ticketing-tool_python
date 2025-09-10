@@ -2279,10 +2279,10 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                     <Paper 
                         elevation={0} 
                         sx={{ 
-                            borderRadius: 2, 
-                            backgroundColor: '#ffffff',
+                            borderRadius: '8px', 
+                            overflow: 'hidden',
                             border: '1px solid #e0e0e0',
-                            overflow: 'hidden'
+                            width: '100%'
                         }}
                     >
                         {filteredUsers.length === 0 ? (
@@ -2466,28 +2466,32 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
         
         <Collapse in={!collapsedClients[clientName]} timeout="auto" unmountOnExit>
             <TableContainer sx={{ 
-                maxHeight: 400,
+                width: '100%',
+                overflowX: 'auto',
                 '&::-webkit-scrollbar': {
-                    width: '6px !important',
-                    height: '6px !important',
+                    height: '8px',
                 },
                 '&::-webkit-scrollbar-track': {
-                    background: '#f1f1f1 !important',
-                    borderRadius: '3px !important',
+                    backgroundColor: '#f1f1f1',
+                    borderRadius: '4px',
                 },
                 '&::-webkit-scrollbar-thumb': {
-                    background: '#c1c1c1 !important',
-                    borderRadius: '3px !important',
+                    backgroundColor: '#c1c1c1',
+                    borderRadius: '4px',
                     '&:hover': {
-                        background: '#a8a8a8 !important',
+                        backgroundColor: '#a8a8a8',
                     },
                 },
             }}>
-                <Table size="small" sx={{ minWidth: 700, borderCollapse: 'collapse' }}>
+                <Table size="small" sx={{ 
+                    minWidth: { xs: '800px', sm: '900px', md: '1000px' }, 
+                    borderCollapse: 'collapse',
+                    width: '100%'
+                }}>
                     <TableHead sx={{ bgcolor: '#ffffff' }}>
                         <TableRow>
                             {showCheckboxes && (
-                            <TableCell padding="checkbox">
+                            <TableCell padding="checkbox" sx={{ py: 0.4, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
                                 <Checkbox
                                         checked={users.length > 0 && users.every(u => selectedUsers.includes(u.uid))}
                                         indeterminate={users.some(u => selectedUsers.includes(u.uid)) && !users.every(u => selectedUsers.includes(u.uid))}
@@ -2512,39 +2516,36 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                                 />
                             </TableCell>
                             )}
-                            <TableCell sx={{ py: 0.5, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0', width: '5%' }}>
+                            <TableCell sx={{ py: 0.4, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
                                 #
                             </TableCell>
                             {!(user && user.role === 'site_admin') && (
-                                <TableCell sx={{ py: 0.5, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0', width: adjustedColumnWidths.companyName }}>
+                                <TableCell sx={{ py: 0.4, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
                                     Company Name
                                 </TableCell>
                             )}
-                            <TableCell sx={{ py: 0.5, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0', width: adjustedColumnWidths.firstName }}>
-                                First Name
+                            <TableCell sx={{ py: 0.4, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
+                                Name
                             </TableCell>
-                            <TableCell sx={{ py: 0.5, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0', width: adjustedColumnWidths.lastName }}>
-                                Last Name
-                            </TableCell>
-                            <TableCell sx={{ py: 0.5, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0', width: adjustedColumnWidths.employeeId }}>
+                            <TableCell sx={{ py: 0.4, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
                                 Employee ID
                             </TableCell>
-                            <TableCell sx={{ py: 0.5, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0', width: adjustedColumnWidths.email }}>
-                                Email
-                            </TableCell>
-                            <TableCell sx={{ py: 0.5, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0', width: adjustedColumnWidths.designation }}>
+                            <TableCell sx={{ py: 0.4, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
                                 Designation
                             </TableCell>
-                            <TableCell sx={{ py: 0.5, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0', width: adjustedColumnWidths.contactNumber }}>
+                            <TableCell sx={{ py: 0.4, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
+                                Email
+                            </TableCell>
+                            <TableCell sx={{ py: 0.4, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
                                 Contact
                             </TableCell>
-                            <TableCell sx={{ py: 0.5, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0', width: adjustedColumnWidths.managerEmail }}>
-                                Manager Email
+                            <TableCell sx={{ py: 0.4, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
+                                Manager
                             </TableCell>
-                            <TableCell sx={{ py: 0.5, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0', width: adjustedColumnWidths.employmentType }}>
-                                Employment Type
+                            <TableCell sx={{ py: 0.4, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
+                                Role
                             </TableCell>
-                            <TableCell align="right" sx={{ py: 0.5, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', width: adjustedColumnWidths.actions }}>
+                            <TableCell align="right" sx={{ py: 0.4, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem' }}>
                                 Actions
                             </TableCell>
                         </TableRow>
@@ -2560,76 +2561,61 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                                 }}
                             >
                                 {showCheckboxes && (
-                                <TableCell padding="checkbox">
+                                <TableCell padding="checkbox" sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
                                     <Checkbox
                                         checked={selectedUsers.includes(u.uid)}
                                         onChange={() => handleSelectUser(u.uid)}
                                     />
                                 </TableCell>
                                 )}
-                                <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0', width: '5%' }}>
+                                <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
                                     {i + 1}
                                 </TableCell>
                                 {!(user && user.role === 'site_admin') && (
-                                    <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0', width: adjustedColumnWidths.companyName }}>
+                                    <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
                                         {u.companyName || u.client_name || '-'}
                                     </TableCell>
                                 )}
-                                <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0', width: adjustedColumnWidths.firstName }}>
-                                    {u.firstName || (u.name ? u.name.split(' ')[0] : '')}
-                                </TableCell>
-                                <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0', width: adjustedColumnWidths.lastName }}>
-                                    {u.lastName || (u.name ? u.name.split(' ').slice(1).join(' ') : '')}
-                                </TableCell>
-                                <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0', width: adjustedColumnWidths.employeeId }}>
-                                    {u.employeeId || '-'}
-                                </TableCell>
-                                <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0', width: adjustedColumnWidths.email }}>
-                                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                                        <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>
-                                            {u.email}
+                                <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
+                                    <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+                                        <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                                            {u.firstName || (u.name ? u.name.split(' ')[0] : '')}
                                         </Typography>
-                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                            {u.role && (
-                                            <Typography 
-                                                variant="caption" 
-                                                sx={{ 
-                                                    fontSize: '0.7rem',
-                                                        color: u.role === 'site_admin' ? '#f57c00' : u.role === 'user' ? '#1976d2' : '#666',
-                                                    fontWeight: 600
-                                                }}
-                                            >
-                                                    ({u.role === 'user' ? 'User' : u.role === 'site_admin' ? 'Site Admin' : u.role})
-                                            </Typography>
-                                            )}
-                                            {u.active === false && (
-                                                <Chip 
-                                                    label="Inactive" 
-                                                    size="small" 
-                                                    sx={{ 
-                                                        fontSize: '0.6rem', 
-                                                        height: '18px', 
-                                                        bgcolor: '#ffebee', 
-                                                        color: '#d32f2f' 
-                                                    }} 
-                                                />
-                                            )}
-                                        </Box>
+                                        <Typography variant="body2" color="textSecondary">
+                                            {u.lastName || (u.name ? u.name.split(' ').slice(1).join(' ') : '')}
+                                        </Typography>
                                     </Box>
                                 </TableCell>
-                                <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0', width: adjustedColumnWidths.designation }}>
+                                <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
+                                    {u.employeeId || '-'}
+                                </TableCell>
+                                <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
                                     {u.designation || '-'}
                                 </TableCell>
-                                <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0', width: adjustedColumnWidths.contactNumber }}>
+                                <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
+                                    {u.email}
+                                </TableCell>
+                                <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
                                     {u.contactNumber || '-'}
                                 </TableCell>
-                                <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0', width: adjustedColumnWidths.managerEmail }}>
+                                <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
                                     {u.managerEmail || '-'}
                                 </TableCell>
-                                <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0', width: adjustedColumnWidths.employmentType }}>
-                                    {u.employmentType || '-'}
+                                <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
+                                    <Chip 
+                                        label={u.role === 'user' ? 'User' : u.role === 'site_admin' ? 'Site Admin' : u.role || 'User'} 
+                                        size="small" 
+                                        color={u.role === 'site_admin' ? 'primary' : u.role === 'user' ? 'secondary' : 'default'} 
+                                        sx={{ 
+                                            fontSize: '0.7rem', 
+                                            height: 22,
+                                            fontWeight: 500,
+                                            '&.MuiChip-colorPrimary': { bgcolor: '#e3f2fd', color: '#1976d2' },
+                                            '&.MuiChip-colorSecondary': { bgcolor: '#e8f5e9', color: '#388e3c' }
+                                        }} 
+                                    />
                                 </TableCell>
-                                <TableCell align="right" sx={{ py: 0.4, px: 2, width: adjustedColumnWidths.actions }}>
+                                <TableCell align="right" sx={{ py: 0.4, px: 2 }}>
                                     {passwordChangeNotifications[u.uid] ? (
                                         <Typography 
                                             variant="body2" 
@@ -2742,36 +2728,51 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                 >
                     <DialogTitle
                         sx={{
-                            background: '#283149',
-                            minHeight: '50px',
+                            background: 'linear-gradient(135deg, #ff6b35 0%, #f7931e 100%)',
+                            minHeight: '60px',
                             display: 'flex',
                             justifyContent: 'space-between',
                             alignItems: 'center',
                             color: 'white',
-                            px: 2.5,
-                            py: 2,
-                            borderBottom: '1px solid #e0e0e0'
+                            px: 3,
+                            py: 2
                         }}
                     >
-                        <Typography variant="h6" component="div" sx={{ fontSize: '1rem', fontWeight: 600 }}>
-                            Add User
-                        </Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                            <Box sx={{ 
+                                p: 1, 
+                                bgcolor: 'rgba(255,255,255,0.2)', 
+                                borderRadius: 1,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                            }}>
+                                <PersonIcon sx={{ fontSize: '1.2rem' }} />
+                            </Box>
+                            <Box>
+                                <Typography variant="body2" sx={{ fontSize: '1rem', opacity: 0.9 }}>
+                                    Create a new user profile
+                                </Typography>
+                            </Box>
+                        </Box>
                         <IconButton onClick={closeAddUserModal} sx={{ color: 'white', '&:hover': { bgcolor: 'rgba(255,255,255,0.1)' } }}>
                             <CloseIcon fontSize="small" />
                         </IconButton>
                     </DialogTitle>
-                    <DialogContent sx={{ p: { xs: 2, sm: 2.5 }, bgcolor: '#f5f5f5' }}>
-                        <Box component="form" onSubmit={handleAddUserSave} sx={{ display: 'flex', flexDirection: 'column', gap: 2 }} autoComplete="off">
+                    <DialogContent sx={{ p: { xs: 2, sm: 3 }, bgcolor: '#f8f9fa' }}>
+                        <Box component="form" onSubmit={handleAddUserSave} sx={{ display: 'flex', flexDirection: 'column', gap: 3 }} autoComplete="off">
                             {/* Hidden password field to trick Chrome autofill */}
                             <input type="password" style={{ display: 'none' }} autoComplete="new-password" />
                             
-                            {/* User Information Section */}
-                            <Box sx={{ bgcolor: 'white', p: 2, border: '1px solid #e0e0e0', borderRadius: 1 }}>
-                                <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.5 }}>
-                                    <PersonIcon sx={{ color: '#666', mr: 1 }} fontSize="small" />
-                                    <Typography variant="subtitle1" sx={{ fontSize: '0.9rem', fontWeight: 600, color: '#333' }}>User Information</Typography>
+                            {/* Contact Information Section */}
+                            <Box sx={{ bgcolor: 'white', p: 2.5, border: '1px solid #e0e0e0', borderRadius: 1.5 }}>
+                                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                                    <Box sx={{ width: 3, height: 20, bgcolor: '#ff6b35', borderRadius: 1.5, mr: 1.5 }} />
+                                    <Typography variant="subtitle1" sx={{ fontSize: '1rem', fontWeight: 600, color: '#666' }}>
+                                        Contact Information
+                                    </Typography>
                                 </Box>
-                                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 1.5 }}>
+                                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr 1fr' }, gap: 2 }}>
                                     {user && user.role === 'site_admin' ? (
                                         <TextField
                                             label="Company Name" 
@@ -2788,15 +2789,22 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                                             InputLabelProps={{ 
                                                 shrink: true, 
                                                 sx: { 
-                                                    fontSize: '1rem',
-                                                    color: '#1976d2',
-                                                    fontWeight: 600,
+                                                    fontSize: '0.9rem',
+                                                    color: '#666',
+                                                    fontWeight: 500,
                                                     '&.Mui-focused': {
-                                                        color: '#1565c0'
+                                                        color: '#333'
                                                     }
                                                 } 
                                             }}
-                                            sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                                            sx={{ 
+                                                '& .MuiInputBase-input': { fontSize: '0.9rem' },
+                                                '& .MuiOutlinedInput-root': {
+                                                    '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                                                        borderColor: '#ff6b35',
+                                                    }
+                                                }
+                                            }}
                                         />
                                     ) : (
                                         <TextField 
@@ -2814,15 +2822,22 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                                             InputLabelProps={{ 
                                                 shrink: true, 
                                                 sx: { 
-                                                    fontSize: '1rem',
-                                                    color: '#1976d2',
-                                                    fontWeight: 600,
+                                                    fontSize: '0.9rem',
+                                                    color: '#666',
+                                                    fontWeight: 500,
                                                     '&.Mui-focused': {
-                                                        color: '#1565c0'
+                                                        color: '#333'
                                                     }
                                                 } 
                                             }}
-                                            sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                                            sx={{ 
+                                                '& .MuiInputBase-input': { fontSize: '0.9rem' },
+                                                '& .MuiOutlinedInput-root': {
+                                                    '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                                                        borderColor: '#ff6b35',
+                                                    }
+                                                }
+                                            }}
                                         >
                                             <MenuItem value="" disabled sx={{ fontSize: '0.85rem' }}>Select Company</MenuItem>
                                             {previousClientsRef.current.map(c => (
@@ -2849,15 +2864,22 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                                         InputLabelProps={{ 
                                             shrink: true, 
                                             sx: { 
-                                                fontSize: '1rem',
-                                                color: '#1976d2',
-                                                fontWeight: 600,
+                                                fontSize: '0.9rem',
+                                                color: '#666',
+                                                fontWeight: 500,
                                                 '&.Mui-focused': {
-                                                    color: '#1565c0'
+                                                    color: '#333'
                                                 }
                                             } 
                                         }}
-                                        sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                                        sx={{ 
+                                            '& .MuiInputBase-input': { fontSize: '0.9rem' },
+                                            '& .MuiOutlinedInput-root': {
+                                                '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                                                    borderColor: '#ff6b35',
+                                                }
+                                            }
+                                        }}
                                     />
                                     
                                     <TextField 
@@ -2871,15 +2893,22 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                                         InputLabelProps={{ 
                                             shrink: true, 
                                             sx: { 
-                                                fontSize: '1rem',
-                                                color: '#1976d2',
-                                                fontWeight: 600,
+                                                fontSize: '0.9rem',
+                                                color: '#666',
+                                                fontWeight: 500,
                                                 '&.Mui-focused': {
-                                                    color: '#1565c0'
+                                                    color: '#333'
                                                 }
                                             } 
                                         }}
-                                        sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                                        sx={{ 
+                                            '& .MuiInputBase-input': { fontSize: '0.9rem' },
+                                            '& .MuiOutlinedInput-root': {
+                                                '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                                                    borderColor: '#ff6b35',
+                                                }
+                                            }
+                                        }}
                                     />
                                     
                                     <TextField
@@ -2893,15 +2922,22 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                                         InputLabelProps={{ 
                                             shrink: true, 
                                             sx: { 
-                                                fontSize: '1rem',
-                                                color: '#1976d2',
-                                                fontWeight: 600,
+                                                fontSize: '0.9rem',
+                                                color: '#666',
+                                                fontWeight: 500,
                                                 '&.Mui-focused': {
-                                                    color: '#1565c0'
+                                                    color: '#333'
                                                 }
                                             } 
                                         }}
-                                        sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                                        sx={{ 
+                                            '& .MuiInputBase-input': { fontSize: '0.9rem' },
+                                            '& .MuiOutlinedInput-root': {
+                                                '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                                                    borderColor: '#ff6b35',
+                                                }
+                                            }
+                                        }}
                                     />
                                     
                                     <TextField
@@ -2918,42 +2954,24 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                                         InputLabelProps={{ 
                                             shrink: true, 
                                             sx: { 
-                                                fontSize: '1rem',
-                                                color: '#1976d2',
-                                                fontWeight: 600,
+                                                fontSize: '0.9rem',
+                                                color: '#666',
+                                                fontWeight: 500,
                                                 '&.Mui-focused': {
-                                                    color: '#1565c0'
+                                                    color: '#333'
                                                 }
                                             } 
                                         }}
-                                        sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                                        sx={{ 
+                                            '& .MuiInputBase-input': { fontSize: '0.9rem' },
+                                            '& .MuiOutlinedInput-root': {
+                                                '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                                                    borderColor: '#ff6b35',
+                                                }
+                                            }
+                                        }}
                                     />
                                     
-                                    <TextField
-                                        label="Password" 
-                                        name="password"
-                                        value={addUserData.password}
-                                        InputProps={{ 
-                                            readOnly: true,
-                                            startAdornment: <InputAdornment position="start"><LockIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
-                                        }} 
-                                        required 
-                                        size="small"
-                                        fullWidth
-                                        helperText="Auto-generated password"
-                                        InputLabelProps={{ 
-                                            shrink: true, 
-                                            sx: { 
-                                                fontSize: '1rem',
-                                                color: '#1976d2',
-                                                fontWeight: 600,
-                                                '&.Mui-focused': {
-                                                    color: '#1565c0'
-                                                }
-                                            } 
-                                        }}
-                                        sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
-                                    />
                                     
                                     <TextField
                                         label="Contact Number" 
@@ -2969,15 +2987,22 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                                         InputLabelProps={{ 
                                             shrink: true, 
                                             sx: { 
-                                                fontSize: '1rem',
-                                                color: '#1976d2',
-                                                fontWeight: 600,
+                                                fontSize: '0.9rem',
+                                                color: '#666',
+                                                fontWeight: 500,
                                                 '&.Mui-focused': {
-                                                    color: '#1565c0'
+                                                    color: '#333'
                                                 }
                                             } 
                                         }}
-                                        sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                                        sx={{ 
+                                            '& .MuiInputBase-input': { fontSize: '0.9rem' },
+                                            '& .MuiOutlinedInput-root': {
+                                                '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                                                    borderColor: '#ff6b35',
+                                                }
+                                            }
+                                        }}
                                     />
                                     
                                     <TextField
@@ -2994,17 +3019,36 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                                         InputLabelProps={{ 
                                             shrink: true, 
                                             sx: { 
-                                                fontSize: '1rem',
-                                                color: '#1976d2',
-                                                fontWeight: 600,
+                                                fontSize: '0.9rem',
+                                                color: '#666',
+                                                fontWeight: 500,
                                                 '&.Mui-focused': {
-                                                    color: '#1565c0'
+                                                    color: '#333'
                                                 }
                                             } 
                                         }}
-                                        sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                                        sx={{ 
+                                            '& .MuiInputBase-input': { fontSize: '0.9rem' },
+                                            '& .MuiOutlinedInput-root': {
+                                                '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                                                    borderColor: '#ff6b35',
+                                                }
+                                            }
+                                        }}
                                     />
                                     
+                                </Box>
+                            </Box>
+
+                            {/* Professional Information Section */}
+                            <Box sx={{ bgcolor: 'white', p: 2.5, border: '1px solid #e0e0e0', borderRadius: 1.5 }}>
+                                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                                    <Box sx={{ width: 3, height: 20, bgcolor: '#ff6b35', borderRadius: 1.5, mr: 1.5 }} />
+                                    <Typography variant="subtitle1" sx={{ fontSize: '1rem', fontWeight: 600, color: '#666' }}>
+                                        Professional Information
+                                    </Typography>
+                                </Box>
+                                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr 1fr' }, gap: 2 }}>
                                     <TextField 
                                         select 
                                         label="Employment Type" 
@@ -3020,19 +3064,26 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                                         InputLabelProps={{ 
                                             shrink: true, 
                                             sx: { 
-                                                fontSize: '1rem',
-                                                color: '#1976d2',
-                                                fontWeight: 600,
+                                                fontSize: '0.9rem',
+                                                color: '#666',
+                                                fontWeight: 500,
                                                 '&.Mui-focused': {
-                                                    color: '#1565c0'
+                                                    color: '#333'
                                                 }
                                             } 
                                         }}
-                                        sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                                        sx={{ 
+                                            '& .MuiInputBase-input': { fontSize: '0.9rem' },
+                                            '& .MuiOutlinedInput-root': {
+                                                '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                                                    borderColor: '#ff6b35',
+                                                }
+                                            }
+                                        }}
                                     >
-                                        <MenuItem value="" disabled sx={{ fontSize: '0.85rem' }}>Select Employment Type</MenuItem>
+                                        <MenuItem value="" disabled sx={{ fontSize: '0.9rem' }}>Select Employment Type</MenuItem>
                                         {EMPLOYMENT_TYPES.map(opt => (
-                                            <MenuItem key={opt.value} value={opt.value} sx={{ fontSize: '0.85rem' }}>{opt.label}</MenuItem>
+                                            <MenuItem key={opt.value} value={opt.value} sx={{ fontSize: '0.9rem' }}>{opt.label}</MenuItem>
                                         ))}
                                     </TextField>
                                     
@@ -3050,16 +3101,61 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                                         InputLabelProps={{ 
                                             shrink: true, 
                                             sx: { 
-                                                fontSize: '1rem',
-                                                color: '#1976d2',
-                                                fontWeight: 600,
+                                                fontSize: '0.9rem',
+                                                color: '#666',
+                                                fontWeight: 500,
                                                 '&.Mui-focused': {
-                                                    color: '#1565c0'
+                                                    color: '#333'
                                                 }
                                             } 
                                         }}
-                                        sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                                        sx={{ 
+                                            '& .MuiInputBase-input': { fontSize: '0.9rem' },
+                                            '& .MuiOutlinedInput-root': {
+                                                '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                                                    borderColor: '#ff6b35',
+                                                }
+                                            }
+                                        }}
                                     />
+                                    
+                                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                                        <TextField
+                                            label="Password" 
+                                            name="password"
+                                            value={addUserData.password}
+                                            InputProps={{ 
+                                                readOnly: true,
+                                                startAdornment: <InputAdornment position="start"><LockIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
+                                            }} 
+                                            required 
+                                            size="small"
+                                            fullWidth
+                                            InputLabelProps={{ 
+                                                shrink: true, 
+                                                sx: { 
+                                                    fontSize: '0.9rem',
+                                                    color: '#666',
+                                                    fontWeight: 500
+                                                } 
+                                            }}
+                                            sx={{ 
+                                                '& .MuiInputBase-input': { 
+                                                    fontSize: '0.9rem',
+                                                    bgcolor: '#f5f5f5',
+                                                    color: '#666'
+                                                },
+                                                '& .MuiOutlinedInput-root': {
+                                                    '& fieldset': {
+                                                        borderColor: '#e0e0e0',
+                                                    }
+                                                }
+                                            }}
+                                        />
+                                        <Typography variant="caption" sx={{ fontSize: '0.75rem', color: '#666', ml: 1 }}>
+                                            Auto-generated password
+                                        </Typography>
+                                    </Box>
                                 </Box>
                             </Box>
                         </Box>
@@ -3071,10 +3167,12 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                             variant="outlined" 
                             size="small"
                             sx={{ 
-                                textTransform: 'none', 
-                                fontSize: '0.85rem',
-                                borderRadius: 1,
-                                px: 2
+                                borderColor: '#ff6b35',
+                                color: '#ff6b35',
+                                '&:hover': {
+                                    borderColor: '#e55a2b',
+                                    bgcolor: '#fff3e0'
+                                }
                             }}
                         >
                             Cancel
@@ -3082,17 +3180,13 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                         <Button 
                             type="submit" 
                             variant="contained" 
-                            color="primary" 
                             size="small"
                             onClick={handleAddUserSave}
+                            startIcon={<PersonIcon />}
                             sx={{ 
-                                textTransform: 'none', 
-                                fontSize: '0.85rem',
-                                borderRadius: 1,
-                                px: 2,
-                                boxShadow: 'none',
+                                bgcolor: '#ff6b35',
                                 '&:hover': {
-                                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                                    bgcolor: '#e55a2b'
                                 }
                             }}
                         >
@@ -3159,15 +3253,22 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                                             InputLabelProps={{ 
                                                 shrink: true, 
                                                 sx: { 
-                                                    fontSize: '1rem',
-                                                    color: '#1976d2',
-                                                    fontWeight: 600,
+                                                    fontSize: '0.9rem',
+                                                    color: '#666',
+                                                    fontWeight: 500,
                                                     '&.Mui-focused': {
-                                                        color: '#1565c0'
+                                                        color: '#333'
                                                     }
                                                 } 
                                             }}
-                                            sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                                            sx={{ 
+                                                '& .MuiInputBase-input': { fontSize: '0.9rem' },
+                                                '& .MuiOutlinedInput-root': {
+                                                    '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                                                        borderColor: '#ff6b35',
+                                                    }
+                                                }
+                                            }}
                                         />
                                     )}
                                     
@@ -3182,15 +3283,22 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                                         InputLabelProps={{ 
                                             shrink: true, 
                                             sx: { 
-                                                fontSize: '1rem',
-                                                color: '#1976d2',
-                                                fontWeight: 600,
+                                                fontSize: '0.9rem',
+                                                color: '#666',
+                                                fontWeight: 500,
                                                 '&.Mui-focused': {
-                                                    color: '#1565c0'
+                                                    color: '#333'
                                                 }
                                             } 
                                         }}
-                                        sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                                        sx={{ 
+                                            '& .MuiInputBase-input': { fontSize: '0.9rem' },
+                                            '& .MuiOutlinedInput-root': {
+                                                '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                                                    borderColor: '#ff6b35',
+                                                }
+                                            }
+                                        }}
                                     />
                                     
                                     <TextField 
@@ -3204,15 +3312,22 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                                         InputLabelProps={{ 
                                             shrink: true, 
                                             sx: { 
-                                                fontSize: '1rem',
-                                                color: '#1976d2',
-                                                fontWeight: 600,
+                                                fontSize: '0.9rem',
+                                                color: '#666',
+                                                fontWeight: 500,
                                                 '&.Mui-focused': {
-                                                    color: '#1565c0'
+                                                    color: '#333'
                                                 }
                                             } 
                                         }}
-                                        sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                                        sx={{ 
+                                            '& .MuiInputBase-input': { fontSize: '0.9rem' },
+                                            '& .MuiOutlinedInput-root': {
+                                                '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                                                    borderColor: '#ff6b35',
+                                                }
+                                            }
+                                        }}
                                     />
                                     
                                     <TextField 
@@ -3226,15 +3341,22 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                                         InputLabelProps={{ 
                                             shrink: true, 
                                             sx: { 
-                                                fontSize: '1rem',
-                                                color: '#1976d2',
-                                                fontWeight: 600,
+                                                fontSize: '0.9rem',
+                                                color: '#666',
+                                                fontWeight: 500,
                                                 '&.Mui-focused': {
-                                                    color: '#1565c0'
+                                                    color: '#333'
                                                 }
                                             } 
                                         }}
-                                        sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                                        sx={{ 
+                                            '& .MuiInputBase-input': { fontSize: '0.9rem' },
+                                            '& .MuiOutlinedInput-root': {
+                                                '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                                                    borderColor: '#ff6b35',
+                                                }
+                                            }
+                                        }}
                                     />
                                     
                                     <TextField 
@@ -3267,15 +3389,22 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                                         InputLabelProps={{ 
                                             shrink: true, 
                                             sx: { 
-                                                fontSize: '1rem',
-                                                color: '#1976d2',
-                                                fontWeight: 600,
+                                                fontSize: '0.9rem',
+                                                color: '#666',
+                                                fontWeight: 500,
                                                 '&.Mui-focused': {
-                                                    color: '#1565c0'
+                                                    color: '#333'
                                                 }
                                             } 
                                         }}
-                                        sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                                        sx={{ 
+                                            '& .MuiInputBase-input': { fontSize: '0.9rem' },
+                                            '& .MuiOutlinedInput-root': {
+                                                '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                                                    borderColor: '#ff6b35',
+                                                }
+                                            }
+                                        }}
                                     />
                                     
                                     <TextField 
@@ -3289,15 +3418,22 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                                         InputLabelProps={{ 
                                             shrink: true, 
                                             sx: { 
-                                                fontSize: '1rem',
-                                                color: '#1976d2',
-                                                fontWeight: 600,
+                                                fontSize: '0.9rem',
+                                                color: '#666',
+                                                fontWeight: 500,
                                                 '&.Mui-focused': {
-                                                    color: '#1565c0'
+                                                    color: '#333'
                                                 }
                                             } 
                                         }}
-                                        sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                                        sx={{ 
+                                            '& .MuiInputBase-input': { fontSize: '0.9rem' },
+                                            '& .MuiOutlinedInput-root': {
+                                                '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                                                    borderColor: '#ff6b35',
+                                                }
+                                            }
+                                        }}
                                     />
                                     
                                     <TextField 
@@ -3311,15 +3447,22 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                                         InputLabelProps={{ 
                                             shrink: true, 
                                             sx: { 
-                                                fontSize: '1rem',
-                                                color: '#1976d2',
-                                                fontWeight: 600,
+                                                fontSize: '0.9rem',
+                                                color: '#666',
+                                                fontWeight: 500,
                                                 '&.Mui-focused': {
-                                                    color: '#1565c0'
+                                                    color: '#333'
                                                 }
                                             } 
                                         }}
-                                        sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                                        sx={{ 
+                                            '& .MuiInputBase-input': { fontSize: '0.9rem' },
+                                            '& .MuiOutlinedInput-root': {
+                                                '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                                                    borderColor: '#ff6b35',
+                                                }
+                                            }
+                                        }}
                                     />
                                     
                                     <FormControl fullWidth size="small" required>

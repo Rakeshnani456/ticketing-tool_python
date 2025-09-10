@@ -246,7 +246,7 @@ const ReportsComponent = ({ user, showFlashMessage }) => {
                         <div>
                             <h1 className="text-2xl font-bold text-gray-900 flex items-center">
                                 <TrendingUp className="mr-3 text-orange-600" size={28} />
-                                Reports & Analytics (Work in progress)
+                                Analytics (Work in progress)
                             </h1>
                             <p className="text-gray-600 mt-2">
                                 Comprehensive insights and analytics for your ticketing system

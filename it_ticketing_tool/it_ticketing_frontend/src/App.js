@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 // Import Routes, Route, Link, useNavigate, useLocation from react-router-dom (BrowserRouter is now in index.js)
 import { Routes, Route, Link, useNavigate, useLocation } from 'react-router-dom';
+import AdvancedSearchComponent from './components/common/AdvancedSearchComponent';
 import {
     User,
     LogOut,
@@ -20,6 +21,8 @@ import {
     Users,
     Shield,
     Pin,
+    Key,
+    Plus,
 
     ChevronUp,
     Home,
@@ -32,6 +35,9 @@ import {
     Building,
     Zap,
     Loader2,
+    UserCog,
+    Wrench,
+    Handshake,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AiOutlineEye } from 'react-icons/ai'; // Or choose another icon library like 'fa' for Font Awesome
@@ -55,6 +61,8 @@ import Menu from '@mui/material/Menu'; // Import Material-UI Menu
 import MenuItem from '@mui/material/MenuItem'; // Import Material-UI MenuItem
 import NotificationModal from './components/common/NotificationModal';
 import { BellRing } from './components/common/BellRing';
+import CustomNotification from './components/common/CustomNotification';
+import { NotificationProvider, useNotification } from './contexts/NotificationContext';
 import { createPortal } from 'react-dom';
 import ReactDOM from 'react-dom';
 
@@ -66,6 +74,10 @@ import { collection, query, onSnapshot, where, doc, getDoc } from 'firebase/fire
 
 // Import API Base URL from constants
 import { API_BASE_URL } from './config/constants';
+
+// Import cookie management
+import cookieManager from './utils/cookieManager';
+import CookieConsentBanner from './components/common/CookieConsentBanner';
 
 // Import local logo image
 import KriasolLogo from './assets/logo/logo.png';
@@ -97,8 +109,10 @@ import UserManagementComponent from './components/admin/UserManagementComponent'
 import Modal from './components/common/Modal';
 import AdminManagementComponent from './components/admin/AdminManagementComponent';
 import ClientManagementComponent from './components/admin/ClientManagementComponent';
+import KnowledgeBaseComponent from './components/KnowledgeBaseComponent';
 import EngineerManagementComponent from './components/admin/EngineerManagementComponent';
 import ReportsComponent from './components/ReportsComponent';
+import PersonalNotesComponent from './components/PersonalNotesComponent';
 
 
 
@@ -110,12 +124,6 @@ const SettingsComponent = () => (
     </div>
 );
 
-const KnowledgeBaseComponent = () => (
-    <div className="p-6">
-        <h2 className="text-2xl font-bold mb-4">Knowledge Base Page (Placeholder)</h2>
-        <p>Content for knowledge base will go here.</p>
-    </div>
-);
 
 // NEW: Placeholder components for admin sidebar
 const SiteAdminManagementComponent = () => (
@@ -153,7 +161,7 @@ function TooltipBubble({ title, children }) {
       {children}
       {show && createPortal(
         <div
-          className="scale-up-center-normal"
+          className="fade-in"
           style={{
             position: 'fixed',
             left: coords.left,
@@ -178,20 +186,94 @@ function TooltipBubble({ title, children }) {
   );
 }
 
+// Specialized TooltipBubble for create button - positions underneath
+function CreateButtonTooltipBubble({ title, children }) {
+  const [show, setShow] = useState(false);
+  const [coords, setCoords] = useState({ top: 0, left: 0 });
+  const iconRef = useRef(null);
+
+  useEffect(() => {
+    if (show && iconRef.current) {
+      const rect = iconRef.current.getBoundingClientRect();
+      const viewportWidth = window.innerWidth;
+      const tooltipWidth = 200; // Approximate tooltip width
+      
+      // Position tooltip directly under the button (left-aligned)
+      let leftPosition = rect.left;
+      
+      // Ensure tooltip doesn't go off-screen to the right
+      if (leftPosition + tooltipWidth > viewportWidth - 10) {
+        leftPosition = viewportWidth - tooltipWidth - 10;
+      }
+      
+      // Ensure tooltip doesn't go off-screen to the left
+      if (leftPosition < 10) {
+        leftPosition = 10;
+      }
+      
+      setCoords({
+        top: rect.bottom + 8, // Position directly under the element
+        left: leftPosition,
+      });
+    }
+  }, [show]);
+
+  return (
+    <div
+      style={{ position: 'relative', display: 'inline-block' }}
+      onMouseEnter={() => setShow(true)}
+      onMouseLeave={() => setShow(false)}
+      ref={iconRef}
+    >
+      {children}
+      {show && createPortal(
+        <div
+          className="fade-in"
+          style={{
+            position: 'fixed',
+            left: coords.left,
+            top: coords.top,
+            background: '#000000',
+            color: '#ffffff',
+            borderRadius: 8,
+            padding: '6px 12px',
+            fontSize: 11,
+            fontWeight: 500,
+            whiteSpace: 'nowrap',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            zIndex: 9999,
+            pointerEvents: 'none',
+            // No transform needed - positioned directly under text
+          }}
+        >
+          {/* Arrow pointing up */}
+          <div
+            style={{
+              position: 'absolute',
+              top: '-6px',
+              left: '12px', // Position arrow near the left edge
+              width: 0,
+              height: 0,
+              borderLeft: '6px solid transparent',
+              borderRight: '6px solid transparent',
+              borderBottom: '6px solid #000000',
+            }}
+          />
+          {title}
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+}
+
 /**
- * Main application component.
- * Manages user authentication state, global navigation, flash messages, and renders
- * the appropriate page based on the current route and user role.
+ * Main application content component that uses notification context
  */
-const App = () => {
+const AppContent = () => {
+    const { showSuccess, showError, showWarning, showInfo } = useNotification();
     // State for the current authenticated user (Firebase user + custom role)
     const [currentUser, setCurrentUser] = useState(null);
-    // State for displaying temporary flash messages
-    const [flashMessage, setFlashMessage] = useState(null);
-    // State for the type of flash message (e.g., 'success', 'error', 'info')
-    const [flashType, setFlashType] = useState('info');
-    // Ref to manage the timeout for hiding flash messages
-    const flashMessageTimeoutRef = useRef(null);
     // Key to force refresh of ticket lists (e.g., after creating a new ticket)
     const [ticketListRefreshKey, setTicketListRefreshKey] = useState(0);
     // State for the global search keyword
@@ -439,6 +521,9 @@ const App = () => {
                             }
                         }
                         
+                        // Store user session in cookies
+                        cookieManager.setUserSession(userProfile);
+                        
                         setCurrentUser(userProfile);
                         fetchNotifications(userProfile); // Fetch notifications for logged-in user
 
@@ -658,6 +743,7 @@ const App = () => {
     const handleLogout = async () => {
         try {
             await signOut(authClient); // Sign out from Firebase
+            cookieManager.clearUserSession(); // Clear user session from cookies
             setCurrentUser(null); // Clear current user state
             setIsAuthLoading(false);
             showFlashMessage('Logged out successfully.', 'success');
@@ -703,22 +789,30 @@ const App = () => {
 
 
     /**
-     * Displays a temporary flash message to the user.
+     * Displays a temporary flash message to the user using the new notification system.
      * @param {string} message - The message content.
      * @param {'info'|'success'|'error'|'warning'} [type='info'] - The type of message for styling.
      * @param {number} [duration=3000] - Duration in milliseconds before the message hides.
      * @returns {void}
      */
     const showFlashMessage = useCallback((message, type = 'info', duration = 3000) => {
-        if (flashMessageTimeoutRef.current) {
-            clearTimeout(flashMessageTimeoutRef.current); // Clear any existing timeout
+        // Use the new notification system
+        switch (type) {
+            case 'success':
+                showSuccess(message, { duration });
+                break;
+            case 'error':
+                showError(message, { duration });
+                break;
+            case 'warning':
+                showWarning(message, { duration });
+                break;
+            case 'info':
+            default:
+                showInfo(message, { duration });
+                break;
         }
-        setFlashMessage(message);
-        setFlashType(type);
-        flashMessageTimeoutRef.current = setTimeout(() => {
-            setFlashMessage(null); // Hide message after duration
-        }, duration);
-    }, []); // Empty dependency array means this function is stable
+    }, [showSuccess, showError, showWarning, showInfo]);
 
     /**
      * Callback function for when a new ticket is successfully created.
@@ -779,11 +873,11 @@ const App = () => {
     /**
      * Handles submission of the global search form.
      * Triggers a refresh of ticket lists to apply the search filter.
-     * @param {Event} e - The form submission event.
+     * @param {string} searchTerm - The search term from the advanced search component.
      * @returns {void}
      */
-    const handleSearchSubmit = (e) => {
-        e.preventDefault();
+    const handleSearchSubmit = (searchTerm) => {
+        setSearchKeyword(searchTerm);
         setTicketListRefreshKey(prev => prev + 1); // Force re-render of ticket lists with new search keyword
     };
 
@@ -896,6 +990,7 @@ const App = () => {
 
     // Add refs for profile dropdowns
     const profileMenuRef = useRef(null);
+    const managementMenuRef = useRef(null);
 
     // Add useEffect for closing Management dropdown on outside click - No longer needed for MUI Menu
     // useEffect(() => {
@@ -921,6 +1016,55 @@ const App = () => {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, [isProfileMenuOpen]);
 
+    // Add useEffect for closing Management dropdown on outside click
+    useEffect(() => {
+        if (!managementOpen) return;
+        function handleClickOutside(event) {
+            if (managementMenuRef.current && !managementMenuRef.current.contains(event.target)) {
+                handleClose();
+            }
+        }
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [managementOpen]);
+
+    // Add custom CSS for the blended dropdown animation
+    useEffect(() => {
+        const fadeInDownStyle = `
+            @keyframes fadeInDown {
+                from {
+                    opacity: 0;
+                    transform: translateY(-10px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+            
+            @keyframes fadeIn {
+                from {
+                    opacity: 0;
+                }
+                to {
+                    opacity: 1;
+                }
+            }
+            
+            .fade-in {
+                animation: fadeIn 0.3s ease-in-out;
+            }
+        `;
+        
+        const style = document.createElement('style');
+        style.textContent = fadeInDownStyle;
+        document.head.appendChild(style);
+        
+        return () => {
+            document.head.removeChild(style);
+        };
+    }, []);
+
     // Suppress ResizeObserver loop error in development
     if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
         const suppressedErrors = [
@@ -940,13 +1084,6 @@ const App = () => {
 
     return (
         <div className="flex min-h-screen bg-white font-inter"> {/* Main flex container (row) */}
-            {/* Global Flash Message */}
-            {flashMessage && (
-                <div className={`fixed top-16 left-1/2 transform -translate-x-1/2 z-[9999] px-4 py-2 rounded shadow-lg transition-all duration-300 ${flashType === 'error' ? 'bg-red-100 text-red-800 border border-red-300' : 'bg-green-100 text-green-800 border border-green-300'}`}
-                     style={{ minWidth: 280, maxWidth: 480, textAlign: 'center', fontWeight: 500, fontSize: '1rem' }}>
-                    {flashMessage}
-                </div>
-            )}
 
             {/* Create Ticket Modal - Rendered at root level */}
             {currentUser && location.pathname === '/create-ticket' && (
@@ -1010,184 +1147,315 @@ const App = () => {
                 </div>
             )}
 
-            {/* Top Banner Header - make it fixed and full width */}
+            {/* Modern Top Header - Redesigned */}
             {currentUser && !isAuthLoading && location.pathname !== '/login' && location.pathname !== '/register' && (
                 <header
-                    className="fixed top-0 flex items-center justify-between shadow-sm border-b border-gray-200/60 flex-shrink-0 z-50 transition-all duration-300 ease-in-out"
+                    className="fixed top-0 flex items-center justify-between flex-shrink-0 z-50 transition-all duration-300 ease-in-out"
                     style={{
-                        height: '50.4px',
-                        minHeight: '50.4px',
-                        padding: '0 16px',
+                        height: '56px',
+                        minHeight: '56px',
+                        padding: '0 24px',
                         left: isSidebarExpanded ? 184 : 56,
                         width: `calc(100% - ${(isSidebarExpanded ? 184 : 56)}px)`,
-                        backgroundColor: '#e85c34',
-                        color: '#FFFFFF'
+                        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                        color: '#FFFFFF',
+                        boxShadow: '0 4px 20px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 0, 0, 0.08)',
+                        backdropFilter: 'blur(10px)',
+                        borderBottom: '1px solid rgba(255, 255, 255, 0.1)'
                     }}
                 >
-                {/* Left side: Dashboard and Manage buttons with search bar */}
-                <div className={`flex items-center gap-2 ${
+                {/* Left side: Modern Navigation */}
+                <div className={`flex items-center gap-1 ${
                     !(['admin', 'site_admin', 'super_admin'].includes(currentUser.role) || ['super_admin', 'admin'].includes(currentUser.role)) 
                     ? 'pl-4' 
                     : ''
                 }`}>
-                    {/* Dashboard button */}
+                    {/* Dashboard button - Modern Design */}
                     {currentUser && (['admin', 'site_admin', 'super_admin'].includes(currentUser.role)) && (
-                        <Link to="/dashboard" className={`flex items-center px-3 text-base font-bold transition-all duration-200 hover:bg-white/20 hover:text-white ${location.pathname === '/dashboard' ? 'bg-white/15 text-white' : 'text-white'}`} style={{
-                            textShadow: '0.5px 0.5px 0px rgba(0,0,0,0.2), 2px 2px 0px rgba(0,0,0,0.1)',
-                            transform: 'translateZ(0)',
-                            letterSpacing: '0.5px',
-                            height: '50.4px',
-                            minHeight: '50.4px',
-                            marginLeft: '-16px'
-                        }}> 
+                        <Link 
+                            to="/dashboard" 
+                            className={`flex items-center px-4 py-2 text-sm font-semibold transition-all duration-300 rounded-lg ${
+                                location.pathname === '/dashboard' 
+                                    ? 'bg-white/20 text-white shadow-lg backdrop-blur-sm border border-white/30' 
+                                    : 'text-white/90 hover:bg-white/15 hover:text-white hover:shadow-md'
+                            }`} 
+                            style={{
+                                height: '40px',
+                                minHeight: '40px',
+                                letterSpacing: '0.3px',
+                                fontWeight: '600'
+                            }}
+                        > 
+                            <Home className="w-4 h-4 mr-2" />
                             Dashboard
                         </Link>
                     )}
-                    {/* Management Dropdown (right of Dashboard) - Now using Material-UI Menu */}
+                    {/* Blended Management Dropdown */}
                     {currentUser && (['super_admin', 'admin'].includes(currentUser.role)) && (
-                        <div className="relative">
+                        <div className="relative" ref={managementMenuRef}>
                             <button
-                                onClick={handleClick} // Use handleClick to open the MUI Menu
-                                className="flex items-center px-3 text-base font-bold transition-all duration-200 hover:bg-white/20 hover:text-white text-white cursor-pointer"
-                                aria-controls={managementOpen ? 'management-menu' : undefined} // ARIA attributes
+                                onClick={handleClick}
+                                className={`flex items-center px-4 py-2 text-sm font-semibold transition-all duration-300 rounded-lg cursor-pointer ${
+                                    managementOpen 
+                                        ? 'bg-white/20 text-white shadow-lg backdrop-blur-sm border border-white/30 rounded-b-none' 
+                                        : 'text-white/90 hover:bg-white/15 hover:text-white hover:shadow-md'
+                                }`}
+                                aria-controls={managementOpen ? 'management-menu' : undefined}
                                 aria-haspopup="true"
                                 aria-expanded={managementOpen ? 'true' : undefined}
                                 style={{
-                                    textShadow: '0.5px 0.5px 0px rgba(0,0,0,0.2), 2px 2px 0px rgba(0,0,0,0.1)',
-                                    transform: 'translateZ(0)',
-                                    letterSpacing: '0.5px',
-                                    height: '50.4px',
-                                    minHeight: '50.4px'
+                                    height: '40px',
+                                    minHeight: '40px',
+                                    letterSpacing: '0.3px',
+                                    fontWeight: '600'
                                 }}
                             >
+                                <Settings className="w-4 h-4 mr-2" />
                                 Manage
                                 {managementOpen ? (
-                                    <ChevronUp className="ml-1 w-4 h-4" />
+                                    <ChevronUp className="ml-2 w-4 h-4" />
                                 ) : (
-                                    <ChevronDown className="ml-1 w-4 h-4" />
+                                    <ChevronDown className="ml-2 w-4 h-4" />
                                 )}
                             </button>
-                            <Menu
-                                id="management-menu"
-                                anchorEl={anchorEl}
-                                open={managementOpen}
-                                onClose={handleClose}
-                                MenuListProps={{
-                                    'aria-labelledby': 'manage-button',
-                                }}
-                                anchorOrigin={{
-                                    vertical: 'bottom',
-                                    horizontal: 'center', // Center horizontally with respect to button
-                                }}
-                                transformOrigin={{
-                                    vertical: 'top',
-                                    horizontal: 'center', // Center horizontally with respect to button
-                                }}
-                                disablePortal
-                                PaperProps={{
-                                    elevation: 8, // Adds shadow
-                                    sx: {
-                                        borderRadius: '12px', // Rounded corners to match sidebar
-                                        minWidth: 120,
-                                        width: 'auto',
-                                        fontSize: '0.75rem',
-                                        padding: 0,
-                                        overflow: 'hidden', // Ensures rounded corners are applied to content
-                                        marginTop: 0.5, // Slightly offset menu so it doesn't cover the button
-                                    },
-                                }}
-                            >
+                            
+                            {/* Custom Blended Dropdown */}
+                            {managementOpen && (
+                                <div 
+                                    className="absolute top-full left-0 right-0 bg-white/95 backdrop-blur-lg border border-orange-500 border-t-0 rounded-b-lg shadow-2xl z-50"
+                                    style={{
+                                        boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+                                        animation: 'fadeInDown 0.2s ease-out'
+                                    }}
+                                >
                                 {currentUser.role === 'super_admin' && (
                                     <>
-                                        <MenuItem onClick={() => handleMenuItemClick('/admin-management')} sx={{ fontSize: '0.75rem', minHeight: 22 }}>
-                                            <Users width={16} height={16} className="mr-2" /> Admins
-                                        </MenuItem>
-                                        <MenuItem onClick={() => handleMenuItemClick('/engineer-management')} sx={{ fontSize: '0.75rem', minHeight: 22 }}>
-                                            <PeopleIcon fontSize="small" sx={{ fontSize: 16, marginRight: '8px' }} /> Engineers
-                                        </MenuItem>
-                                        <MenuItem onClick={() => handleMenuItemClick('/user-management')} sx={{ fontSize: '0.75rem', minHeight: 22 }}>
-                                            <User width={16} height={16} className="mr-2" /> Users
-                                        </MenuItem>
+                                            <button
+                                                onClick={() => handleMenuItemClick('/admin-management')}
+                                                className="w-full flex items-center px-4 py-3 text-sm text-black hover:bg-gray-100/80 transition-all duration-200 first:rounded-t-none"
+                                            >
+                                                <Shield width={16} height={16} className="mr-3 text-gray-600" />
+                                                <span className="font-medium">Admins</span>
+                                            </button>
+                                            <div className="w-full h-px bg-gray-200/50"></div>
+                                            <button
+                                                onClick={() => handleMenuItemClick('/engineer-management')}
+                                                className="w-full flex items-center px-4 py-3 text-sm text-black hover:bg-gray-100/80 transition-all duration-200"
+                                            >
+                                                <Wrench width={16} height={16} className="mr-3 text-gray-600" />
+                                                <span className="font-medium">Engineers</span>
+                                            </button>
+                                            <div className="w-full h-px bg-gray-200/50"></div>
                                     </>
                                 )}
                                 {currentUser.role === 'admin' && (
                                     <>
-                                        <MenuItem onClick={() => handleMenuItemClick('/engineer-management')} sx={{ fontSize: '0.75rem', minHeight: 22 }}>
-                                            <PeopleIcon fontSize="small" sx={{ fontSize: 16, marginRight: '8px' }} /> Engineers
-                                        </MenuItem>
-                                        <MenuItem onClick={() => handleMenuItemClick('/client-management')} sx={{ fontSize: '0.75rem', minHeight: 22 }}>
-                                            <Users width={16} height={16} className="mr-2" /> Clients
-                                        </MenuItem>
-                                        <MenuItem onClick={() => handleMenuItemClick('/user-management')} sx={{ fontSize: '0.75rem', minHeight: 22 }}>
-                                            <User width={16} height={16} className="mr-2" /> Users
-                                        </MenuItem>
+                                            <button
+                                                onClick={() => handleMenuItemClick('/engineer-management')}
+                                                className="w-full flex items-center px-4 py-3 text-sm text-black hover:bg-gray-100/80 transition-all duration-200 first:rounded-t-none"
+                                            >
+                                                <Wrench width={16} height={16} className="mr-3 text-gray-600" />
+                                                <span className="font-medium">Engineers</span>
+                                            </button>
+                                            <div className="w-full h-px bg-gray-200/50"></div>
+                                            <button
+                                                onClick={() => handleMenuItemClick('/client-management')}
+                                                className="w-full flex items-center px-4 py-3 text-sm text-black hover:bg-gray-100/80 transition-all duration-200"
+                                            >
+                                                <Users width={16} height={16} className="mr-3 text-gray-600" />
+                                                <span className="font-medium">Clients</span>
+                                            </button>
+                                            <div className="w-full h-px bg-gray-200/50"></div>
                                     </>
                                 )}
-                            </Menu>
+                                </div>
+                            )}
                         </div>
                     )}
                     
-                    {/* Search bar - positioned to the right of Dashboard/Manage buttons, or to the left if no menu options */}
-                    {currentUser && !isAuthLoading && location.pathname !== '/login' && location.pathname !== '/register' && (
-                        <form onSubmit={handleSearchSubmit} className="flex items-center">
-                            <div className="relative">
-                                <input
-                                    type="text"
-                                    value={searchKeyword}
-                                    onChange={handleSearchChange}
-                                    placeholder="Search..."
-                                    className="pl-9 pr-3 py-1 text-sm border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-gray-100 text-gray-900 placeholder-gray-500"
-                                    style={{ width: 220, minHeight: 28 }}
+                    {/* Advanced Search Component - Desktop - Only for Admin/Super Admin */}
+                    {currentUser && !isAuthLoading && location.pathname !== '/login' && location.pathname !== '/register' && (['admin', 'super_admin', 'site_admin'].includes(currentUser.role)) && (
+                        <div className="ml-4 hidden md:flex items-center gap-3 flex-shrink-0">
+                            <div className="flex-shrink-0">
+                                <AdvancedSearchComponent
+                                    onSearchSubmit={handleSearchSubmit}
+                                    navigateTo={navigateTo}
+                                    placeholder="Search"
+                                    width={280}
                                 />
-                                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-500" />
                             </div>
-                        </form>
+                            {/* Create Ticket Button - Right side of search field for Admin roles */}
+                            <div className="flex-shrink-0">
+                                <CreateButtonTooltipBubble title="Create a new ticket">
+                                    <Link 
+                                        to="/create-ticket" 
+                                        className={`flex items-center px-4 py-2 text-sm font-semibold transition-all duration-300 rounded-lg whitespace-nowrap ${
+                                            location.pathname === '/create-ticket' 
+                                                ? 'bg-white/20 text-white shadow-lg backdrop-blur-sm border border-white/30' 
+                                                : 'text-white/90 hover:bg-white/15 hover:text-white hover:shadow-md'
+                                        }`} 
+                                        style={{
+                                            height: '40px',
+                                            minHeight: '40px',
+                                            letterSpacing: '0.3px',
+                                            fontWeight: '600'
+                                        }}
+                                    > 
+                                        <Plus className="w-4 h-4 mr-2" />
+                                        Create
+                                    </Link>
+                                </CreateButtonTooltipBubble>
+                            </div>
+                        </div>
                     )}
+
+                    {/* Mobile Search Button - Only for Admin/Super Admin */}
+                    {currentUser && !isAuthLoading && location.pathname !== '/login' && location.pathname !== '/register' && (['admin', 'super_admin', 'site_admin'].includes(currentUser.role)) && (
+                        <div className="md:hidden flex items-center gap-2 ml-4 flex-shrink-0">
+                            <button
+                                onClick={() => {
+                                    // For mobile, we can implement a modal or just trigger search
+                                    const searchTerm = prompt("Search tickets, users, knowledge base...");
+                                    if (searchTerm) {
+                                        handleSearchSubmit(searchTerm);
+                                    }
+                                }}
+                                className="p-2 text-gray-600 hover:text-gray-800 hover:bg-white/20 rounded-lg transition-colors flex-shrink-0"
+                            >
+                                <Search className="w-5 h-5" />
+                            </button>
+                            {/* Create Ticket Button - Mobile for Admin roles */}
+                            <Link 
+                                to="/create-ticket" 
+                                className={`flex items-center px-3 py-2 text-sm font-semibold transition-all duration-300 rounded-lg whitespace-nowrap flex-shrink-0 ${
+                                    location.pathname === '/create-ticket' 
+                                        ? 'bg-white/20 text-white shadow-lg backdrop-blur-sm border border-white/30' 
+                                        : 'text-white/90 hover:bg-white/15 hover:text-white hover:shadow-md'
+                                }`} 
+                                style={{
+                                    height: '40px',
+                                    minHeight: '40px',
+                                    letterSpacing: '0.3px',
+                                    fontWeight: '600'
+                                }}
+                            > 
+                                <Plus className="w-4 h-4 mr-1" />
+                                Create
+                            </Link>
+                        </div>
+                    )}
+
                 </div>
                 
+                {/* Dashboard button for Support Engineers - Left side */}
+                {currentUser && !isAuthLoading && location.pathname !== '/login' && location.pathname !== '/register' && currentUser.role === 'support' && (
+                    <div className="hidden md:block mr-8">
+                        <Link 
+                            to="/dashboard" 
+                            className={`flex items-center px-4 py-2 text-sm font-semibold transition-all duration-300 rounded-lg ${
+                                location.pathname === '/dashboard' 
+                                    ? 'bg-white/20 text-white shadow-lg backdrop-blur-sm border border-white/30' 
+                                    : 'text-white/90 hover:bg-white/15 hover:text-white hover:shadow-md'
+                            }`} 
+                                    style={{ 
+                                height: '40px',
+                                minHeight: '40px',
+                                letterSpacing: '0.3px',
+                                fontWeight: '600'
+                            }}
+                        > 
+                            <Home className="w-4 h-4 mr-2" />
+                            Dashboard
+                        </Link>
+                            </div>
+                )}
+
+                {/* Center Search Component - For Support Engineers and Users */}
+                {currentUser && !isAuthLoading && location.pathname !== '/login' && location.pathname !== '/register' && !(['admin', 'super_admin', 'site_admin'].includes(currentUser.role)) && (
+                    <div className="flex-1 flex justify-center items-center px-4 gap-4">
+                        <div className="hidden md:block flex-shrink-0">
+                            <AdvancedSearchComponent
+                                onSearchSubmit={handleSearchSubmit}
+                                navigateTo={navigateTo}
+                                placeholder="Search tickets, users, knowledge base..."
+                                width={400}
+                            />
+                        </div>
+                        {/* Mobile Search Button for Support/Users */}
+                        <button
+                            onClick={() => {
+                                const searchTerm = prompt("Search tickets, users, knowledge base...");
+                                if (searchTerm) {
+                                    handleSearchSubmit(searchTerm);
+                                }
+                            }}
+                            className="md:hidden p-2 text-white hover:bg-white/20 rounded-lg transition-colors flex-shrink-0"
+                        >
+                            <Search className="w-5 h-5" />
+                        </button>
+                        
+                        {/* Create Ticket Button - Right side of search field */}
+                        <Link 
+                            to="/create-ticket" 
+                            className={`flex items-center px-4 py-2 text-sm font-semibold transition-all duration-300 rounded-lg whitespace-nowrap flex-shrink-0 ${
+                                location.pathname === '/create-ticket' 
+                                    ? 'bg-white/20 text-white shadow-lg backdrop-blur-sm border border-white/30' 
+                                    : 'text-white/90 hover:bg-white/15 hover:text-white hover:shadow-md'
+                            }`} 
+                            style={{
+                                height: '40px',
+                                minHeight: '40px',
+                                letterSpacing: '0.3px',
+                                fontWeight: '600'
+                            }}
+                        > 
+                            <Plus className="w-4 h-4 mr-2" />
+                            Create
+                        </Link>
+                    </div>
+                )}
+                
                 <div className="flex-1" />
-                {/* Display mobile number and email for user and site_admin roles */}
+                {/* Modern Contact Information */}
                 {currentUser && !isAuthLoading && location.pathname !== '/login' && location.pathname !== '/register' && (currentUser.role === 'user' || currentUser.role === 'site_admin') && (
-                    <div className="flex items-center gap-4 mr-4">
-                        <div className="flex items-center gap-4 text-sm">
-                            <div className="flex items-center gap-1 group cursor-pointer">
-                                <PhoneIcon sx={{ fontSize: '0.9rem', color: '#2a2a2a' }} />
-                                <span className="text-white font-bold text-sm tracking-wide group-hover:text-white/80 transition-colors duration-200" style={{
-                                    textShadow: '1px 1px 0px rgba(0,0,0,0.2), 2px 2px 0px rgba(0,0,0,0.1)',
-                                    transform: 'translateZ(0)',
-                                    letterSpacing: '0.5px'
+                    <div className="flex items-center gap-6 mr-6">
+                        <div className="flex items-center gap-6 text-sm">
+                            <div className="flex items-center gap-2 group cursor-pointer px-3 py-2 rounded-lg hover:bg-white/10 transition-all duration-300">
+                                <PhoneIcon sx={{ fontSize: '1rem', color: 'rgba(255,255,255,0.9)' }} />
+                                <span className="text-white font-medium text-sm group-hover:text-white transition-colors duration-200" style={{
+                                    letterSpacing: '0.3px'
                                 }}>{'+91 9391930393'}</span>
                             </div>
-                            <div className="w-px h-5 bg-white/30"></div>
-                            <div className="flex items-center gap-1 group cursor-pointer">
-                                <EmailIcon sx={{ fontSize: '0.9rem', color: '#2a2a2a' }} />
-                                <span className="text-white font-bold text-sm tracking-wide group-hover:text-white/80 transition-colors duration-200" style={{
-                                    textShadow: '1px 1px 0px rgba(0,0,0,0.2), 2px 2px 0px rgba(0,0,0,0.1)',
-                                    transform: 'translateZ(0)',
-                                    letterSpacing: '0.5px'
+                            <div className="w-px h-6 bg-white/20"></div>
+                            <div className="flex items-center gap-2 group cursor-pointer px-3 py-2 rounded-lg hover:bg-white/10 transition-all duration-300">
+                                <EmailIcon sx={{ fontSize: '1rem', color: 'rgba(255,255,255,0.9)' }} />
+                                <span className="text-white font-medium text-sm group-hover:text-white transition-colors duration-200" style={{
+                                    letterSpacing: '0.3px'
                                 }}>{'HelloIT@kriasol.com'}</span>
                             </div>
                         </div>
                     </div>
                 )}
-                {/* Notification bell and profile dropdown on the right side */}
+                {/* Modern Notification and Profile Section */}
                 {currentUser && !isAuthLoading && location.pathname !== '/login' && location.pathname !== '/register' && (
-                    <div className="flex items-center gap-3">
-                        {/* Notification Bell */}
+                    <div className="flex items-center gap-2">
+                        {/* Modern Notification Bell */}
                         <div className="relative inline-block">
-                            <button 
-                                className="p-2 hover:bg-white/20 transition-all duration-200"
-                                onClick={() => setIsNotificationMenuOpen(true)}
-                            >
-                                <BellRing
-                                    width={20}
-                                    height={20}
-                                    stroke="#FFFFFF"
-                                    strokeWidth={1.5}
-                                    unreadCount={notifications.filter(n => !n.read).length}
-                                    animateBell={hasNewNotifications}
-                                />
-                            </button>
+                            <CreateButtonTooltipBubble title="Notifications">
+                                <button 
+                                    className="p-2.5 hover:bg-white/20 rounded-lg transition-all duration-300 hover:shadow-md"
+                                    onClick={() => setIsNotificationMenuOpen(true)}
+                                >
+                                    <BellRing
+                                        width={20}
+                                        height={20}
+                                        stroke="#FFFFFF"
+                                        strokeWidth={1.5}
+                                        unreadCount={notifications.filter(n => !n.read).length}
+                                        animateBell={hasNewNotifications}
+                                    />
+                                </button>
+                            </CreateButtonTooltipBubble>
                             <NotificationModal
                                 isOpen={isNotificationMenuOpen}
                                 onClose={() => setIsNotificationMenuOpen(false)}
@@ -1203,56 +1471,78 @@ const App = () => {
                                 className={isNotificationMenuOpen ? "scale-up-tr-normal" : ""}
                             />
                         </div>
-                        {/* Profile Section */}
+                        {/* Modern Profile Section */}
                         <div className="relative" ref={profileMenuRef}>
                             <button
                                 onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
-                                className="flex items-center gap-3 p-2 hover:bg-white/20 transition-all duration-200 rounded-lg"
+                                className={`flex items-center gap-3 p-2 transition-all duration-300 rounded-lg ${
+                                    isProfileMenuOpen 
+                                        ? 'bg-white/20 text-white shadow-lg backdrop-blur-sm border border-white/30 rounded-b-none' 
+                                        : 'hover:bg-white/20 hover:shadow-md'
+                                }`}
                             >
-                                <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center text-gray-700 font-bold text-xs border-2 border-white/60 shadow-md hover:bg-gray-50 transition-all duration-200">
+                                <div className="w-9 h-9 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center text-white font-bold text-sm border border-white/30 shadow-lg hover:bg-white/30 transition-all duration-300">
                                     {currentUser.email?.charAt(0).toUpperCase()}
                                 </div>
                                 <div className="hidden sm:block text-left">
-                                    <p className="text-sm font-medium text-white truncate" style={{
-                                        textShadow: '0.5px 0.5px 0px rgba(0,0,0,0.15)',
-                                        transform: 'translateZ(0)',
-                                        letterSpacing: '0.25px'
+                                    <p className="text-sm font-semibold text-white truncate" style={{
+                                        letterSpacing: '0.3px'
                                     }}>
                                         {currentUser.email}
                                     </p>
-                                    <p className={`text-xs capitalize truncate ${
-                                        currentUser.role === 'super_admin' ? 'text-yellow-200 font-medium' :
-                                        currentUser.role === 'admin' ? 'text-blue-200 font-medium' :
-                                        currentUser.role === 'site_admin' ? 'text-green-200 font-medium' :
-                                        currentUser.role === 'support' ? 'text-purple-200 font-normal' :
-                                        currentUser.role === 'support' ? 'text-orange-200 font-normal' :
-                                        'text-white/80 font-normal'
+                                    <p className={`text-xs capitalize truncate font-medium ${
+                                        currentUser.role === 'super_admin' ? 'text-yellow-200' :
+                                        currentUser.role === 'admin' ? 'text-blue-200' :
+                                        currentUser.role === 'site_admin' ? 'text-green-200' :
+                                        currentUser.role === 'support' ? 'text-purple-200' :
+                                        currentUser.role === 'support' ? 'text-orange-200' :
+                                        'text-white/80'
                                     }`} style={{ 
                                         fontSize: '0.75rem',
-                                        textShadow: '0.5px 0.5px 0px rgba(0,0,0,0.1)',
-                                        transform: 'translateZ(0)',
-                                        letterSpacing: '0.25px'
+                                        letterSpacing: '0.3px'
                                     }}>
                                         {currentUser.role?.replace('_', ' ')}
                                     </p>
                                 </div>
                             </button>
                             {isProfileMenuOpen && (
-                                <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                                <div className="absolute left-0 right-0 top-full bg-white/95 backdrop-blur-lg border border-orange-500 border-t-0 rounded-b-lg shadow-2xl z-50" style={{
+                                    boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+                                    animation: 'fadeInDown 0.2s ease-out'
+                                }}>
                                     <Link
                                         to="/profile"
-                                        className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                                        className="w-full flex items-center px-4 py-3 text-sm text-black hover:bg-gray-100/80 transition-all duration-200 first:rounded-t-none"
                                         onClick={() => setIsProfileMenuOpen(false)}
                                     >
-                                        <User className="w-4 h-4 inline mr-2" />
-                                        Profile
+                                        <User className="w-4 h-4 mr-3 text-gray-600" />
+                                        <span className="font-medium">View Profile</span>
                                     </Link>
+                                    <div className="w-full h-px bg-gray-200/50"></div>
+                                    <Link
+                                        to="/change-password"
+                                        className="w-full flex items-center px-4 py-3 text-sm text-black hover:bg-gray-100/80 transition-all duration-200"
+                                        onClick={() => setIsProfileMenuOpen(false)}
+                                    >
+                                        <Key className="w-4 h-4 mr-3 text-gray-600" />
+                                        <span className="font-medium">Change Password</span>
+                                    </Link>
+                                    <div className="w-full h-px bg-gray-200/50"></div>
+                                    <Link
+                                        to="/settings"
+                                        className="w-full flex items-center px-4 py-3 text-sm text-black hover:bg-gray-100/80 transition-all duration-200 last:rounded-b-lg"
+                                        onClick={() => setIsProfileMenuOpen(false)}
+                                    >
+                                        <Settings className="w-4 h-4 mr-3 text-gray-600" />
+                                        <span className="font-medium">Settings</span>
+                                    </Link>
+                                    <div className="w-full h-px bg-gray-200/50"></div>
                                     <button
                                         onClick={handleLogout}
-                                        className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                                        className="w-full flex items-center px-4 py-3 text-sm text-red-600 hover:bg-red-50/80 transition-all duration-200 last:rounded-b-lg"
                                     >
-                                        <LogOut className="w-4 h-4 inline mr-2" />
-                                        Logout
+                                        <LogOut className="w-4 h-4 mr-3" />
+                                        <span className="font-medium">Logout</span>
                                     </button>
                                 </div>
                             )}
@@ -1269,30 +1559,38 @@ const App = () => {
                     initial={false}
                     animate={isSidebarExpanded ? "expanded" : "collapsed"}
                     variants={sidebarVariants}
-                    className="sidebar-glass fixed left-0 text-gray-700 flex flex-col flex-shrink-0 overflow-y-auto h-screen z-50 bg-white/95 backdrop-blur-sm border-r-2 border-gray-400"
-                    style={{ top: 0, height: '100vh', overflow: 'hidden' }}
+                    className="fixed left-0 text-gray-600 flex flex-col flex-shrink-0 overflow-y-auto h-screen z-50 border-r border-gray-200"
+                    style={{ 
+                        backgroundColor: '#ffffff',
+                        top: 0, 
+                        height: '100vh', 
+                        overflow: 'hidden'
+                    }}
                 >
                     {/* Logo at the top of the sidebar */}
-                    <div className={`flex ${isSidebarExpanded ? 'justify-center px-3 py-2' : 'justify-center pt-2 pb-1'}`}>
+                    <div className={`flex ${isSidebarExpanded ? 'justify-start px-3 py-2' : 'justify-center pt-2 pb-1'}`} style={{ height: '56px', alignItems: 'center' }}>
                         <Link to={currentUser ? (['site_admin', 'super_admin', 'support', 'admin'].includes(currentUser.role) ? '/dashboard' : '/my-tickets') : '/login'} className="flex items-center">
                             <img 
                                 src={isSidebarExpanded ? KriasolLogo : FabLogo} 
                                 alt="Logo" 
                                 className={`transition-all duration-300 ease-in-out ${
                                     isSidebarExpanded 
-                                        ? 'h-12 w-auto max-w-full' 
-                                        : 'h-10 w-10'
+                                        ? 'h-10 w-auto max-w-full' 
+                                        : 'h-7 w-7'
                                 }`}
                                 style={{
                                     objectFit: 'contain',
-                                    maxHeight: isSidebarExpanded ? '40px' : '40px'
+                                    maxHeight: isSidebarExpanded ? '40px' : '28px'
                                 }}
                             />
                         </Link>
                     </div>
+                    
+                    {/* Separator line under logo - aligned with header bottom */}
+                    <div className="border-t border-gray-300 mx-3"></div>
 
                     {/* Navigation Menu */}
-                    <div className="flex-1 px-3 py-2 flex flex-col space-y-1">
+                    <div className="flex-1 px-2 py-2 flex flex-col space-y-1">
                         {/* Main Navigation */}
                         <div className="space-y-1 flex-1">
                             {(currentUser.role === 'super_admin') ? (
@@ -1302,13 +1600,13 @@ const App = () => {
                                         <motion.div
                                             variants={textVariants}
                                             animate={isSidebarExpanded ? "expanded" : "collapsed"}
-                                            className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider"
+                                             className="px-3 py-2 text-xs font-semibold text-gray-500 tracking-wider font-['Source_Sans_Pro']"
                                         >
                                             Activity
                                         </motion.div>
                                     )}
                                     
-                                    <Link to="/all-tickets" className={`group flex items-center px-3 py-2  text-sm font-medium transition-all duration-200 hover:bg-orange-50 hover:text-orange-600 ${location.pathname === '/all-tickets' ? ' text-orange-700' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                    <Link to="/all-tickets" className={`group flex items-center px-3 py-2 text-sm font-semibold font-['Source_Sans_Pro'] transition-all duration-200 hover:bg-gray-200 hover:text-black ${location.pathname === '/all-tickets' ? 'bg-gray-200 text-black rounded-lg' : 'text-black'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                         { !isSidebarExpanded ? (
                                             <TooltipBubble title="All Tickets">
                                                 <div className="flex items-center justify-center w-7 h-7">
@@ -1323,7 +1621,7 @@ const App = () => {
                                         <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">All Tickets</motion.span>
                                     </Link>
                                     
-                                    <Link to="/my-tickets" className={`group flex items-center px-3 py-2  text-sm font-medium transition-all duration-200 hover:bg-orange-50 hover:text-orange-600 ${location.pathname === '/my-tickets' ? ' text-orange-700' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                    <Link to="/my-tickets" className={`group flex items-center px-3 py-2  text-sm font-semibold font-['Source_Sans_Pro'] transition-all duration-200 hover:bg-gray-200 hover:text-black ${location.pathname === '/my-tickets' ? 'bg-gray-200 text-black rounded-lg' : 'text-black'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                         { !isSidebarExpanded ? (
                                             <TooltipBubble title="My Tickets">
                                                 <div className="flex items-center justify-center w-7 h-7">
@@ -1343,25 +1641,40 @@ const App = () => {
                                         <motion.div
                                             variants={textVariants}
                                             animate={isSidebarExpanded ? "expanded" : "collapsed"}
-                                            className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider mt-6"
+                                            className="px-3 py-2 text-xs font-semibold text-gray-500 tracking-wider font-['Source_Sans_Pro'] mt-6"
                                         >
                                             Organisation
                                         </motion.div>
                                     )}
                                     
-                                    <Link to="/clients" className={`group flex items-center px-3 py-2  text-sm font-medium transition-all duration-200 hover:bg-orange-50 hover:text-orange-600 ${location.pathname === '/clients' ? ' text-orange-700' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                    <Link to="/clients" className={`group flex items-center px-3 py-2  text-sm font-semibold font-['Source_Sans_Pro'] transition-all duration-200 hover:bg-gray-200 hover:text-black ${location.pathname === '/clients' ? 'bg-gray-200 text-black rounded-lg' : 'text-black'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                         { !isSidebarExpanded ? (
                                             <TooltipBubble title="Clients">
                                                 <div className="flex items-center justify-center w-7 h-7">
-                                                    <Building size={23} className="flex-shrink-0" />
+                                                    <Handshake size={23} className="flex-shrink-0" />
                                                 </div>
                                             </TooltipBubble>
                                         ) : (
                                             <div className="flex items-center justify-center w-5 h-5 mr-3">
-                                                <Building size={18} className="flex-shrink-0" />
+                                                <Handshake size={18} className="flex-shrink-0" />
                                             </div>
                                         )}
                                         <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">Clients</motion.span>
+                                    </Link>
+                                    
+                                    <Link to="/user-management" className={`group flex items-center px-3 py-2  text-sm font-semibold font-['Source_Sans_Pro'] transition-all duration-200 hover:bg-gray-200 hover:text-black ${location.pathname === '/user-management' ? 'bg-gray-200 text-black rounded-lg' : 'text-black'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                        { !isSidebarExpanded ? (
+                                            <TooltipBubble title="Users">
+                                                <div className="flex items-center justify-center w-7 h-7">
+                                                    <UserCog size={23} className="flex-shrink-0" />
+                                                </div>
+                                            </TooltipBubble>
+                                        ) : (
+                                            <div className="flex items-center justify-center w-5 h-5 mr-3">
+                                                <UserCog size={18} className="flex-shrink-0" />
+                                            </div>
+                                        )}
+                                        <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">Users</motion.span>
                                     </Link>
 
 
@@ -1371,13 +1684,13 @@ const App = () => {
                                         <motion.div
                                             variants={textVariants}
                                             animate={isSidebarExpanded ? "expanded" : "collapsed"}
-                                            className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider mt-6"
+                                            className="px-3 py-2 text-xs font-semibold text-gray-500 tracking-wider font-['Source_Sans_Pro'] mt-6"
                                         >
                                             Reports
                                         </motion.div>
                                     )}
                                     
-                                    <Link to="/reports" className={`group flex items-center px-3 py-2  text-sm font-medium transition-all duration-200 hover:bg-orange-50 hover:text-orange-600 ${location.pathname === '/reports' ? ' text-orange-700' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                    <Link to="/reports" className={`group flex items-center px-3 py-2  text-sm font-semibold font-['Source_Sans_Pro'] transition-all duration-200 hover:bg-gray-200 hover:text-black ${location.pathname === '/reports' ? 'bg-gray-200 text-black rounded-lg' : 'text-black'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                         { !isSidebarExpanded ? (
                                             <TooltipBubble title="Reports">
                                                 <div className="flex items-center justify-center w-7 h-7">
@@ -1389,13 +1702,13 @@ const App = () => {
                                                 <TrendingUp size={18} className="flex-shrink-0" />
                                             </div>
                                         )}
-                                        <span className={`whitespace-nowrap overflow-hidden transition-all duration-200 ${isSidebarExpanded ? 'opacity-100 w-auto' : 'opacity-0 w-0'}`}>Reports & Analytics</span>
+                                        <span className={`whitespace-nowrap overflow-hidden transition-all duration-200 ${isSidebarExpanded ? 'opacity-100 w-auto' : 'opacity-0 w-0'}`}>Analytics</span>
                                     </Link>
                                     
                                 </>
                             ) : currentUser.role === 'admin' ? (
                                 <>
-                                    <Link to="/all-tickets" className={`group flex items-center px-3 py-2  text-sm font-medium transition-all duration-200 hover:bg-orange-50 hover:text-orange-600 ${location.pathname === '/all-tickets' ? ' text-orange-700' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                    <Link to="/all-tickets" className={`group flex items-center px-3 py-2  text-sm font-semibold font-['Source_Sans_Pro'] transition-all duration-200 hover:bg-gray-200 hover:text-black ${location.pathname === '/all-tickets' ? 'bg-gray-200 text-black rounded-lg' : 'text-black'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                         { !isSidebarExpanded ? (
                                             <TooltipBubble title="All Tickets">
                                                 <div className="flex items-center justify-center w-7 h-7">
@@ -1414,7 +1727,7 @@ const App = () => {
                                 </>
                             ) : currentUser.role === 'site_admin' ? (
                                 <>
-                                    <Link to="/all-tickets" className={`group flex items-center px-3 py-2  text-sm font-medium transition-all duration-200 hover:bg-orange-50 hover:text-orange-600 ${location.pathname === '/all-tickets' ? ' text-orange-700' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                    <Link to="/all-tickets" className={`group flex items-center px-3 py-2  text-sm font-semibold font-['Source_Sans_Pro'] transition-all duration-200 hover:bg-gray-200 hover:text-black ${location.pathname === '/all-tickets' ? 'bg-gray-200 text-black rounded-lg' : 'text-black'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
                                         { !isSidebarExpanded ? (
                                             <TooltipBubble title="All Tickets">
                                                 <div className="flex items-center justify-center w-7 h-7">
@@ -1429,7 +1742,7 @@ const App = () => {
                                         <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">All Tickets</motion.span>
                                     </Link>
                                     
-                                    <Link to="/my-tickets" className={`group flex items-center px-3 py-2  text-sm font-medium transition-all duration-200 hover:bg-orange-50 hover:text-orange-600 ${location.pathname === '/my-tickets' ? ' text-orange-700' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                    <Link to="/my-tickets" className={`group flex items-center px-3 py-2  text-sm font-semibold font-['Source_Sans_Pro'] transition-all duration-200 hover:bg-gray-200 hover:text-black ${location.pathname === '/my-tickets' ? 'bg-gray-200 text-black rounded-lg' : 'text-black'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
                                         { !isSidebarExpanded ? (
                                             <TooltipBubble title="My Tickets">
                                                 <div className="flex items-center justify-center w-7 h-7">
@@ -1444,22 +1757,8 @@ const App = () => {
                                         <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">My Tickets</motion.span>
                                     </Link>
                                     
-                                    <Link to="/user-management" className={`group flex items-center px-3 py-2  text-sm font-medium transition-all duration-200 hover:bg-orange-50 hover:text-orange-600 ${location.pathname === '/user-management' ? ' text-orange-700' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
-                                        { !isSidebarExpanded ? (
-                                            <TooltipBubble title="Users">
-                                                <div className="flex items-center justify-center w-7 h-7">
-                                                    <Users size={23} className="flex-shrink-0" />
-                                                </div>
-                                            </TooltipBubble>
-                                        ) : (
-                                            <div className="flex items-center justify-center w-5 h-5 mr-3">
-                                                <Users size={18} className="flex-shrink-0" />
-                                            </div>
-                                        )}
-                                        <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">Users</motion.span>
-                                    </Link>
                                     
-                                    <Link to="/create-ticket" className={`group flex items-center px-3 py-2  text-sm font-medium transition-all duration-200 hover:bg-green-50 hover:text-green-700 ${location.pathname === '/create-ticket' ? 'bg-green-50 text-green-700 shadow-sm' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                    <Link to="/create-ticket" className={`group flex items-center px-3 py-2  text-sm font-semibold font-['Source_Sans_Pro'] transition-all duration-200 hover:bg-green-50 hover:text-green-700 ${location.pathname === '/create-ticket' ? 'bg-green-50 text-green-700 shadow-sm' : 'text-black'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                         { !isSidebarExpanded ? (
                                             <TooltipBubble title="Create Ticket">
                                                 <div className="flex items-center justify-center w-7 h-7">
@@ -1481,15 +1780,15 @@ const App = () => {
                                                 <motion.div
                                                     variants={textVariants}
                                                     animate={isSidebarExpanded ? "expanded" : "collapsed"}
-                                                    className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider mt-6"
+                                                    className="px-3 py-2 text-xs font-semibold text-gray-500 tracking-wider font-['Source_Sans_Pro'] mt-6"
                                                 >
                                                     Reports
                                                 </motion.div>
                                             )}
                                             
-                                            <Link to="/reports" className={`group flex items-center px-3 py-2  text-sm font-medium transition-all duration-200 hover:bg-orange-50 hover:text-orange-600 ${location.pathname === '/reports' ? ' text-orange-700' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                            <Link to="/reports" className={`group flex items-center px-3 py-2  text-sm font-semibold font-['Source_Sans_Pro'] transition-all duration-200 hover:bg-gray-200 hover:text-black ${location.pathname === '/reports' ? 'bg-gray-200 text-black rounded-lg' : 'text-black'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                                 { !isSidebarExpanded ? (
-                                                    <TooltipBubble title="Reports & Analytics">
+                                                    <TooltipBubble title="Analytics">
                                                         <div className="flex items-center justify-center w-7 h-7">
                                                             <TrendingUp size={23} className="flex-shrink-0" />
                                                         </div>
@@ -1499,17 +1798,17 @@ const App = () => {
                                                         <TrendingUp size={18} className="flex-shrink-0" />
                                                     </div>
                                                 )}
-                                                <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">Reports & Analytics</motion.span>
+                                                <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">Analytics</motion.span>
                                             </Link>
                                         </>
                                     )}
                                 </>
                             ) : (
                                 <>
-                                    {/* Only show Dashboard in sidebar for support and other non-admin roles */}
-                                    {(['support', 'admin', 'site_admin'].includes(currentUser.role)) && (
+                                    {/* Only show Dashboard in sidebar for admin and site_admin roles */}
+                                    {(['admin', 'site_admin'].includes(currentUser.role)) && (
                                         <>
-                                            <Link to="/dashboard" className={`group flex items-center px-3 py-2  text-sm font-medium transition-all duration-200 hover:bg-orange-50 hover:text-orange-600 ${location.pathname === '/dashboard' ? ' text-orange-700' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                            <Link to="/dashboard" className={`group flex items-center px-3 py-2  text-sm font-semibold font-['Source_Sans_Pro'] transition-all duration-200 hover:bg-gray-200 hover:text-black ${location.pathname === '/dashboard' ? 'bg-gray-200 text-black rounded-lg' : 'text-black'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                                 { !isSidebarExpanded ? (
                                                     <TooltipBubble title="Dashboard">
                                                         <div className="flex items-center justify-center w-7 h-7">
@@ -1523,25 +1822,26 @@ const App = () => {
                                                 )}
                                                 <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">Dashboard</motion.span>
                                             </Link>
-                                            
-                                            <Link to="/all-tickets" className={`group flex items-center px-3 py-2  text-sm font-medium transition-all duration-200 hover:bg-orange-50 hover:text-orange-600 ${location.pathname === '/all-tickets' ? ' text-orange-700' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
-                                                { !isSidebarExpanded ? (
-                                                    <TooltipBubble title="All Tickets">
-                                                        <div className="flex items-center justify-center w-7 h-7">
-                                                            <FileText size={23} className="flex-shrink-0" />
-                                                        </div>
-                                                    </TooltipBubble>
-                                                ) : (
-                                                    <div className="flex items-center justify-center w-5 h-5 mr-3">
-                                                        <FileText size={18} className="flex-shrink-0" />
-                                                    </div>
-                                                )}
-                                                <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">All Tickets</motion.span>
-                                            </Link>
                                         </>
                                     )}
                                     
-                                    <Link to="/my-tickets" className={`group flex items-center px-3 py-2  text-sm font-medium transition-all duration-200 hover:bg-orange-50 hover:text-orange-600 ${location.pathname === '/my-tickets' ? ' text-orange-700' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                    {/* All Tickets - visible for all roles */}
+                                    <Link to="/all-tickets" className={`group flex items-center px-3 py-2 text-sm font-semibold font-['Source_Sans_Pro'] transition-all duration-200 hover:bg-gray-200 hover:text-black ${location.pathname === '/all-tickets' ? 'bg-gray-200 text-black rounded-lg' : 'text-black'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                        { !isSidebarExpanded ? (
+                                            <TooltipBubble title="All Tickets">
+                                                <div className="flex items-center justify-center w-7 h-7">
+                                                    <FileText size={23} className="flex-shrink-0" />
+                                                </div>
+                                            </TooltipBubble>
+                                        ) : (
+                                            <div className="flex items-center justify-center w-5 h-5 mr-3">
+                                                <FileText size={18} className="flex-shrink-0" />
+                                            </div>
+                                        )}
+                                        <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">All Tickets</motion.span>
+                                    </Link>
+                                    
+                                    <Link to="/my-tickets" className={`group flex items-center px-3 py-2  text-sm font-semibold font-['Source_Sans_Pro'] transition-all duration-200 hover:bg-gray-200 hover:text-black ${location.pathname === '/my-tickets' ? 'bg-gray-200 text-black rounded-lg' : 'text-black'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                         { !isSidebarExpanded ? (
                                             <TooltipBubble title="My Tickets">
                                                 <div className="flex items-center justify-center w-7 h-7">
@@ -1556,19 +1856,19 @@ const App = () => {
                                         <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">My Tickets</motion.span>
                                     </Link>
                                     
-                                    <Link to="/create-ticket" className={`group flex items-center px-3 py-2  text-sm font-medium transition-all duration-200 hover:bg-green-50 hover:text-green-700 ${location.pathname === '/create-ticket' ? 'bg-green-50 text-green-700 shadow-sm' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                    <Link to="/personal-notes" className={`group flex items-center px-3 py-2  text-sm font-semibold font-['Source_Sans_Pro'] transition-all duration-200 hover:bg-gray-200 hover:text-black ${location.pathname === '/personal-notes' ? 'bg-gray-200 text-black rounded-lg' : 'text-black'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                         { !isSidebarExpanded ? (
-                                            <TooltipBubble title="Create Ticket">
+                                            <TooltipBubble title="My Notes">
                                                 <div className="flex items-center justify-center w-7 h-7">
-                                                    <Zap size={23} className="flex-shrink-0" />
+                                                    <FileText size={23} className="flex-shrink-0" />
                                                 </div>
                                             </TooltipBubble>
                                         ) : (
                                             <div className="flex items-center justify-center w-5 h-5 mr-3">
-                                                <Zap size={18} className="flex-shrink-0" />
+                                                <FileText size={18} className="flex-shrink-0" />
                                             </div>
                                         )}
-                                        <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">Create Ticket</motion.span>
+                                        <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">My Notes</motion.span>
                                     </Link>
                                     
 
@@ -1576,10 +1876,48 @@ const App = () => {
                             )}
                         </div>
 
+                        {/* Sidebar Toggle Button - Only show when expanded */}
+                        {isSidebarExpanded && (
+                            <div className="pt-4">
+                                <div className="space-y-1">
+                                    <button
+                                        onClick={() => setIsSidebarExpanded(false)}
+                                        className="group flex items-center px-3 py-2 text-sm font-semibold font-['Source_Sans_Pro'] transition-all duration-200 hover:bg-gray-50 hover:text-black text-gray-600 justify-start"
+                                        title="Collapse sidebar"
+                                    >
+                                        <div className="flex items-center justify-center w-5 h-5 mr-3">
+                                            <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" data-rtl-flip="" className="icon max-md:hidden">
+                                                <path d="M6.83496 3.99992C6.38353 4.00411 6.01421 4.0122 5.69824 4.03801C5.31232 4.06954 5.03904 4.12266 4.82227 4.20012L4.62207 4.28606C4.18264 4.50996 3.81498 4.85035 3.55859 5.26848L3.45605 5.45207C3.33013 5.69922 3.25006 6.01354 3.20801 6.52824C3.16533 7.05065 3.16504 7.71885 3.16504 8.66301V11.3271C3.16504 12.2712 3.16533 12.9394 3.20801 13.4618C3.25006 13.9766 3.33013 14.2909 3.45605 14.538L3.55859 14.7216C3.81498 15.1397 4.18266 15.4801 4.62207 15.704L4.82227 15.79C5.03904 15.8674 5.31234 15.9205 5.69824 15.9521C6.01398 15.9779 6.383 15.986 6.83398 15.9902L6.83496 3.99992ZM18.165 11.3271C18.165 12.2493 18.1653 12.9811 18.1172 13.5702C18.0745 14.0924 17.9916 14.5472 17.8125 14.9648L17.7295 15.1415C17.394 15.8 16.8834 16.3511 16.2568 16.7353L15.9814 16.8896C15.5157 17.1268 15.0069 17.2285 14.4102 17.2773C13.821 17.3254 13.0893 17.3251 12.167 17.3251H7.83301C6.91071 17.3251 6.17898 17.3254 5.58984 17.2773C5.06757 17.2346 4.61294 17.1508 4.19531 16.9716L4.01855 16.8896C3.36014 16.5541 2.80898 16.0434 2.4248 15.4169L2.27051 15.1415C2.03328 14.6758 1.93158 14.167 1.88281 13.5702C1.83468 12.9811 1.83496 12.2493 1.83496 11.3271V8.66301C1.83496 7.74072 1.83468 7.00898 1.88281 6.41985C1.93157 5.82309 2.03329 5.31432 2.27051 4.84856L2.4248 4.57317C2.80898 3.94666 3.36012 3.436 4.01855 3.10051L4.19531 3.0175C4.61285 2.83843 5.06771 2.75548 5.58984 2.71281C6.17898 2.66468 6.91071 2.66496 7.83301 2.66496H12.167C13.0893 2.66496 13.821 2.66468 14.4102 2.71281C15.0069 2.76157 15.5157 2.86329 15.9814 3.10051L16.2568 3.25481C16.8833 3.63898 17.394 4.19012 17.7295 4.84856L17.8125 5.02531C17.9916 5.44285 18.0745 5.89771 18.1172 6.41985C18.1653 7.00898 18.165 7.74072 18.165 8.66301V11.3271ZM8.16406 15.995H12.167C13.1112 15.995 13.7794 15.9947 14.3018 15.9521C14.8164 15.91 15.1308 15.8299 15.3779 15.704L15.5615 15.6015C15.9797 15.3451 16.32 14.9774 16.5439 14.538L16.6299 14.3378C16.7074 14.121 16.7605 13.8478 16.792 13.4618C16.8347 12.9394 16.835 12.2712 16.835 11.3271V8.66301C16.835 7.71885 16.8347 7.05065 16.792 6.52824C16.7605 6.14232 16.7073 5.86904 16.6299 5.65227L16.5439 5.45207C16.32 5.01264 15.9796 4.64498 15.5615 4.3886L15.3779 4.28606C15.1308 4.16013 14.8165 4.08006 14.3018 4.03801C13.7794 3.99533 13.1112 3.99504 12.167 3.99504H8.16406C8.16407 3.99667 8.16504 3.99829 8.16504 3.99992L8.16406 15.995Z"></path>
+                                            </svg>
+                                        </div>
+                                        <span className="whitespace-nowrap overflow-hidden truncate font-semibold font-['Source_Sans_Pro']">Collapse</span>
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
                         {/* Bottom Menu Items */}
-                        <div className={`${isSidebarExpanded ? 'pt-4 border-t border-gray-100' : 'absolute bottom-0 left-0 right-0'}`}>
-                            <div className="space-y-0.5">
-                                    <Link to="/knowledge-base" className={`group flex items-center px-3 py-2  text-sm font-medium transition-all duration-200 hover:bg-orange-50 hover:text-orange-600 ${location.pathname === '/knowledge-base' ? ' text-orange-700' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                         <div className={`${isSidebarExpanded ? 'pt-4 border-t border-gray-200' : 'absolute bottom-0 left-0 right-0'}`}>
+                             <div className="space-y-1">
+                                {/* Expand Button - Only show when collapsed, above Help & Info */}
+                                {!isSidebarExpanded && (
+                                    <div className="flex w-full justify-center mb-2">
+                                        <TooltipBubble title="Expand sidebar">
+                                            <button
+                                                onClick={() => setIsSidebarExpanded(true)}
+                                                className="group flex items-center justify-center px-3 py-2 text-sm font-semibold font-['Source_Sans_Pro'] transition-all duration-200 hover:bg-gray-50 hover:text-black text-gray-600"
+                                            >
+                                                <div className="flex items-center justify-center w-7 h-7">
+                                                    <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" data-rtl-flip="" className="icon max-md:hidden">
+                                                        <path d="M6.83496 3.99992C6.38353 4.00411 6.01421 4.0122 5.69824 4.03801C5.31232 4.06954 5.03904 4.12266 4.82227 4.20012L4.62207 4.28606C4.18264 4.50996 3.81498 4.85035 3.55859 5.26848L3.45605 5.45207C3.33013 5.69922 3.25006 6.01354 3.20801 6.52824C3.16533 7.05065 3.16504 7.71885 3.16504 8.66301V11.3271C3.16504 12.2712 3.16533 12.9394 3.20801 13.4618C3.25006 13.9766 3.33013 14.2909 3.45605 14.538L3.55859 14.7216C3.81498 15.1397 4.18266 15.4801 4.62207 15.704L4.82227 15.79C5.03904 15.8674 5.31234 15.9205 5.69824 15.9521C6.01398 15.9779 6.383 15.986 6.83398 15.9902L6.83496 3.99992ZM18.165 11.3271C18.165 12.2493 18.1653 12.9811 18.1172 13.5702C18.0745 14.0924 17.9916 14.5472 17.8125 14.9648L17.7295 15.1415C17.394 15.8 16.8834 16.3511 16.2568 16.7353L15.9814 16.8896C15.5157 17.1268 15.0069 17.2285 14.4102 17.2773C13.821 17.3254 13.0893 17.3251 12.167 17.3251H7.83301C6.91071 17.3251 6.17898 17.3254 5.58984 17.2773C5.06757 17.2346 4.61294 17.1508 4.19531 16.9716L4.01855 16.8896C3.36014 16.5541 2.80898 16.0434 2.4248 15.4169L2.27051 15.1415C2.03328 14.6758 1.93158 14.167 1.88281 13.5702C1.83468 12.9811 1.83496 12.2493 1.83496 11.3271V8.66301C1.83496 7.74072 1.83468 7.00898 1.88281 6.41985C1.93157 5.82309 2.03329 5.31432 2.27051 4.84856L2.4248 4.57317C2.80898 3.94666 3.36012 3.436 4.01855 3.10051L4.19531 3.0175C4.61285 2.83843 5.06771 2.75548 5.58984 2.71281C6.17898 2.66468 6.91071 2.66496 7.83301 2.66496H12.167C13.0893 2.66496 13.821 2.66468 14.4102 2.71281C15.0069 2.76157 15.5157 2.86329 15.9814 3.10051L16.2568 3.25481C16.8833 3.63898 17.394 4.19012 17.7295 4.84856L17.8125 5.02531C17.9916 5.44285 18.0745 5.89771 18.1172 6.41985C18.1653 7.00898 18.165 7.74072 18.165 8.66301V11.3271ZM8.16406 15.995H12.167C13.1112 15.995 13.7794 15.9947 14.3018 15.9521C14.8164 15.91 15.1308 15.8299 15.3779 15.704L15.5615 15.6015C15.9797 15.3451 16.32 14.9774 16.5439 14.538L16.6299 14.3378C16.7074 14.121 16.7605 13.8478 16.792 13.4618C16.8347 12.9394 16.835 12.2712 16.835 11.3271V8.66301C16.835 7.71885 16.8347 7.05065 16.792 6.52824C16.7605 6.14232 16.7073 5.86904 16.6299 5.65227L16.5439 5.45207C16.32 5.01264 15.9796 4.64498 15.5615 4.3886L15.3779 4.28606C15.1308 4.16013 14.8165 4.08006 14.3018 4.03801C13.7794 3.99533 13.1112 3.99504 12.167 3.99504H8.16406C8.16407 3.99667 8.16504 3.99829 8.16504 3.99992L8.16406 15.995Z"></path>
+                                                    </svg>
+                                                </div>
+                                            </button>
+                                        </TooltipBubble>
+                                    </div>
+                                )}
+                                
+                                    <Link to="/knowledge-base" className={`group flex items-center px-3 py-2  text-sm font-semibold font-['Source_Sans_Pro'] transition-all duration-200 hover:bg-gray-200 hover:text-black ${location.pathname === '/knowledge-base' ? 'bg-gray-200 text-black rounded-lg' : 'text-black'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                     { !isSidebarExpanded ? (
                                         <TooltipBubble title="Help & Info">
                                             <div className="flex items-center justify-center w-7 h-7">
@@ -1594,7 +1932,7 @@ const App = () => {
                                     <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">Help & Info</motion.span>
                                 </Link>
                                 
-                                    <Link to="/settings" className={`group flex items-center px-3 py-2  text-sm font-medium transition-all duration-200 hover:bg-orange-50 hover:text-orange-600 ${location.pathname === '/settings' ? ' text-orange-700' : 'text-gray-700'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                    <Link to="/settings" className={`group flex items-center px-3 py-2  text-sm font-semibold font-['Source_Sans_Pro'] transition-all duration-200 hover:bg-gray-200 hover:text-black ${location.pathname === '/settings' ? 'bg-gray-200 text-black rounded-lg' : 'text-black'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                     { !isSidebarExpanded ? (
                                         <TooltipBubble title="Settings">
                                             <div className="flex items-center justify-center w-7 h-7">
@@ -1609,34 +1947,11 @@ const App = () => {
                                     <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">Settings</motion.span>
                                 </Link>
 
-                                {/* Expand/Collapse Arrow - Only show when collapsed */}
-                                {!isSidebarExpanded && (
-                                    <div className="flex w-full justify-center">
-                                        <TooltipBubble title="Expand view">
-                                            <button
-                                                onClick={() => setIsSidebarExpanded(true)}
-                                                className="group flex items-center justify-center px-3 py-2  text-sm font-medium transition-all duration-200 hover:bg-orange-50 hover:text-orange-600 text-gray-700"
-                                            >
-                                                <ChevronRight size={23} className="flex-shrink-0" />
-                                            </button>
-                                        </TooltipBubble>
-                                    </div>
-                                )}
                             </div>
                         </div>
 
 
 
-                        {/* Expand/Collapse Arrow - Only show when expanded, positioned at bottom right */}
-                        {isSidebarExpanded && (
-                            <button
-                                onClick={() => setIsSidebarExpanded(false)}
-                                className="absolute bottom-4 right-3 p-2 rounded-full hover:bg-orange-50 transition-all duration-200 z-50 group"
-                                title="Collapse sidebar"
-                            >
-                                <ChevronRight size={16} className="text-gray-400 group-hover:text-orange-600 rotate-180" />
-                            </button>
-                        )}
                     </div>
                 </motion.nav>
             )}
@@ -1649,8 +1964,8 @@ const App = () => {
                 variants={mainContentVariants}
                 style={currentUser && !isAuthLoading && location.pathname !== '/login' && location.pathname !== '/register' ? { 
                     position: 'fixed',
-                    top: 48,
-                    height: 'calc(100vh - 48px)',
+                     top: 64,
+                     height: 'calc(100vh - 64px)',
                     overflowY: 'auto',
                     zIndex: 40
                 } : { 
@@ -1720,7 +2035,7 @@ const App = () => {
                                         <AccessDeniedComponent />
                                 } />
                                 <Route path="/settings" element={<SettingsComponent />} />
-                                <Route path="/knowledge-base" element={<KnowledgeBaseComponent />} />
+                                <Route path="/knowledge-base" element={<KnowledgeBaseComponent currentUser={currentUser} showFlashMessage={showFlashMessage} />} />
                                 <Route path="/admin-management" element={
                                     currentUser.role === 'super_admin' ?
                                         <AdminManagementComponent currentUser={currentUser} showFlashMessage={showFlashMessage} /> :
@@ -1731,9 +2046,15 @@ const App = () => {
                                 <Route path="/siteadmin-management" element={['admin', 'site_admin', 'super_admin'].includes(currentUser.role) ? <SiteAdminManagementComponent /> : <AccessDeniedComponent />} />
                                 <Route path="/engineer-management" element={(['admin', 'site_admin', 'super_admin'].includes(currentUser.role)) ? <EngineerManagementComponent user={currentUser} showFlashMessage={showFlashMessage} /> : <AccessDeniedComponent />} />
                                 
+                                
                                 <Route path="/reports" element={
                                     (['admin', 'super_admin'].includes(currentUser.role)) ?
                                         <ReportsComponent user={currentUser} showFlashMessage={showFlashMessage} /> :
+                                        <AccessDeniedComponent />
+                                } />
+                                <Route path="/personal-notes" element={
+                                    (['support', 'admin', 'super_admin', 'site_admin'].includes(currentUser.role)) ?
+                                        <PersonalNotesComponent user={currentUser} showFlashMessage={showFlashMessage} /> :
                                         <AccessDeniedComponent />
                                 } />
                                 
@@ -1765,5 +2086,17 @@ const App = () => {
     </div>
 );
 }
+
+/**
+ * Main application component with notification provider
+ */
+const App = () => {
+    return (
+        <NotificationProvider>
+            <AppContent />
+            <CookieConsentBanner />
+        </NotificationProvider>
+    );
+};
 
 export default App;

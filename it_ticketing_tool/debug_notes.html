@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Notes Implementation</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .debug-section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .info { background-color: #d1ecf1; border-color: #bee5eb; }
+        button { padding: 10px 15px; margin: 5px; cursor: pointer; }
+        pre { background-color: #f8f9fa; padding: 10px; border-radius: 3px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>Notes Implementation Debug</h1>
+    
+    <div class="debug-section info">
+        <h3>Backend API Test</h3>
+        <button onclick="testBackendAPI()">Test Backend API</button>
+        <div id="backend-result"></div>
+    </div>
+
+    <div class="debug-section info">
+        <h3>Frontend Test</h3>
+        <p>Open browser console and navigate to a ticket detail page to see debug logs.</p>
+        <p>Look for these console messages:</p>
+        <ul>
+            <li>"TicketUpdatesSection - isSupportUser: [true/false]"</li>
+            <li>"Notes tab clicked, isSupportUser: [true/false]"</li>
+            <li>"Rendering NotesTab, activeTab: notes"</li>
+            <li>"NotesTab: ticket data: [object]"</li>
+        </ul>
+    </div>
+
+    <div class="debug-section info">
+        <h3>User Role Check</h3>
+        <p>Make sure you're logged in as a user with one of these roles:</p>
+        <ul>
+            <li>support</li>
+            <li>admin</li>
+            <li>super_admin</li>
+            <li>site_admin</li>
+        </ul>
+    </div>
+
+    <script>
+        async function testBackendAPI() {
+            const resultDiv = document.getElementById('backend-result');
+            resultDiv.innerHTML = '<p>Testing backend API...</p>';
+            
+            try {
+                // Test if backend is running
+                const response = await fetch('http://localhost:5000/api/tickets/summary-counts', {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (response.ok) {
+                    resultDiv.innerHTML = '<div class="success"><p>✅ Backend API is running!</p></div>';
+                } else {
+                    resultDiv.innerHTML = `<div class="error"><p>❌ Backend API returned status: ${response.status}</p></div>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error"><p>❌ Backend API is not running or not accessible: ${error.message}</p></div>`;
+            }
+        }
+        
+        // Auto-test backend on page load
+        window.onload = function() {
+            testBackendAPI();
+        };
+    </script>
+</body>
+</html>

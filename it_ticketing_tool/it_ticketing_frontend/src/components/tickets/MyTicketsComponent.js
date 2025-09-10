@@ -274,9 +274,17 @@ const MyTicketsComponent = ({ user, navigateTo, showFlashMessage, searchKeyword,
                                         <span className="block sm:hidden font-semibold text-gray-600">#:</span>
                                         {index + 1}
                                     </td>
-                                    <td className="block sm:table-cell px-2 py-4 text-xs text-blue-700 hover:underline font-medium cursor-pointer whitespace-normal break-words border-r border-gray-200" onClick={() => navigateTo('/tickets', ticket.id)}>
+                                    <td className="block sm:table-cell px-2 py-4 text-xs text-blue-700 hover:underline font-medium cursor-pointer whitespace-normal break-words border-r border-gray-200">
                                         <span className="block sm:hidden font-semibold text-gray-600">Ticket ID:</span>
-                                        {ticket.display_id}
+                                        <a
+                                            href={`/tickets/${ticket.id}`}
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                navigateTo('/tickets', ticket.id);
+                                            }}
+                                        >
+                                            {ticket.display_id}
+                                        </a>
                                     </td>
                                     <td className="block sm:table-cell px-2 py-4 text-xs text-gray-800 max-w-xs truncate whitespace-normal break-words border-r border-gray-200" title={ticket.short_description}>
                                         <span className="block sm:hidden font-semibold text-gray-600">Short Description:</span>

@@ -26,7 +26,7 @@ class EmailService {
             const { subject, text, html } = getWelcomeEmailTemplate(userData);
             
             const mailOptions = {
-                from: 'tt.support@kriasol.com',
+                from: 'process.env.DISTRIBUTION_EMAIL',
                 to: userData.userEmail,
                 subject: subject,
                 text: text,
@@ -55,7 +55,7 @@ class EmailService {
             const { subject, text, html } = getPasswordResetTemplate(userData);
             
             const mailOptions = {
-                from: 'tt.support@kriasol.com',
+                from: 'process.env.DISTRIBUTION_EMAIL',
                 to: userData.userEmail,
                 subject: subject,
                 text: text,
@@ -81,8 +81,8 @@ class EmailService {
             const { subject, text, html } = getTicketNotificationTemplate(ticketData);
             
             const mailOptions = {
-                from: 'tt.support@kriasol.com',
-                to: ticketData.toEmail || 'tt.support@kriasol.com',
+                from: 'process.env.DISTRIBUTION_EMAIL',
+                to: ticketData.toEmail || 'process.env.DISTRIBUTION_EMAIL',
                 cc: ticketData.ccEmail,
                 subject: subject,
                 text: text,
@@ -108,8 +108,8 @@ class EmailService {
             const { subject, text, html } = getTicketStatusUpdateTemplate(ticketData);
             
             const mailOptions = {
-                from: 'tt.support@kriasol.com',
-                to: ticketData.toEmail || 'tt.support@kriasol.com',
+                from: 'process.env.DISTRIBUTION_EMAIL',
+                to: ticketData.toEmail || 'process.env.DISTRIBUTION_EMAIL',
                 cc: ticketData.ccEmail,
                 subject: subject,
                 text: text,
@@ -138,8 +138,8 @@ class EmailService {
             const { subject, text, html } = template(ticketData);
             
             const mailOptions = {
-                from: 'tt.support@kriasol.com',
-                to: ticketData.toEmail || 'tt.support@kriasol.com',
+                from: 'process.env.DISTRIBUTION_EMAIL',
+                to: ticketData.toEmail || 'process.env.DISTRIBUTION_EMAIL',
                 cc: ticketData.ccEmail,
                 subject: subject,
                 text: text,
@@ -166,8 +166,8 @@ class EmailService {
             const { subject, text, html } = getUserTicketAssignmentTemplate(ticketData);
             
             const mailOptions = {
-                from: 'tt.support@kriasol.com',
-                to: ticketData.toEmail || 'tt.support@kriasol.com',
+                from: 'process.env.DISTRIBUTION_EMAIL',
+                to: ticketData.toEmail || 'process.env.DISTRIBUTION_EMAIL',
                 cc: ticketData.ccEmail,
                 subject: subject,
                 text: text,
@@ -193,8 +193,8 @@ class EmailService {
             const { subject, text, html } = getTicketCancellationTemplate(ticketData);
             
             const mailOptions = {
-                from: 'tt.support@kriasol.com',
-                to: ticketData.toEmail || 'tt.support@kriasol.com',
+                from: 'process.env.DISTRIBUTION_EMAIL',
+                to: ticketData.toEmail || 'process.env.DISTRIBUTION_EMAIL',
                 cc: ticketData.ccEmail,
                 subject: subject,
                 text: text,
@@ -220,8 +220,8 @@ class EmailService {
             const { subject, text, html } = getTicketCommentTemplate(ticketData);
             
             const mailOptions = {
-                from: 'tt.support@kriasol.com',
-                to: ticketData.toEmail || 'tt.support@kriasol.com',
+                from: 'process.env.DISTRIBUTION_EMAIL',
+                to: ticketData.toEmail || 'process.env.DISTRIBUTION_EMAIL',
                 cc: ticketData.ccEmail,
                 subject: subject,
                 text: text,
@@ -247,8 +247,8 @@ class EmailService {
             const { subject, text, html } = getAttachmentUploadTemplate(attachmentData);
             
             const mailOptions = {
-                from: 'tt.support@kriasol.com',
-                to: attachmentData.toEmail || 'tt.support@kriasol.com',
+                from: 'process.env.DISTRIBUTION_EMAIL',
+                to: attachmentData.toEmail || 'process.env.DISTRIBUTION_EMAIL',
                 cc: attachmentData.ccEmail,
                 subject: subject,
                 text: text,
@@ -277,7 +277,7 @@ class EmailService {
     async sendCustomEmail(emailData) {
         try {
             const mailOptions = {
-                from: 'tt.support@kriasol.com',
+                from: 'process.env.DISTRIBUTION_EMAIL',
                 to: emailData.to,
                 subject: emailData.subject,
                 text: emailData.text,
@@ -327,7 +327,7 @@ class EmailService {
             const { subject, text, html } = getPasswordSharingTemplate(userData);
             
             const mailOptions = {
-                from: 'tt.support@kriasol.com',
+                from: 'process.env.DISTRIBUTION_EMAIL',
                 to: userData.userEmail,
                 subject: subject,
                 text: text,
