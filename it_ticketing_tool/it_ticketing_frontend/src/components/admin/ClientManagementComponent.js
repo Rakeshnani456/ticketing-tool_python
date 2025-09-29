@@ -13,6 +13,7 @@ import {
 import { API_BASE_URL } from '../../config/constants';
 import { getFirestore, collection, onSnapshot } from 'firebase/firestore';
 import { app } from '../../config/firebase';
+import SmartCacheManager from '../../utils/smartCacheManager';
 import ClientInfoModal from '../common/ClientInfoModal';
 import PrimaryButton from '../common/PrimaryButton';
 import ClientCard from './ClientCard';
@@ -117,24 +118,85 @@ const ClientManagementComponent = ({ user }) => {
     let unsubClients = null;
     let unsubUsers = null;
     
-    // Set up Firestore snapshot listeners for both clients and users
-    unsubClients = onSnapshot(collection(db, 'clients'), (snapshot) => {
-      setClients(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      setLoading(false);
-    }, (err) => {
-      setError('Could not load clients.');
-      setClients([]);
-      setLoading(false);
-    });
+    // OPTIMIZED: Use smart cache manager for intelligent caching
+    const fetchClientsData = async () => {
+      try {
+        const result = await SmartCacheManager.smartFetch(
+          async () => {
+            console.log('🔄 Fetching fresh clients data');
+            const response = await fetch(`${API_BASE_URL}/api/clients`, {
+              headers: { 'Authorization': `Bearer ${await user.firebaseUser.getIdToken()}` }
+            });
+            if (!response.ok) {
+              throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            return await response.json();
+          },
+          'clients_data',
+          'CLIENTS',
+          user?.uid,
+          { forceRefresh: false, checkChanges: true }
+        );
+        
+        setClients(result.data);
+        setLoading(false);
+        
+        if (result.fromCache) {
+          console.log(`📦 Clients loaded from cache (age: ${Math.round(result.age / 1000)}s)`);
+        } else {
+          console.log(`✅ Fresh clients data loaded and cached`);
+        }
+      } catch (err) {
+        console.error('Error fetching clients:', err);
+        setError('Could not load clients.');
+        setClients([]);
+        setLoading(false);
+      }
+    };
 
-    // Set up Firestore snapshot listener for users
-    unsubUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
-      const fetchedUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setUsers(fetchedUsers);
-    }, (err) => {
-      console.error('Error fetching users:', err);
-      // Don't set error here as it's not critical for client management
-    });
+    const fetchUsersData = async () => {
+      try {
+        const result = await SmartCacheManager.smartFetch(
+          async () => {
+            console.log('🔄 Fetching fresh users data');
+            const response = await fetch(`${API_BASE_URL}/api/users`, {
+              headers: { 'Authorization': `Bearer ${await user.firebaseUser.getIdToken()}` }
+            });
+            if (!response.ok) {
+              throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            return await response.json();
+          },
+          'users_data',
+          'USERS',
+          user?.uid,
+          { forceRefresh: false, checkChanges: true }
+        );
+        
+        setUsers(result.data);
+        
+        if (result.fromCache) {
+          console.log(`📦 Users loaded from cache (age: ${Math.round(result.age / 1000)}s)`);
+        } else {
+          console.log(`✅ Fresh users data loaded and cached`);
+        }
+      } catch (err) {
+        console.error('Error fetching users:', err);
+      }
+    };
+
+    // Initial data fetch
+    fetchClientsData();
+    fetchUsersData();
+
+    // OPTIMIZED: Set up less frequent polling instead of real-time listeners
+    const pollInterval = setInterval(() => {
+      fetchClientsData();
+      fetchUsersData();
+    }, 30000); // Poll every 30 seconds instead of real-time
+
+    unsubClients = () => clearInterval(pollInterval);
+    unsubUsers = () => {}; // No-op since we're not using real-time listeners
     
     return () => {
       if (unsubClients) unsubClients();

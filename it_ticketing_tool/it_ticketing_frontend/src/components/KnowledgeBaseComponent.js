@@ -97,6 +97,23 @@ const KnowledgeBaseComponent = ({ currentUser, showFlashMessage }) => {
     const loadData = async () => {
         setLoading(true);
         try {
+            // OPTIMIZED: Check cache first
+            const cacheKey = `knowledge_base_data_${currentUser?.uid || 'anonymous'}`;
+            const cachedData = localStorage.getItem(cacheKey);
+            const cacheTime = localStorage.getItem(`${cacheKey}_time`);
+            const now = Date.now();
+            const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+            if (cachedData && cacheTime && (now - parseInt(cacheTime)) < CACHE_DURATION) {
+                console.log('📦 Using cached knowledge base data');
+                const data = JSON.parse(cachedData);
+                setDocuments(data.documents || []);
+                setFaqs(data.faqs || []);
+                setLoading(false);
+                return;
+            }
+
+            console.log('🔄 Fetching fresh knowledge base data');
             const token = await getAuthToken();
             const [docResponse, faqResponse] = await Promise.all([
                 fetch(`${API_BASE_URL}/api/knowledge-base/documents`, {
@@ -111,15 +128,25 @@ const KnowledgeBaseComponent = ({ currentUser, showFlashMessage }) => {
                 })
             ]);
 
+            let documents = [];
+            let faqs = [];
+
             if (docResponse.ok) {
                 const docData = await docResponse.json();
-                setDocuments(docData.documents || []);
+                documents = docData.documents || [];
+                setDocuments(documents);
             }
 
             if (faqResponse.ok) {
                 const faqData = await faqResponse.json();
-                setFaqs(faqData.faqs || []);
+                faqs = faqData.faqs || [];
+                setFaqs(faqs);
             }
+
+            // Cache the data
+            const dataToCache = { documents, faqs };
+            localStorage.setItem(cacheKey, JSON.stringify(dataToCache));
+            localStorage.setItem(`${cacheKey}_time`, now.toString());
         } catch (error) {
             console.error('Error loading data:', error);
             showFlashMessage('Failed to load knowledge base data', 'error');
@@ -130,6 +157,21 @@ const KnowledgeBaseComponent = ({ currentUser, showFlashMessage }) => {
 
     const loadCategories = async () => {
         try {
+            // OPTIMIZED: Check cache first for categories
+            const cacheKey = `knowledge_base_categories_${currentUser?.uid || 'anonymous'}`;
+            const cachedData = localStorage.getItem(cacheKey);
+            const cacheTime = localStorage.getItem(`${cacheKey}_time`);
+            const now = Date.now();
+            const CACHE_DURATION = 10 * 60 * 1000; // 10 minutes (categories change less frequently)
+
+            if (cachedData && cacheTime && (now - parseInt(cacheTime)) < CACHE_DURATION) {
+                console.log('📦 Using cached categories');
+                const data = JSON.parse(cachedData);
+                setCategories(data.categories || []);
+                return;
+            }
+
+            console.log('🔄 Fetching fresh categories');
             const token = await getAuthToken();
             const response = await fetch(`${API_BASE_URL}/api/knowledge-base/categories`, {
                 headers: {
@@ -138,7 +180,12 @@ const KnowledgeBaseComponent = ({ currentUser, showFlashMessage }) => {
             });
             if (response.ok) {
                 const data = await response.json();
-                setCategories(data.categories || []);
+                const categories = data.categories || [];
+                setCategories(categories);
+                
+                // Cache the categories
+                localStorage.setItem(cacheKey, JSON.stringify({ categories }));
+                localStorage.setItem(`${cacheKey}_time`, now.toString());
             }
         } catch (error) {
             console.error('Error loading categories:', error);

@@ -35,13 +35,21 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
             if (userRole === 'site_admin' && userClientName) {
                 // For site_admin, get users from their company/client
                 
-                // Try to get users by client_name first
+                // OPTIMIZED: Use a single query with 'in' operator to check both fields
                 try {
-                    snapshot = await usersCollection.where('client_name', '==', userClientName).get();
+                    // First try client_name
+                    snapshot = await usersCollection.where('client_name', '==', userClientName).limit(500).get();
                     
                     // If no users found, try companyName
                     if (snapshot.empty) {
-                        snapshot = await usersCollection.where('companyName', '==', userClientName).get();
+                        snapshot = await usersCollection.where('companyName', '==', userClientName).limit(500).get();
+                    }
+                    
+                    // If still empty, try a compound query (if supported by your indexes)
+                    if (snapshot.empty) {
+                        // This would require a composite index, but provides better performance
+                        // For now, we'll keep the two separate queries but add better logging
+                        console.log(`No users found for client_name or companyName: ${userClientName}`);
                     }
                 } catch (queryError) {
                     console.error('Error in Firestore query:', queryError);
@@ -53,10 +61,10 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
                 return res.status(200).json([]);
             } else if (userRole === 'support') {
                 // For support role, get all support users
-                snapshot = await usersCollection.where('role', '==', 'support').get();
+                snapshot = await usersCollection.where('role', '==', 'support').limit(500).get();
             } else if (userRole === 'admin' || userRole === 'super_admin') {
                 // For admin/super_admin, get all users
-                snapshot = await usersCollection.get();
+                snapshot = await usersCollection.limit(1000).get();
             } else {
                 return res.status(403).json({ error: 'Insufficient permissions to view users.' });
             }

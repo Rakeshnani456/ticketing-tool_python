@@ -64,6 +64,21 @@ const ReportsComponent = ({ user, showFlashMessage }) => {
     useEffect(() => {
         const fetchClients = async () => {
             try {
+                // OPTIMIZED: Check cache first for clients
+                const cacheKey = `clients_data_${user?.uid || 'anonymous'}`;
+                const cachedData = localStorage.getItem(cacheKey);
+                const cacheTime = localStorage.getItem(`${cacheKey}_time`);
+                const now = Date.now();
+                const CACHE_DURATION = 10 * 60 * 1000; // 10 minutes (clients don't change often)
+
+                if (cachedData && cacheTime && (now - parseInt(cacheTime)) < CACHE_DURATION) {
+                    console.log('📦 Using cached clients data');
+                    const clientsData = JSON.parse(cachedData);
+                    setClients(clientsData);
+                    return;
+                }
+
+                console.log('🔄 Fetching fresh clients data');
                 const idToken = await user.firebaseUser.getIdToken();
                 const response = await fetch(`${API_BASE_URL}/api/clients`, {
                     headers: { 'Authorization': `Bearer ${idToken}` }
@@ -71,6 +86,10 @@ const ReportsComponent = ({ user, showFlashMessage }) => {
                 if (response.ok) {
                     const clientsData = await response.json();
                     setClients(clientsData);
+                    
+                    // Cache the data
+                    localStorage.setItem(cacheKey, JSON.stringify(clientsData));
+                    localStorage.setItem(`${cacheKey}_time`, now.toString());
                 }
             } catch (error) {
                 console.error('Error fetching clients:', error);
@@ -86,6 +105,22 @@ const ReportsComponent = ({ user, showFlashMessage }) => {
     const generateReport = useCallback(async () => {
         setIsLoading(true);
         try {
+            // OPTIMIZED: Check cache first
+            const cacheKey = `report_data_${user?.uid}_${filters.dateRange}_${filters.clients.join(',')}_${filters.status}_${filters.priority}`;
+            const cachedData = localStorage.getItem(cacheKey);
+            const cacheTime = localStorage.getItem(`${cacheKey}_time`);
+            const now = Date.now();
+            const CACHE_DURATION = 2 * 60 * 1000; // 2 minutes
+
+            if (cachedData && cacheTime && (now - parseInt(cacheTime)) < CACHE_DURATION) {
+                console.log('📦 Using cached report data');
+                const data = JSON.parse(cachedData);
+                setReportData(data);
+                setIsLoading(false);
+                return;
+            }
+
+            console.log('🔄 Fetching fresh report data');
             const idToken = await user.firebaseUser.getIdToken();
             const params = new URLSearchParams({
                 dateRange: filters.dateRange,
@@ -101,6 +136,10 @@ const ReportsComponent = ({ user, showFlashMessage }) => {
             if (response.ok) {
                 const data = await response.json();
                 setReportData(data);
+                
+                // Cache the data
+                localStorage.setItem(cacheKey, JSON.stringify(data));
+                localStorage.setItem(`${cacheKey}_time`, now.toString());
             } else {
                 throw new Error('Failed to fetch report data');
             }

@@ -1,5 +1,6 @@
 /* --- Global Scrollbar Styles (apply to all scrollable elements) --- */
 @import url('https://fonts.googleapis.com/css2?family=Source+Sans+3:ital,wght@0,200..900;1,200..900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
 
 /* --- Theme Color Variables --- */
 :root {
@@ -30,6 +31,28 @@
     }
     to {
         opacity: 1;
+    }
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes fadeInDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
     }
 }
 
@@ -391,16 +414,17 @@ textarea.max-w-none.w-full::-webkit-scrollbar-corner {
   -webkit-backdrop-filter: none;
   border-radius: 0;
   box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.08);
-  border-right: 1px solid #9ca3af;
   transition: background 0.3s, box-shadow 0.3s;
+  font-family: 'Poppins', sans-serif;
 }
 
 .sidebar-glass .menu-item {
-  color: #758CA3; /* Default grey-blue text */
+  color: #000000; /* Black text */
   background: transparent;
   border-radius: 12px;
   transition: background 0.2s, color 0.2s, box-shadow 0.2s;
-  font-weight: 500;
+  font-weight: 400;
+  font-family: 'Poppins', sans-serif;
 }
 
 .sidebar-glass .menu-item:hover {
@@ -411,18 +435,39 @@ textarea.max-w-none.w-full::-webkit-scrollbar-corner {
 }
 
 .sidebar-glass .menu-item.active, .sidebar-glass .menu-item[aria-current="page"] {
-  background: rgba(244, 76, 35, 0.15); /* Orange background when selected */
-  color: #f44c23;
-  border-radius: 0;
-  box-shadow: none;
+  background: #ffffff !important; /* White background when selected */
+  color: #000000 !important;
+  border-radius: 8px !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2) !important; /* Black shadow */
+  border: 1px solid rgba(244, 76, 35, 0.6) !important; /* Orange outline */
   filter: none;
-  border-left: none;
+  position: relative;
+  z-index: 1;
 }
 
 .sidebar-glass .menu-item.active svg,
 .sidebar-glass .menu-item[aria-current="page"] svg {
-  color: #f44c23;
-  fill: #f44c23;
+  /* Keep original icon colors - no color changes */
+}
+
+/* Focus state for menu items */
+.sidebar-glass .menu-item:focus,
+.sidebar-glass .menu-item:focus-visible {
+  outline: none;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(244, 76, 35, 0.6);
+  background: #ffffff;
+}
+
+/* Persistent focus for active menu items */
+.sidebar-glass .menu-item.active:focus,
+.sidebar-glass .menu-item[aria-current="page"]:focus {
+  outline: none;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(244, 76, 35, 0.6);
+  background: #ffffff;
 }
 
 .sidebar-glass .menu-item.active .sidebar-count-badge {
@@ -544,11 +589,75 @@ textarea.max-w-none.w-full::-webkit-scrollbar-corner {
   height: 23px !important;
 }
 
+/* Poppins font for sidebar navigation links */
+.sidebar-glass .group.flex.items-center {
+  font-family: 'Poppins', sans-serif;
+  font-weight: 400;
+  color: #000000;
+}
+
+/* Poppins font for sidebar section headers */
+.sidebar-glass .sidebar-section-header {
+  font-family: 'Poppins', sans-serif;
+  font-weight: 400;
+  color: #6b7280;
+}
+
+/* Poppins font for sidebar count badges */
+.sidebar-glass .sidebar-count-badge {
+  font-family: 'Poppins', sans-serif;
+  font-weight: 400;
+}
+
 /* Main app header - fixed top header */
 header.fixed.top-0 {
-  background: #f44c23 !important; /* Main app header color */
+  background: #ffffff !important; /* Main app header color */
   box-shadow: none !important;
-  border-bottom: none !important;
+  border-bottom: 1px solid #e5e7eb !important;
+}
+
+/* Header button styles */
+.header-button {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.375rem 0.5rem;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: all 0.2s ease-in-out;
+  text-decoration: none;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+
+.header-button:hover {
+  background-color: #f9fafb;
+  color: #1f2937;
+}
+
+.header-button.active {
+  background-color: #f3f4f6;
+  color: #1f2937;
+}
+
+/* Responsive header adjustments */
+@media (max-width: 640px) {
+  header.fixed.top-0 {
+    padding: 0 0.75rem;
+  }
+  
+  .header-button {
+    padding: 0.25rem 0.375rem;
+    font-size: 0.8125rem;
+  }
+}
+
+@media (max-width: 768px) {
+  header.fixed.top-0 {
+    padding: 0 1rem;
+  }
 }
 
 
@@ -692,6 +801,27 @@ body {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+/* Bulk assign loading spinner */
+.loader {
+    width: 48px;
+    height: 48px;
+    border: 5px solid #e5e7eb;
+    border-bottom-color: #3b82f6;
+    border-radius: 50%;
+    display: inline-block;
+    box-sizing: border-box;
+    animation: rotation 1s linear infinite;
+}
+
+@keyframes rotation {
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
 }
 
 /* Disable all hover scale/transform effects on client management page */

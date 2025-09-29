@@ -21,9 +21,10 @@ import {
   FileText, Plus, ExternalLink
 } from 'lucide-react';
 import CustomDropdown from './common/CustomDropdown';
-import { collection, query, onSnapshot, orderBy, limit, getFirestore, where } from 'firebase/firestore';
+import { collection, query, orderBy, limit, getFirestore, where } from 'firebase/firestore';
 import { dbClient } from '../config/firebase';
 import { COLORS } from '../config/constants';
+import { useDashboardData } from '../hooks/useDataManager';
 
 // Register Chart.js components
 ChartJS.register(
@@ -154,6 +155,24 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
   // State for company filter (for Super Admin and Engineer)
   const [selectedCompany, setSelectedCompany] = useState('');
   const [availableCompanies, setAvailableCompanies] = useState([]);
+
+  // Use centralized data management
+  const { data: dashboardData, loading: dashboardLoading, error: dashboardError } = useDashboardData(
+    user?.uid,
+    user?.role,
+    user?.client_name
+  );
+
+  // Update state when dashboard data changes
+  useEffect(() => {
+    if (dashboardData) {
+      setTickets(processedDashboardData.tickets || []);
+      setCompanyUsers(processedDashboardData.companyUsers || []);
+      setActivities(processedDashboardData.activities || []);
+      setAgents(processedDashboardData.agents || []);
+      setLoading(false);
+    }
+  }, [dashboardData]);
   
   // State for time period filter (Ticket Volume Trend)
   const [selectedTimePeriod, setSelectedTimePeriod] = useState('7');
@@ -191,211 +210,8 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
     ? 'bg-gray-800/70 backdrop-blur-lg border-gray-700' 
     : 'bg-white/90 backdrop-blur-lg border-gray-300';
 
-  // Fetch data from Firebase
-  useEffect(() => {
-    if (!user || !user.firebaseUser) return;
-    
-    // OPTIMIZED: Check cache first
-    const cacheKey = `dashboard_data_${user.uid}`;
-    const cachedData = localStorage.getItem(cacheKey);
-    const cacheTime = localStorage.getItem(`${cacheKey}_time`);
-    const now = Date.now();
-    
-    // Use cached data if it's less than 2 minutes old
-    if (cachedData && cacheTime && (now - parseInt(cacheTime)) < 120000) {
-      try {
-        const parsedData = JSON.parse(cachedData);
-        setTickets(parsedData.tickets || []);
-        setCompanyUsers(parsedData.companyUsers || []);
-        setLoading(false);
-      } catch (e) {
-        console.warn('Failed to parse cached dashboard data:', e);
-      }
-    }
-    
-    // Fetch tickets with company filtering for site admin
-    const ticketsRef = collection(dbClient, 'tickets');
-    let ticketsQuery;
-    
-    // OPTIMIZED: Apply proper filtering to reduce reads
-    if (user.role === 'site_admin' && user.client_name) {
-      ticketsQuery = query(ticketsRef, where('client_name', '==', user.client_name), orderBy('created_at', 'desc'), limit(100));
-    } else {
-      ticketsQuery = query(ticketsRef, orderBy('created_at', 'desc'), limit(100));
-    }
-    
-    const unsubscribeTickets = onSnapshot(ticketsQuery, (snapshot) => {
-      const fetchedTickets = snapshot.docs.map(doc => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          ...data,
-          created_at: data.created_at?.toDate?.() || new Date(),
-          updated_at: data.updated_at?.toDate?.() || new Date(),
-        };
-      });
-      
-      // Additional client-side filtering for site admin if needed
-      let filteredTickets = fetchedTickets;
-      if (user.role === 'site_admin' && user.client_name) {
-        filteredTickets = fetchedTickets.filter(ticket => {
-          const ticketClientName = ticket.client_name || ticket.companyName;
-          return ticketClientName === user.client_name || ticketClientName === user.companyName;
-        });
-      }
-      
-      setTickets(filteredTickets);
-      setLoading(false);
-      
-      // Cache the data
-      const dataToCache = {
-        tickets: filteredTickets,
-        companyUsers: companyUsers,
-        timestamp: now
-      };
-      localStorage.setItem(cacheKey, JSON.stringify(dataToCache));
-      localStorage.setItem(`${cacheKey}_time`, now.toString());
-    });
-    
-    // Initialize empty agents array (will be populated from real data when available)
-    setAgents([]);
-    
-    // OPTIMIZED: Only fetch company users if needed and not already cached
-    let unsubscribeUsers = null;
-    if (user.role === 'site_admin' && user.client_name) {
-      const usersRef = collection(dbClient, 'users');
-      const usersQuery = query(usersRef, where('client_name', '==', user.client_name), limit(100));
-      
-      unsubscribeUsers = onSnapshot(usersQuery, (snapshot) => {
-        const fetchedUsers = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
-        setCompanyUsers(fetchedUsers);
-        
-        // Update cache with new company users
-        const existingCache = localStorage.getItem(cacheKey);
-        if (existingCache) {
-          try {
-            const parsedCache = JSON.parse(existingCache);
-            parsedCache.companyUsers = fetchedUsers;
-            localStorage.setItem(cacheKey, JSON.stringify(parsedCache));
-          } catch (e) {
-            console.warn('Failed to update cache with company users:', e);
-          }
-        }
-        
-        console.log(`Fetched ${fetchedUsers.length} users for company: ${user.client_name}`);
-      }, (error) => {
-        console.error('Error fetching company users:', error);
-      });
-    }
-    
-    // OPTIMIZED: Reduce activities fetch and add caching
-    const activitiesRef = collection(dbClient, 'activities');
-    let activitiesQuery;
-    
-    // For site admin, we'll fetch more activities and filter client-side
-    // This handles existing activities that don't have client_name field
-    if (user.role === 'site_admin' && user.client_name) {
-      activitiesQuery = query(activitiesRef, orderBy('timestamp', 'desc'), limit(20));
-    } else {
-      activitiesQuery = query(activitiesRef, orderBy('timestamp', 'desc'), limit(5));
-    }
-    
-    console.log('Setting up activities listener...');
-    const unsubscribeActivities = onSnapshot(activitiesQuery, (snapshot) => {
-      console.log('Activities snapshot received:', snapshot.docs.length, 'documents');
-      const fetchedActivities = snapshot.docs.map(doc => {
-        const data = doc.data();
-        console.log('Activity data:', data);
-        return {
-          id: doc.id,
-          ...data,
-          timestamp: data.timestamp?.toDate?.() || new Date(),
-        };
-      });
-      
-      // Client-side filtering for site admin
-      let filteredActivities = fetchedActivities;
-      
-      if (user.role === 'site_admin' && user.client_name) {
-        console.log('Site admin filtering activities. User client_name:', user.client_name);
-        console.log('Total activities before filtering:', fetchedActivities.length);
-        console.log('Company users available for filtering:', companyUsers.length);
-        
-        // Get list of company user emails for filtering
-        const companyUserEmails = companyUsers.map(u => u.email).filter(Boolean);
-        console.log('Company user emails:', companyUserEmails);
-        
-        filteredActivities = fetchedActivities.filter(activity => {
-          // First, check if activity has direct client information
-          const activityClientName = activity.client_name || activity.companyName;
-          if (activityClientName) {
-            const matches = activityClientName === user.client_name || activityClientName === user.companyName;
-            console.log(`Activity ${activity.id} has client_name: ${activityClientName}, matches: ${matches}`);
-            return matches;
-          }
-          
-          // Check if the activity was performed by a company user
-          if (activity.user_email && companyUserEmails.includes(activity.user_email)) {
-            console.log(`Activity ${activity.id} performed by company user: ${activity.user_email}`);
-            return true;
-          }
-          
-          // If no direct client info, look up the associated ticket
-          if (activity.ticket_id) {
-            const associatedTicket = tickets.find(ticket => ticket.id === activity.ticket_id);
-            if (associatedTicket) {
-              const ticketClientName = associatedTicket.client_name || associatedTicket.companyName;
-              const matches = ticketClientName === user.client_name || ticketClientName === user.companyName;
-              console.log(`Activity ${activity.id} linked to ticket ${activity.ticket_id}, ticket client_name: ${ticketClientName}, matches: ${matches}`);
-              return matches;
-            }
-          }
-          
-          // If company users are not loaded yet, be more permissive for existing activities
-          // This prevents activities from disappearing during initial load
-          if (companyUsers.length === 0) {
-            console.log(`Activity ${activity.id} - company users not loaded yet, allowing temporarily`);
-            return true;
-          }
-          
-          // If we can't determine the company, exclude it for security
-          console.log('Activity without client info, excluding for security:', activity);
-          return false;
-        });
-        
-        console.log('Activities after filtering:', filteredActivities.length);
-        
-        // Limit to 3 most recent after filtering
-        filteredActivities = filteredActivities.slice(0, 3);
-        console.log('Final activities for site admin:', filteredActivities.length);
-      } else {
-        // For non-site admin users, just use the fetched activities
-        filteredActivities = fetchedActivities;
-      }
-      
-      console.log('Setting activities state with:', filteredActivities.length, 'activities');
-      setActivities(filteredActivities);
-      
-      // Store original activities for re-filtering
-      if (user.role === 'site_admin' && user.client_name) {
-        setOriginalActivities(fetchedActivities);
-      }
-    }, (error) => {
-      console.error('Error fetching activities:', error);
-      console.error('Error details:', error.code, error.message);
-    });
-    
-    return () => {
-      unsubscribeTickets();
-      unsubscribeActivities();
-      if (unsubscribeUsers) {
-        unsubscribeUsers();
-      }
-    };
-  }, [user]);
+  // Data fetching is now handled by centralized data management
+  // The useDashboardData hook will handle all Firebase queries and caching
 
   // Re-filter activities when company users are loaded (for site admin)
   useEffect(() => {
@@ -439,43 +255,8 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
     }
   }, [companyUsers, user, originalActivities, tickets]);
 
-  // Fetch available companies for Super Admin, Engineer, and Site Admin
-  useEffect(() => {
-    if (!user || (user.role !== 'super_admin' && user.role !== 'engineer' && user.role !== 'site_admin')) return;
-
-    const usersRef = collection(dbClient, 'users');
-    const unsubscribeCompanies = onSnapshot(usersRef, (snapshot) => {
-      const companies = new Set();
-      snapshot.docs.forEach(doc => {
-        const userData = doc.data();
-        if (userData.client_name) {
-          companies.add(userData.client_name);
-        }
-        if (userData.companyName) {
-          companies.add(userData.companyName);
-        }
-      });
-      
-      const companiesList = Array.from(companies).sort();
-      console.log('Available companies fetched:', companiesList);
-      console.log('User role:', user?.role);
-      setAvailableCompanies(companiesList);
-      
-      // Set "All" as default if none selected
-      if (!selectedCompany) {
-        setSelectedCompany('All');
-      }
-      
-      // Set default time period to 7 days if not already set
-      if (selectedTimePeriod === '30') {
-        setSelectedTimePeriod('7');
-      }
-    });
-
-    return () => {
-      unsubscribeCompanies();
-    };
-  }, [user, selectedCompany]);
+  // Companies fetching removed - not critical for main functionality
+  // This can be added back later if needed for specific admin features
 
   // Create mappings for ticket ID lookups
   const ticketMappings = useMemo(() => {
@@ -493,7 +274,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
   }, [tickets]);
 
   // Process data for visualizations
-  const dashboardData = useMemo(() => {
+  const processedDashboardData = useMemo(() => {
     // Calculate ticket metrics
     const now = new Date();
     const lastWeek = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
@@ -968,7 +749,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
             <div className="flex justify-between items-start">
               <div>
                 <p className="opacity-75 font-semibold text-sm">Total Tickets</p>
-                <p className="text-2xl font-bold mt-1">{dashboardData.totalActiveTickets}</p>
+                <p className="text-2xl font-bold mt-1">{processedDashboardData.totalActiveTickets}</p>
                 <p className="text-blue-500 text-xs font-bold mt-1 flex items-center">
                   <Activity size={12} className="mr-1" /> Active tickets
                 </p>
@@ -995,7 +776,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
             <div className="flex justify-between items-start">
               <div>
                 <p className="opacity-75 font-semibold text-sm">Open Tickets</p>
-                <p className="text-2xl font-bold mt-1">{dashboardData.openTickets}</p>
+                <p className="text-2xl font-bold mt-1">{processedDashboardData.openTickets}</p>
                 <p className="text-orange-500 text-xs font-bold mt-1 flex items-center">
                   <AlertCircle size={12} className="mr-1" /> Need attention
                 </p>
@@ -1022,7 +803,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
             <div className="flex justify-between items-start">
               <div>
                 <p className="opacity-75 font-semibold text-sm">In Progress</p>
-                <p className="text-2xl font-bold mt-1">{dashboardData.inProgressTickets}</p>
+                <p className="text-2xl font-bold mt-1">{processedDashboardData.inProgressTickets}</p>
                 <p className="text-yellow-500 text-xs font-bold mt-1 flex items-center">
                   <Clock size={12} className="mr-1" /> Being worked on
                 </p>
@@ -1050,7 +831,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
               <div className="flex justify-between items-start">
                 <div>
                   <p className="opacity-75 font-semibold text-sm">Assigned to Me</p>
-                  <p className="text-2xl font-bold mt-1">{dashboardData.assignedToMe}</p>
+                  <p className="text-2xl font-bold mt-1">{processedDashboardData.assignedToMe}</p>
                   <p className="text-green-500 text-xs font-bold mt-1 flex items-center">
                     <Users size={12} className="mr-1" /> My tickets
                   </p>
@@ -1074,7 +855,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
               <div className="flex justify-between items-start">
                 <div>
                   <p className="opacity-75 font-semibold text-sm">Avg. Resolution</p>
-                  <p className="text-2xl font-bold mt-1">{dashboardData.avgResolutionTime}m</p>
+                  <p className="text-2xl font-bold mt-1">{processedDashboardData.avgResolutionTime}m</p>
                   <p className="text-purple-500 text-xs font-bold mt-1 flex items-center">
                     <TrendingUp size={12} className="mr-1" /> Minutes avg
                   </p>
@@ -1119,7 +900,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                       : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'
                   }`}
                 >
-                  Recents ({dashboardData.recentTickets.length})
+                  Recents ({processedDashboardData.recentTickets.length})
                 </button>
               </div>
             </div>
@@ -1345,8 +1126,8 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
             
             {activeTab === 'tickets' && (
               <div className="space-y-0 max-h-72 overflow-y-auto">
-                {dashboardData.recentTickets.length > 0 ? (
-                  dashboardData.recentTickets.map((ticket, index) => {
+                {processedDashboardData.recentTickets.length > 0 ? (
+                  processedDashboardData.recentTickets.map((ticket, index) => {
                     const itemBg = darkMode 
                       ? (index % 2 === 0 ? 'bg-gray-800/50' : 'bg-gray-700/50') 
                       : (index % 2 === 0 ? 'bg-white' : 'bg-slate-25/40');
@@ -1564,20 +1345,20 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
             <div className="flex justify-between items-center mb-2 px-3">
               <div className="text-sm text-gray-600">
                 <span className="font-medium text-black">
-                  {dashboardData.volumeTrend.reduce((sum, day) => sum + day.volume, 0)}
+                  {processedDashboardData.volumeTrend.reduce((sum, day) => sum + day.volume, 0)}
                 </span> total tickets in selected period
               </div>
               <div className="text-sm text-gray-600">
                 <span className="font-medium text-black">
-                  {Math.round(dashboardData.volumeTrend.reduce((sum, day) => sum + day.volume, 0) / Math.max(dashboardData.volumeTrend.length, 1) * 10) / 10}
+                  {Math.round(processedDashboardData.volumeTrend.reduce((sum, day) => sum + day.volume, 0) / Math.max(processedDashboardData.volumeTrend.length, 1) * 10) / 10}
                 </span> avg per day
               </div>
             </div>
             <div className="w-full">
-              {dashboardData.volumeTrend.length > 0 ? (
+              {processedDashboardData.volumeTrend.length > 0 ? (
               <ResponsiveContainer width="100%" height={300}>
                 <AreaChart 
-                  data={dashboardData.volumeTrend} 
+                  data={processedDashboardData.volumeTrend} 
                   animationDuration={0}
                   margin={{ top: 10, right: 30, left: -20, bottom: 0 }}
                 >
@@ -1677,11 +1458,11 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                   <div className="flex items-center gap-3 text-xs">
                     <div className="flex items-center gap-1.5 px-2 py-1 bg-green-50 text-green-700 rounded-full border border-green-200">
                       <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
-                      <span className="font-semibold">{dashboardData.totalResolvedTickets} Resolved</span>
+                      <span className="font-semibold">{processedDashboardData.totalResolvedTickets} Resolved</span>
                     </div>
                     <div className="flex items-center gap-1.5 px-2 py-1 bg-blue-50 text-blue-700 rounded-full border border-blue-200">
                       <div className="w-1.5 h-1.5 bg-blue-500 rounded-full"></div>
-                      <span className="font-semibold">{dashboardData.avgResolutionTime}m Avg</span>
+                      <span className="font-semibold">{processedDashboardData.avgResolutionTime}m Avg</span>
                     </div>
                   </div>
                 </div>
@@ -1769,8 +1550,8 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
 
             {/* Summary Metrics */}
             <div className="flex gap-2 mb-4">
-              {dashboardData.resolutionTimes.length > 0 ? (
-                dashboardData.resolutionTimes.map((metric, index) => {
+              {processedDashboardData.resolutionTimes.length > 0 ? (
+                processedDashboardData.resolutionTimes.map((metric, index) => {
                   const colors = [
                     'from-blue-500 to-blue-600',
                     'from-green-500 to-green-600', 
@@ -1814,17 +1595,17 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
             </div>
 
             {/* Resolution Time Distribution */}
-            {dashboardData.resolutionTimeDistribution.length > 0 && (
+            {processedDashboardData.resolutionTimeDistribution.length > 0 && (
               <div className="mb-4">
                 <h3 className="text-sm font-semibold mb-2">Time Distribution</h3>
                 <div className="h-48">
                   <ChartBar
                     data={{
-                      labels: dashboardData.resolutionTimeDistribution.map(item => item.range),
+                      labels: processedDashboardData.resolutionTimeDistribution.map(item => item.range),
                       datasets: [
                         {
                           label: 'Number of Tickets',
-                          data: dashboardData.resolutionTimeDistribution.map(item => item.count),
+                          data: processedDashboardData.resolutionTimeDistribution.map(item => item.count),
                           backgroundColor: [
                             'rgba(59, 130, 246, 0.8)',   // Blue
                             'rgba(16, 185, 129, 0.8)',   // Green
@@ -1880,7 +1661,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                               return `Time Range: ${context[0].label}`;
                             },
                             label: function(context) {
-                              const percentage = dashboardData.resolutionTimeDistribution[context.dataIndex]?.percentage || 0;
+                              const percentage = processedDashboardData.resolutionTimeDistribution[context.dataIndex]?.percentage || 0;
                               return `${context.parsed.y} tickets (${percentage}%)`;
                             }
                           }

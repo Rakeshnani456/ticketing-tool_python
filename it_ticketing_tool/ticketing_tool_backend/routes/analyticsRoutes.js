@@ -16,14 +16,17 @@ module.exports = function(db, admin, authenticateToken, checkRole) {
             console.log('Database connection status:', db ? 'Connected' : 'Not connected');
             let query = db.collection('tickets');
             
-            // Check total tickets in collection
-            const totalTicketsSnapshot = await db.collection('tickets').get();
-            console.log(`Total tickets in database: ${totalTicketsSnapshot.size}`);
+            // OPTIMIZED: Use count() instead of reading all tickets
+            // This is a major optimization - we were reading ALL tickets just to count them!
+            const totalTicketsCount = await db.collection('tickets').count().get();
+            console.log(`Total tickets in database: ${totalTicketsCount.data().count}`);
             
-            if (totalTicketsSnapshot.size > 0) {
-                const sampleTicket = totalTicketsSnapshot.docs[0].data();
+            // Get a sample ticket for debugging (limit to 1)
+            const sampleSnapshot = await db.collection('tickets').limit(1).get();
+            if (!sampleSnapshot.empty) {
+                const sampleTicket = sampleSnapshot.docs[0].data();
                 console.log('Sample ticket data:', {
-                    id: totalTicketsSnapshot.docs[0].id,
+                    id: sampleSnapshot.docs[0].id,
                     status: sampleTicket.status,
                     priority: sampleTicket.priority,
                     created_at: sampleTicket.created_at,
@@ -80,9 +83,10 @@ module.exports = function(db, admin, authenticateToken, checkRole) {
                 query = query.where('priority', '==', priority);
             }
             
-            // Get tickets
+            // Get tickets with limit to prevent excessive reads
             console.log('Final query filters applied');
-            const ticketsSnapshot = await query.get();
+            // OPTIMIZED: Add limit to prevent reading too many tickets
+            const ticketsSnapshot = await query.limit(1000).get();
             const tickets = [];
             
             console.log(`Found ${ticketsSnapshot.size} tickets in query`);
@@ -397,45 +401,58 @@ module.exports = function(db, admin, authenticateToken, checkRole) {
                 });
             });
             
-            // Get tickets for each client
-            const clientAnalytics = await Promise.all(clients.map(async (client) => {
-                let query = db.collection('tickets').where('client_id', '==', client.id);
+            // OPTIMIZED: Get all tickets once and group by client instead of multiple queries
+            let allTicketsQuery = db.collection('tickets');
+            
+            // Apply date range if specified
+            if (dateRange && dateRange !== 'all') {
+                const now = new Date();
+                let startDate;
                 
-                // Apply date range if specified
-                if (dateRange && dateRange !== 'all') {
-                    const now = new Date();
-                    let startDate;
-                    
-                    switch (dateRange) {
-                        case '7d':
-                            startDate = new Date(now.getTime() - (7 * 24 * 60 * 60 * 1000));
-                            break;
-                        case '30d':
-                            startDate = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
-                            break;
-                        case '90d':
-                            startDate = new Date(now.getTime() - (90 * 24 * 60 * 60 * 1000));
-                            break;
-                        case '1y':
-                            startDate = new Date(now.getTime() - (365 * 24 * 60 * 60 * 1000));
-                            break;
-                        default:
-                            startDate = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
-                    }
-                    
-                    query = query.where('created_at', '>=', admin.firestore.Timestamp.fromDate(startDate));
+                switch (dateRange) {
+                    case '7d':
+                        startDate = new Date(now.getTime() - (7 * 24 * 60 * 60 * 1000));
+                        break;
+                    case '30d':
+                        startDate = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
+                        break;
+                    case '90d':
+                        startDate = new Date(now.getTime() - (90 * 24 * 60 * 60 * 1000));
+                        break;
+                    case '1y':
+                        startDate = new Date(now.getTime() - (365 * 24 * 60 * 60 * 1000));
+                        break;
+                    default:
+                        startDate = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
                 }
                 
-                const ticketsSnapshot = await query.get();
-                const tickets = [];
-                
-                ticketsSnapshot.forEach(doc => {
-                    tickets.push(doc.data());
-                });
-                
-                const totalTickets = tickets.length;
-                const openTickets = tickets.filter(t => ['Open', 'In Progress'].includes(t.status)).length;
-                const resolvedTickets = tickets.filter(t => ['Resolved', 'Cancelled'].includes(t.status)).length;
+                allTicketsQuery = allTicketsQuery.where('created_at', '>=', admin.firestore.Timestamp.fromDate(startDate));
+            }
+            
+            // OPTIMIZED: Add limit and get all tickets at once
+            const allTicketsSnapshot = await allTicketsQuery.limit(2000).get();
+            const allTickets = [];
+            
+            allTicketsSnapshot.forEach(doc => {
+                allTickets.push(doc.data());
+            });
+            
+            // Group tickets by client_id
+            const ticketsByClient = {};
+            allTickets.forEach(ticket => {
+                const clientId = ticket.client_id;
+                if (!ticketsByClient[clientId]) {
+                    ticketsByClient[clientId] = [];
+                }
+                ticketsByClient[clientId].push(ticket);
+            });
+            
+            // Calculate analytics for each client
+            const clientAnalytics = clients.map(client => {
+                const clientTickets = ticketsByClient[client.id] || [];
+                const totalTickets = clientTickets.length;
+                const openTickets = clientTickets.filter(t => ['Open', 'In Progress'].includes(t.status)).length;
+                const resolvedTickets = clientTickets.filter(t => ['Resolved', 'Cancelled'].includes(t.status)).length;
                 
                 return {
                     ...client,
@@ -444,7 +461,7 @@ module.exports = function(db, admin, authenticateToken, checkRole) {
                     resolvedTickets,
                     resolutionRate: totalTickets > 0 ? ((resolvedTickets / totalTickets) * 100).toFixed(1) : 0
                 };
-            }));
+            });
             
             res.json(clientAnalytics);
             
@@ -470,51 +487,66 @@ module.exports = function(db, admin, authenticateToken, checkRole) {
                 });
             });
             
-            // Get tickets for each engineer
-            const engineerAnalytics = await Promise.all(engineers.map(async (engineer) => {
-                let query = db.collection('tickets').where('assigned_to', '==', engineer.email);
+            // OPTIMIZED: Get all tickets once and group by engineer instead of multiple queries
+            let allTicketsQuery = db.collection('tickets');
+            
+            // Apply date range if specified
+            if (dateRange && dateRange !== 'all') {
+                const now = new Date();
+                let startDate;
                 
-                // Apply date range if specified
-                if (dateRange && dateRange !== 'all') {
-                    const now = new Date();
-                    let startDate;
-                    
-                    switch (dateRange) {
-                        case '7d':
-                            startDate = new Date(now.getTime() - (7 * 24 * 60 * 60 * 1000));
-                            break;
-                        case '30d':
-                            startDate = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
-                            break;
-                        case '90d':
-                            startDate = new Date(now.getTime() - (90 * 24 * 60 * 60 * 1000));
-                            break;
-                        case '1y':
-                            startDate = new Date(now.getTime() - (365 * 24 * 60 * 60 * 1000));
-                            break;
-                        default:
-                            startDate = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
-                    }
-                    
-                    query = query.where('created_at', '>=', admin.firestore.Timestamp.fromDate(startDate));
+                switch (dateRange) {
+                    case '7d':
+                        startDate = new Date(now.getTime() - (7 * 24 * 60 * 60 * 1000));
+                        break;
+                    case '30d':
+                        startDate = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
+                        break;
+                    case '90d':
+                        startDate = new Date(now.getTime() - (90 * 24 * 60 * 60 * 1000));
+                        break;
+                    case '1y':
+                        startDate = new Date(now.getTime() - (365 * 24 * 60 * 60 * 1000));
+                        break;
+                    default:
+                        startDate = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
                 }
                 
-                const ticketsSnapshot = await query.get();
-                const tickets = [];
-                
-                ticketsSnapshot.forEach(doc => {
-                    tickets.push(doc.data());
-                });
-                
-                const totalTickets = tickets.length;
-                const openTickets = tickets.filter(t => ['Open', 'In Progress'].includes(t.status)).length;
-                const resolvedTickets = tickets.filter(t => ['Resolved', 'Cancelled'].includes(t.status)).length;
+                allTicketsQuery = allTicketsQuery.where('created_at', '>=', admin.firestore.Timestamp.fromDate(startDate));
+            }
+            
+            // OPTIMIZED: Add limit and get all tickets at once
+            const allTicketsSnapshot = await allTicketsQuery.limit(2000).get();
+            const allTickets = [];
+            
+            allTicketsSnapshot.forEach(doc => {
+                allTickets.push(doc.data());
+            });
+            
+            // Group tickets by assigned_to email
+            const ticketsByEngineer = {};
+            allTickets.forEach(ticket => {
+                const engineerEmail = ticket.assigned_to;
+                if (engineerEmail) {
+                    if (!ticketsByEngineer[engineerEmail]) {
+                        ticketsByEngineer[engineerEmail] = [];
+                    }
+                    ticketsByEngineer[engineerEmail].push(ticket);
+                }
+            });
+            
+            // Calculate analytics for each engineer
+            const engineerAnalytics = engineers.map(engineer => {
+                const engineerTickets = ticketsByEngineer[engineer.email] || [];
+                const totalTickets = engineerTickets.length;
+                const openTickets = engineerTickets.filter(t => ['Open', 'In Progress'].includes(t.status)).length;
+                const resolvedTickets = engineerTickets.filter(t => ['Resolved', 'Cancelled'].includes(t.status)).length;
                 
                 // Calculate average resolution time
                 let totalResolutionTime = 0;
                 let resolvedCount = 0;
                 
-                tickets.forEach(ticket => {
+                engineerTickets.forEach(ticket => {
                     if (ticket.resolved_at && ticket.created_at) {
                         const created = new Date(ticket.created_at.toDate ? ticket.created_at.toDate() : ticket.created_at);
                         const resolved = new Date(ticket.resolved_at.toDate ? ticket.resolved_at.toDate() : ticket.resolved_at);
@@ -534,7 +566,7 @@ module.exports = function(db, admin, authenticateToken, checkRole) {
                     avgResolutionTime,
                     resolutionRate: totalTickets > 0 ? ((resolvedTickets / totalTickets) * 100).toFixed(1) : 0
                 };
-            }));
+            });
             
             res.json(engineerAnalytics);
             
@@ -577,7 +609,8 @@ module.exports = function(db, admin, authenticateToken, checkRole) {
                 query = query.where('created_at', '>=', admin.firestore.Timestamp.fromDate(startDate));
             }
             
-            const ticketsSnapshot = await query.get();
+            // OPTIMIZED: Add limit to prevent excessive reads
+            const ticketsSnapshot = await query.limit(2000).get();
             const tickets = [];
             
             ticketsSnapshot.forEach(doc => {

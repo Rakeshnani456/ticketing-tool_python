@@ -359,6 +359,11 @@ app.get('/api/cache/stats', (req, res) => {
     }
 })();
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
+
+// Initialize WebSocket server
+const WebSocketServer = require('./websocketServer');
+const wsServer = new WebSocketServer(server);
+console.log('WebSocket server initialized');

@@ -120,9 +120,15 @@ export const useRealTimeAnalytics = (user, filters) => {
   useEffect(() => {
     const handleConnectionChange = (connected) => {
       setIsConnected(connected);
+      // OPTIMIZED: Don't automatically re-subscribe on every connection change
+      // Let the smart cache manager handle data fetching
       if (connected) {
-        // Re-subscribe when connection is restored
-        subscribe();
+        console.log('🌐 WebSocket reconnected - using cached data instead of re-subscribing');
+        // Only re-subscribe if we don't have any data yet
+        if (!data) {
+          console.log('📊 No cached data available, subscribing to analytics');
+          subscribe();
+        }
       }
     };
 
@@ -135,7 +141,7 @@ export const useRealTimeAnalytics = (user, filters) => {
     return () => {
       websocketClient.removeListener('connection_change', handleConnectionChange);
     };
-  }, [subscribe]);
+  }, [subscribe, data]);
 
   // Handle analytics updates
   useEffect(() => {

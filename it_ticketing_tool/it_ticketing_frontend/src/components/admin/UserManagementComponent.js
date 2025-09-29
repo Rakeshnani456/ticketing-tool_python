@@ -45,6 +45,7 @@ import { getFirestore, collection, onSnapshot, query, where, orderBy } from 'fir
 import { app } from '../../config/firebase';
 import * as XLSX from 'xlsx';
 import { useTheme } from '@mui/material/styles';
+import SmartCacheManager from '../../utils/smartCacheManager';
 // For Material-UI v5 and above
 import Checkbox from '@mui/material/Checkbox';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
@@ -156,6 +157,9 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
     const [importModalOpen, setImportModalOpen] = useState(false);
     const [importedUsers, setImportedUsers] = useState([]);
     const [importError, setImportError] = useState('');
+    
+    // OPTIMIZED: Add debouncing to prevent rapid successive API calls
+    const fetchUsersDebounced = useRef(null);
     const [importResults, setImportResults] = useState(null);
     const [importedPasswords, setImportedPasswords] = useState([]);
     const [credentialsDownloaded, setCredentialsDownloaded] = useState(false);
@@ -381,14 +385,14 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                     // Initial fetch
                     await fetchUsersFromAPI();
                     
-                    // Set up polling interval
-                    const pollInterval = setInterval(async () => {
+                    // OPTIMIZED: Much less aggressive polling - every 2 minutes instead of 5 seconds
+                    const pollInterval = setInterval(() => {
                         try {
-                            await fetchUsersFromAPI();
+                            fetchUsersDebouncedFn(); // Use debounced version
                         } catch (error) {
                             console.error("Error in API polling:", error);
                         }
-                    }, 5000); // Poll every 5 seconds
+                    }, 120000); // Poll every 2 minutes (120 seconds)
                     
                     unsubscribe = () => clearInterval(pollInterval);
                     
@@ -1253,103 +1257,100 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
       setPage(0);
     };
 
+    // OPTIMIZED: Debounced version of fetchUsersFromAPI
+    const fetchUsersDebouncedFn = useCallback((forceRefresh = false) => {
+        if (fetchUsersDebounced.current) {
+            clearTimeout(fetchUsersDebounced.current);
+        }
+        
+        fetchUsersDebounced.current = setTimeout(() => {
+            fetchUsersFromAPI(forceRefresh);
+        }, 500); // 500ms debounce
+    }, []);
+
     const fetchUsersFromAPI = useCallback(async (forceRefresh = false) => {
         try {
-            // Check cache first (unless force refresh is requested)
-            if (!forceRefresh) {
-                const cacheKey = user.role === 'site_admin' ? 
-                    `userManagement_cache_${user.role}_${user.companyName}` : 
-                    `userManagement_cache_${user.role}`;
-                const cacheTimeKey = `${cacheKey}_time`;
-                
-                const cachedData = localStorage.getItem(cacheKey);
-                const cacheTime = localStorage.getItem(cacheTimeKey);
-                
-                if (cachedData && cacheTime) {
-                    const cacheAge = Date.now() - parseInt(cacheTime);
-                    const cacheValidDuration = 5 * 60 * 1000; // 5 minutes
-                    
-                    if (cacheAge < cacheValidDuration) {
-                        console.log("Loading users from cache...");
-                        const cachedUsers = JSON.parse(cachedData);
-                        setUsers(cachedUsers);
-                        previousUsersRef.current = cachedUsers;
-                        setLastFetchTime(parseInt(cacheTime));
-                        setLoading(false);
-                        setError(null);
-                        return;
-                    } else {
-                        console.log("Cache expired, fetching fresh data...");
-                    }
-                }
-            }
-            
-            console.log("Fetching users from API...", { userRole: user.role, userCompanyName: user.companyName });
-            
             if (previousClientsRef.current.length === 0) {
                 await fetchClients();
             }
             
-            const idToken = await user.firebaseUser.getIdToken();
-            const response = await fetch(`${API_BASE_URL}/api/users`, {
-                headers: {
-                    'Authorization': `Bearer ${idToken}`,
-                    'Content-Type': 'application/json'
-                }
-            });
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-            const fetchedUsers = await response.json();
-            console.log("Fetched users from API:", fetchedUsers.length, "users");
+            const cacheKey = user.role === 'site_admin' ? 
+                `userManagement_cache_${user.role}_${user.companyName}` : 
+                `userManagement_cache_${user.role}`;
             
-            const usersWithClientDetails = fetchedUsers.map(u => {
-                const clientMatch = previousClientsRef.current.find(c => c['Client name'] === u.client_name);
-                return {
-                    ...u,
-                    asset_id: u.asset_id || u.assetid || '',
-                    domain: clientMatch ? clientMatch.Domain : (u.domain || ''),
-                    clientname: clientMatch ? clientMatch['Client name'] : (u.client_name || 'Unknown Client'),
-                    companyName: u.client_name || u.companyName || 'Unknown Company',
-                    firstName: u.firstName || '',
-                    lastName: u.lastName || '',
-                    contactNumber: u.contactNumber || '',
-                    managerEmail: u.managerEmail || '',
-                    employmentType: u.employmentType || '',
-                    designation: u.designation || '',
-                    employeeId: u.employeeId || '',
-                };
-            });
+            // Use smart cache manager with intelligent caching
+            const result = await SmartCacheManager.smartFetch(
+                async () => {
+                    console.log("🔄 Fetching users from API...", { userRole: user.role, userCompanyName: user.companyName });
+                    const idToken = await user.firebaseUser.getIdToken();
+                    const response = await fetch(`${API_BASE_URL}/api/users`, {
+                        headers: {
+                            'Authorization': `Bearer ${idToken}`,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+                    const fetchedUsers = await response.json();
+                    console.log("Fetched users from API:", fetchedUsers.length, "users");
+                    
+                    const usersWithClientDetails = fetchedUsers.map(u => {
+                        const clientMatch = previousClientsRef.current.find(c => c['Client name'] === u.client_name);
+                        return {
+                            ...u,
+                            asset_id: u.asset_id || u.assetid || '',
+                            domain: clientMatch ? clientMatch.Domain : (u.domain || ''),
+                            clientname: clientMatch ? clientMatch['Client name'] : (u.client_name || 'Unknown Client'),
+                            companyName: u.client_name || u.companyName || 'Unknown Company',
+                            firstName: u.firstName || '',
+                            lastName: u.lastName || '',
+                            contactNumber: u.contactNumber || '',
+                            managerEmail: u.managerEmail || '',
+                            employmentType: u.employmentType || '',
+                            designation: u.designation || '',
+                            employeeId: u.employeeId || '',
+                        };
+                    });
+                    
+                    // For site_admin, filter users to only show their company's users
+                    let filteredUsers = usersWithClientDetails;
+                    if (user.role === 'site_admin' && user.companyName) {
+                        const beforeFilter = filteredUsers.length;
+                        filteredUsers = usersWithClientDetails.filter(u => 
+                            u.clientname === user.companyName || 
+                            u.companyName === user.companyName
+                        );
+                        console.log(`Site admin filtering: ${beforeFilter} -> ${filteredUsers.length} users for company ${user.companyName}`);
+                    }
+                    
+                    return filteredUsers;
+                },
+                cacheKey,
+                'USERS',
+                user.uid,
+                { forceRefresh, checkChanges: true }
+            );
             
-            // For site_admin, filter users to only show their company's users
-            let filteredUsers = usersWithClientDetails;
-            if (user.role === 'site_admin' && user.companyName) {
-                const beforeFilter = filteredUsers.length;
-                filteredUsers = usersWithClientDetails.filter(u => 
-                    u.clientname === user.companyName || 
-                    u.companyName === user.companyName
-                );
-                console.log(`Site admin filtering: ${beforeFilter} -> ${filteredUsers.length} users for company ${user.companyName}`);
-            }
-            
-            if (!areUsersEqual(previousUsersRef.current, filteredUsers)) {
-                console.log("Updating users state with API data");
-                setUsers(filteredUsers);
-                previousUsersRef.current = filteredUsers;
-                
-                // Cache the data with role-specific keys
-                const currentTime = Date.now();
-                const cacheKey = user.role === 'site_admin' ? 
-                    `userManagement_cache_${user.role}_${user.companyName}` : 
-                    `userManagement_cache_${user.role}`;
-                const cacheTimeKey = `${cacheKey}_time`;
-                localStorage.setItem(cacheKey, JSON.stringify(filteredUsers));
-                localStorage.setItem(cacheTimeKey, currentTime.toString());
-                setLastFetchTime(currentTime);
+            // Only update state if data actually changed
+            if (!areUsersEqual(previousUsersRef.current, result.data)) {
+                console.log("Updating users state with", result.fromCache ? "cached" : "fresh", "data");
+                setUsers(result.data);
+                previousUsersRef.current = result.data;
+                setLastFetchTime(Date.now());
+            } else {
+                console.log("✅ Users data unchanged, no state update needed");
             }
             
             setLoading(false);
             setError(null);
+            
+            if (result.fromCache) {
+                console.log(`📦 Users loaded from cache (age: ${Math.round(result.age / 1000)}s)`);
+            } else {
+                console.log(`✅ Fresh users data loaded and cached`);
+            }
+            
         } catch (error) {
             console.error("Error fetching users from API:", error);
             setError(`API error: ${error.message}`);

@@ -2,13 +2,14 @@
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Loader2, XCircle, ListFilter, User, ChevronLeft, ChevronRight, ChevronDown, Plus, Search, Pin, PinOff, Edit3, Trash2, Save, X, FileText, Calendar, ExternalLink, Copy, Link, Eye, ArrowRight } from 'lucide-react';
-import { collection, query, onSnapshot, where, orderBy, getFirestore, limit, getDocs, doc, updateDoc } from 'firebase/firestore';
+import { Loader2, XCircle, ListFilter, User, ChevronLeft, ChevronRight, ChevronDown, Plus, Search, Pin, PinOff, Edit3, Trash2, Save, X, FileText, Calendar, ExternalLink, Copy, Link, Eye, ArrowRight, RefreshCw } from 'lucide-react';
+import { collection, query, where, orderBy, getFirestore, limit, getDocs, doc, updateDoc } from 'firebase/firestore';
 import ReactDOM, { createPortal } from 'react-dom';
 import { API_BASE_URL } from '../../config/constants';
 import { app, dbClient } from '../../config/firebase';
 import CustomDropdown from '../common/CustomDropdown';
 import SelectButton from '../common/SelectButton';
+import { useTickets } from '../../hooks/useDataManager';
 
 // TooltipBubble component for hover tooltips
 function TooltipBubble({ title, children }) {
@@ -139,6 +140,38 @@ const styles = `
 const ProfilePopup = ({ visible, position, user, copyStatus, onMouseEnter, onMouseLeave, onCopyEmail, onCopyName }) => {
     if (!visible || !user) return null;
 
+    // Calculate smart positioning
+    const calculateSmartPosition = () => {
+        const viewportHeight = window.innerHeight;
+        const viewportWidth = window.innerWidth;
+        const popupHeight = 200; // Estimated popup height
+        const popupWidth = 200; // Estimated popup width
+        
+        let top = position.y;
+        let left = position.x - 100; // Center the popup
+        
+        // Check if popup would go off the bottom of viewport
+        const shouldOpenAbove = position.y + popupHeight > viewportHeight;
+        if (shouldOpenAbove) {
+            // Position above the element instead
+            top = position.y - popupHeight - 10;
+        }
+        
+        // Check if popup would go off the right edge
+        if (left + popupWidth > viewportWidth) {
+            left = viewportWidth - popupWidth - 10;
+        }
+        
+        // Check if popup would go off the left edge
+        if (left < 10) {
+            left = 10;
+        }
+        
+        return { top, left, shouldOpenAbove };
+    };
+
+    const smartPosition = calculateSmartPosition();
+
     const getStatusMessage = () => {
         switch (copyStatus) {
             case 'email_copied':
@@ -168,32 +201,57 @@ const ProfilePopup = ({ visible, position, user, copyStatus, onMouseEnter, onMou
             data-profile-popup
             className="fixed z-50 bg-white border border-gray-200 rounded-lg shadow-lg py-2 min-w-[200px]"
             style={{
-                left: position.x - 100, // Center the popup
-                top: position.y, // Position below the element
+                left: smartPosition.left,
+                top: smartPosition.top,
                 zIndex: 9999
             }}
             onMouseEnter={onMouseEnter}
             onMouseLeave={onMouseLeave}
         >
-            {/* Arrow pointing up to the element */}
-            <div 
-                className="absolute -top-2 left-1/2 transform -translate-x-1/2 w-0 h-0"
-                style={{
-                    borderLeft: '8px solid transparent',
-                    borderRight: '8px solid transparent',
-                    borderBottom: '8px solid #e5e7eb' // border-gray-200
-                }}
-            />
-            <div 
-                className="absolute -top-1.5 left-1/2 transform -translate-x-1/2 w-0 h-0"
-                style={{
-                    borderLeft: '7px solid transparent',
-                    borderRight: '7px solid transparent',
-                    borderBottom: '7px solid white'
-                }}
-            />
+            {/* Arrow pointing to the element */}
+            {smartPosition.shouldOpenAbove ? (
+                // Arrow pointing down (popup is above)
+                <>
+                    <div 
+                        className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 w-0 h-0"
+                        style={{
+                            borderLeft: '8px solid transparent',
+                            borderRight: '8px solid transparent',
+                            borderTop: '8px solid #e5e7eb' // border-gray-200
+                        }}
+                    />
+                    <div 
+                        className="absolute -bottom-1.5 left-1/2 transform -translate-x-1/2 w-0 h-0"
+                        style={{
+                            borderLeft: '7px solid transparent',
+                            borderRight: '7px solid transparent',
+                            borderTop: '7px solid white'
+                        }}
+                    />
+                </>
+            ) : (
+                // Arrow pointing up (popup is below)
+                <>
+                    <div 
+                        className="absolute -top-2 left-1/2 transform -translate-x-1/2 w-0 h-0"
+                        style={{
+                            borderLeft: '8px solid transparent',
+                            borderRight: '8px solid transparent',
+                            borderBottom: '8px solid #e5e7eb' // border-gray-200
+                        }}
+                    />
+                    <div 
+                        className="absolute -top-1.5 left-1/2 transform -translate-x-1/2 w-0 h-0"
+                        style={{
+                            borderLeft: '7px solid transparent',
+                            borderRight: '7px solid transparent',
+                            borderBottom: '7px solid white'
+                        }}
+                    />
+                </>
+            )}
             
-            <div className="px-3 py-2 text-xs font-medium text-gray-500 border-b border-gray-100">
+            <div className="px-3 py-2 text-sm font-medium text-gray-500 border-b border-gray-100">
                 User Profile
             </div>
             <div className="px-3 py-2 text-sm space-y-3">
@@ -228,7 +286,7 @@ const ProfilePopup = ({ visible, position, user, copyStatus, onMouseEnter, onMou
                     </div>
                 )}
                 {copyStatus && (
-                    <div className={`text-xs text-center ${getStatusColor()}`}>
+                    <div className={`text-sm text-center ${getStatusColor()}`}>
                         {getStatusMessage()}
                     </div>
                 )}
@@ -241,6 +299,38 @@ const ProfilePopup = ({ visible, position, user, copyStatus, onMouseEnter, onMou
 // TicketIdPopup Component
 const TicketIdPopup = ({ visible, position, ticketId, documentId, copyStatus, onOpen, onCopyId, onCopyUrl, onMouseEnter, onMouseLeave }) => {
     if (!visible || !ticketId) return null;
+
+    // Calculate smart positioning
+    const calculateSmartPosition = () => {
+        const viewportHeight = window.innerHeight;
+        const viewportWidth = window.innerWidth;
+        const popupHeight = 150; // Estimated popup height
+        const popupWidth = 180; // Estimated popup width
+        
+        let top = position.y;
+        let left = position.x - 90; // Center the popup
+        
+        // Check if popup would go off the bottom of viewport
+        const shouldOpenAbove = position.y + popupHeight > viewportHeight;
+        if (shouldOpenAbove) {
+            // Position above the element instead
+            top = position.y - popupHeight - 10;
+        }
+        
+        // Check if popup would go off the right edge
+        if (left + popupWidth > viewportWidth) {
+            left = viewportWidth - popupWidth - 10;
+        }
+        
+        // Check if popup would go off the left edge
+        if (left < 10) {
+            left = 10;
+        }
+        
+        return { top, left, shouldOpenAbove };
+    };
+
+    const smartPosition = calculateSmartPosition();
 
     const getStatusMessage = () => {
         switch (copyStatus) {
@@ -271,30 +361,55 @@ const TicketIdPopup = ({ visible, position, ticketId, documentId, copyStatus, on
             data-ticket-id-popup
             className="fixed z-50 bg-white border border-gray-200 rounded-lg shadow-lg py-2 min-w-[180px]"
             style={{
-                left: position.x - 90, // Center the popup
-                top: position.y, // Position below the ticket ID
+                left: smartPosition.left,
+                top: smartPosition.top,
                 zIndex: 9999
             }}
             onMouseEnter={onMouseEnter}
             onMouseLeave={onMouseLeave}
         >
-            {/* Arrow pointing up to ticket ID */}
-            <div 
-                className="absolute -top-2 left-1/2 transform -translate-x-1/2 w-0 h-0"
-                style={{
-                    borderLeft: '8px solid transparent',
-                    borderRight: '8px solid transparent',
-                    borderBottom: '8px solid #e5e7eb' // border-gray-200
-                }}
-            />
-            <div 
-                className="absolute -top-1.5 left-1/2 transform -translate-x-1/2 w-0 h-0"
-                style={{
-                    borderLeft: '7px solid transparent',
-                    borderRight: '7px solid transparent',
-                    borderBottom: '7px solid white'
-                }}
-            />
+            {/* Arrow pointing to ticket ID */}
+            {smartPosition.shouldOpenAbove ? (
+                // Arrow pointing down (popup is above)
+                <>
+                    <div 
+                        className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 w-0 h-0"
+                        style={{
+                            borderLeft: '8px solid transparent',
+                            borderRight: '8px solid transparent',
+                            borderTop: '8px solid #e5e7eb' // border-gray-200
+                        }}
+                    />
+                    <div 
+                        className="absolute -bottom-1.5 left-1/2 transform -translate-x-1/2 w-0 h-0"
+                        style={{
+                            borderLeft: '7px solid transparent',
+                            borderRight: '7px solid transparent',
+                            borderTop: '7px solid white'
+                        }}
+                    />
+                </>
+            ) : (
+                // Arrow pointing up (popup is below)
+                <>
+                    <div 
+                        className="absolute -top-2 left-1/2 transform -translate-x-1/2 w-0 h-0"
+                        style={{
+                            borderLeft: '8px solid transparent',
+                            borderRight: '8px solid transparent',
+                            borderBottom: '8px solid #e5e7eb' // border-gray-200
+                        }}
+                    />
+                    <div 
+                        className="absolute -top-1.5 left-1/2 transform -translate-x-1/2 w-0 h-0"
+                        style={{
+                            borderLeft: '7px solid transparent',
+                            borderRight: '7px solid transparent',
+                            borderBottom: '7px solid white'
+                        }}
+                    />
+                </>
+            )}
             
             <div className="py-1">
                 <a
@@ -323,7 +438,7 @@ const TicketIdPopup = ({ visible, position, ticketId, documentId, copyStatus, on
                     Copy Ticket URL
                 </button>
                 {copyStatus && (
-                    <div className={`px-3 py-1 text-xs font-medium ${getStatusColor()} text-center`}>
+                    <div className={`px-3 py-1 text-sm font-medium ${getStatusColor()} text-center`}>
                         {getStatusMessage()}
                     </div>
                 )}
@@ -346,12 +461,79 @@ const TicketIdPopup = ({ visible, position, ticketId, documentId, copyStatus, on
  * @param {function} props.showFlashMessage - Function to display temporary messages.
  * @param {object} props.user - The current authenticated user object.
  * @param {string} props.searchKeyword - Keyword to filter tickets by (e.g., ticket ID, description).
- * @param {number} props.refreshKey - A key that, when changed, triggers a re-fetch of tickets.
  * @param {string} [props.initialFilterAssignment=''] - Initial assignment filter ('unassigned', 'assigned_to_me', or '').
  * @param {boolean} [props.showFilters=true] - Whether to display the filter and export section.
  * @returns {JSX.Element} The list of all tickets or a loading/error message.
  */
-const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword, refreshKey, initialFilterAssignment = '', showFilters = true }) => {
+const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword, initialFilterAssignment = '', showFilters = true }) => {
+    // Cache configuration
+    const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+    const CACHE_KEY = `all_tickets_${user?.uid}_${user?.role}`;
+    
+    // Cache utility functions
+    const getCachedData = () => {
+        try {
+            const cached = localStorage.getItem(CACHE_KEY);
+            const cacheTime = localStorage.getItem(`${CACHE_KEY}_time`);
+            if (cached && cacheTime) {
+                const age = Date.now() - parseInt(cacheTime);
+                if (age < CACHE_DURATION) {
+                    return JSON.parse(cached);
+                }
+            }
+        } catch (error) {
+            console.warn('Failed to read cache:', error);
+        }
+        return null;
+    };
+    
+    const setCachedData = (data) => {
+        try {
+            localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+            localStorage.setItem(`${CACHE_KEY}_time`, Date.now().toString());
+        } catch (error) {
+            console.warn('Failed to write cache:', error);
+        }
+    };
+    
+    const clearCache = () => {
+        try {
+            localStorage.removeItem(CACHE_KEY);
+            localStorage.removeItem(`${CACHE_KEY}_time`);
+        } catch (error) {
+            console.warn('Failed to clear cache:', error);
+        }
+    };
+    
+    // Use centralized data manager for tickets
+    const { data: ticketsData, loading: ticketsLoading, error: ticketsError, refresh: refreshTicketsData } = useTickets(
+        user?.uid,
+        user?.role,
+        user?.client_name
+    );
+
+    // Manual refresh function
+    const refreshTickets = useCallback(() => {
+        console.log('🔄 Manual refresh triggered');
+        clearCache();
+        setLoading(true);
+        setCacheStatus('loading');
+        // Force refresh through the data manager
+        refreshTicketsData();
+        // Update last refresh timestamp
+        if (user?.uid) {
+            localStorage.setItem(`last_tickets_refresh_${user.uid}`, Date.now().toString());
+        }
+    }, [refreshTicketsData, user?.uid]);
+    
+    // Expose refresh function globally for cache invalidation
+    useEffect(() => {
+        window.refreshAllTicketsCache = refreshTickets;
+        return () => {
+            delete window.refreshAllTicketsCache;
+        };
+    }, [refreshTickets]);
+    
     // State to hold ALL tickets fetched from Firestore (before client-side filtering)
     const [allTickets, setAllTickets] = useState([]);
     // State for the tickets currently being displayed in the table (after client-side filtering)
@@ -395,6 +577,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
     const [engineersLoading, setEngineersLoading] = useState(false);
     const [selectedEngineer, setSelectedEngineer] = useState('');
     const [assignLoading, setAssignLoading] = useState(false);
+    const [assignSuccess, setAssignSuccess] = useState(false);
     const [assignPopupRef] = useState(useRef(null));
     // State to track loading for individual ticket assignments
     const [assigningTickets, setAssigningTickets] = useState(new Set());
@@ -423,6 +606,9 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
     // State for ticket peek panel
     const [showPeekPanel, setShowPeekPanel] = useState(false);
     const [peekedTicket, setPeekedTicket] = useState(null);
+    
+    // State for cache status
+    const [cacheStatus, setCacheStatus] = useState('loading'); // 'loading', 'cached', 'fresh'
     
     // Ref to track if engineers have been fetched to prevent unnecessary re-fetching
     const engineersFetchedRef = useRef(false);
@@ -763,9 +949,6 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                 throw new Error(`Failed to fetch companies: ${response.status} ${response.statusText}`);
             }
             const companiesData = await response.json();
-            console.log('Fetched companies data:', companiesData);
-            console.log('Number of companies fetched:', companiesData.length);
-            console.log('Companies array after setState:', companiesData);
             setCompanies(companiesData);
             companiesFetchedRef.current = true; // Mark as fetched
         } catch (error) {
@@ -825,10 +1008,8 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                 setAvailableEngineers(engineers);
                 engineersCacheRef.current = engineers; // Cache the engineers
                 engineersFetchedRef.current = true;
-                console.log('Successfully loaded engineers from Firestore:', engineers);
                 return;
             } else {
-                console.log('No engineers found with required roles in the database');
                 setAvailableEngineers([]);
                 if (user && user.role === 'site_admin') {
                     showFlashMessage('No engineers found in the system. Please add users with support, admin, or site_admin roles.', 'info');
@@ -898,6 +1079,11 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                     : 'Ticket unassigned successfully', 
                 'success'
             );
+
+            // Refresh data to ensure consistency
+            if (refreshTicketsData) {
+                refreshTicketsData();
+            }
 
         } catch (error) {
             console.error('Error assigning ticket:', error);
@@ -1191,6 +1377,17 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
             // Firebase SDK handles authentication automatically when user is signed in
             // No need to manually check for tokens
             
+            // Get the assigned user information first
+            const assignedUserQuery = query(
+                collection(dbClient, 'users'),
+                where('email', '==', selectedEngineer)
+            );
+            const assignedUserSnapshot = await getDocs(assignedUserQuery);
+            if (assignedUserSnapshot.empty) {
+                throw new Error(`Engineer ${selectedEngineer} not found in users collection`);
+            }
+            const assignedUser = assignedUserSnapshot.docs[0];
+            
             // First, test if the backend is reachable
             console.log('Testing backend connectivity...');
             console.log('API_BASE_URL:', API_BASE_URL);
@@ -1224,17 +1421,6 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
 
                     // Update the ticket assignment in Firestore directly
                     const ticketRef = doc(db, 'tickets', ticketId);
-                    
-                    // First, get the assigned user's ID from the users collection
-                    const usersRef = collection(db, 'users');
-                    const userQuery = query(usersRef, where('email', '==', selectedEngineer));
-                    const userSnapshot = await getDocs(userQuery);
-                    
-                    if (userSnapshot.empty) {
-                        throw new Error(`Engineer ${selectedEngineer} not found in users collection`);
-                    }
-                    
-                    const assignedUser = userSnapshot.docs[0];
                     
                     // Trigger the existing backend assignment email system FIRST (before updating Firestore)
                     // This ensures the backend sees the original assignment value and can detect the change
@@ -1301,6 +1487,34 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
             
             if (successful.length > 0) {
                 showFlashMessage(`Successfully assigned ${successful.length} tickets to ${selectedEngineer}`, 'success');
+                
+                // Update local state immediately for real-time UI updates
+                console.log('🔄 Updating local state immediately for real-time updates...');
+                setAllTickets(prevTickets => 
+                    prevTickets.map(ticket => {
+                        if (selectedTickets.includes(ticket.id)) {
+                            return {
+                                ...ticket,
+                                assigned_to_email: selectedEngineer,
+                                assigned_to_id: assignedUser?.id,
+                                updated_at: new Date().toISOString()
+                            };
+                        }
+                        return ticket;
+                    })
+                );
+                
+                // Clear cache to ensure WebSocket updates are processed
+                clearCache();
+                
+                // Trigger WebSocket refresh
+                if (refreshTicketsData) {
+                    console.log('🔄 Triggering WebSocket data refresh...');
+                    refreshTicketsData();
+                }
+                
+                // Show success state in popup
+                setAssignSuccess(true);
             }
             
             if (failed.length > 0) {
@@ -1332,69 +1546,47 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
     // Get location for URL parameters
     const location = useLocation();
 
-    // Read URL parameters for initial filtering
+    // Read URL parameters for initial filtering - only run once on mount
     useEffect(() => {
         const urlParams = new URLSearchParams(location.search);
         const statusParam = urlParams.get('status');
         const assignmentParam = urlParams.get('assignment');
         
-        console.log('URL Parameters detected:', {
-            statusParam,
-            assignmentParam,
-            fullSearch: location.search
-        });
         
         if (statusParam) {
-            console.log('Setting filter status from URL:', statusParam);
             setFilterStatus(statusParam);
             setFilterBy('status');
         }
         
         if (assignmentParam) {
-            console.log('Setting filter assignment from URL:', assignmentParam);
             setFilterAssignment(assignmentParam);
         }
-    }, [location.search]);
+    }, []); // Only run once on mount, not on every location change
 
     // Check and reset company filter if user doesn't have permission
     useEffect(() => {
         const hasCompanyFilterPermission = user?.role === 'super_admin' || user?.role === 'admin' || user?.role === 'support' || user?.role === 'site_admin';
         
-        console.log('Company filter permission check:', {
-            userRole: user?.role,
-            hasPermission: hasCompanyFilterPermission,
-            currentFilterBy: filterBy
-        });
         
         if (filterBy === 'company' && !hasCompanyFilterPermission) {
-            console.log('User does not have permission for company filtering, resetting to status filter');
             setFilterBy('status');
             // Don't reset the company filter - preserve the selection for when they switch back
         }
     }, [user?.role, filterBy]);
 
-    // Fetch companies when component mounts or when filterBy changes to 'company' (if not already loaded)
+    // Fetch companies when filterBy changes to 'company' (if not already loaded)
     useEffect(() => {
-        console.log('Company fetch effect triggered:', {
-            filterBy,
-            companiesLength: companies.length,
-            shouldFetch: filterBy === 'company' && companies.length === 0
-        });
-        
-        if (filterBy === 'company' && companies.length === 0) {
-            console.log('Fetching companies for company filter...');
+        if (filterBy === 'company' && companies.length === 0 && !loadingCompanies) {
             fetchCompanies();
         }
-    }, [filterBy, companies.length]);
+    }, [filterBy]); // Remove companies.length from dependencies to prevent unnecessary re-fetching
 
     // Fetch companies when component mounts (only once)
     useEffect(() => {
         // Only fetch if companies haven't been loaded yet
         if (!companiesFetchedRef.current && !loadingCompanies) {
-            console.log('Fetching companies on component mount...');
             fetchCompanies();
         } else {
-            console.log('Companies already loaded or loading, skipping fetch');
         }
     }, []); // Empty dependency array - only run once on mount
 
@@ -1431,29 +1623,12 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
         setPeekedTicket(null);
     };
 
-    // Debug logging
-    console.log('Notes state:', { 
-        notesCount: notes.length, 
-        filteredCount: filteredNotes.length, 
-        pinnedCount: pinnedNotes.length,
-        unpinnedCount: unpinnedNotes.length,
-        searchTerm: notesSearchTerm,
-        selectedCategory: notesSelectedCategory
-    });
 
     // Fetch engineers for assignment dropdowns - single useEffect with better caching
     useEffect(() => {
-        console.log('Engineer fetch useEffect triggered:', {
-            userRole: user?.role,
-            hasCache: !!engineersCacheRef.current,
-            isFetched: engineersFetchedRef.current,
-            currentEngineers: availableEngineers.length
-        });
-
         if (user?.role === 'support' || user?.role === 'admin' || user?.role === 'super_admin') {
             // Check if we have cached engineers first
             if (engineersCacheRef.current && engineersCacheRef.current.length > 0) {
-                console.log('Using cached engineers from ref');
                 setAvailableEngineers(engineersCacheRef.current);
                 engineersFetchedRef.current = true; // Mark as fetched
                 return;
@@ -1461,10 +1636,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
             
             // Only fetch if not already fetched and no cache
             if (!engineersFetchedRef.current) {
-                console.log('Fetching engineers for role:', user.role);
                 fetchEngineers();
-            } else {
-                console.log('Engineers already fetched, skipping fetch');
             }
         }
     }, [user?.role]); // Only depend on user role
@@ -1517,99 +1689,98 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
         return newData;
     };
 
-    /**
-     * Effect hook to set up real-time Firestore listener for all tickets.
-     * This ensures 'allTickets' state contains the comprehensive dataset for accurate counts.
-     */
+    // Initialize with cached data on mount
     useEffect(() => {
-        if (!user || !user.firebaseUser || !db) {
-            setLoading(false);
-            showFlashMessage('Authentication required to view tickets.', 'info');
-            return () => {};
-        }
-
-        setError(null);
-
-        // OPTIMIZED: Check cache first
-        const cacheKey = `all_tickets_${user.uid}_${searchKeyword || 'default'}_${filterBy || 'default'}_${filterCompany || 'default'}`;
-        const cachedData = localStorage.getItem(cacheKey);
-        const cacheTime = localStorage.getItem(`${cacheKey}_time`);
-        const now = Date.now();
-        
-        // Use cached data if it's less than 2 minutes old
-        if (cachedData && cacheTime && (now - parseInt(cacheTime)) < 120000) {
-            try {
-                const parsedData = JSON.parse(cachedData);
-                setAllTickets(parsedData);
-                setLoading(false);
-            } catch (e) {
-                console.warn('Failed to parse cached all tickets data:', e);
-            }
-        }
-
-        // Debug site admin user profile
-        if (user.role === 'site_admin') {
-            console.log("Site admin user profile debug:", {
-                uid: user.uid,
-                email: user.email,
-                client_name: user.client_name,
-                companyName: user.companyName,
-                firebaseUser: user.firebaseUser ? 'present' : 'missing'
-            });
-        }
-
-        let ticketsRef = collection(db, 'tickets');
-        let q;
-
-        // If there's an exact search keyword that looks like a TICKET-ID,
-        // apply that filter directly in the Firestore query for efficiency.
-        if (searchKeyword && searchKeyword.toUpperCase().startsWith('TICKET-')) {
-            const exactId = searchKeyword.toUpperCase();
-            q = query(ticketsRef, where('display_id', '==', exactId), orderBy('created_at', 'desc'), limit(10));
-        } else if (user && user.role === 'site_admin' && user.client_name) {
-            // Only fetch tickets for this site_admin's company
-            q = query(ticketsRef, where('client_name', '==', user.client_name), orderBy('created_at', 'desc'), limit(100));
-        } else if (user && user.role === 'site_admin') {
-            // Fallback: if site admin doesn't have client_name, fetch all tickets and filter client-side
-            console.warn("Site admin user doesn't have client_name field, falling back to client-side filtering");
-            q = query(ticketsRef, orderBy('created_at', 'desc'), limit(100));
-        } else {
-            // Otherwise, fetch all tickets ordered by creation date.
-            q = query(ticketsRef, orderBy('created_at', 'desc'), limit(100));
-        }
-
-        // Set up the real-time listener
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const fetchedTickets = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...formatTicketData(doc.data()) // Format timestamps
-            }));
-            setAllTickets(fetchedTickets); // Update the raw fetched tickets (full dataset or exact search result)
+        const cachedData = getCachedData();
+        if (cachedData) {
+            console.log('📦 Loading tickets from cache');
+            setAllTickets(cachedData);
             setLoading(false);
             setError(null);
-            
-            // Cache the data
-            localStorage.setItem(cacheKey, JSON.stringify(fetchedTickets));
-            localStorage.setItem(`${cacheKey}_time`, now.toString());
-        }, (err) => {
-            console.error("Firestore onSnapshot error:", err);
-            // Add more specific error handling for site admin
-            if (user && user.role === 'site_admin') {
-                console.error("Site admin ticket fetch error details:", {
-                    userClientName: user.client_name,
-                    userCompanyName: user.companyName,
-                    error: err.message,
-                    code: err.code
-                });
-            }
-            setError(`Failed to load tickets: ${err.message}`);
-            showFlashMessage(`Failed to load tickets: ${err.message}`, 'error');
-            setLoading(false);
-        });
+            setCacheStatus('cached');
+        } else {
+            setCacheStatus('loading');
+        }
+    }, []); // Only run once on mount
 
-        // Cleanup function: unsubscribe from the listener when the component unmounts
-        return () => unsubscribe();
-    }, [db, searchKeyword, user, filterBy, filterCompany]);
+    // Update local state when tickets data changes
+    useEffect(() => {
+        if (ticketsData) {
+            console.log('🔄 Loading tickets from API - ticketsData received:', ticketsData.length, 'tickets');
+            // Apply search filtering if needed
+            let filteredTickets = ticketsData;
+            
+            if (searchKeyword && searchKeyword.toUpperCase().startsWith('TICKET-')) {
+                const exactId = searchKeyword.toUpperCase();
+                filteredTickets = ticketsData.filter(ticket => 
+                    ticket.display_id === exactId
+                );
+            }
+            
+            setAllTickets(filteredTickets);
+            setCachedData(filteredTickets); // Cache the data
+            setLoading(false);
+            setError(null);
+            setCacheStatus('fresh');
+        }
+    }, [ticketsData, searchKeyword]);
+
+    // Force refresh tickets data when component mounts or user changes
+    useEffect(() => {
+        if (user?.uid) {
+            console.log('🔄 Force refreshing tickets data for real-time updates');
+            refreshTicketsData();
+        }
+    }, [user?.uid, refreshTicketsData]);
+
+    // Listen for real-time updates via WebSocket instead of polling
+    useEffect(() => {
+        if (!user?.uid) return;
+
+        // Set up a more efficient refresh strategy
+        const handleVisibilityChange = () => {
+            if (!document.hidden && user?.uid) {
+                // Only refresh when user returns to the tab and data might be stale
+                const lastRefresh = localStorage.getItem(`last_tickets_refresh_${user.uid}`);
+                const now = Date.now();
+                const fiveMinutes = 5 * 60 * 1000;
+                
+                if (!lastRefresh || (now - parseInt(lastRefresh)) > fiveMinutes) {
+                    console.log('🔄 Refreshing tickets on tab focus (data may be stale)');
+                    refreshTicketsData();
+                    localStorage.setItem(`last_tickets_refresh_${user.uid}`, now.toString());
+                }
+            }
+        };
+
+        // Listen for custom events that indicate data changes
+        const handleDataChange = (event) => {
+            if (event.detail?.type === 'ticket_created' || event.detail?.type === 'ticket_updated') {
+                console.log('🔄 Data change detected, refreshing tickets');
+                refreshTicketsData();
+            }
+        };
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        document.addEventListener('ticketDataChanged', handleDataChange);
+        
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+            document.removeEventListener('ticketDataChanged', handleDataChange);
+        };
+    }, [user?.uid, refreshTicketsData]);
+
+    // Handle loading and error states
+    useEffect(() => {
+        if (ticketsLoading !== undefined) {
+            setLoading(ticketsLoading);
+        }
+        if (ticketsError) {
+            setError(`Failed to load tickets: ${ticketsError}`);
+            showFlashMessage(`Failed to load tickets: ${ticketsError}`, 'error');
+            setLoading(false);
+        }
+    }, [ticketsLoading, ticketsError]);
 
 
     /**
@@ -1617,47 +1788,24 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
      * whenever `allTickets` (the raw data from Firestore) or filter states change.
      */
     useEffect(() => {
-        console.log('Filtering effect triggered with:', {
-            filterStatus,
-            filterBy,
-            filterPriority,
-            filterAssignment,
-            filterCompany,
-            totalTickets: allTickets.length
-        });
-        
         let currentFilteredTickets = [...allTickets]; // Start with all tickets fetched by Firestore
 
         // If user is a site_admin, filter tickets by their company/client
         if (user && user.role === 'site_admin') {
             if (user.client_name) {
-                console.log("Site admin filtering tickets:", {
-                    userClientName: user.client_name,
-                    userCompanyName: user.companyName,
-                    totalTickets: currentFilteredTickets.length
-                });
+        // Site admin filtering tickets
                 currentFilteredTickets = currentFilteredTickets.filter(ticket => {
                     const ticketClientName = ticket.client_name || ticket.companyName;
                     const matches = ticketClientName === user.client_name || ticketClientName === user.companyName;
-                    if (!matches) {
-                        console.log("Filtered out ticket:", {
-                            ticketId: ticket.display_id,
-                            ticketClientName: ticketClientName,
-                            userClientName: user.client_name,
-                            userCompanyName: user.companyName
-                        });
-                    }
+                    // Filtered out ticket
                     return matches;
                 });
-                console.log("After site admin filtering:", {
-                    filteredTickets: currentFilteredTickets.length
-                });
+                // After site admin filtering
             } else {
                 console.warn("Site admin user doesn't have client_name field - showing all tickets");
                 showFlashMessage('Warning: Site admin profile missing company information. Showing all tickets.', 'warning');
             }
         } else {
-            console.log("Non-site admin user - no automatic company filtering applied");
         }
 
         // Always filter out 'Closed', 'Resolved', and 'Cancelled' tickets from being displayed in the grid
@@ -1725,40 +1873,14 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
             });
         }
         
-        // Debug: log final filtered tickets count
-        console.log('Final filtered tickets count:', currentFilteredTickets.length);
-        console.log('Filtering summary:', {
-            filterBy,
-            filterStatus,
-            filterPriority,
-            filterAssignment,
-            filterCompany,
-            totalTickets: allTickets.length,
-            filteredTickets: currentFilteredTickets.length
-        });
+        // Final filtered tickets count
 
         setDisplayedTickets(currentFilteredTickets); // Update displayed tickets
-    }, [allTickets, filterStatus, filterPriority, filterBy, filterAssignment, filterCompany, searchKeyword, user, companies]); // Dependencies include all filtering states and user
+    }, [allTickets, filterStatus, filterPriority, filterBy, filterAssignment, filterCompany, searchKeyword, user?.uid, user?.role, user?.client_name]); // Removed companies.length to prevent unnecessary re-renders
 
 
-    // Effect hook to measure message box height and set up auto-hide timer
+    // Effect hook to measure message box height and set up auto-hide timer - only run once on mount
     useEffect(() => {
-        // Check if there are URL parameters first
-        const urlParams = new URLSearchParams(location.search);
-        const statusParam = urlParams.get('status');
-        const assignmentParam = urlParams.get('assignment');
-        
-        // Only reset filter states if there are no URL parameters
-        if (!statusParam && !assignmentParam) {
-            // Reset filter states based on initialFilterAssignment
-            setFilterAssignment(initialFilterAssignment);
-            if (!initialFilterAssignment && filterStatus !== '') { // Only reset to 'Open' if no assignment filter AND filterStatus is not already empty
-                setFilterStatus('Open'); // Re-default to Open if no assignment filter is active
-            } else {
-                setFilterStatus(''); // Clear status filter if an assignment filter is explicitly set
-            }
-        }
-
         // Reset message visibility and animation states
         setShowMessage(true);
         setMessageOpacity(1);
@@ -1774,14 +1896,14 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
             initialMessageBoxHeight.current = height + marginBottom; // Total space occupied
         }
 
-        // NEW: Automatically close message after 2 seconds when the component mounts or filters change
+        // NEW: Automatically close message after 2 seconds when the component mounts
         const timer = setTimeout(() => {
             handleCloseMessage();
         }, 2000); // 2000 milliseconds = 2 seconds
 
-        // Cleanup the timer if the component unmounts or dependencies change before it fires
+        // Cleanup the timer if the component unmounts
         return () => clearTimeout(timer);
-    }, [initialFilterAssignment, location.search]);
+    }, []); // Only run once on mount
 
 
     // Effect hook to handle clicks outside the export popup to close it
@@ -2142,7 +2264,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
         statusOptions.map(option => ({
             ...option,
             label: (
-                <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getStatusClasses(option.value)}`}>
+                <span className={`px-2 py-0.5 text-sm font-medium rounded-full ${getStatusClasses(option.value)}`}>
                     {option.label}
                 </span>
             )
@@ -2216,7 +2338,12 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
     const totalPages = Math.ceil(displayedTickets.length / ticketsPerPage);
     const paginatedTickets = displayedTickets.slice((currentPage - 1) * ticketsPerPage, currentPage * ticketsPerPage);
 
-    useEffect(() => { setCurrentPage(1); }, [displayedTickets]);
+    // Only reset to page 1 if the current page is beyond the new total pages
+    useEffect(() => { 
+        if (currentPage > totalPages && totalPages > 0) {
+            setCurrentPage(1); 
+        }
+    }, [displayedTickets.length, currentPage, totalPages]);
 
     const handlePageChange = (page) => {
       if (page >= 1 && page <= totalPages) setCurrentPage(page);
@@ -2230,7 +2357,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
       if (end - start < 2) start = Math.max(1, end - 2);
       for (let i = start; i <= end; i++) {
         pages.push(
-          <button key={i} onClick={() => handlePageChange(i)} className={`mx-0.5 w-7 h-7 flex items-center justify-center rounded-full text-xs font-semibold transition-colors duration-200 ${i === currentPage ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}>{i}</button>
+          <button key={i} onClick={() => handlePageChange(i)} className={`mx-0.5 w-7 h-7 flex items-center justify-center rounded-full text-sm font-semibold transition-colors duration-200 ${i === currentPage ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}>{i}</button>
         );
       }
       const firstTicket = (currentPage - 1) * ticketsPerPage + 1;
@@ -2260,27 +2387,27 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                         </button>
                         <h3 className="text-lg font-semibold mb-4">Export Tickets</h3>
                         <div className="mb-4">
-                            <label className="block text-xs font-semibold text-gray-700 mb-1">Start Date</label>
+                            <label className="block text-sm font-semibold text-gray-700 mb-1">Start Date</label>
                             <input
                                 type="date"
                                 value={startDate}
                                 onChange={e => setStartDate(e.target.value)}
-                                className="p-1 border border-gray-300 rounded-md text-xs w-full"
+                                className="p-1 border border-gray-300 rounded-md text-sm w-full"
                                 max={today}
                             />
                         </div>
                         <div className="mb-4">
-                            <label className="block text-xs font-semibold text-gray-700 mb-1">End Date</label>
+                            <label className="block text-sm font-semibold text-gray-700 mb-1">End Date</label>
                             <input
                                 type="date"
                                 value={endDate}
                                 onChange={e => setEndDate(e.target.value)}
-                                className="p-1 border border-gray-300 rounded-md text-xs w-full"
+                                className="p-1 border border-gray-300 rounded-md text-sm w-full"
                                 max={today}
                             />
                         </div>
                         <div className="mb-4">
-                            <label className="block text-xs font-semibold text-gray-700 mb-1">Status</label>
+                            <label className="block text-sm font-semibold text-gray-700 mb-1">Status</label>
                             <CustomDropdown
                                 value={exportStatus}
                                 onChange={value => setExportStatus(value)}
@@ -2298,14 +2425,14 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                         <div className="flex justify-end gap-2">
                             <button
                                 onClick={() => setShowExportPopup(false)}
-                                className="px-3 py-1.5 text-xs font-medium text-white bg-gradient-to-r from-red-400 to-red-500 rounded-md shadow-sm hover:from-red-500 hover:to-red-600 hover:shadow-md transition-all duration-200 border-0 focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-1"
+                                className="px-3 py-1.5 text-sm font-medium text-white bg-gradient-to-r from-red-400 to-red-500 rounded-md shadow-sm hover:from-red-500 hover:to-red-600 hover:shadow-md transition-all duration-200 border-0 focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-1"
                             >
                                 Cancel
                             </button>
                             <button
                                 onClick={handleExport}
                                 disabled={loading || !startDate || !endDate}
-                                className="px-3 py-1.5 text-xs font-bold text-green-600 bg-white border border-green-600 rounded-md shadow-sm hover:bg-green-50 hover:border-green-700 hover:text-green-700 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="px-3 py-1.5 text-sm font-bold text-green-600 bg-white border border-green-600 rounded-md shadow-sm hover:bg-green-50 hover:border-green-700 hover:text-green-700 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 {loading ? 'Exporting...' : 'Confirm Export'}
                             </button>
@@ -2315,9 +2442,17 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                 document.body
             )}
             {showAssignPopup && assignMode && user?.role !== 'site_admin' && ReactDOM.createPortal(
-                <div className="fixed inset-0 z-[9999] flex items-center justify-center">
-                    <div className="absolute inset-0 bg-black bg-opacity-30" />
-                    <div ref={assignPopupRef} className="relative z-10 bg-white border border-gray-300 rounded-md shadow-lg p-6 w-full max-w-md">
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+                    <div 
+                        className="absolute inset-0 bg-black bg-opacity-30" 
+                        onClick={(e) => {
+                            // Only close if clicking directly on the backdrop, not on child elements
+                            if (e.target === e.currentTarget) {
+                                setShowAssignPopup(false);
+                            }
+                        }}
+                    />
+                    <div ref={assignPopupRef} className="relative z-10 bg-white border border-gray-300 rounded-md shadow-lg p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
                         <button
                             onClick={() => setShowAssignPopup(false)}
                             className="absolute top-2 right-2 text-gray-400 hover:text-gray-600"
@@ -2325,36 +2460,73 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                             ✕
                         </button>
                         <h3 className="text-lg font-semibold mb-4">Assign Tickets to Engineer</h3>
-                        <div className="mb-4">
-                            <label className="block text-xs font-semibold text-gray-700 mb-1">Select Engineer</label>
-                            <CustomDropdown
-                                value={selectedEngineer}
-                                onChange={value => setSelectedEngineer(value)}
-                                options={[
-                                    { value: '', label: 'Choose an engineer...' },
-                                    ...availableEngineers.map(engineer => ({
-                                        value: engineer.email,
-                                        label: `${engineer.name} (${engineer.email})`
-                                    }))
-                                ]}
-                                className="w-full"
-                            />
-                        </div>
-                        <div className="flex justify-end gap-2">
-                            <button
-                                onClick={() => setShowAssignPopup(false)}
-                                className="px-3 py-1.5 text-xs font-medium text-white bg-gradient-to-r from-red-400 to-red-500 rounded-md shadow-sm hover:from-red-500 hover:to-red-600 hover:shadow-md transition-all duration-200 border-0 focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-1"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={handleBulkAssign}
-                                disabled={!selectedEngineer || assignLoading || availableEngineers.length === 0}
-                                className={`px-3 py-1.5 text-xs font-medium text-white bg-gradient-to-r from-blue-600 to-blue-700 rounded-md shadow-sm hover:from-blue-700 hover:to-blue-800 hover:shadow-md transition-all duration-200 border-0 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed`}
-                            >
-                                {assignLoading ? 'Assigning...' : 'Assign Tickets'}
-                            </button>
-                        </div>
+                        
+                        {assignLoading ? (
+                            <div className="flex flex-col items-center justify-center py-8">
+                                <span className="loader mb-4"></span>
+                                <p className="text-sm text-gray-700 text-center">
+                                    Assigning selected tickets to <strong>{selectedEngineer}</strong>
+                                </p>
+                            </div>
+                        ) : assignSuccess ? (
+                            <div className="flex flex-col items-center justify-center py-8">
+                                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
+                                    <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                    </svg>
+                                </div>
+                                <p className="text-lg font-semibold text-green-700 text-center mb-2">
+                                    Assigned Successfully!
+                                </p>
+                                <p className="text-sm text-gray-600 text-center">
+                                    Tickets have been assigned to <strong>{selectedEngineer}</strong>
+                                </p>
+                                <button
+                                    onClick={() => {
+                                        setShowAssignPopup(false);
+                                        setAssignSuccess(false);
+                                        setSelectedEngineer('');
+                                    }}
+                                    className="mt-4 px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 transition-colors"
+                                >
+                                    Close
+                                </button>
+                            </div>
+                        ) : (
+                            <>
+                                <div className="mb-4">
+                                    <label className="block text-sm font-semibold text-gray-700 mb-1">Select Engineer</label>
+                                    <CustomDropdown
+                                        value={selectedEngineer}
+                                        onChange={value => setSelectedEngineer(value)}
+                                        options={[
+                                            { value: '', label: 'Choose an engineer...' },
+                                            ...availableEngineers.map(engineer => ({
+                                                value: engineer.email,
+                                                label: `${engineer.name} (${engineer.email})`
+                                            }))
+                                        ]}
+                                        className="w-full"
+                                        disableClickOutside={true}
+                                    />
+                                </div>
+                                <div className="flex justify-end gap-2">
+                                    <button
+                                        onClick={() => setShowAssignPopup(false)}
+                                        className="px-3 py-1.5 text-sm font-medium text-white bg-gradient-to-r from-red-400 to-red-500 rounded-md shadow-sm hover:from-red-500 hover:to-red-600 hover:shadow-md transition-all duration-200 border-0 focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-1"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        onClick={handleBulkAssign}
+                                        disabled={!selectedEngineer || assignLoading || availableEngineers.length === 0}
+                                        className={`px-3 py-1.5 text-sm font-medium text-white bg-gradient-to-r from-blue-600 to-blue-700 rounded-md shadow-sm hover:from-blue-700 hover:to-blue-800 hover:shadow-md transition-all duration-200 border-0 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed`}
+                                    >
+                                        Assign Tickets
+                                    </button>
+                                </div>
+                            </>
+                        )}
                     </div>
                 </div>,
                 document.body
@@ -2364,20 +2536,23 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                 showNotesPanel && showPeekPanel ? 'mr-160' : 
                 showNotesPanel || showPeekPanel ? 'mr-80' : ''
             }`}>
-                {/* Top Bar: Title, Filter By, Dropdown, Clear Filters (left) | Export Tickets (right) */}
+                {/* Top Bar: Title (left) | Filter Options (center) | Export Tickets (right) */}
                 <div className="flex flex-wrap items-center justify-between mb-2">
-                    <div className="flex items-center gap-3 flex-wrap">
+                    <div className="flex items-center gap-2">
                         <h2 className="text-lg font-extrabold text-gray-800">
                             {getPageHeading()}
                         </h2>
-                        {/* Companies dropdown moved here */}
+                    </div>
+                    
+                    {/* Centered Filter Options */}
+                    <div className="flex items-center gap-3 flex-wrap justify-center flex-1">
+                        {/* Companies dropdown */}
                         {(user?.role === 'super_admin' || user?.role === 'admin' || user?.role === 'support') && (
-                        <div>
-                            {console.log('Rendering first dropdown - filterCompany:', filterCompany, 'filterBy:', filterBy)}
+                        <div className="flex items-center gap-2">
+                            <span className="text-sm font-semibold text-gray-700">Client:</span>
                             <CustomDropdown
                                 value={filterCompany}
                                 onChange={value => {
-                                    console.log('First dropdown - Setting company filter to:', value);
                                     setFilterCompany(value);
                                 }}
                                 options={[
@@ -2392,12 +2567,12 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                         }))
                                     )
                                 ]}
-                                className="w-48 h-8 mr-2"
+                                className="w-48 h-8"
                             />
                         </div>
                         )}
                         <span className="text-sm font-semibold text-gray-700">Filter By:</span>
-                        <div className="mr-2">
+                        <div>
                             <CustomDropdown
                                 value={filterBy}
                                 onChange={value => { 
@@ -2419,22 +2594,36 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                     { value: 'priority', label: 'Priority' },
                                     { value: 'history', label: 'History' }
                                 ]}
-                                className="w-24 h-8"
+                                className="w-24 h-7"
+                                size="sm"
                             />
                         </div>
-                        {(filterBy !== 'status' || filterStatus !== '' || filterPriority !== '' || filterAssignment !== '' || filterCompany !== '' || filterBy === 'history') && (
-                            <button
-                                onClick={clearAllFilters}
-                                className="px-3 py-1.5 text-xs font-medium text-red-500 bg-transparent rounded-md border border-red-300 hover:bg-red-50 hover:border-red-400 transition-all duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-red-200 focus:ring-offset-1"
-                            >
-                                <svg className="w-3 h-3 mr-1.5 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                                Clear Filters
-                            </button>
-                        )}
+                        {/* Clear Filters Button - Always reserve space to prevent layout shift */}
+                        <div className="min-w-[120px] flex justify-center">
+                            {(filterBy !== 'status' || filterStatus !== '' || filterPriority !== '' || filterAssignment !== '' || filterCompany !== '' || filterBy === 'history') && (
+                                <button
+                                    onClick={clearAllFilters}
+                                    className="px-3 py-1.5 text-sm font-medium text-red-500 bg-transparent rounded-md border border-red-300 hover:bg-red-50 hover:border-red-400 transition-all duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-red-200 focus:ring-offset-1"
+                                >
+                                    <svg className="w-3 h-3 mr-1.5 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                    Clear Filters
+                                </button>
+                            )}
+                        </div>
                     </div>
-                    <div className="flex items-center ml-auto">
+                    
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={refreshTickets}
+                            disabled={loading}
+                            className="inline-flex items-center justify-center px-2 py-1 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 hover:border-gray-400 transition-all duration-200 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="Refresh tickets data"
+                        >
+                            <RefreshCw className={`w-3 h-3 mr-1 ${loading ? 'animate-spin' : ''}`} />
+                            Refresh
+                        </button>
                         <button
                             onClick={async () => {
                                 if (!assignMode && selectedTickets.length > 0) {
@@ -2445,12 +2634,17 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                             }}
                             disabled={loading}
                             ref={exportButtonRef}
-                            className="group relative inline-flex items-center justify-center px-3 py-1.5 text-xs font-bold text-green-800 bg-white border rounded-md shadow-sm hover:bg-green-50 hover:border-green-700 hover:text-green-700 transition-all duration-200 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
+                            className={`group relative inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded-md transition-all duration-200 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none ${
+                                !assignMode && selectedTickets.length > 0
+                                    ? 'text-white bg-blue-600 hover:bg-blue-700 shadow-md ring-2 ring-blue-200'
+                                    : 'text-blue-700 bg-white border border-blue-300 hover:bg-blue-50 hover:border-blue-400'
+                            }`}
+                            title={!assignMode && selectedTickets.length > 0 ? 'Export selected tickets' : 'Export tickets with filters'}
                         >
-                            {!assignMode && selectedTickets.length > 0 
-                                ? `Export Selected (${selectedTickets.length})` 
-                                : 'Export Tickets'
-                            }
+                            <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V4" />
+                            </svg>
+                            {!assignMode && selectedTickets.length > 0 ? `Export Selected (${selectedTickets.length})` : 'Export Tickets'}
                         </button>
                     </div>
                 </div>
@@ -2462,7 +2656,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                     <div className="flex items-center gap-2 flex-wrap">
                         {/* Filters Section */}
                         {filterBy === 'company' && (user?.role === 'super_admin' || user?.role === 'admin' || user?.role === 'support') && (
-                            <div className="mr-2">
+                            <div>
                                 <CustomDropdown
                                     value={filterCompany}
                                     onChange={value => setFilterCompany(value)}
@@ -2478,82 +2672,108 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                             }))
                                         )
                                     ]}
-                                    className="w-48 h-8"
+                                    className="w-40 h-7"
+                                    size="sm"
                                 />
                             </div>
                         )}
                         {filterBy === 'status' && (
-                            <div className="inline-flex bg-white border border-gray-300 rounded-full shadow-sm overflow-hidden">
+                            <div className="inline-flex bg-white shadow-sm overflow-visible">
                                 <button 
                                     onClick={() => { setFilterStatus(''); setFilterAssignment(''); }} 
-                                    className={`px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${filterStatus === '' && filterAssignment === '' ? 'bg-blue-600 text-white rounded-l-full' : 'text-gray-700 hover:bg-gray-100'}`}
+                                    className={`relative px-3 py-1.5 text-sm font-medium transition-all duration-200 ${filterStatus === '' && filterAssignment === '' ? 'text-gray-700 border-b-2 border-orange-600' : 'text-gray-700 border-b border-transparent'}`}
                                 >
-                                    All <span className={`${filterStatus === '' && filterAssignment === '' ? 'text-white' : 'text-blue-600 font-bold'}`}>({counts.total_tickets})</span>
+                                    All Tickets
+                                    {counts.total_tickets > 0 && (
+                                        <span className="absolute -top-2 -right-1 bg-blue-500 text-white font-bold text-[9px] rounded-full min-h-2 min-w-4 px-1 flex items-center justify-center">
+                                            {counts.total_tickets}
+                                        </span>
+                                    )}
                                 </button>
                                 <button 
                                     onClick={() => { setFilterStatus('Open'); setFilterAssignment(''); }} 
-                                    className={`px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${filterStatus === 'Open' && filterAssignment === '' ? 'bg-green-600 text-white' : 'text-gray-700 hover:bg-gray-100'}`}
+                                    className={`relative px-3 py-1.5 text-sm font-medium transition-all duration-200 ${filterStatus === 'Open' && filterAssignment === '' ? 'text-gray-700 border-b-2 border-orange-600' : 'text-gray-700 border-b border-transparent'}`}
                                 >
-                                    Open <span className={`${filterStatus === 'Open' && filterAssignment === '' ? 'text-white' : 'text-green-600 font-bold'}`}>({counts.open_tickets})</span>
+                                    Open
+                                    {counts.open_tickets > 0 && (
+                                        <span className="absolute -top-2 -right-1 bg-green-500 text-white font-bold text-[9px] rounded-full min-h-2 min-w-4 px-1 flex items-center justify-center">
+                                            {counts.open_tickets}
+                                        </span>
+                                    )}
                                 </button>
                                 <button 
                                     onClick={() => { setFilterStatus('In Progress'); setFilterAssignment(''); }} 
-                                    className={`px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${filterStatus === 'In Progress' && filterAssignment === '' ? 'bg-yellow-600 text-white' : 'text-gray-700 hover:bg-gray-100'}`}
+                                    className={`relative px-3 py-1.5 text-sm font-medium transition-all duration-200 ${filterStatus === 'In Progress' && filterAssignment === '' ? 'text-gray-700 border-b-2 border-orange-600' : 'text-gray-700 border-b border-transparent'}`}
                                 >
-                                    In Progress <span className={`${filterStatus === 'In Progress' && filterAssignment === '' ? 'text-white' : 'text-yellow-600 font-bold'}`}>({counts.in_progress_tickets})</span>
+                                    In Progress
+                                    {counts.in_progress_tickets > 0 && (
+                                        <span className="absolute -top-2 -right-1 bg-orange-500 text-white font-bold text-[9px] rounded-full min-h-2 min-w-4 px-1 flex items-center justify-center">
+                                            {counts.in_progress_tickets}
+                                        </span>
+                                    )}
                                 </button>
                                 <button 
                                     onClick={() => { setFilterStatus('Hold'); setFilterAssignment(''); }} 
-                                    className={`px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${filterStatus === 'Hold' && filterAssignment === '' ? 'bg-purple-600 text-white' : 'text-gray-700 hover:bg-gray-100'}`}
+                                    className={`relative px-3 py-1.5 text-sm font-medium transition-all duration-200 ${filterStatus === 'Hold' && filterAssignment === '' ? 'text-gray-700 border-b-2 border-orange-600' : 'text-gray-700 border-b border-transparent'}`}
                                 >
-                                    On Hold <span className={`${filterStatus === 'Hold' && filterAssignment === '' ? 'text-white' : 'text-purple-600 font-bold'}`}>({counts.hold_tickets})</span>
+                                    On Hold
+                                    {counts.hold_tickets > 0 && (
+                                        <span className="absolute -top-2 -right-1 bg-red-500 text-white font-bold text-[9px] rounded-full min-h-2 min-w-4 px-1 flex items-center justify-center">
+                                            {counts.hold_tickets}
+                                        </span>
+                                    )}
                                 </button>
                                 <button 
                                     onClick={() => { setFilterAssignment('unassigned'); setFilterStatus(''); }} 
-                                    className={`px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${filterAssignment === 'unassigned' && filterStatus === '' ? 'bg-orange-600 text-white rounded-r-full' : 'text-gray-700 hover:bg-gray-100'}`}
+                                    className={`relative px-3 py-1.5 text-sm font-medium transition-all duration-200 ${filterAssignment === 'unassigned' && filterStatus === '' ? 'text-gray-700 border-b-2 border-orange-600' : 'text-gray-700 border-b border-transparent'}`}
                                 >
-                                    Unassigned <span className={`${filterAssignment === 'unassigned' && filterStatus === '' ? 'text-white' : 'text-orange-600 font-bold'}`}>({counts.unassigned})</span>
+                                    Unassigned
+                                    {counts.unassigned > 0 && (
+                                        <span className="absolute -top-2 -right-1 bg-gray-500 text-white font-bold text-[9px] rounded-full min-h-2 min-w-4 px-1 flex items-center justify-center">
+                                            {counts.unassigned}
+                                        </span>
+                                    )}
                                 </button>
                             </div>
                         )}
                         {filterBy === 'priority' && (
-                            <div className="inline-flex bg-white border border-gray-300 rounded-full shadow-sm overflow-hidden">
+                            <div className="inline-flex bg-white shadow-sm overflow-visible">
                                 <button 
                                     onClick={() => setFilterPriority('')} 
-                                    className={`px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${filterPriority === '' ? 'bg-blue-600 text-white rounded-l-full' : 'text-gray-700 hover:bg-gray-100'}`}
+                                    className={`px-3 py-1.5 text-sm font-medium transition-all duration-200 ${filterPriority === '' ? 'bg-blue-600 text-white' : 'text-gray-700 hover:bg-gray-100'}`}
                                 >
                                     All
                                 </button>
                                 <button 
                                     onClick={() => setFilterPriority('Low')} 
-                                    className={`px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${filterPriority === 'Low' ? 'bg-blue-600 text-white' : 'text-gray-700 hover:bg-gray-100'}`}
+                                    className={`px-3 py-1.5 text-sm font-medium transition-all duration-200 ${filterPriority === 'Low' ? 'bg-blue-600 text-white' : 'text-gray-700 hover:bg-gray-100'}`}
                                 >
                                     Low
                                 </button>
                                 <button 
                                     onClick={() => setFilterPriority('Medium')} 
-                                    className={`px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${filterPriority === 'Medium' ? 'bg-orange-600 text-white' : 'text-gray-700 hover:bg-gray-100'}`}
+                                    className={`px-3 py-1.5 text-sm font-medium transition-all duration-200 ${filterPriority === 'Medium' ? 'bg-orange-600 text-white' : 'text-gray-700 hover:bg-gray-100'}`}
                                 >
                                     Medium
                                 </button>
                                 <button 
                                     onClick={() => setFilterPriority('High')} 
-                                    className={`px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${filterPriority === 'High' ? 'bg-red-600 text-white' : 'text-gray-700 hover:bg-gray-100'}`}
+                                    className={`px-3 py-1.5 text-sm font-medium transition-all duration-200 ${filterPriority === 'High' ? 'bg-red-600 text-white' : 'text-gray-700 hover:bg-gray-100'}`}
                                 >
                                     High
                                 </button>
                                 <button 
                                     onClick={() => setFilterPriority('Critical')} 
-                                    className={`px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${filterPriority === 'Critical' ? 'bg-red-900 text-white rounded-r-full' : 'text-gray-700 hover:bg-gray-100'}`}
+                                    className={`px-3 py-1.5 text-sm font-medium transition-all duration-200 ${filterPriority === 'Critical' ? 'bg-red-900 text-white' : 'text-gray-700 hover:bg-gray-100'}`}
                                 >
                                     Critical
                                 </button>
                             </div>
                         )}
                         {filterBy === 'history' && (
-                            <div className="inline-flex bg-white border border-gray-300 rounded-full shadow-sm overflow-hidden">
+                            <div className="inline-flex bg-white shadow-sm overflow-visible">
                                 <button 
-                                    className="px-3 py-1.5 text-xs font-semibold border-blue-300 text-blue rounded-full"
+                                    className="px-3 py-1.5 text-sm font-medium text-blue"
                                 >
                                     Resolved & Cancelled Tickets
                                 </button>
@@ -2567,52 +2787,9 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                             {/* Copy from original code, lines 1291-1357 */}
                             {!assignMode && !showCheckboxes ? (
                                 <>
-                                    {canAssign && user?.role !== 'site_admin' && filterBy !== 'history' && (
-                                        <button 
-                                            onClick={enterAssignMode}
-                                            className="px-3 py-1.5 
-                rounded-md 
-                text-xs 
-                font-semibold 
-                inline-flex 
-                items-center 
-                justify-center 
-                cursor-pointer 
-                transition-all 
-                duration-200 
-                ease-in-out 
-                text-center 
-                min-w-[80px]
-                font-['Source_Sans_Pro']
-                bg-white 
-                text-gray-800 
-                border
-                border-orange-400
-                hover:bg-gray-50 
-                hover:border-orange-500 
-                
-                hover:shadow-md
-                focus:outline-none 
-                focus:border-orange-500 
-                focus:ring-2 
-                focus:ring-orange-400
-                active:bg-gray-100 
-                active:border-gray-600 
-                active:translate-y-0.5 
-                active:shadow-sm
-                disabled:bg-white 
-                disabled:text-gray-400 
-                disabled:border-gray-300 
-                disabled:cursor-not-allowed
-                disabled:hover:transform-none
-                disabled:hover:shadow-none"
-                                        >
-                                            Bulk-Assign
-                                        </button>
-                                    )}
                                     <SelectButton 
                                         onClick={enterExportSelectionMode}
-                                        className="text-sm"
+                                        className="px-2 py-1 text-xs min-w-[68px]"
                                     >
                                         Select
                                     </SelectButton>
@@ -2621,9 +2798,13 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                 // Assign mode - show Assign button with count and Cancel button
                                 <>
                                 <button 
-                                    onClick={() => setShowAssignPopup(true)}
+                                    onClick={() => {
+                                        setShowAssignPopup(true);
+                                        setAssignSuccess(false);
+                                        setAssignLoading(false);
+                                    }}
                                     disabled={selectedTickets.length === 0}
-                                            className={`group relative inline-flex items-center justify-center px-3 py-1.5 text-xs font-medium rounded-md shadow-sm transition-all duration-200 ease-in-out border-0 focus:outline-none focus:ring-2 focus:ring-offset-1 ${
+                                            className={`group relative inline-flex items-center justify-center px-3 py-1.5 text-sm font-medium rounded-md shadow-sm transition-all duration-200 ease-in-out border-0 focus:outline-none focus:ring-2 focus:ring-offset-1 ${
                                         selectedTickets.length === 0 
                                                     ? 'bg-gray-300 text-gray-500 cursor-not-allowed shadow-none' 
                                                     : 'text-white bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 hover:shadow-md focus:ring-green-500'
@@ -2636,7 +2817,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                 </button>
                                         <button 
                                             onClick={exitAssignMode}
-                                            className="group relative inline-flex items-center justify-center px-3 py-1.5 text-xs font-medium text-white bg-gradient-to-r from-red-400 to-red-500 rounded-md shadow-sm hover:from-red-500 hover:to-red-600 hover:shadow-md transition-all duration-200 ease-in-out border-0 focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-1"
+                                            className="group relative inline-flex items-center justify-center px-3 py-1.5 text-sm font-medium text-white bg-gradient-to-r from-red-400 to-red-500 rounded-md shadow-sm hover:from-red-500 hover:to-red-600 hover:shadow-md transition-all duration-200 ease-in-out border-0 focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-1"
                                         >
                                             <svg className="w-3 h-3 mr-1.5 group-hover:scale-110 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -2648,7 +2829,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                 // Export selection mode - show Cancel button
                                 <button 
                                     onClick={exitExportSelectionMode}
-                                    className="group relative inline-flex items-center justify-center px-3 py-1.5 text-xs font-medium text-white bg-gradient-to-r from-red-400 to-red-500 rounded-md shadow-sm hover:from-red-500 hover:to-red-600 hover:shadow-md transition-all duration-200 ease-in-out border-0 focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-1"
+                                    className="group relative inline-flex items-center justify-center px-3 py-1.5 text-sm font-medium text-white bg-gradient-to-r from-red-400 to-red-500 rounded-md shadow-sm hover:from-red-500 hover:to-red-600 hover:shadow-md transition-all duration-200 ease-in-out border-0 focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-1"
                                 >
                                     <svg className="w-3 h-3 mr-1.5 group-hover:scale-110 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -2658,10 +2839,10 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                             )}
                             <button 
                                 onClick={() => setShowNotesPanel(!showNotesPanel)}
-                                className={`px-3 py-1.5 
+                                className={`px-2 py-1 
                 rounded-md 
                 text-xs 
-                font-semibold 
+                font-medium 
                 inline-flex 
                 items-center 
                 justify-center 
@@ -2670,7 +2851,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                 duration-200 
                 ease-in-out 
                 text-center 
-                min-w-[80px]
+                min-w-[72px]
                 font-['Source_Sans_Pro']
                 bg-white 
                 text-gray-800 
@@ -2704,6 +2885,40 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                             </button>
                         </div>
                     </div>
+                    {(assignMode || showCheckboxes) && (
+                        <div className={`w-full mt-2 px-3 py-2 text-sm rounded-md border ${
+                            selectedTickets.length === 0
+                                ? 'text-blue-800 bg-blue-50/80 border-blue-300'
+                                : 'text-blue-900 bg-blue-50 border-blue-400'
+                        }`}>
+                            {selectedTickets.length === 0 ? (
+                                'No tickets selected. Please select one or more tickets to proceed.'
+                            ) : (
+                                <div className="flex items-center justify-between gap-2">
+                                    <span>{`${selectedTickets.length} ${selectedTickets.length === 1 ? 'ticket' : 'tickets'} selected.`}</span>
+                                    <div className="flex items-center gap-2">
+                                        {canAssign && user?.role !== 'site_admin' && (
+                                            <button 
+                                                onClick={() => {
+                                                    if (!assignMode) {
+                                                        setAssignMode(true);
+                                                        setShowCheckboxes(true);
+                                                    }
+                                                    setShowAssignPopup(true);
+                                                    setAssignSuccess(false);
+                                                    setAssignLoading(false);
+                                                }}
+                                                className="px-2 py-1 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded"
+                                            >
+                                                Assign Selected
+                                            </button>
+                                        )}
+                                        
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
 
                 {displayedTickets.length === 0 ? (
@@ -2713,7 +2928,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                 ) : (
                     <>
                         {/* Ticket Count Display */}
-                        <div className="text-[12px] text-gray-500 text-left mb-2 px-0">
+                        <div className="text-[12px] text-gray-500 text-center mb-2 px-0">
                             Showing {((currentPage - 1) * ticketsPerPage) + 1}-{Math.min(currentPage * ticketsPerPage, displayedTickets.length)} of {displayedTickets.length} Tickets
                             {filterBy === 'company' && (
                                 <span className="ml-7 text-gray-600">
@@ -2722,13 +2937,13 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                             )}
                         </div>
                         <div className="w-full max-w-full overflow-x-auto border border-gray-200 bg-white mt-0">
-                        <table className={`w-full min-w-0 bg-white text-xs ${(showCheckboxes || assignMode) ? 'border border-orange-400' : ''}`}>
-                            <thead className="hidden sm:table-header-group bg-gray-100 border-b border-gray-200">
+                         <table className={`w-full min-w-0 bg-white text-sm font-light ${(showCheckboxes || assignMode) ? 'border border-orange-400' : ''}`} style={{ fontFamily: 'Source Sans 3, sans-serif', fontWeight: 300, fontOpticalSizing: 'auto', fontStyle: 'normal' }}>
+                             <thead className="hidden sm:table-header-group bg-gray-100 border-b border-gray-200">
                                 <tr>
-                                    <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">
+                                    <th className="px-2 py-2 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">
                                         <div className="flex flex-col items-start space-y-1">
                                             {assignMode && (
-                                                <span className="text-xs text-gray-500 font-normal">
+                                                <span className="text-sm text-gray-500 font-normal">
                                                     
                                                 </span>
                                             )}
@@ -2763,25 +2978,25 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                             />
                                         </div>
                                     </th>
-                                    <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">#</th>
-                                    <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">Ticket ID</th>
-                                    <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">Short Description</th>
-                                    <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">Created Date</th>
-                                    <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">Priority</th>
-                                    <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">Status</th>
-                                    <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">Requested by</th>
-                                    <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">Assigned To</th>
-                                    <th className="px-2 py-2 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words w-16">Peek</th>
+                                    <th className="px-2 py-2 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">#</th>
+                                    <th className="px-2 py-2 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">Ticket ID</th>
+                                    <th className="px-2 py-2 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">Short Description</th>
+                                    <th className="px-2 py-2 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">Created Date</th>
+                                    <th className="px-2 py-2 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">Priority</th>
+                                    <th className="px-2 py-2 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">Status</th>
+                                    <th className="px-2 py-2 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">Requested by</th>
+                                    <th className="px-2 py-2 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">Assigned To</th>
+                                    <th className="px-2 py-2 text-center text-sm font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words w-16">Peek</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-gray-200">
+                             <tbody className="divide-y divide-gray-200" style={{ fontFamily: 'Source Sans 3, sans-serif', fontWeight: 400, fontOpticalSizing: 'auto', fontStyle: 'normal' }}>
                                 {paginatedTickets.map((ticket, index) => (
-                                    <tr key={ticket.id} className={`block sm:table-row border-b border-gray-200 hover:bg-gray-50 transition-colors duration-150 text-xs h-16 ${
+                                    <tr key={ticket.id} className={`block sm:table-row border-b border-gray-200 hover:bg-gray-50 transition-colors duration-150 text-sm h-16 ${
                                         showPeekPanel && peekedTicket && peekedTicket.id === ticket.id 
                                             ? 'bg-orange-50 border-orange-200' 
                                             : 'bg-white'
                                     }`}>
-                                        <td className="block sm:table-cell px-2 py-4 text-xs text-gray-800 whitespace-normal break-words">
+                                        <td className="block sm:table-cell px-2 py-4 text-sm text-gray-800 whitespace-normal break-words">
                                             <span className="block sm:hidden font-semibold text-gray-600">Select:</span>
                                             <input 
                                                 type="checkbox" 
@@ -2793,11 +3008,11 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                                 }`}
                                             />
                                         </td>
-                                        <td className="block sm:table-cell px-2 py-4 text-xs text-gray-800 whitespace-normal break-words">
+                                        <td className="block sm:table-cell px-2 py-4 text-sm text-gray-800 whitespace-normal break-words">
                                             <span className="block sm:hidden font-semibold text-gray-600">#:</span>
                                             {index + 1}
                                         </td>
-                                        <td className="block sm:table-cell px-2 py-4 text-xs text-blue-700 hover:underline font-medium cursor-pointer whitespace-normal break-words" 
+                                        <td className="block sm:table-cell px-2 py-4 text-sm text-gray-700 hover:text-gray-900 hover:underline font-medium cursor-pointer whitespace-normal break-words" 
                                             onMouseEnter={(e) => showTicketIdPopup(ticket.display_id, ticket.id, e)}
                                             onMouseLeave={hideTicketIdPopup}
                                         >
@@ -2812,13 +3027,16 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                                 {ticket.display_id}
                                             </a>
                                         </td>
-                                        <td className="block sm:table-cell px-2 py-4 text-xs text-gray-800 max-w-xs" title={ticket.short_description}>
+                                        <td className="block sm:table-cell px-2 py-4 text-sm text-gray-800 max-w-xs" title={ticket.short_description}>
                                             <span className="block sm:hidden font-semibold text-gray-600">Short Description:</span>
-                                            <div className="line-clamp-2 text-ellipsis overflow-hidden">
-                                            {ticket.short_description}
+                                            <div 
+                                                className="line-clamp-2 text-ellipsis overflow-hidden text-blue-600 hover:text-blue-800 hover:underline cursor-pointer transition-colors duration-200"
+                                                onClick={() => navigateTo('/tickets', ticket.id)}
+                                            >
+                                                {ticket.short_description}
                                             </div>
                                         </td>
-                                        <td className="block sm:table-cell px-2 py-4 text-xs text-gray-800 max-w-32">
+                                        <td className="block sm:table-cell px-2 py-4 text-sm text-gray-800 min-w-[180px] max-w-[280px]">
                                             <span className="block sm:hidden font-semibold text-gray-600">Created Date:</span>
                                             <div className="truncate">
                                                 {ticket.created_at ? (
@@ -2844,17 +3062,17 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                                 ) : 'N/A'}
                                             </div>
                                         </td>
-                                        <td className="block sm:table-cell px-2 py-4 text-xs text-gray-800 whitespace-normal break-words">
-                                            <span className="block sm:hidden font-semibold text-gray-600">Priority:</span>
-                                            <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getPriorityClasses(ticket.priority)}`}>{ticket.priority}</span>
+                                        <td className="block sm:table-cell px-2 py-4 text-sm text-gray-800 whitespace-normal break-words">
+                                            <span className="block sm:hidden font-medium text-gray-600">Priority:</span>
+                                            <span className={`px-2 py-0.5 text-sm font-medium rounded-full ${getPriorityClasses(ticket.priority)}`}>{ticket.priority}</span>
                                         </td>
-                                        <td className="block sm:table-cell px-2 py-4 whitespace-normal break-words text-xs text-gray-800">
-                                            <span className="block sm:hidden font-semibold text-gray-600">Status:</span>
+                                        <td className="block sm:table-cell px-2 py-4 whitespace-normal break-words text-sm text-gray-800">
+                                            <span className="block sm:hidden font-medium text-gray-600">Status:</span>
                                             {/* Show status dropdown for engineers and super admins */}
                                             {(user?.role === 'support' || user?.role === 'admin' || user?.role === 'super_admin') ? (
                                                 <div className="min-w-[120px] max-w-[160px] overflow-hidden">
                                                     {changingStatusTickets.has(ticket.id) ? (
-                                                        <div className="flex items-center gap-1 text-xs text-blue-600">
+                                                        <div className="flex items-center gap-1 text-sm text-blue-600">
                                                             <Loader2 className="w-3 h-3 animate-spin" />
                                                             <span>Updating...</span>
                                                         </div>
@@ -2864,11 +3082,11 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                                             onChange={(value) => handleTicketStatusChange(ticket.id, value)}
                                                             options={memoizedStatusOptions}
                                                             placeholder={ticket.status}
-                                                            className="text-xs w-full"
+                                                            className="text-sm w-full"
                                                             disabled={['Resolved', 'Cancelled', 'Closed'].includes(ticket.status)}
                                                             variant="minimal"
                                                             customDisplay={(
-                                                                <span className={`px-2 py-0.5 text-xs font-semibold rounded-full truncate ${getStatusClasses(ticket.status)}`}>
+                                                                <span className={`px-2 py-0.5 text-sm font-medium rounded-full truncate ${getStatusClasses(ticket.status)}`}>
                                                                     {ticket.status}
                                                                 </span>
                                                             )}
@@ -2876,14 +3094,14 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                                     )}
                                                 </div>
                                             ) : (
-                                                <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getStatusClasses(ticket.status)}`}>{ticket.status}</span>
+                                                <span className={`px-2 py-0.5 text-sm font-medium rounded-full ${getStatusClasses(ticket.status)}`}>{ticket.status}</span>
                                             )}
                                         </td>
-                                        <td className="block sm:table-cell px-2 py-4 text-xs text-gray-800 max-w-32">
+                                        <td className="block sm:table-cell px-2 py-4 text-sm text-gray-800 min-w-[180px] max-w-[280px]">
                                             <span className="block sm:hidden font-semibold text-gray-600">Requested by:</span>
                                             <div className="truncate">
                                             <span 
-                                                className="text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
+                                                className="text-black hover:text-gray-800 hover:underline cursor-pointer"
                                                 onMouseEnter={(e) => {
                                                     if (ticket.reporter_email) {
                                                         showProfilePopup(
@@ -2906,15 +3124,15 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                             </span>
                                             </div>
                                         </td>
-                                        <td className="block sm:table-cell px-2 py-4 text-xs text-gray-800 max-w-32">
+                                        <td className="block sm:table-cell px-2 py-4 text-sm text-gray-800 min-w-[180px] max-w-[280px]" style={{ fontFamily: 'Source Sans 3, sans-serif', fontWeight: 300, fontOpticalSizing: 'auto', fontStyle: 'normal' }}>
                                             <span className="block sm:hidden font-semibold text-gray-600">Assigned To:</span>
                                             {/* Show assignment dropdown for engineers and super admins */}
                                             {(user?.role === 'support' || user?.role === 'admin' || user?.role === 'super_admin') ? (
-                                                <div className="min-w-[120px] max-w-[128px] overflow-hidden">
+                                                <div className="min-w-[180px] max-w-[280px] w-full">
                                                     {engineersLoading && availableEngineers.length === 0 ? (
-                                                        <span className="text-xs text-gray-500">Loading...</span>
+                                                        <span className="text-sm text-gray-500">Loading...</span>
                                                     ) : assigningTickets.has(ticket.id) ? (
-                                                        <div className="flex items-center gap-1 text-xs text-blue-600">
+                                                        <div className="flex items-center gap-1 text-sm text-blue-600">
                                                             <Loader2 className="w-3 h-3 animate-spin" />
                                                             <span>Assigning...</span>
                                                         </div>
@@ -2924,14 +3142,14 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                                             onChange={(value) => handleTicketAssignment(ticket.id, value)}
                                                             options={assignmentOptions}
                                                             placeholder={ticket.assigned_to_email || 'Unassigned'}
-                                                            className="text-xs w-full"
+                                                            className="text-sm w-full"
                                                             disabled={['Resolved', 'Cancelled', 'Closed'].includes(ticket.status)}
                                                             variant="minimal"
                                                         />
                                                     )}
                                                 </div>
                                             ) : (
-                                                <div className="truncate">
+                                                <div className="truncate" style={{ fontFamily: 'Source Sans 3, sans-serif', fontWeight: 300, fontOpticalSizing: 'auto', fontStyle: 'normal' }}>
                                                 <span>{ticket.assigned_to_email || 'Unassigned'}</span>
                                                 </div>
                                             )}
@@ -3063,14 +3281,14 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                                 type="button"
                                                 onClick={cancelEditing}
                                                 disabled={addingNote}
-                                                className="px-2 py-1 text-xs text-gray-600 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-60 disabled:cursor-not-allowed"
+                                                className="px-2 py-1 text-sm text-gray-600 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-60 disabled:cursor-not-allowed"
                                             >
                                                 Cancel
                                             </button>
                                             <button
                                                 type="submit"
                                                 disabled={addingNote}
-                                                className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center disabled:opacity-60 disabled:cursor-not-allowed"
+                                                className="px-2 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center disabled:opacity-60 disabled:cursor-not-allowed"
                                             >
                                                 {addingNote ? (
                                                     <>
@@ -3094,7 +3312,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                         {!showAddNoteForm && !viewingNote && (
                             <button
                                 onClick={() => setShowAddNoteForm(true)}
-                                className="w-full mb-4 px-3 py-2 text-xs font-medium text-white bg-orange-500 rounded-md hover:bg-orange-600 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 transition-all duration-200 flex items-center justify-center shadow-sm hover:shadow-md transform hover:scale-[1.01]"
+                                className="w-full mb-4 px-3 py-2 text-sm font-medium text-white bg-orange-500 rounded-md hover:bg-orange-600 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 transition-all duration-200 flex items-center justify-center shadow-sm hover:shadow-md transform hover:scale-[1.01]"
                             >
                                 <Plus className="w-3 h-3 mr-1.5" />
                                 Add Note
@@ -3133,7 +3351,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
         {/* Category Tag */}
         <div className="flex items-center gap-2">
           <span
-            className={`inline-flex items-center px-3 py-1 rounded-md text-xs font-medium ${getCategoryColor(
+            className={`inline-flex items-center px-3 py-1 rounded-md text-sm font-medium ${getCategoryColor(
               viewingNote.category
             )}`}
           >
@@ -3190,7 +3408,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                        e.stopPropagation();
                        handleDeleteConfirm(viewingNote.id);
                      }}
-                     className="px-3 py-1.5 bg-red-600 text-white text-xs rounded-md hover:bg-red-700 transition-colors"
+                     className="px-3 py-1.5 bg-red-600 text-white text-sm rounded-md hover:bg-red-700 transition-colors"
                    >
                      Delete
                    </button>
@@ -3199,7 +3417,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                        e.stopPropagation();
                        handleDeleteCancel();
                      }}
-                     className="px-3 py-1.5 bg-gray-100 text-gray-700 text-xs rounded-md hover:bg-gray-200 transition-colors"
+                     className="px-3 py-1.5 bg-gray-100 text-gray-700 text-sm rounded-md hover:bg-gray-200 transition-colors"
                    >
                      Cancel
                    </button>
@@ -3216,7 +3434,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
       </div>
 
       {/* Date (bottom with separator) */}
-      <div className="flex justify-end pt-4 mt-4 border-t text-xs text-gray-400">
+      <div className="flex justify-end pt-4 mt-4 border-t text-sm text-gray-400">
         <Calendar className="w-4 h-4 mr-1.5" />
         {formatDate(viewingNote.updated_at)}
       </div>
@@ -3236,7 +3454,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                 ) : (pinnedNotes.length === 0 && unpinnedNotes.length === 0) ? (
                                     <div className="text-center py-8">
                                         <FileText className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-                                        <p className="text-xs text-gray-500">No notes found</p>
+                                        <p className="text-sm text-gray-500">No notes found</p>
                                     </div>
                                 ) : (
                                     <div className="space-y-4">
@@ -3258,7 +3476,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                         <div className="flex items-start justify-between">
                                             <div className="flex-1 min-w-0 mr-2">
                                                 <div className="flex items-center gap-2 mb-1">
-                                                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${getCategoryColor(note.category)}`}>
+                                                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-sm font-medium ${getCategoryColor(note.category)}`}>
                                                         {noteCategories.find(c => c.value === note.category)?.label}
                                                     </span>
                                                 </div>
@@ -3269,7 +3487,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                                                     <h4 className="font-medium text-sm text-gray-900 mb-2">
                                                                         {note.title}
                                                                     </h4>
-                                                                    <p className="text-xs text-gray-600 line-clamp-4 mb-1">
+                                                                    <p className="text-sm text-gray-600 line-clamp-4 mb-1">
                                                     {note.content}
                                                 </p>
                                                                 </div>
@@ -3309,19 +3527,19 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                                                         {/* Delete Confirmation Popup */}
                                                                         {showDeleteConfirm === note.id && (
                                                                             <div className="delete-confirmation-container absolute top-8 right-0 z-50 bg-white border border-gray-200 rounded-lg shadow-lg p-3 min-w-[180px]">
-                                                                                <div className="text-xs text-gray-700 mb-2">
+                                                                                <div className="text-sm text-gray-700 mb-2">
                                                                                     Delete this note?
                                                                                 </div>
                                                                                 <div className="flex gap-1.5">
                                                                                     <button
                                                                                         onClick={() => handleDeleteConfirm(note.id)}
-                                                                                        className="px-2.5 py-1 bg-red-600 text-white text-xs rounded-md hover:bg-red-700 transition-colors"
+                                                                                        className="px-2.5 py-1 bg-red-600 text-white text-sm rounded-md hover:bg-red-700 transition-colors"
                                                                                     >
                                                                                         Delete
                                                                                     </button>
                                                                                     <button
                                                                                         onClick={handleDeleteCancel}
-                                                                                        className="px-2.5 py-1 bg-gray-100 text-gray-700 text-xs rounded-md hover:bg-gray-200 transition-colors"
+                                                                                        className="px-2.5 py-1 bg-gray-100 text-gray-700 text-sm rounded-md hover:bg-gray-200 transition-colors"
                                                                                     >
                                                                                         Cancel
                                                                                     </button>
@@ -3355,7 +3573,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                                             <div className="flex items-start justify-between">
                                                                 <div className="flex-1 min-w-0 mr-2">
                                                                     <div className="flex items-center gap-2 mb-1">
-                                                                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${getCategoryColor(note.category)}`}>
+                                                                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-sm font-medium ${getCategoryColor(note.category)}`}>
                                                                             {noteCategories.find(c => c.value === note.category)?.label}
                                                                         </span>
                                                                     </div>
@@ -3366,7 +3584,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                                                     <h4 className="font-medium text-sm text-gray-900 mb-2">
                                                                         {note.title}
                                                                     </h4>
-                                                                    <p className="text-xs text-gray-600 line-clamp-4 mb-1">
+                                                                    <p className="text-sm text-gray-600 line-clamp-4 mb-1">
                                                                         {note.content}
                                                                     </p>
                                             </div>
@@ -3406,7 +3624,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                                      {/* Delete Confirmation Popup */}
                                                      {showDeleteConfirm === note.id && (
                                                          <div className="delete-confirmation-container absolute top-8 right-0 z-50 bg-white border border-gray-200 rounded-lg shadow-lg p-3 min-w-[180px]">
-                                                             <div className="text-xs text-gray-700 mb-2">
+                                                             <div className="text-sm text-gray-700 mb-2">
                                                                  Delete this note?
                                                              </div>
                                                              <div className="flex gap-1.5">
@@ -3415,7 +3633,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                                                          e.stopPropagation();
                                                                          handleDeleteConfirm(note.id);
                                                                      }}
-                                                                     className="px-2.5 py-1 bg-red-600 text-white text-xs rounded-md hover:bg-red-700 transition-colors"
+                                                                     className="px-2.5 py-1 bg-red-600 text-white text-sm rounded-md hover:bg-red-700 transition-colors"
                                                                  >
                                                                      Delete
                                                                  </button>
@@ -3424,7 +3642,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                                                          e.stopPropagation();
                                                                          handleDeleteCancel();
                                                                      }}
-                                                                     className="px-2.5 py-1 bg-gray-100 text-gray-700 text-xs rounded-md hover:bg-gray-200 transition-colors"
+                                                                     className="px-2.5 py-1 bg-gray-100 text-gray-700 text-sm rounded-md hover:bg-gray-200 transition-colors"
                                                                  >
                                                                      Cancel
                                                                  </button>
@@ -3467,7 +3685,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                         e.preventDefault();
                                         navigateTo('/tickets', peekedTicket.id);
                                     }}
-                                    className="bg-gradient-to-r from-orange-500 to-orange-600 text-white px-3 py-1.5 rounded-md text-xs font-medium hover:from-orange-600 hover:to-orange-700 transition-all duration-200 shadow-sm hover:shadow-md flex items-center gap-1"
+                                    className="bg-gradient-to-r from-orange-500 to-orange-600 text-white px-3 py-1.5 rounded-md text-sm font-medium hover:from-orange-600 hover:to-orange-700 transition-all duration-200 shadow-sm hover:shadow-md flex items-center gap-1"
                                 >
                                     <ExternalLink className="w-3 h-3" />
                                     View Full Details
@@ -3502,14 +3720,14 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                             {/* Status & Priority Row */}
                             <div className="flex gap-3">
                                 <div className="flex-1">
-                                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Status</label>
-                                    <span className={`inline-flex items-center px-3 py-1.5 text-xs font-bold rounded-full ${getStatusClasses(peekedTicket.status)}`}>
+                                    <label className="block text-sm font-medium text-gray-500 uppercase tracking-wide mb-2">Status</label>
+                                    <span className={`inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-full ${getStatusClasses(peekedTicket.status)}`}>
                                         {peekedTicket.status}
                                     </span>
                                 </div>
                                 <div className="flex-1">
-                                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Priority</label>
-                                    <span className={`inline-flex items-center px-3 py-1.5 text-xs font-bold rounded-full ${getPriorityClasses(peekedTicket.priority)}`}>
+                                    <label className="block text-sm font-medium text-gray-500 uppercase tracking-wide mb-2">Priority</label>
+                                    <span className={`inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-full ${getPriorityClasses(peekedTicket.priority)}`}>
                                         {peekedTicket.priority}
                                     </span>
                                 </div>
@@ -3517,7 +3735,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
 
                             {/* Description Card */}
                             <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
-                                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Description</label>
+                                <label className="block text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">Description</label>
                                 <p className="text-sm text-gray-900 leading-relaxed">{peekedTicket.short_description}</p>
                             </div>
 
@@ -3531,7 +3749,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                             <User className="w-4 h-4 text-blue-600" />
                                         </div>
                                         <div className="flex-1 min-w-0">
-                                            <p className="text-xs font-medium text-gray-500">Requested by</p>
+                                            <p className="text-sm font-medium text-gray-500">Requested by</p>
                                             <p className="text-sm text-gray-900 truncate">{peekedTicket.reporter_email || 'N/A'}</p>
                                         </div>
                                     </div>
@@ -3541,7 +3759,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                             <User className="w-4 h-4 text-green-600" />
                                         </div>
                                         <div className="flex-1 min-w-0">
-                                            <p className="text-xs font-medium text-gray-500">Assigned to</p>
+                                            <p className="text-sm font-medium text-gray-500">Assigned to</p>
                                             <p className="text-sm text-gray-900 truncate">{peekedTicket.assigned_to_email || 'Unassigned'}</p>
                                         </div>
                                     </div>
@@ -3556,7 +3774,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                     <div className="flex items-start gap-3">
                                         <div className="w-2 h-2 bg-green-500 rounded-full mt-2 flex-shrink-0"></div>
                                         <div className="flex-1 min-w-0">
-                                            <p className="text-xs font-medium text-gray-500">Created</p>
+                                            <p className="text-sm font-medium text-gray-500">Created</p>
                                             <p className="text-sm text-gray-900">
                                                 {peekedTicket.created_at ? new Date(peekedTicket.created_at).toLocaleDateString('en-US', { 
                                                     month: 'short', 
@@ -3573,7 +3791,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                     <div className="flex items-start gap-3">
                                         <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 flex-shrink-0"></div>
                                         <div className="flex-1 min-w-0">
-                                            <p className="text-xs font-medium text-gray-500">Last Updated</p>
+                                            <p className="text-sm font-medium text-gray-500">Last Updated</p>
                                             <p className="text-sm text-gray-900">
                                                 {peekedTicket.updated_at ? new Date(peekedTicket.updated_at).toLocaleDateString('en-US', { 
                                                     month: 'short', 
@@ -3592,7 +3810,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                             {/* Full Description */}
                             {peekedTicket.description && (
                                 <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
-                                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Full Description</label>
+                                    <label className="block text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">Full Description</label>
                                     <div className="text-sm text-gray-700 leading-relaxed max-h-32 overflow-y-auto">
                                         {peekedTicket.description}
                                     </div>

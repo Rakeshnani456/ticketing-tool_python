@@ -26,11 +26,13 @@ const CustomDropdown = ({
     disabled = false,
     label = "",
     variant = "default", // "default" or "minimal"
-    customDisplay = null // Custom display component for the selected value
+    customDisplay = null, // Custom display component for the selected value
+    size = 'md', // 'sm' | 'md' - controls button height and font size
+    disableClickOutside = false // Disable click outside detection for modal contexts
 }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [selectedOption, setSelectedOption] = useState(null);
-    const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 0 });
+    const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 0, openUpward: false });
     const dropdownRef = useRef(null);
     const buttonRef = useRef(null);
 
@@ -43,8 +45,14 @@ const CustomDropdown = ({
     // Close dropdown when clicking outside
     useEffect(() => {
         function handleClickOutside(event) {
-            if (dropdownRef.current && !dropdownRef.current.contains(event.target) && 
-                buttonRef.current && !buttonRef.current.contains(event.target)) {
+            // Check if click is outside both dropdown and button
+            const isOutsideDropdown = dropdownRef.current && !dropdownRef.current.contains(event.target);
+            const isOutsideButton = buttonRef.current && !buttonRef.current.contains(event.target);
+            
+            // Only close if click is outside both elements AND not on a modal backdrop
+            const isModalBackdrop = event.target.classList.contains('bg-black') && event.target.classList.contains('bg-opacity-30');
+            
+            if (isOutsideDropdown && isOutsideButton && !isModalBackdrop) {
                 setIsOpen(false);
             }
         }
@@ -61,7 +69,7 @@ const CustomDropdown = ({
             }
         }
 
-        if (isOpen) {
+        if (isOpen && !disableClickOutside) {
             document.addEventListener('mousedown', handleClickOutside);
             window.addEventListener('scroll', handleScroll, true);
             window.addEventListener('resize', handleResize);
@@ -78,15 +86,63 @@ const CustomDropdown = ({
     const calculatePosition = () => {
         if (buttonRef.current) {
             const rect = buttonRef.current.getBoundingClientRect();
+            const viewportHeight = window.innerHeight;
+            const viewportWidth = window.innerWidth;
+            
+            // Calculate optimal width based on content
+            const maxContentWidth = Math.max(
+                ...options.map(option => {
+                    const label = typeof option.label === 'string' ? option.label : option.label?.props?.children || '';
+                    return label.length * 8; // Approximate character width
+                })
+            );
+            // Use button width as minimum, but ensure dropdown is at least as wide as the button
+            const optimalWidth = Math.max(rect.width, Math.min(maxContentWidth + 32, 300));
+            
+            // Estimate dropdown height (approximate 32px per option + padding)
+            const estimatedDropdownHeight = Math.min(options.length * 32 + 16, 200); // Max 200px height
+            
+            // Check if dropdown would go out of viewport when opening below
+            const spaceBelow = viewportHeight - rect.bottom;
+            const spaceAbove = rect.top;
+            
+            // Determine if dropdown should open upward
+            // Open upward if there's not enough space below AND there's more space above
+            const shouldOpenUpward = spaceBelow < estimatedDropdownHeight && 
+                                   spaceAbove > estimatedDropdownHeight && 
+                                   spaceAbove > spaceBelow;
+            
+            // Calculate position
+            let top, left;
+            
+            if (shouldOpenUpward) {
+                // Open above the button
+                top = Math.max(10, rect.top + window.scrollY - estimatedDropdownHeight);
+            } else {
+                // Open below the button (default)
+                top = rect.bottom + window.scrollY;
+            }
+            
+            // Ensure dropdown doesn't go off the edges of viewport
+            // For modals, try to align with button first, then adjust if needed
+            let preferredLeft = rect.left + window.scrollX;
+            if (preferredLeft + optimalWidth > viewportWidth - 10) {
+                preferredLeft = viewportWidth - optimalWidth - 10;
+            }
+            left = Math.max(10, preferredLeft);
+            
             setDropdownPosition({
-                top: rect.bottom + window.scrollY,
-                left: rect.left + window.scrollX,
-                width: rect.width
+                top,
+                left,
+                width: optimalWidth,
+                openUpward: shouldOpenUpward
             });
         }
     };
 
-    const handleOptionClick = (option) => {
+    const handleOptionClick = (option, event) => {
+        event.preventDefault();
+        event.stopPropagation();
         onChange(option.value);
         setIsOpen(false);
     };
@@ -99,6 +155,11 @@ const CustomDropdown = ({
             setIsOpen(!isOpen);
         }
     };
+
+    // Compute size classes
+    const sizeTextClass = size === 'sm' ? 'text-xs' : 'text-sm';
+    const sizePadDefault = size === 'sm' ? 'px-2 py-1' : 'px-3 py-1.5';
+    const sizePadMinimal = size === 'sm' ? 'px-1 py-0.5' : 'px-1.5 py-1';
 
     return (
         <div className={`relative ${className}`}>
@@ -113,23 +174,24 @@ const CustomDropdown = ({
                     type="button"
                     onClick={handleToggle}
                     disabled={disabled}
-                    className={`w-full text-xs focus:outline-none transition-all duration-200 flex items-center ${
+                    className={`w-full ${sizeTextClass} focus:outline-none transition-all duration-200 flex items-center ${
                         variant === 'minimal' 
-                            ? `px-1 py-0.5 border-0 bg-transparent hover:bg-gray-50 rounded ${
+                            ? `${sizePadMinimal} border-0 bg-transparent hover:bg-gray-50 rounded ${
                                 disabled 
                                     ? 'cursor-not-allowed text-gray-500' 
                                     : isOpen
                                         ? 'bg-gray-50'
                                         : 'text-gray-700 hover:text-gray-900'
                             }`
-                            : `px-3 py-1.5 border rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${
+                            : `${sizePadDefault} border rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${
                                 disabled 
                                     ? 'bg-gray-100 cursor-not-allowed text-gray-500 border-gray-200' 
                                     : isOpen
-                                        ? 'border-blue-500 bg-white shadow-sm'
+                                        ? 'border-blue-500 bg-white shadow-sm ring-2 ring-blue-200'
                                         : 'border-gray-300 bg-white hover:border-gray-400'
                             }`
                     }`}
+                    style={{ fontFamily: 'Source Sans 3, sans-serif', fontWeight: 400, fontOpticalSizing: 'auto', fontStyle: 'normal' }}
                 >
                     <div className="flex items-center gap-2 min-w-0 flex-1 text-left">
                         <div 
@@ -153,30 +215,38 @@ const CustomDropdown = ({
                 {isOpen && createPortal(
                     <div 
                         ref={dropdownRef}
-                        className="fixed bg-white/95 backdrop-blur-lg border border-gray-300 rounded-md shadow-lg z-[9999]"
+                        onClick={(e) => e.stopPropagation()}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onMouseUp={(e) => e.stopPropagation()}
+                        className={`fixed bg-white/95 backdrop-blur-lg border border-gray-300 rounded-md shadow-lg z-[10000] ${
+                            dropdownPosition.openUpward ? 'rounded-b-none' : 'rounded-t-none'
+                        }`}
                         style={{
                             top: dropdownPosition.top,
                             left: dropdownPosition.left,
                             width: dropdownPosition.width,
                             boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
-                            animation: 'fadeInDown 0.15s ease-out'
+                            animation: dropdownPosition.openUpward ? 'fadeInUp 0.15s ease-out' : 'fadeInDown 0.15s ease-out'
                         }}
                     >
                         {options.map((option, index) => (
                             <button
                                 key={option.value}
                                 type="button"
-                                onClick={() => handleOptionClick(option)}
-                                className={`w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-100/80 transition-all duration-200 flex items-center min-w-0 ${
+                                onClick={(e) => handleOptionClick(option, e)}
+                                onMouseDown={(e) => e.stopPropagation()}
+                                onMouseUp={(e) => e.stopPropagation()}
+                                className={`w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100/80 transition-all duration-200 flex items-center min-w-0 ${
                                     index === 0 ? 'rounded-t-md' : ''
                                 } ${
                                     index === options.length - 1 ? 'rounded-b-md' : ''
                                 } ${
                                     option.value === value ? 'bg-blue-50 text-blue-700 font-medium' : ''
                                 }`}
+                                style={{ fontFamily: 'Source Sans 3, sans-serif', fontWeight: 400, fontOpticalSizing: 'auto', fontStyle: 'normal' }}
                                 title={option.fullLabel || (typeof option.label === 'string' ? option.label : option.label?.props?.children || '')}
                             >
-                                <div className="min-w-0 flex-1 truncate">
+                                <div className="min-w-0 flex-1 whitespace-nowrap">
                                     {typeof option.label === 'string' ? option.label : option.label}
                                 </div>
                             </button>

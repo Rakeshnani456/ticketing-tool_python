@@ -6,6 +6,13 @@ class WebSocketServer {
         this.wss = new WebSocket.Server({ server });
         this.clients = new Map(); // Map to store client connections
         this.analyticsSubscriptions = new Map(); // Map to store analytics subscriptions
+        this.cache = new Map(); // Map to store cached data
+        this.cacheDurations = {
+            tickets: 5 * 60 * 1000,        // 5 minutes
+            ticket_counts: 2 * 60 * 1000,   // 2 minutes
+            dashboard_data: 3 * 60 * 1000,  // 3 minutes
+            notifications: 1 * 60 * 1000,   // 1 minute
+        };
         this.setupWebSocket();
     }
 
@@ -21,6 +28,14 @@ class WebSocketServer {
                     if (data.type === 'authenticate') {
                         // Verify Firebase token
                         const { token, userId, userRole, clientName } = data;
+                        
+                        console.log('🔐 Received authentication request:', {
+                            tokenType: typeof token,
+                            tokenLength: token ? token.length : 0,
+                            userId,
+                            userRole,
+                            clientName
+                        });
                         
                         try {
                             // Verify the token (you might want to add more validation)
@@ -55,6 +70,9 @@ class WebSocketServer {
                     } else if (data.type === 'unsubscribe_analytics') {
                         // Handle analytics unsubscription
                         this.handleAnalyticsUnsubscription(ws, data);
+                    } else if (data.type === 'request_data') {
+                        // Handle data requests
+                        this.handleDataRequest(ws, data);
                     }
                 } catch (error) {
                     console.error('Error processing WebSocket message:', error);
@@ -132,6 +150,161 @@ class WebSocketServer {
                 console.log(`Cleaned up analytics subscription: ${key}`);
             }
         }
+    }
+
+    async handleDataRequest(ws, data) {
+        const clientInfo = this.clients.get(ws);
+        if (!clientInfo) {
+            ws.send(JSON.stringify({
+                type: 'error',
+                message: 'Client not authenticated'
+            }));
+            return;
+        }
+
+        const { dataType, userId, userRole, clientName, options, subscriptionId } = data;
+        
+        try {
+            let responseData = null;
+            
+            // Add caching to reduce Firebase reads
+            const cacheKey = `${dataType}_${userId}_${userRole}_${clientName || 'default'}`;
+            const cachedData = this.getCachedData(cacheKey);
+            
+            if (cachedData && this.isCacheValid(cachedData, dataType)) {
+                console.log(`📦 Using cached data for ${dataType}`);
+                responseData = cachedData.data;
+            } else {
+                console.log(`🔄 Fetching fresh data for ${dataType}`);
+                
+                switch (dataType) {
+                    case 'tickets':
+                        responseData = await this.getTicketsData(userId, userRole, clientName, options);
+                        break;
+                    case 'ticket_counts':
+                        responseData = await this.getTicketCountsData(userId, userRole, clientName);
+                        break;
+                    case 'dashboard_data':
+                        responseData = await this.getDashboardData(userId, userRole, clientName, options);
+                        break;
+                    case 'notifications':
+                        responseData = await this.getNotificationsData(userId);
+                        break;
+                    default:
+                        throw new Error(`Unknown data type: ${dataType}`);
+                }
+                
+                // Cache the data
+                this.setCachedData(cacheKey, responseData, dataType);
+            }
+
+            ws.send(JSON.stringify({
+                type: 'data_response',
+                dataType,
+                data: responseData,
+                subscriptionId
+            }));
+
+        } catch (error) {
+            console.error(`Error fetching ${dataType} data:`, error);
+            ws.send(JSON.stringify({
+                type: 'error',
+                message: `Failed to fetch ${dataType} data: ${error.message}`
+            }));
+        }
+    }
+
+    async getTicketsData(userId, userRole, clientName, options = {}) {
+        const db = admin.firestore();
+        let query = db.collection('tickets');
+
+        // Apply role-based filtering
+        if (userRole === 'site_admin' && clientName) {
+            query = query.where('client_name', '==', clientName);
+        } else if (userRole === 'user') {
+            query = query.where('reporter_id', '==', userId);
+        }
+
+        query = query.orderBy('created_at', 'desc').limit(options.limit || 100);
+
+        const snapshot = await query.get();
+        return snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+            created_at: doc.data().created_at?.toDate?.() || new Date(),
+            updated_at: doc.data().updated_at?.toDate?.() || new Date(),
+        }));
+    }
+
+    async getTicketCountsData(userId, userRole, clientName) {
+        const tickets = await this.getTicketsData(userId, userRole, clientName);
+        
+        const totalTickets = tickets.length;
+        const activeTickets = tickets.filter(t => ['Open', 'In Progress', 'Hold'].includes(t.status)).length;
+        const assignedToMeTickets = tickets.filter(t => t.assigned_to_id === userId && !['Closed', 'Resolved'].includes(t.status)).length;
+
+        return {
+            total_tickets: totalTickets,
+            active_tickets: activeTickets,
+            assigned_to_me: assignedToMeTickets
+        };
+    }
+
+    async getDashboardData(userId, userRole, clientName, options = {}) {
+        const db = admin.firestore();
+        
+        // Get tickets data
+        const tickets = await this.getTicketsData(userId, userRole, clientName);
+        
+        // Get company users if site admin
+        let companyUsers = [];
+        if (userRole === 'site_admin' && clientName) {
+            const usersSnapshot = await db.collection('users')
+                .where('client_name', '==', clientName)
+                .limit(100)
+                .get();
+            companyUsers = usersSnapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+        }
+
+        // Get recent activities
+        let activitiesQuery = db.collection('activities').orderBy('timestamp', 'desc');
+        if (userRole === 'site_admin' && clientName) {
+            activitiesQuery = activitiesQuery.limit(20);
+        } else {
+            activitiesQuery = activitiesQuery.limit(5);
+        }
+        
+        const activitiesSnapshot = await activitiesQuery.get();
+        const activities = activitiesSnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+            timestamp: doc.data().timestamp?.toDate?.() || new Date(),
+        }));
+
+        return {
+            tickets,
+            companyUsers,
+            activities,
+            agents: [] // Will be populated when available
+        };
+    }
+
+    async getNotificationsData(userId) {
+        const db = admin.firestore();
+        const snapshot = await db.collection('notifications')
+            .where('userId', '==', userId)
+            .orderBy('created_at', 'desc')
+            .limit(50)
+            .get();
+        
+        return snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+            created_at: doc.data().created_at?.toDate?.() || new Date(),
+        }));
     }
 
     // Broadcast analytics updates to subscribed clients
@@ -238,6 +411,65 @@ class WebSocketServer {
                 lastUpdate: sub.lastUpdate
             }))
         };
+    }
+
+    // Caching methods
+    getCachedData(cacheKey) {
+        const cached = this.cache.get(cacheKey);
+        if (cached) {
+            console.log(`📦 Cache hit for ${cacheKey}`);
+            return cached;
+        }
+        return null;
+    }
+
+    setCachedData(cacheKey, data, dataType) {
+        const now = Date.now();
+        this.cache.set(cacheKey, {
+            data,
+            timestamp: now,
+            dataType
+        });
+        console.log(`💾 Cached data for ${cacheKey}`);
+    }
+
+    isCacheValid(cachedData, dataType) {
+        const now = Date.now();
+        const duration = this.cacheDurations[dataType] || 5 * 60 * 1000; // Default 5 minutes
+        return (now - cachedData.timestamp) < duration;
+    }
+
+    clearCache() {
+        this.cache.clear();
+        console.log('🗑️ Cache cleared');
+    }
+
+    clearCacheForUser(userId) {
+        const keysToDelete = [];
+        for (const [key, value] of this.cache.entries()) {
+            if (key.includes(userId)) {
+                keysToDelete.push(key);
+            }
+        }
+        keysToDelete.forEach(key => this.cache.delete(key));
+        console.log(`🗑️ Cleared cache for user ${userId}`);
+    }
+
+    // Broadcast data updates to all connected clients
+    broadcastDataUpdate(dataType, data, userId = null) {
+        const message = {
+            type: `${dataType}_update`,
+            data: data,
+            timestamp: Date.now()
+        };
+
+        if (userId) {
+            // Broadcast to specific user
+            this.broadcastToUser(message, userId);
+        } else {
+            // Broadcast to all clients
+            this.broadcast(message);
+        }
     }
 }
 

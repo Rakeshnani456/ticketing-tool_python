@@ -5,13 +5,14 @@
  */
 export class FirebaseCache {
     static CACHE_DURATIONS = {
-        TICKET_COUNTS: 5 * 60 * 1000,      // 5 minutes
-        DASHBOARD_DATA: 2 * 60 * 1000,     // 2 minutes
-        MY_TICKETS: 2 * 60 * 1000,         // 2 minutes
-        ALL_TICKETS: 2 * 60 * 1000,        // 2 minutes
-        TICKET_DETAIL: 1 * 60 * 1000,      // 1 minute
-        USER_DATA: 5 * 60 * 1000,          // 5 minutes
-        ACTIVITIES: 3 * 60 * 1000,         // 3 minutes
+        TICKET_COUNTS: 10 * 60 * 1000,     // 10 minutes
+        DASHBOARD_DATA: 5 * 60 * 1000,     // 5 minutes
+        MY_TICKETS: 5 * 60 * 1000,         // 5 minutes
+        ALL_TICKETS: 5 * 60 * 1000,        // 5 minutes
+        TICKET_DETAIL: 2 * 60 * 1000,      // 2 minutes
+        USER_DATA: 10 * 60 * 1000,         // 10 minutes
+        ACTIVITIES: 5 * 60 * 1000,         // 5 minutes
+        NOTIFICATIONS: 2 * 60 * 1000,      // 2 minutes
     };
 
     /**
@@ -273,11 +274,307 @@ export class FirebaseOptimizer {
     }
 }
 
+/**
+ * Centralized Data Manager - Single source of truth for all Firebase data
+ */
+export class DataManager {
+    static listeners = new Map();
+    static cache = new Map();
+    static websocketClient = null;
+    static subscribers = new Map();
+
+    /**
+     * Initialize the data manager with websocket client
+     */
+    static initialize(wsClient) {
+        this.websocketClient = wsClient;
+        this.lastConnectionState = false;
+        
+        // Set up websocket listeners for real-time updates
+        if (wsClient) {
+            wsClient.addListener('ticket_update', (data) => {
+                this.handleTicketUpdate(data);
+            });
+            wsClient.addListener('user_update', (data) => {
+                this.handleUserUpdate(data);
+            });
+            wsClient.addListener('notification_update', (data) => {
+                this.handleNotificationUpdate(data);
+            });
+            
+            // Handle data responses from server
+            wsClient.addListener('data_tickets', (data) => {
+                this.handleDataResponse('tickets', data);
+            });
+            wsClient.addListener('data_ticket_counts', (data) => {
+                this.handleDataResponse('ticket_counts', data);
+            });
+            wsClient.addListener('data_dashboard_data', (data) => {
+                this.handleDataResponse('dashboard_data', data);
+            });
+            wsClient.addListener('data_notifications', (data) => {
+                this.handleDataResponse('notifications', data);
+            });
+            
+            // Handle connection changes more intelligently
+            wsClient.addListener('connection_change', (connected) => {
+                this.handleConnectionChange(connected);
+            });
+        }
+    }
+
+    /**
+     * Handle WebSocket connection changes intelligently
+     */
+    static handleConnectionChange(connected) {
+        const wasConnected = this.lastConnectionState;
+        this.lastConnectionState = connected;
+        
+        if (connected && !wasConnected) {
+            console.log('🌐 WebSocket reconnected - using cached data, not triggering fresh fetches');
+            // Don't trigger fresh data fetches on reconnection
+            // Let components use cached data and only fetch when needed
+        } else if (!connected && wasConnected) {
+            console.log('🌐 WebSocket disconnected - components will use cached data');
+        }
+    }
+
+    /**
+     * Subscribe to data updates
+     */
+    static subscribe(dataType, callback, options = {}) {
+        const subscriptionId = `${dataType}_${Date.now()}_${Math.random()}`;
+        
+        if (!this.subscribers.has(dataType)) {
+            this.subscribers.set(dataType, new Map());
+        }
+        
+        this.subscribers.get(dataType).set(subscriptionId, { callback, options });
+        
+        // Return subscription ID for cleanup
+        return subscriptionId;
+    }
+
+    /**
+     * Unsubscribe from data updates
+     */
+    static unsubscribe(dataType, subscriptionId) {
+        if (this.subscribers.has(dataType)) {
+            this.subscribers.get(dataType).delete(subscriptionId);
+        }
+    }
+
+    /**
+     * Notify all subscribers of data changes
+     */
+    static notifySubscribers(dataType, data) {
+        if (this.subscribers.has(dataType)) {
+            this.subscribers.get(dataType).forEach(({ callback }) => {
+                try {
+                    callback(data);
+                } catch (error) {
+                    console.error('Error in data subscriber callback:', error);
+                }
+            });
+        }
+    }
+
+    /**
+     * Handle ticket updates from websocket
+     */
+    static handleTicketUpdate(data) {
+        console.log('🎫 Processing ticket update from WebSocket:', data);
+        
+        // Update cache with timestamp
+        const now = Date.now();
+        this.cache.set('tickets', { data: data.tickets, timestamp: now });
+        this.cache.set('ticket_counts', { data: data.counts, timestamp: now });
+        
+        // Notify subscribers
+        this.notifySubscribers('tickets', data.tickets);
+        this.notifySubscribers('ticket_counts', data.counts);
+        
+        // Update localStorage cache
+        localStorage.setItem('tickets_cache', JSON.stringify(data.tickets));
+        localStorage.setItem('tickets_cache_time', now.toString());
+        localStorage.setItem('ticket_counts_cache', JSON.stringify(data.counts));
+        localStorage.setItem('ticket_counts_cache_time', now.toString());
+        
+        console.log('✅ Ticket data updated and cached');
+    }
+
+    /**
+     * Handle user updates from websocket
+     */
+    static handleUserUpdate(data) {
+        this.cache.set('users', data.users);
+        this.notifySubscribers('users', data.users);
+        
+        const now = Date.now();
+        localStorage.setItem('users_cache', JSON.stringify(data.users));
+        localStorage.setItem('users_cache_time', now.toString());
+    }
+
+    /**
+     * Handle notification updates from websocket
+     */
+    static handleNotificationUpdate(data) {
+        this.cache.set('notifications', data.notifications);
+        this.notifySubscribers('notifications', data.notifications);
+        
+        const now = Date.now();
+        localStorage.setItem('notifications_cache', JSON.stringify(data.notifications));
+        localStorage.setItem('notifications_cache_time', now.toString());
+    }
+
+    /**
+     * Handle data responses from server
+     */
+    static handleDataResponse(dataType, data) {
+        console.log(`📊 Processing data response for ${dataType}:`, data?.length || 'no data');
+        
+        // Update cache with timestamp
+        const now = Date.now();
+        this.cache.set(dataType, { data, timestamp: now });
+        
+        // Notify subscribers
+        this.notifySubscribers(dataType, data);
+        
+        // Update localStorage cache
+        localStorage.setItem(`${dataType}_cache`, JSON.stringify(data));
+        localStorage.setItem(`${dataType}_cache_time`, now.toString());
+        
+        console.log(`✅ ${dataType} data updated and cached`);
+    }
+
+    /**
+     * Get cached data or fetch from Firebase
+     */
+    static async getData(dataType, userId, options = {}) {
+        const cacheKey = `${dataType}_${userId}`;
+        const cacheDuration = FirebaseCache.CACHE_DURATIONS[dataType.toUpperCase()] || 5 * 60 * 1000;
+        
+        // Check memory cache first
+        if (this.cache.has(cacheKey)) {
+            const cachedData = this.cache.get(cacheKey);
+            if (Date.now() - cachedData.timestamp < cacheDuration) {
+                console.log(`📦 Using cached data for ${dataType}`);
+                return cachedData.data;
+            }
+        }
+        
+        // Check localStorage cache
+        const cachedData = FirebaseCache.getCachedData(cacheKey, cacheDuration);
+        if (cachedData) {
+            // Update memory cache
+            this.cache.set(cacheKey, { data: cachedData, timestamp: Date.now() });
+            console.log(`📦 Using localStorage cached data for ${dataType}`);
+            return cachedData;
+        }
+        
+        // If websocket is available, request data through it
+        if (this.websocketClient && this.websocketClient.isConnected) {
+            console.log(`🌐 Requesting ${dataType} data via WebSocket`);
+            return new Promise((resolve) => {
+                const subscriptionId = this.subscribe(dataType, (data) => {
+                    this.unsubscribe(dataType, subscriptionId);
+                    // Cache the data for future use
+                    this.cache.set(cacheKey, { data, timestamp: Date.now() });
+                    FirebaseCache.setCachedData(cacheKey, data);
+                    resolve(data);
+                });
+                
+                // Request data from server via websocket
+                this.websocketClient.send('request_data', {
+                    dataType,
+                    userId,
+                    options,
+                    subscriptionId
+                });
+                
+                // Set a timeout to avoid hanging if websocket doesn't respond
+                setTimeout(() => {
+                    this.unsubscribe(dataType, subscriptionId);
+                    console.log(`⏰ WebSocket timeout for ${dataType}, falling back to null`);
+                    resolve(null);
+                }, 5000); // 5 second timeout
+            });
+        }
+        
+        // Fallback: return null and let the component handle it
+        console.log(`WebSocket not available for ${dataType} - will use fallback Firebase query`);
+        return null;
+    }
+
+    /**
+     * Clear all caches
+     */
+    static clearAllCaches() {
+        this.cache.clear();
+        FirebaseCache.clearCache();
+    }
+
+    /**
+     * Clear cache for specific user
+     */
+    static clearUserCache(userId) {
+        const keysToDelete = [];
+        this.cache.forEach((value, key) => {
+            if (key.includes(userId)) {
+                keysToDelete.push(key);
+            }
+        });
+        
+        keysToDelete.forEach(key => this.cache.delete(key));
+        FirebaseCache.clearUserCache(userId);
+    }
+
+    /**
+     * Check if data is fresh (less than 30 seconds old)
+     */
+    static isDataFresh(dataType, maxAge = 30000) {
+        const cacheKey = dataType;
+        if (this.cache.has(cacheKey)) {
+            const cachedData = this.cache.get(cacheKey);
+            const age = Date.now() - cachedData.timestamp;
+            return age < maxAge;
+        }
+        return false;
+    }
+
+    /**
+     * Get data age in milliseconds
+     */
+    static getDataAge(dataType) {
+        const cacheKey = dataType;
+        if (this.cache.has(cacheKey)) {
+            const cachedData = this.cache.get(cacheKey);
+            return Date.now() - cachedData.timestamp;
+        }
+        return null;
+    }
+
+    /**
+     * Force refresh data by clearing cache and requesting fresh data
+     */
+    static async forceRefresh(dataType, userId, options = {}) {
+        console.log(`🔄 Force refreshing ${dataType} data`);
+        
+        // Clear cache
+        this.cache.delete(dataType);
+        FirebaseCache.clearUserCache(userId);
+        
+        // Request fresh data
+        return this.getData(dataType, userId, options);
+    }
+}
+
 export default {
     FirebaseCache,
     QueryOptimizer,
     RateLimiter,
     FirebasePerformance,
-    FirebaseOptimizer
+    FirebaseOptimizer,
+    DataManager
 };
 

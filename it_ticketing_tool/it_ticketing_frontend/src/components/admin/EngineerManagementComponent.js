@@ -24,6 +24,7 @@ import {
 } from '@mui/icons-material';
 import { API_BASE_URL } from '../../config/constants';
 import { useNavigate } from 'react-router-dom';
+import SmartCacheManager from '../../utils/smartCacheManager';
 
 const initialUserState = {
   firstName: '',
@@ -95,20 +96,37 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
     
     const fetchEngineers = async () => {
       try {
-        const idToken = await user.firebaseUser.getIdToken();
+        const result = await SmartCacheManager.smartFetch(
+          async () => {
+            console.log('🔄 Fetching fresh engineers data');
+            const idToken = await user.firebaseUser.getIdToken();
+            
+            const res = await fetch(`${API_BASE_URL}/api/users`, {
+              headers: {
+                'Authorization': `Bearer ${idToken}`,
+                'Content-Type': 'application/json'
+              }
+            });
+            
+            if (!res.ok) throw new Error('Failed to fetch users');
+            const data = await res.json();
+            return data.filter(u => u.role === 'support');
+          },
+          'engineers_data',
+          'ENGINEERS',
+          user?.uid,
+          { forceRefresh: false, checkChanges: true }
+        );
         
-        const res = await fetch(`${API_BASE_URL}/api/users`, {
-          headers: {
-            'Authorization': `Bearer ${idToken}`,
-            'Content-Type': 'application/json'
-          }
-        });
-        
-        if (!res.ok) throw new Error('Failed to fetch users');
-        const data = await res.json();
-        setUsers(data.filter(u => u.role === 'support'));
+        setUsers(result.data);
         setLoading(false);
         hasFetchedData.current = true;
+        
+        if (result.fromCache) {
+          console.log(`📦 Engineers loaded from cache (age: ${Math.round(result.age / 1000)}s)`);
+        } else {
+          console.log(`✅ Fresh engineers data loaded and cached`);
+        }
       } catch (err) {
         console.error('Error fetching engineers:', err);
         setError('Could not load engineers. Please check if the backend server is running and Firebase is configured.');
