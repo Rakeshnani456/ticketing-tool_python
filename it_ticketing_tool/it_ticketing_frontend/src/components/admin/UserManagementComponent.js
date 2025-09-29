@@ -851,6 +851,18 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
     };
 
     const isAlphanumeric = (str) => /^[a-zA-Z0-9]+$/.test(str);
+    // Simple fetch helper with timeout to avoid indefinitely hanging requests
+    const fetchWithTimeout = async (url, options = {}, timeoutMs = 15000) => {
+      const controller = new AbortController();
+      const id = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const response = await fetch(url, { ...options, signal: controller.signal });
+        return response;
+      } finally {
+        clearTimeout(id);
+      }
+    };
+
     const handleChangePassword = async (e) => {
       e.preventDefault();
       setChangePwdError('');
@@ -887,41 +899,51 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
           const errData = await res.json();
           throw new Error(errData.error || 'Failed to change password');
         }
-        
-        // If email checkbox is checked, send the password email
+        // Schedule modal close immediately after password update succeeds
+        setPasswordResetStatus(emailSent ? 'Password reset in progress...' : 'Password reset successfully!');
+        const closeTimer = setTimeout(() => {
+          closeChangePwdModal();
+          setIsPasswordResetting(false);
+          setPasswordResetStatus('');
+        }, 2000);
+
+        // If email checkbox is checked, send the password email (non-blocking with timeout)
         if (emailSent) {
-          try {
-            const userData = users.find(u => u.uid === pwdUserId);
-            if (userData) {
-              const emailRes = await fetch(`${API_BASE_URL}/api/users/${pwdUserId}/send-password-email`, {
-                method: 'POST',
-                headers: { 
-                  'Authorization': `Bearer ${idToken}`,
-                  'Content-Type': 'application/json' 
-                },
-                body: JSON.stringify({ 
-                  password: newPassword,
-                  userEmail: userData.email,
-                  userName: `${userData.firstName || ''} ${userData.lastName || ''}`.trim() || userData.name || 'User',
-                  companyName: userData.clientname || userData.companyName || 'Company',
-                  loginUrl: FRONTEND_URL
-                }),
-              });
-              
-              if (emailRes.ok) {
-                setPasswordResetStatus('Password reset and email sent successfully!');
-              } else {
-                setPasswordResetStatus('Password reset successful, but email failed to send.');
+          (async () => {
+            try {
+              const userData = users.find(u => u.uid === pwdUserId);
+              if (userData) {
+                const emailRes = await fetchWithTimeout(`${API_BASE_URL}/api/users/${pwdUserId}/send-password-email`, {
+                  method: 'POST',
+                  headers: { 
+                    'Authorization': `Bearer ${idToken}`,
+                    'Content-Type': 'application/json' 
+                  },
+                  body: JSON.stringify({ 
+                    password: newPassword,
+                    userEmail: userData.email,
+                    userName: `${userData.firstName || ''} ${userData.lastName || ''}`.trim() || userData.name || 'User',
+                    companyName: userData.clientname || userData.companyName || 'Company',
+                    loginUrl: FRONTEND_URL
+                  }),
+                }, 10000);
+                // If modal is already closing/closed, simply log outcome
+                if (emailRes && emailRes.ok) {
+                  setPasswordResetStatus('Password reset and email sent successfully!');
+                } else {
+                  setPasswordResetStatus('Password reset successful, but email failed to send.');
+                }
               }
+            } catch (emailErr) {
+              console.error('Email sending failed:', emailErr);
+              setPasswordResetStatus('Password reset successful, but email failed to send.');
+            } finally {
+              // Ensure spinner is cleared even if email step took long
+              setIsPasswordResetting(false);
             }
-          } catch (emailErr) {
-            console.error('Email sending failed:', emailErr);
-            setPasswordResetStatus('Password reset successful, but email failed to send.');
-          }
-        } else {
-          setPasswordResetStatus('Password reset successfully!');
+          })();
         }
-        
+
         // Show inline notification for this specific user
         setPasswordChangeNotifications(prev => ({
           ...prev,
@@ -939,13 +961,6 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
             return newState;
           });
         }, 5000);
-         
-        // Close modal after 2 seconds to show success message
-        setTimeout(() => {
-        closeChangePwdModal();
-          setIsPasswordResetting(false);
-          setPasswordResetStatus('');
-        }, 2000);
         
         // Force refresh the users list to show the updated user
         if (user.role === 'site_admin') {
