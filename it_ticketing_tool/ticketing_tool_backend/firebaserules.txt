@@ -41,6 +41,18 @@ service cloud.firestore {
         isSiteAdminForTicket()
       );
 
+      // Allow collection-level queries for tickets based on user role
+      allow list: if isAuthenticated() && (
+        // Users can list tickets they created
+        resource.data.reporter_id == getUserId() ||
+        // Support/Admin/Super Admin can list all tickets
+        hasSupportAdminOrSuperAdminRole() ||
+        // Site admin can list tickets for their client
+        (exists(/databases/$(database)/documents/users/$(getUserId())) &&
+         get(/databases/$(database)/documents/users/$(getUserId())).data.role == 'site_admin' &&
+         get(/databases/$(database)/documents/users/$(getUserId())).data.client_name == resource.data.client_name)
+      );
+
       // Allow authenticated users to create tickets
       allow create: if isAuthenticated() &&
         request.resource.data.reporter_id == getUserId();
@@ -104,6 +116,24 @@ service cloud.firestore {
       allow create: if isAuthenticated();
       // Allow only the backend to update/delete activities (for security)
       allow update, delete: if false;
+    }
+
+    // Rules for the 'read_states' collection
+    match /read_states/{userId} {
+      // Allow users to read and write their own read states
+      allow read, write: if isAuthenticated() && getUserId() == userId;
+    }
+
+    // Rules for the 'notifications' collection
+    match /notifications/{notificationId} {
+      // Allow users to read their own notifications
+      allow read: if isAuthenticated() && resource.data.userId == getUserId();
+      // Allow creation of notifications (typically by backend)
+      allow create: if isAuthenticated();
+      // Allow users to update their own notifications (mark as read, etc.)
+      allow update: if isAuthenticated() && resource.data.userId == getUserId();
+      // Prevent deletion of notifications
+      allow delete: if false;
     }
   }
 }

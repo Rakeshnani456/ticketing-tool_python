@@ -28,9 +28,8 @@ class WebSocketClient {
         // Set up token refresh mechanism
         this.setupTokenRefresh();
 
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        // Use port 5000 for backend WebSocket server
-        const wsUrl = `${protocol}//${window.location.hostname}:5000`;
+        // Use the configured WebSocket URL from constants
+        const wsUrl = process.env.REACT_APP_WS_URL || 'wss://ticketing-tool-python-1.onrender.com';
         
         console.log('🌐 Connecting to WebSocket:', wsUrl);
         this.ws = new WebSocket(wsUrl);

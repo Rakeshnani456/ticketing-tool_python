@@ -1,7 +1,7 @@
 // Service for managing read states via API
 import { authClient } from '../config/firebase';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://ticketing-tool-python-1.onrender.com';
 
 class ReadStatesService {
   async getAuthToken() {

@@ -310,7 +310,18 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
 
     const fetchClients = useCallback(async () => {
         try {
-            const res = await fetch(`${API_BASE_URL}/api/clients`);
+            if (!user || !user.firebaseUser) {
+                console.error("User not authenticated");
+                return;
+            }
+            
+            const idToken = await user.firebaseUser.getIdToken();
+            const res = await fetch(`${API_BASE_URL}/api/clients`, {
+                headers: {
+                    'Authorization': `Bearer ${idToken}`,
+                    'Content-Type': 'application/json'
+                }
+            });
             if (!res.ok) throw new Error('Failed to fetch clients');
             const data = await res.json();
             if (JSON.stringify(previousClientsRef.current) !== JSON.stringify(data)) {
@@ -320,7 +331,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
         } catch (err) {
             console.error("Error fetching clients:", err);
         }
-    }, []);
+    }, [user]);
 
     // Remove this useEffect as fetchClients is called in the main useEffect
 
@@ -682,9 +693,13 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
               isSiteAdmin: false,
             };
             
+            const idToken = await user.firebaseUser.getIdToken();
             const res = await fetch(`${API_BASE_URL}/api/users`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Authorization': `Bearer ${idToken}`,
+                    'Content-Type': 'application/json' 
+                },
                 body: JSON.stringify(payload),
             });
             
@@ -1311,9 +1326,13 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
         
         setImportProgress(prev => ({ ...prev, status: 'Sending data to server...' }));
         
+        const idToken = await user.firebaseUser.getIdToken();
         const res = await fetch(`${API_BASE_URL}/api/users/bulk`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Authorization': `Bearer ${idToken}`,
+            'Content-Type': 'application/json' 
+          },
           body: JSON.stringify({ 
             users: usersWithCompany,
             siteAdminCompany: user && user.role === 'site_admin' ? user.companyName : null
