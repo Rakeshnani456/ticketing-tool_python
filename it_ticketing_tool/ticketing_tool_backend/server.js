@@ -71,7 +71,62 @@ const transporter = nodemailer.createTransport({
 // Initialize email service
 const emailService = new EmailService(transporter);
 
-app.use(cors());
+// CORS configuration
+const corsOptions = {
+    origin: function (origin, callback) {
+        // Allow requests with no origin (like mobile apps or curl requests)
+        if (!origin) return callback(null, true);
+        
+        const allowedOrigins = [
+            'https://ticketingtoolv2.web.app',
+            'https://ticketingtoolv2.firebaseapp.com',
+            'http://localhost:3000',
+            'http://localhost:3001'
+        ];
+        
+        if (allowedOrigins.indexOf(origin) !== -1) {
+            callback(null, true);
+        } else {
+            console.log('CORS blocked origin:', origin);
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+    exposedHeaders: ['Content-Length', 'X-Foo', 'X-Bar'],
+    optionsSuccessStatus: 200,
+    preflightContinue: false
+};
+
+app.use(cors(corsOptions));
+
+// Fallback CORS for development/testing
+app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+    res.header('Access-Control-Allow-Credentials', 'true');
+    
+    if (req.method === 'OPTIONS') {
+        res.sendStatus(200);
+    } else {
+        next();
+    }
+});
+
+// Handle preflight requests
+app.options('*', cors(corsOptions));
+
+// Specific CORS handling for login endpoint
+app.options('/login', cors(corsOptions));
+
+// Debug middleware to log CORS issues
+app.use((req, res, next) => {
+    console.log(`CORS Debug: ${req.method} ${req.path} from origin: ${req.headers.origin}`);
+    next();
+});
+
 app.use(express.json());
 
 // Health check endpoint for Docker
