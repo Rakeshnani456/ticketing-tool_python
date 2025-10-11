@@ -12,6 +12,8 @@ class WebSocketClient {
         this.userInfo = null;
         this.analyticsSubscriptions = new Map(); // Track analytics subscriptions
         this.isAuthenticating = false; // Prevent multiple authentication attempts
+        this.tokenRefreshInterval = null; // Token refresh interval
+        this.lastTokenRefresh = 0; // Track last token refresh time
     }
 
     connect(token, userInfo) {
@@ -22,6 +24,9 @@ class WebSocketClient {
 
         this.authToken = token;
         this.userInfo = userInfo;
+        
+        // Set up token refresh mechanism
+        this.setupTokenRefresh();
 
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         // Use port 5000 for backend WebSocket server
@@ -82,6 +87,71 @@ class WebSocketClient {
             console.error('❌ WebSocket error:', error);
             this.isAuthenticating = false;
         };
+    }
+
+    setupTokenRefresh() {
+        // Clear existing interval
+        if (this.tokenRefreshInterval) {
+            clearInterval(this.tokenRefreshInterval);
+        }
+        
+        // Refresh token every 45 minutes (tokens expire after 1 hour)
+        this.tokenRefreshInterval = setInterval(async () => {
+            if (this.userInfo && this.userInfo.firebaseUser) {
+                try {
+                    console.log('🔄 Refreshing Firebase token...');
+                    const newToken = await this.userInfo.firebaseUser.getIdToken(true); // Force refresh
+                    this.authToken = newToken;
+                    this.lastTokenRefresh = Date.now();
+                    console.log('✅ Firebase token refreshed successfully');
+                    
+                    // Re-authenticate with new token if connected
+                    if (this.isConnected && this.ws && this.ws.readyState === WebSocket.OPEN) {
+                        this.authenticate();
+                    }
+                } catch (error) {
+                    console.error('❌ Failed to refresh Firebase token:', error);
+                    // If token refresh fails, try to reconnect
+                    this.handleReconnect();
+                }
+            }
+        }, 45 * 60 * 1000); // 45 minutes
+    }
+
+    async refreshToken() {
+        if (this.userInfo && this.userInfo.firebaseUser) {
+            try {
+                console.log('🔄 Manually refreshing Firebase token...');
+                const newToken = await this.userInfo.firebaseUser.getIdToken(true); // Force refresh
+                this.authToken = newToken;
+                this.lastTokenRefresh = Date.now();
+                console.log('✅ Firebase token refreshed successfully');
+                return newToken;
+            } catch (error) {
+                console.error('❌ Failed to refresh Firebase token:', error);
+                throw error;
+            }
+        }
+        throw new Error('No Firebase user available for token refresh');
+    }
+
+    async handleTokenExpiration() {
+        try {
+            console.log('🔄 Handling token expiration...');
+            await this.refreshToken();
+            
+            // Re-authenticate with new token
+            if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                console.log('🔄 Re-authenticating with refreshed token...');
+                this.authenticate();
+            } else {
+                console.log('🔄 WebSocket not connected, will authenticate on next connection');
+            }
+        } catch (error) {
+            console.error('❌ Failed to handle token expiration:', error);
+            // If we can't refresh the token, try to reconnect
+            this.handleReconnect();
+        }
     }
 
     authenticate() {
@@ -161,7 +231,14 @@ class WebSocketClient {
             case 'error':
                 console.error('❌ WebSocket error:', data.message);
                 this.isAuthenticating = false;
-                this.notifyListeners('websocket_error', data);
+                
+                // Handle token expiration specifically
+                if (data.message && data.message.includes('id-token-expired')) {
+                    console.log('🔄 Token expired, attempting to refresh...');
+                    this.handleTokenExpiration();
+                } else {
+                    this.notifyListeners('websocket_error', data);
+                }
                 break;
             default:
                 console.log('❓ Unknown WebSocket message type:', data.type);
@@ -278,6 +355,12 @@ class WebSocketClient {
     disconnect() {
         // Cancel any pending reconnection
         WebSocketConnectionManager.cancelReconnection();
+        
+        // Clear token refresh interval
+        if (this.tokenRefreshInterval) {
+            clearInterval(this.tokenRefreshInterval);
+            this.tokenRefreshInterval = null;
+        }
         
         if (this.ws) {
             this.ws.close();

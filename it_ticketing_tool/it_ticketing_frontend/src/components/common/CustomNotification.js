@@ -53,11 +53,11 @@ const CustomNotification = ({
         
         switch (position) {
             case 'top-left':
-                return `top-4 left-4`;
+                return `top-20 left-4`; // Adjusted to account for header
             case 'top-center':
-                return `top-4 left-1/2 transform -translate-x-1/2`;
+                return `top-20 left-1/2 transform -translate-x-1/2`; // Adjusted to account for header
             case 'top-right':
-                return `top-4 right-4`;
+                return `top-20 right-4`; // Adjusted to account for header
             case 'bottom-left':
                 return `bottom-4 left-4`;
             case 'bottom-center':
@@ -65,7 +65,7 @@ const CustomNotification = ({
             case 'bottom-right':
                 return `bottom-4 right-4`;
             default:
-                return `top-4 right-4`;
+                return `top-20 right-4`; // Adjusted to account for header
         }
     };
 
@@ -78,7 +78,7 @@ const CustomNotification = ({
             case 'top-center':
             case 'top-right':
                 return { 
-                    top: `${16 + stackOffset}px`,
+                    top: `${80 + stackOffset}px`, // Adjusted to account for header (80px)
                     zIndex: 9999 - index // Higher z-index for newer notifications
                 };
             case 'bottom-left':
@@ -151,15 +151,7 @@ const CustomNotification = ({
             <div className={`relative bg-white border-l-4 ${typeStyles.container} rounded-lg shadow-lg overflow-hidden ${
                 index > 0 ? 'shadow-xl' : ''
             }`}>
-                {/* Progress bar */}
-                <div className="absolute top-0 left-0 w-full h-1 bg-gray-200">
-                    <div 
-                        className={`h-full ${typeStyles.progress} transition-all ease-linear`}
-                        style={{
-                            animation: `shrink ${duration}ms linear forwards`
-                        }}
-                    />
-                </div>
+                {/* Progress bar removed for cleaner look */}
 
                 {/* Stack indicator for multiple notifications */}
                 {totalCount > 1 && (
@@ -193,17 +185,7 @@ const CustomNotification = ({
                 </div>
             </div>
 
-            {/* CSS Animation for progress bar */}
-            <style jsx>{`
-                @keyframes shrink {
-                    from {
-                        width: 100%;
-                    }
-                    to {
-                        width: 0%;
-                    }
-                }
-            `}</style>
+            {/* CSS Animation removed - no progress bar */}
         </div>
     );
 };

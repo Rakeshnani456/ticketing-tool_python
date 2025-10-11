@@ -12,12 +12,21 @@ function TooltipBubble({ title, children, id }) {
             const rect = iconRef.current.getBoundingClientRect();
             const viewportWidth = window.innerWidth;
             const viewportHeight = window.innerHeight;
-            const tooltipWidth = 200; // Approximate tooltip width
-            const tooltipHeight = 40; // Approximate tooltip height
+            // Calculate tooltip width based on text content
+            const tooltipWidth = Math.max(title.length * 8, 80); // Dynamic width based on text
+            const tooltipHeight = 32; // Smaller height for button tooltips
             
-            // Calculate optimal position
+            // Calculate optimal position - position directly under the button
             let topPosition = rect.bottom + 8;
-            let leftPosition = rect.left + (rect.width / 10) - (tooltipWidth / 10); // Center the tooltip under the element
+            let leftPosition = rect.left + (rect.width / 2) - (tooltipWidth / 2); // Center the tooltip under the element
+            
+            // Ensure tooltip is positioned exactly under the button
+            if (leftPosition < rect.left) {
+                leftPosition = rect.left;
+            }
+            if (leftPosition + tooltipWidth > rect.right) {
+                leftPosition = rect.right - tooltipWidth;
+            }
             
             // Check if tooltip would go off the bottom of viewport
             if (topPosition + tooltipHeight > viewportHeight - 10) {
@@ -60,7 +69,7 @@ function TooltipBubble({ title, children, id }) {
                         top: coords.top,
                         left: coords.left,
                         backgroundColor: '#1f2937',
-                        color: 'white',
+                        color: '#ffffff !important',
                         padding: '8px 12px',
                         borderRadius: '6px',
                         fontSize: '12px',
@@ -94,9 +103,18 @@ function LeftMenuTooltipBubble({ title, children, id }) {
             const tooltipWidth = 120; // Approximate tooltip width for menu items
             const tooltipHeight = 32; // Approximate tooltip height
             
+            // Account for header height (typically around 64px) to prevent cutoff
+            const headerHeight = 64;
+            const minTopPosition = headerHeight + 10; // Ensure tooltip is below header
+            
             // Position to the right of the icon
             let topPosition = rect.top + (rect.height / 2) - (tooltipHeight / 2); // Center vertically with the icon
             let leftPosition = rect.right + 8; // Position to the right of the icon
+            
+            // Ensure tooltip is not cut off by the header
+            if (topPosition < minTopPosition) {
+                topPosition = minTopPosition;
+            }
             
             // Check if tooltip would go off the right edge of viewport
             if (leftPosition + tooltipWidth > viewportWidth - 10) {
@@ -109,9 +127,9 @@ function LeftMenuTooltipBubble({ title, children, id }) {
                 topPosition = viewportHeight - tooltipHeight - 10;
             }
             
-            // Check if tooltip would go off the top of viewport
-            if (topPosition < 10) {
-                topPosition = 10;
+            // Check if tooltip would go off the top of viewport (with header consideration)
+            if (topPosition < minTopPosition) {
+                topPosition = minTopPosition;
             }
             
             // Ensure tooltip doesn't go off-screen to the left
@@ -142,12 +160,12 @@ function LeftMenuTooltipBubble({ title, children, id }) {
                         top: coords.top,
                         left: coords.left,
                         backgroundColor: '#1f2937',
-                        color: 'white',
+                        color: '#ffffff !important',
                         padding: '6px 10px',
                         borderRadius: '6px',
                         fontSize: '12px',
                         fontWeight: '500',
-                        zIndex: 9999,
+                        zIndex: 99999,
                         boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
                         whiteSpace: 'nowrap',
                         pointerEvents: 'none',

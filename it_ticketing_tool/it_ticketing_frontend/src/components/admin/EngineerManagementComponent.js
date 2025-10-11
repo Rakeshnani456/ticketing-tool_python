@@ -1,8 +1,8 @@
-// src/components/admin/EngineerManagementComponent.js
-import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef, memo } from 'react';
 import {
   Button, Chip, TextField, Box, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
-  IconButton, Snackbar, Alert, Typography, Popover, MenuItem, Tooltip, TablePagination, InputAdornment, Dialog, DialogTitle, DialogContent, DialogActions
+  IconButton, Snackbar, Alert, Typography, Popover, MenuItem, Tooltip, TablePagination, InputAdornment, Dialog, DialogTitle, DialogContent, DialogActions,
+  CircularProgress, Skeleton
 } from '@mui/material';
 import { 
   Edit as EditIcon, 
@@ -19,25 +19,159 @@ import {
   Work as WorkIcon,
   Badge as BadgeIcon,
   AdminPanelSettings as AdminIcon,
-  Close as CloseIcon,
-  Refresh as RefreshIcon
+  Close as CloseIcon
 } from '@mui/icons-material';
 import { API_BASE_URL } from '../../config/constants';
 import { useNavigate } from 'react-router-dom';
 import SmartCacheManager from '../../utils/smartCacheManager';
 
-const initialUserState = {
-  firstName: '',
-  lastName: '',
-  email: '',
-  password: '',
-  contactNumber: '',
-  managerEmail: '',
-  employmentType: '',
-  designation: '',
-  employeeid: '',
-  role: 'support',
+// Custom Tooltip Component
+const CustomTooltip = ({ children, title, position = 'top' }) => {
+  const [show, setShow] = useState(false);
+  
+  return (
+    <div 
+      className="relative inline-block"
+      onMouseEnter={() => setShow(true)}
+      onMouseLeave={() => setShow(false)}
+    >
+      {children}
+      {show && (
+        <div 
+          className={`absolute z-50 px-2 py-1 text-xs text-white bg-gray-800 rounded shadow-lg whitespace-nowrap ${
+            position === 'top' ? 'bottom-full mb-1' : 'top-full mt-1'
+          } left-1/2 transform -translate-x-1/2`}
+        >
+          {title}
+          <div className={`absolute w-2 h-2 bg-gray-800 transform rotate-45 ${
+            position === 'top' ? 'top-full -mt-1' : 'bottom-full -mb-1'
+          } left-1/2 -translate-x-1/2`}></div>
+        </div>
+      )}
+    </div>
+  );
 };
+
+// Custom Badge Component
+const CustomBadge = ({ children, variant = 'default', size = 'sm', className = '' }) => {
+  const baseClasses = 'inline-flex items-center font-medium rounded-full';
+  const sizeClasses = {
+    sm: 'px-2 py-0.5 text-xs',
+    md: 'px-2.5 py-1 text-sm'
+  };
+  const variantClasses = {
+    default: 'bg-gray-100 text-gray-800',
+    primary: 'bg-blue-100 text-blue-800',
+    success: 'bg-green-100 text-green-800',
+    warning: 'bg-yellow-100 text-yellow-800',
+    danger: 'bg-red-100 text-red-800'
+  };
+  
+  return (
+    <span className={`${baseClasses} ${sizeClasses[size]} ${variantClasses[variant]} ${className}`}>
+      {children}
+    </span>
+  );
+};
+
+// Custom Icon Button Component
+const CustomIconButton = ({ children, onClick, className = '', tooltip, ...props }) => {
+  const button = (
+    <button
+      onClick={onClick}
+      className={`inline-flex items-center justify-center rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 ${className}`}
+      {...props}
+    >
+      {children}
+    </button>
+  );
+  
+  if (tooltip) {
+    return <CustomTooltip title={tooltip}>{button}</CustomTooltip>;
+  }
+  
+  return button;
+};
+
+// Memoized table row component for better performance
+const EngineerTableRow = memo(({ user, showActionsColumn, onViewClick, onEditClick, onDeleteClick }) => (
+  <tr className="border-b border-gray-200 hover:bg-gray-50 transition-colors duration-150">
+    <td className={`px-4 py-3 ${showActionsColumn ? 'w-1/6' : 'w-1/5'}`}>
+      <div className="flex items-center space-x-2 min-w-0">
+        <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
+          <PersonIcon className="w-3 h-3 text-blue-600" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <button
+            onClick={() => onViewClick(user)}
+            className="text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline transition-colors duration-150 truncate block w-full text-left"
+            title={`${user.firstName} ${user.lastName}`}
+          >
+            {user.firstName} {user.lastName}
+          </button>
+          <p className="text-xs text-gray-500 mt-0.5 truncate" title={user.contactNumber}>
+            {user.contactNumber}
+          </p>
+        </div>
+      </div>
+    </td>
+    <td className={`px-4 py-3 ${showActionsColumn ? 'w-1/6' : 'w-1/5'}`}>
+      <div className="flex items-center space-x-2 min-w-0">
+        <EmailIcon className="w-3 h-3 text-gray-400 flex-shrink-0" />
+        <span className="text-sm text-gray-900 truncate" title={user.email}>
+          {user.email}
+        </span>
+      </div>
+    </td>
+    <td className={`px-4 py-3 ${showActionsColumn ? 'w-1/6' : 'w-1/5'}`}>
+      <span className="text-sm text-gray-900 truncate block" title={user.employeeId || user.employeeid || 'N/A'}>
+        {user.employeeId || user.employeeid || 'N/A'}
+      </span>
+    </td>
+    <td className={`px-4 py-3 ${showActionsColumn ? 'w-1/6' : 'w-1/5'}`}>
+      <span className="text-sm text-gray-900 truncate block" title={user.designation || 'N/A'}>
+        {user.designation || 'N/A'}
+      </span>
+    </td>
+    <td className={`px-4 py-3 ${showActionsColumn ? 'w-1/6' : 'w-1/5'}`}>
+      <CustomBadge variant="primary" size="sm" className="truncate">
+        {user.role || 'Engineer'}
+      </CustomBadge>
+    </td>
+    <td className={`px-4 py-3 ${showActionsColumn ? 'w-1/6' : 'w-1/5'}`}>
+      <CustomBadge variant="success" size="sm">
+        Active
+      </CustomBadge>
+    </td>
+    {showActionsColumn && (
+      <td className="px-4 py-3 text-center w-1/6">
+        <div className="flex items-center justify-center space-x-1">
+          <CustomIconButton
+            onClick={() => onViewClick(user)}
+            tooltip="View"
+            className="w-7 h-7 text-green-600 hover:text-green-700 hover:bg-green-50 focus:ring-green-500"
+          >
+            <PersonIcon className="w-3.5 h-3.5" />
+          </CustomIconButton>
+          <CustomIconButton
+            onClick={() => onEditClick(user)}
+            tooltip="Edit"
+            className="w-7 h-7 text-gray-600 hover:text-gray-700 hover:bg-gray-50 focus:ring-gray-500"
+          >
+            <EditIcon className="w-3.5 h-3.5" />
+          </CustomIconButton>
+          <CustomIconButton
+            onClick={(event) => onDeleteClick(event, user.uid, user.email)}
+            tooltip="Delete"
+            className="w-7 h-7 text-red-500 hover:text-red-600 hover:bg-red-50 focus:ring-red-500"
+          >
+            <DeleteIcon className="w-3.5 h-3.5" />
+          </CustomIconButton>
+        </div>
+      </td>
+    )}
+  </tr>
+));
 
 const EngineerManagementComponent = ({ user, showFlashMessage }) => {
   const [users, setUsers] = useState([]);
@@ -45,20 +179,6 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
-  const [addMode, setAddMode] = useState(false);
-  const [addRowData, setAddRowData] = useState(initialUserState);
-  const [editRowId, setEditRowId] = useState(null);
-  const [editRowData, setEditRowData] = useState({ 
-    firstName: '', 
-    lastName: '', 
-    email: '', 
-    contactNumber: '', 
-    managerEmail: '', 
-    employmentType: '', 
-    designation: '', 
-    employeeid: '', 
-    role: 'support' 
-  });
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
   const navigate = useNavigate();
   const [openConfirmPopover, setOpenConfirmPopover] = useState(false);
@@ -75,466 +195,164 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
   const [changePwdError, setChangePwdError] = useState('');
   const [showActionsColumn, setShowActionsColumn] = useState(false);
   const hasFetchedData = useRef(false);
+  const cacheKey = 'engineers_cache';
+  const cacheExpiry = 5 * 60 * 1000; // 5 minutes
+
+  // Cache management functions
+  const getCachedData = useCallback((key) => {
+    try {
+      const cached = localStorage.getItem(key);
+      if (cached) {
+        const { data, timestamp } = JSON.parse(cached);
+        if (Date.now() - timestamp < cacheExpiry) {
+          return data;
+        }
+      }
+    } catch (err) {
+      console.warn('Cache read error:', err);
+    }
+    return null;
+  }, [cacheExpiry]);
+
+  const setCachedData = useCallback((key, data) => {
+    try {
+      localStorage.setItem(key, JSON.stringify({
+        data,
+        timestamp: Date.now()
+      }));
+    } catch (err) {
+      console.warn('Cache write error:', err);
+    }
+  }, []);
 
   const fetchClients = useCallback(async () => {
+    // Only fetch clients for super_admin, site_admin should not access clients
+    if (user.role !== 'super_admin') {
+      setClients([]);
+      return;
+    }
+    
     try {
-      const res = await fetch(`${API_BASE_URL}/api/clients`);
+      const idToken = await user.firebaseUser.getIdToken();
+      const res = await fetch(`${API_BASE_URL}/api/clients`, {
+        headers: {
+          'Authorization': `Bearer ${idToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
       if (!res.ok) throw new Error('Failed to fetch clients');
       const data = await res.json();
       setClients(data);
     } catch (err) {
       console.error("Error fetching clients:", err);
     }
-  }, []);
+  }, [user.role, user.firebaseUser]);
 
   useEffect(() => {
     if (hasFetchedData.current) return;
     
     setLoading(true);
     setError(null);
-    fetchClients();
     
-    const fetchEngineers = async () => {
+    const fetchUsers = async () => {
       try {
-        const result = await SmartCacheManager.smartFetch(
-          async () => {
-            console.log('🔄 Fetching fresh engineers data');
+        // Check cache first
+        const cachedEngineers = getCachedData(cacheKey);
+        if (cachedEngineers) {
+          console.log('📦 Loading engineers from cache');
+          setUsers(cachedEngineers);
+          hasFetchedData.current = true;
+          setLoading(false);
+          return;
+        }
+
+        console.log('🌐 Fetching engineers from API');
             const idToken = await user.firebaseUser.getIdToken();
-            
             const res = await fetch(`${API_BASE_URL}/api/users`, {
               headers: {
                 'Authorization': `Bearer ${idToken}`,
                 'Content-Type': 'application/json'
               }
             });
-            
             if (!res.ok) throw new Error('Failed to fetch users');
             const data = await res.json();
-            return data.filter(u => u.role === 'support');
-          },
-          'engineers_data',
-          'ENGINEERS',
-          user?.uid,
-          { forceRefresh: false, checkChanges: true }
+        
+        // Filter for engineers only
+        const engineers = data.filter(user => 
+          user.role === 'engineer' || 
+          user.role === 'senior_engineer' || 
+          user.role === 'lead_engineer' || 
+          user.role === 'principal_engineer' ||
+          user.role === 'support'
         );
         
-        setUsers(result.data);
-        setLoading(false);
+        setUsers(engineers);
+        setCachedData(cacheKey, engineers);
         hasFetchedData.current = true;
-        
-        if (result.fromCache) {
-          console.log(`📦 Engineers loaded from cache (age: ${Math.round(result.age / 1000)}s)`);
-        } else {
-          console.log(`✅ Fresh engineers data loaded and cached`);
-        }
       } catch (err) {
-        console.error('Error fetching engineers:', err);
-        setError('Could not load engineers. Please check if the backend server is running and Firebase is configured.');
-        setUsers([]);
+        console.error("Error fetching engineers:", err);
+        setError(err.message);
+      } finally {
         setLoading(false);
-        hasFetchedData.current = true;
       }
     };
-    
-    fetchEngineers();
-  }, [fetchClients, user]);
 
-  function generatePassword(length = 10) {
-    const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    let password = '';
-    for (let i = 0; i < length; i++) {
-      password += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return password;
-  }
+    fetchUsers();
+    fetchClients();
+  }, [fetchClients, user.firebaseUser, getCachedData, setCachedData, cacheKey]);
 
   const handleAdd = () => {
-    setAddMode(true);
-    setAddRowData({ ...initialUserState, password: generatePassword() });
-    setEditRowId(null);
+    navigate('/engineer-management/create-engineer');
   };
 
-  const handleAddChange = (e) => {
-    const { name, value } = e.target;
-    setAddRowData(prev => ({ ...prev, [name]: value }));
-  };
-
-  const handleAddSave = async (e) => {
-    e.preventDefault();
-    const requiredFields = ['firstName', 'lastName', 'email', 'password', 'contactNumber', 'managerEmail', 'employmentType', 'designation', 'employeeid'];
-    
-    for (const field of requiredFields) {
-      if (!addRowData[field]) {
-        setSnackbar({ open: true, message: 'All fields are required.', severity: 'error' });
-        return;
-      }
-    }
-    
-    try {
-      const payload = {
-        name: `${addRowData.firstName} ${addRowData.lastName}`.trim(),
-        email: addRowData.email,
-        password: addRowData.password,
-        employeeId: addRowData.employeeid,
-        designation: addRowData.designation,
-        contactNumber: addRowData.contactNumber,
-        managerEmail: addRowData.managerEmail,
-        employmentType: addRowData.employmentType,
-        firstName: addRowData.firstName,
-        lastName: addRowData.lastName,
-        role: 'support',
-      };
-      
-      const idToken = await user.firebaseUser.getIdToken();
-      
-      const res = await fetch(`${API_BASE_URL}/api/users`, {
-        method: 'POST',
-        headers: { 
-          'Authorization': `Bearer ${idToken}`,
-          'Content-Type': 'application/json' 
-        },
-        body: JSON.stringify(payload),
-      });
-      
-      if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.error || 'Failed to add engineer');
-      }
-      
-      const newEngineerData = await res.json();
-      setAddMode(false);
-      setSnackbar({ open: true, message: 'Engineer added successfully.', severity: 'success' });
-      
-      // Show inline notification for the new engineer
-      if (newEngineerData && newEngineerData.uid) {
-        showActionNotification(newEngineerData.uid, 'Engineer created successfully', 'success');
-      }
-      
-      // Refresh engineers list
-      const fetchEngineers = async () => {
-        try {
-          const idToken = await user.firebaseUser.getIdToken();
-          
-          const res = await fetch(`${API_BASE_URL}/api/users`, {
-            headers: {
-              'Authorization': `Bearer ${idToken}`,
-              'Content-Type': 'application/json'
-            }
-          });
-          
-          if (!res.ok) throw new Error('Failed to fetch users');
-          const data = await res.json();
-          setUsers(data.filter(u => u.role === 'support'));
-        } catch (err) {
-          setError('Could not load engineers after add.');
-          setUsers([]);
-        }
-      };
-      
-      fetchEngineers();
-    } catch (err) {
-      setSnackbar({ open: true, message: err.message, severity: 'error' });
-    }
-  };
-
-  const handleAddCancel = () => {
-    setAddMode(false);
-    setAddRowData(initialUserState);
-  };
 
   const handleEditClick = (userToEdit) => {
-    setEditRowId(userToEdit.uid);
-    setEditRowData({
-      firstName: userToEdit.firstName || (userToEdit.name ? userToEdit.name.split(' ')[0] : ''),
-      lastName: userToEdit.lastName || (userToEdit.name ? userToEdit.name.split(' ').slice(1).join(' ') : ''),
-      email: userToEdit.email || '',
-      contactNumber: userToEdit.contactNumber || '',
-      managerEmail: userToEdit.managerEmail || '',
-      employmentType: userToEdit.employmentType || '',
-      designation: userToEdit.designation || '',
-      employeeid: userToEdit.employeeId || userToEdit.employeeid || '',
-      role: userToEdit.role || 'support'
-    });
+    navigate(`/engineer-management/engineer-detail/${userToEdit.uid}?edit=true`);
   };
 
-  const handleEditChange = (e) => {
-    const { name, value } = e.target;
-    setEditRowData(prev => ({ ...prev, [name]: value }));
-  };
-
-  const handleEditSave = async (uid) => {
-    try {
-      const payload = {};
-      const originalUser = users.find(u => u.uid === uid);
-      
-      // Check for changes in each field
-      if (editRowData.firstName !== (originalUser?.firstName || '')) {
-        payload.firstName = editRowData.firstName;
-      }
-      if (editRowData.lastName !== (originalUser?.lastName || '')) {
-        payload.lastName = editRowData.lastName;
-      }
-      if (editRowData.email !== (originalUser?.email || '')) {
-        payload.email = editRowData.email;
-      }
-      if (editRowData.contactNumber !== (originalUser?.contactNumber || '')) {
-        payload.contactNumber = editRowData.contactNumber;
-      }
-      if (editRowData.managerEmail !== (originalUser?.managerEmail || '')) {
-        payload.managerEmail = editRowData.managerEmail;
-      }
-      if (editRowData.employmentType !== (originalUser?.employmentType || '')) {
-        payload.employmentType = editRowData.employmentType;
-      }
-      if (editRowData.designation !== (originalUser?.designation || '')) {
-        payload.designation = editRowData.designation;
-      }
-      if (editRowData.employeeid !== (originalUser?.employeeId || originalUser?.employeeid || '')) {
-        payload.employeeId = editRowData.employeeid;
-      }
-      
-      if (Object.keys(payload).length === 0) {
-        setEditRowId(null);
-        setSnackbar({ open: true, message: 'No changes to save.', severity: 'info' });
-        return;
-      }
-      
-      const idToken = await user.firebaseUser.getIdToken();
-      
-      const res = await fetch(`${API_BASE_URL}/api/users/${uid}`, {
-        method: 'PUT',
-        headers: { 
-          'Authorization': `Bearer ${idToken}`,
-          'Content-Type': 'application/json' 
-        },
-        body: JSON.stringify(payload),
-      });
-      
-      if (!res.ok) {
-        const errData = await res.json();
-        if (res.status === 401 || res.status === 403) {
-          throw new Error('Authentication failed. Please try again.');
-        }
-        throw new Error(errData.error || 'Failed to update engineer');
-      }
-      
-      setEditRowId(null);
-      setEditRowData({ 
-        firstName: '', 
-        lastName: '', 
-        email: '', 
-        contactNumber: '', 
-        managerEmail: '', 
-        employmentType: '', 
-        designation: '', 
-        employeeid: '', 
-        role: 'support' 
-      });
-      
-      // Show inline notification for this specific user
-      showActionNotification(uid, 'Engineer updated successfully', 'success');
-      
-      // Refresh engineers list
-      const fetchEngineers = async () => {
-        try {
-          const idToken = await user.firebaseUser.getIdToken();
-          
-          const res = await fetch(`${API_BASE_URL}/api/users`, {
-            headers: {
-              'Authorization': `Bearer ${idToken}`,
-              'Content-Type': 'application/json'
-            }
-          });
-          
-          if (!res.ok) {
-            const errData = await res.json();
-            if (res.status === 401 || res.status === 403) {
-              throw new Error('Authentication failed. Please try again.');
-            }
-            throw new Error('Failed to fetch users');
-          }
-          
-          const data = await res.json();
-          setUsers(data.filter(u => u.role === 'support'));
-        } catch (err) {
-          setError('Could not load engineers after update.');
-          setUsers([]);
-        }
-      };
-      
-      fetchEngineers();
-    } catch (err) {
-      setSnackbar({ open: true, message: err.message, severity: 'error' });
-    }
-  };
-
-  const handleEditCancel = () => {
-    setEditRowId(null);
-    setEditRowData({ 
-      firstName: '', 
-      lastName: '', 
-      email: '', 
-      contactNumber: '', 
-      managerEmail: '', 
-      employmentType: '', 
-      designation: '', 
-      employeeid: '', 
-      role: 'support' 
-    });
+  const handleViewClick = (userToView) => {
+    navigate(`/engineer-management/engineer-detail/${userToView.uid}`);
   };
 
   const handleDeleteClick = (event, uid, email) => {
+    event.stopPropagation();
     setUserToDeleteUid(uid);
     setCurrentUserEmailToDelete(email);
-    anchorEl.current = event.currentTarget;
     setOpenConfirmPopover(true);
+    anchorEl.current = event.currentTarget;
   };
 
-  const handleConfirmDelete = async () => {
-    setOpenConfirmPopover(false);
-    const uid = userToDeleteUid;
-    
-    if (!uid) return;
+  const handleDeleteConfirm = async () => {
+    if (!userToDeleteUid) return;
     
     try {
       const idToken = await user.firebaseUser.getIdToken();
-      
-      const res = await fetch(`${API_BASE_URL}/api/users/${uid}`, {
+      const res = await fetch(`${API_BASE_URL}/api/users/${userToDeleteUid}`, {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${idToken}`,
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
         }
       });
       
-      if (!res.ok) {
-        const errData = await res.json();
-        if (res.status === 401 || res.status === 403) {
-          throw new Error('Authentication failed. Please try again.');
-        }
-        throw new Error(errData.error || 'Failed to delete engineer');
-      }
+      if (!res.ok) throw new Error('Failed to delete engineer');
       
-      // Show inline notification for this specific user
-      showActionNotification(uid, 'Engineer deleted successfully', 'success');
-      setUserToDeleteUid(null);
-      setCurrentUserEmailToDelete('');
-      
-      // Refresh engineers list
-      const fetchEngineers = async () => {
-        try {
-          const idToken = await user.firebaseUser.getIdToken();
-          
-          const res = await fetch(`${API_BASE_URL}/api/users`, {
-            headers: {
-              'Authorization': `Bearer ${idToken}`,
-              'Content-Type': 'application/json'
-            }
-          });
-          
-          if (!res.ok) throw new Error('Failed to fetch users');
-          const data = await res.json();
-          setUsers(data.filter(u => u.role === 'support'));
-        } catch (err) {
-          setError('Could not load engineers after deletion.');
-          setUsers([]);
-        }
-      };
-      
-      fetchEngineers();
+      setUsers(prev => prev.filter(u => u.uid !== userToDeleteUid));
+      setSnackbar({ open: true, message: 'Engineer deleted successfully.', severity: 'success' });
     } catch (err) {
       setSnackbar({ open: true, message: err.message, severity: 'error' });
+    } finally {
+      setOpenConfirmPopover(false);
+      setUserToDeleteUid(null);
+      setCurrentUserEmailToDelete('');
     }
   };
 
-  const handleCancelDelete = () => {
+  const handleDeleteCancel = () => {
     setOpenConfirmPopover(false);
     setUserToDeleteUid(null);
     setCurrentUserEmailToDelete('');
   };
-
-  const openChangePwdModal = (uid) => {
-    setPwdUserId(uid);
-    const generated = generatePassword();
-    setNewPassword(generated);
-    setChangePwdModalOpen(true);
-  };
-
-  const closeChangePwdModal = () => {
-    setChangePwdModalOpen(false);
-    setPwdUserId(null);
-    setNewPassword('');
-    setChangePwdError('');
-  };
-
-  const isAlphanumeric = (str) => /^[a-zA-Z0-9]+$/.test(str);
-
-  const showActionNotification = (uid, message, type = 'success') => {
-    setActionNotifications(prev => ({
-      ...prev,
-      [uid]: {
-        message,
-        type,
-        timestamp: Date.now()
-      }
-    }));
-    
-    // Auto-hide after 5 seconds
-    setTimeout(() => {
-      setActionNotifications(prev => {
-        const newState = { ...prev };
-        delete newState[uid];
-        return newState;
-      });
-    }, 5000);
-  };
-
-  const handleChangePassword = async (e) => {
-    e.preventDefault();
-    setChangePwdError && setChangePwdError('');
-    if (!newPassword || newPassword.length < 6) {
-      setSnackbar({ open: true, message: 'Password must be at least 6 characters.', severity: 'error' });
-      return;
-    }
-    if (!isAlphanumeric(newPassword)) {
-      setSnackbar({ open: true, message: 'Password must contain only alphabets and numbers.', severity: 'error' });
-      return;
-    }
-    try {
-      const idToken = await user.firebaseUser.getIdToken();
-      
-      const res = await fetch(`${API_BASE_URL}/api/users/${pwdUserId}/password`, {
-        method: 'PUT',
-        headers: { 
-          'Authorization': `Bearer ${idToken}`,
-          'Content-Type': 'application/json' 
-        },
-        body: JSON.stringify({ password: newPassword, mustChangePassword: true }),
-      });
-      
-      if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.error || 'Failed to change password');
-      }
-      
-      // Show inline notification for this specific user
-      showActionNotification(pwdUserId, 'Password reset successfully', 'success');
-      
-      closeChangePwdModal();
-    } catch (err) {
-      setSnackbar({ open: true, message: err.message || 'Failed to change password', severity: 'error' });
-    }
-  };
-
-  const filteredUsers = useMemo(() => {
-    return users.filter(u =>
-      u.role === 'support' &&
-      (u.email.toLowerCase().includes(search.toLowerCase()) ||
-       (u.name && u.name.toLowerCase().includes(search.toLowerCase())) ||
-       ((u.employeeId || u.employeeid) && (u.employeeId || u.employeeid).toLowerCase().includes(search.toLowerCase())) ||
-       (u.designation && u.designation.toLowerCase().includes(search.toLowerCase())))
-    );
-  }, [users, search]);
 
   const handleChangePage = (event, newPage) => {
     setPage(newPage);
@@ -545,1256 +363,301 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
     setPage(0);
   };
 
-  return (
-    <div className="engineer-management" style={{ width: '100%', padding: '16px' }}>
-      <Box sx={{ 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        alignItems: { xs: 'flex-start', sm: 'center' }, 
-        mb: 3,
-        flexDirection: { xs: 'column', sm: 'row' },
-        gap: { xs: 2, sm: 0 }
-      }}>
-                 <Typography variant="h6" component="h1" sx={{ 
-                   fontWeight: 500, 
-                   color: '#2c3e50',
-                   fontSize: { xs: '1.1rem', sm: '1.25rem' }
-                 }}>
-           Engineer Management
-         </Typography>
-      </Box>
-      
-      <Box sx={{ mb: 1, display: 'flex', alignItems: 'center', width: '100%' }}>
-        <TextField
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Search engineers..."
-          size="small"
-          sx={{
-            width: { xs: '100%', sm: '300px' },
-            maxWidth: '400px',
-            '& .MuiOutlinedInput-root': {
-              borderRadius: '6px',
-              '& fieldset': { borderColor: '#e0e0e0' },
-              '&:hover fieldset': { borderColor: '#bdbdbd' },
-              '&.Mui-focused fieldset': { borderColor: '#90caf9' },
-            },
-            '& .MuiInputBase-input': { py: 1, fontSize: '0.85rem' }
-          }}
-          InputProps={{
-            startAdornment: (
-              <SearchIcon sx={{ color: '#9e9e9e', mr: 1, fontSize: '1.1rem' }} />
-            ),
-            endAdornment: search && (
-              <IconButton 
-                size="small" 
-                onClick={() => setSearch('')} 
-                sx={{ p: 0.3, mr: 0.5 }}
-              >
-                <ClearIcon fontSize="small" />
-              </IconButton>
-            )
-          }}
-        />
-      </Box>
-      
-      {loading && (
-        <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-          <Typography variant="body2" color="textSecondary">
-            Loading engineers...
-          </Typography>
-        </Box>
-      )}
-      
-      {error && (
-        <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-          <Typography variant="body2" color="error">
-            {error}
-          </Typography>
-        </Box>
-      )}
-      
-      {!loading && !error && (
-        <>
-          <div className="flex justify-center sm:justify-end mb-4 w-full gap-2 flex-wrap">
-            <button
-              onClick={() => setShowActionsColumn(!showActionsColumn)}
-              className={`
-                px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200 ease-in-out
-                flex items-center gap-1.5 w-full sm:w-auto max-w-[200px] sm:max-w-none
-                ${showActionsColumn 
-                  ? 'border border-orange-500 text-orange-500 bg-transparent hover:bg-orange-500 hover:text-white' 
-                  : 'bg-orange-500 text-white hover:bg-orange-600'
-                }
-              `}
-            >
-              <AdminIcon sx={{ fontSize: '14px' }} />
-              {showActionsColumn ? 'Cancel' : 'Manage Engineers'}
-            </button>
-            <button
-              onClick={handleAdd}
-              className="px-3 py-1.5 text-xs font-medium bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-all duration-200 ease-in-out flex items-center gap-1.5 w-full sm:w-auto max-w-[200px] sm:max-w-none"
-            >
-              <AddIcon sx={{ fontSize: '14px' }} />
-              Add Engineer
-            </button>
-          </div>
-          <Paper 
-            elevation={0} 
-            sx={{ 
-              borderRadius: '8px', 
-              overflow: 'hidden',
-              border: '1px solid #e0e0e0',
-              width: '100%'
-            }}
-          >
-                     <TableContainer sx={{ 
-                       width: '100%',
-                       overflowX: 'auto',
-                       '&::-webkit-scrollbar': {
-                         height: '8px',
-                       },
-                       '&::-webkit-scrollbar-track': {
-                         backgroundColor: '#f1f1f1',
-                         borderRadius: '4px',
-                       },
-                       '&::-webkit-scrollbar-thumb': {
-                         backgroundColor: '#c1c1c1',
-                         borderRadius: '4px',
-                         '&:hover': {
-                           backgroundColor: '#a8a8a8',
-                         },
-                       },
-                     }}>
-             <Table size="small" sx={{ 
-               minWidth: { xs: '800px', sm: '900px', md: '1000px' }, 
-               borderCollapse: 'collapse',
-               width: '100%'
-             }}>
-              <TableHead sx={{ bgcolor: '#ffffff' }}>
-                <TableRow>
-                                     <TableCell sx={{ py: 0.4, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
-                     #
-                   </TableCell>
-                   <TableCell sx={{ py: 0.4, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
-                     Name
-                   </TableCell>
-                   <TableCell sx={{ py: 0.4, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
-                     Employee ID
-                   </TableCell>
-                   <TableCell sx={{ py: 0.4, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
-                     Designation
-                   </TableCell>
-                   <TableCell sx={{ py: 0.4, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
-                     Email
-                   </TableCell>
-                   <TableCell sx={{ py: 0.4, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
-                     Contact
-                   </TableCell>
-                   <TableCell sx={{ py: 0.4, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
-                     Manager
-                   </TableCell>
-                   <TableCell sx={{ py: 0.4, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
-                     Role
-                   </TableCell>
-                   {showActionsColumn && (
-                     <TableCell align="right" sx={{ py: 0.4, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem' }}>
-                       Actions
-                     </TableCell>
-                   )}
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {filteredUsers.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={showActionsColumn ? 9 : 8} align="center" sx={{ py: 4 }}>
-                      <Typography variant="body2" color="textSecondary">
-                        No engineer profiles found.
-                      </Typography>
-                    </TableCell>
-                  </TableRow>
-                                 ) : (
-                   filteredUsers
-                     .slice(filteredUsers.length > 10 ? page * rowsPerPage : 0, filteredUsers.length > 10 ? page * rowsPerPage + rowsPerPage : filteredUsers.length)
-                     .sort((a, b) => a.email.localeCompare(b.email))
-                     .map((u, i) => (
-                      <TableRow 
-                        key={u.id || u.uid} 
-                        hover
-                        sx={{ 
-                          bgcolor: '#ffffff',
-                          '&:hover': { bgcolor: '#f5f5f5' }
-                        }}
-                      >
-                                                 <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
-                           {filteredUsers.length > 10 ? page * rowsPerPage + i + 1 : i + 1}
-                         </TableCell>
-                         <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
-                           <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-                             <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                               {u.firstName || (u.name ? u.name.split(' ')[0] : '')}
-                             </Typography>
-                             <Typography variant="body2" color="textSecondary">
-                               {u.lastName || (u.name ? u.name.split(' ').slice(1).join(' ') : '')}
-                             </Typography>
-                           </Box>
-                         </TableCell>
-                         <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
-                           {u.employeeId || u.employeeid}
-                         </TableCell>
-                         <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
-                           {u.designation}
-                         </TableCell>
-                         <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
-                           {u.email}
-                         </TableCell>
-                         <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
-                           {u.contactNumber}
-                         </TableCell>
-                         <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
-                           {u.managerEmail}
-                         </TableCell>
-                         <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
-                           <Chip 
-                             label={u.role} 
-                             size="small" 
-                             color={u.role === 'admin' ? 'primary' : u.role === 'support' ? 'secondary' : 'default'} 
-                             sx={{ 
-                               fontSize: '0.7rem', 
-                               height: 22,
-                               fontWeight: 500,
-                               '&.MuiChip-colorPrimary': { bgcolor: '#e3f2fd', color: '#1976d2' },
-                               '&.MuiChip-colorSecondary': { bgcolor: '#e8f5e9', color: '#388e3c' }
-                             }} 
-                           />
-                         </TableCell>
-                         {showActionsColumn && (
-                           <TableCell align="right" sx={{ py: 0.4, px: 2 }}>
-                            {actionNotifications[u.uid] ? (
-                              <Typography 
-                                variant="body2" 
-                                sx={{ 
-                                  fontSize: '0.7rem',
-                                  color: actionNotifications[u.uid].type === 'success' ? '#2e7d32' : '#d32f2f',
-                                  fontWeight: 500,
-                                  textAlign: 'right',
-                                  py: 0.5
-                                }}
-                              >
-                                {actionNotifications[u.uid].message}
-                              </Typography>
-                            ) : (
-                              <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-                                <Tooltip title="Reset Password">
-                                  <IconButton 
-                                    onClick={() => openChangePwdModal(u.uid)} 
-                                    size="small" 
-                                    sx={{ 
-                                      p: 0.7,
-                                      color: '#607d8b',
-                                      '&:hover': { color: '#455a64', bgcolor: 'rgba(96, 125, 139, 0.1)' }
-                                    }}
-                                  >
-                                    <LockResetIcon fontSize="small" />
-                                  </IconButton>
-                                </Tooltip>
-                                <Tooltip title="Edit">
-                                  <IconButton 
-                                    onClick={() => handleEditClick(u)} 
-                                    size="small" 
-                                    sx={{ 
-                                      p: 0.7,
-                                      color: '#607d8b',
-                                      '&:hover': { color: '#455a64', bgcolor: 'rgba(96, 125, 139, 0.1)' }
-                                    }}
-                                  >
-                                    <EditIcon fontSize="small" />
-                                  </IconButton>
-                                </Tooltip>
-                                <Tooltip title="Delete">
-                                  <IconButton 
-                                    onClick={(event) => handleDeleteClick(event, u.id || u.uid, u.email)} 
-                                    size="small" 
-                                    sx={{ 
-                                      p: 0.7,
-                                      color: '#e57373',
-                                      '&:hover': { color: '#f44336', bgcolor: 'rgba(244, 67, 54, 0.1)' }
-                                    }}
-                                  >
-                                    <DeleteIcon fontSize="small" />
-                                  </IconButton>
-                                </Tooltip>
-                              </Box>
-                            )}
-                          </TableCell>
-                         )}
-                      </TableRow>
-                    ))
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
-          
-                     {filteredUsers.length > 10 && (
-             <TablePagination
-               rowsPerPageOptions={[5, 10, 25]}
-               component="div"
-               count={filteredUsers.length}
-               rowsPerPage={rowsPerPage}
-               page={page}
-               onPageChange={handleChangePage}
-               onRowsPerPageChange={handleChangeRowsPerPage}
-               sx={{
-                 '.MuiTablePagination-selectLabel, .MuiTablePagination-displayedRows': {
-                   fontSize: { xs: '0.7rem', sm: '0.8rem' }
-                 },
-                 '.MuiTablePagination-toolbar': {
-                   minHeight: '40px',
-                   flexWrap: 'wrap',
-                   gap: 1
-                 },
-                 '.MuiTablePagination-actions': {
-                   flexWrap: 'wrap'
-                 }
-               }}
-             />
-           )}
-        </Paper>
-        </>
-      )}
-      
-      {/* Add Engineer Modal */}
-      <Dialog
-        open={addMode}
-        onClose={handleAddCancel}
-        maxWidth="md"
-        fullWidth
-        PaperProps={{
-          sx: {
-            borderRadius: 2,
-            boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
-            maxHeight: '90vh'
-          }
-        }}
-      >
-        <DialogTitle
-          sx={{
-            background: 'linear-gradient(135deg, #ff6b35 0%, #f7931e 100%)',
-            minHeight: '60px',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            color: 'white',
-            px: 3,
-            py: 2
-          }}
-        >
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <Box sx={{ 
-              p: 1, 
-              bgcolor: 'rgba(255,255,255,0.2)', 
-              borderRadius: 1,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}>
-              <PersonIcon sx={{ fontSize: '1.2rem' }} />
-            </Box>
-            <Box>
-           
-              <Typography variant="body2" sx={{ fontSize: '1rem', opacity: 0.9 }}>
-                Create a new engineer profile
-              </Typography>
-            </Box>
-          </Box>
-          <IconButton onClick={handleAddCancel} sx={{ color: 'white', '&:hover': { bgcolor: 'rgba(255,255,255,0.1)' } }}>
-            <CloseIcon fontSize="small" />
-          </IconButton>
-        </DialogTitle>
-        
-        <DialogContent sx={{ p: { xs: 2, sm: 3 }, bgcolor: '#f8f9fa' }}>
-          <Box component="form" onSubmit={handleAddSave} sx={{ display: 'flex', flexDirection: 'column', gap: 3 }} autoComplete="off">
-            {/* Contact Information Section */}
-            <Box sx={{ bgcolor: 'white', p: 2.5, border: '1px solid #e0e0e0', borderRadius: 1.5 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                <Box sx={{ width: 3, height: 20, bgcolor: '#ff6b35', borderRadius: 1.5, mr: 1.5 }} />
-                <Typography variant="subtitle1" sx={{ fontSize: '1rem', fontWeight: 600, color: '#666' }}>
-                  Contact Information
-                </Typography>
-              </Box>
-              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr 1fr' }, gap: 2 }}>
-                <TextField
-                  label="Employee ID"
-                  name="employeeid"
-                  value={addRowData.employeeid}
-                  onChange={handleAddChange}
-                  required
-                  size="small"
-                  fullWidth
-                  placeholder="Enter employee ID"
-                  InputProps={{
-                    startAdornment: <InputAdornment position="start"><BadgeIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
-                  }}
-                  InputLabelProps={{ 
-                    shrink: true, 
-                    sx: { 
-                      fontSize: '0.9rem',
-                      color: '#666',
-                      fontWeight: 500,
-                      '&.Mui-focused': {
-                        color: '#333'
-                      }
-                    } 
-                  }}
-                  sx={{ 
-                    '& .MuiInputBase-input': { fontSize: '0.9rem' },
-                    '& .MuiOutlinedInput-root': {
-                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-                        borderColor: '#ff6b35',
-                      }
-                    }
-                  }}
-                />
-                <TextField
-                  label="First Name"
-                  name="firstName"
-                  value={addRowData.firstName}
-                  onChange={handleAddChange}
-                  required
-                  size="small"
-                  fullWidth
-                  placeholder="Enter first name"
-                  InputProps={{
-                    startAdornment: <InputAdornment position="start"><PersonIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
-                  }}
-                  InputLabelProps={{ 
-                    shrink: true, 
-                    sx: { 
-                      fontSize: '0.9rem',
-                      color: '#666',
-                      fontWeight: 500,
-                      '&.Mui-focused': {
-                        color: '#333'
-                      }
-                    } 
-                  }}
-                  sx={{ 
-                    '& .MuiInputBase-input': { fontSize: '0.9rem' },
-                    '& .MuiOutlinedInput-root': {
-                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-                        borderColor: '#ff6b35',
-                      }
-                    }
-                  }}
-                />
-                <TextField
-                  label="Last Name"
-                  name="lastName"
-                  value={addRowData.lastName}
-                  onChange={handleAddChange}
-                  required
-                  size="small"
-                  fullWidth
-                  placeholder="Enter last name"
-                  InputProps={{
-                    startAdornment: <InputAdornment position="start"><PersonIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
-                  }}
-                  InputLabelProps={{ 
-                    shrink: true, 
-                    sx: { 
-                      fontSize: '0.9rem',
-                      color: '#666',
-                      fontWeight: 500,
-                      '&.Mui-focused': {
-                        color: '#333'
-                      }
-                    } 
-                  }}
-                  sx={{ 
-                    '& .MuiInputBase-input': { fontSize: '0.9rem' },
-                    '& .MuiOutlinedInput-root': {
-                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-                        borderColor: '#ff6b35',
-                      }
-                    }
-                  }}
-                />
-                <TextField
-                  label="Email"
-                  name="email"
-                  type="email"
-                  value={addRowData.email}
-                  onChange={handleAddChange}
-                  required
-                  size="small"
-                  fullWidth
-                  placeholder="Enter email address"
-                  InputProps={{
-                    startAdornment: <InputAdornment position="start"><EmailIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
-                  }}
-                  InputLabelProps={{ 
-                    shrink: true, 
-                    sx: { 
-                      fontSize: '0.9rem',
-                      color: '#666',
-                      fontWeight: 500,
-                      '&.Mui-focused': {
-                        color: '#333'
-                      }
-                    } 
-                  }}
-                  sx={{ 
-                    '& .MuiInputBase-input': { fontSize: '0.9rem' },
-                    '& .MuiOutlinedInput-root': {
-                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-                        borderColor: '#ff6b35',
-                      }
-                    }
-                  }}
-                />
-                <TextField
-                  label="Contact Number"
-                  name="contactNumber"
-                  type="tel"
-                  value={addRowData.contactNumber}
-                  onChange={handleAddChange}
-                  required
-                  size="small"
-                  fullWidth
-                  placeholder="Enter contact number"
-                  InputProps={{
-                    startAdornment: <InputAdornment position="start"><PhoneIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
-                  }}
-                  InputLabelProps={{ 
-                    shrink: true, 
-                    sx: { 
-                      fontSize: '0.9rem',
-                      color: '#666',
-                      fontWeight: 500,
-                      '&.Mui-focused': {
-                        color: '#333'
-                      }
-                    } 
-                  }}
-                  sx={{ 
-                    '& .MuiInputBase-input': { fontSize: '0.9rem' },
-                    '& .MuiOutlinedInput-root': {
-                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-                        borderColor: '#ff6b35',
-                      }
-                    }
-                  }}
-                />
-                <TextField
-                  label="Manager Email"
-                  name="managerEmail"
-                  type="email"
-                  value={addRowData.managerEmail}
-                  onChange={handleAddChange}
-                  required
-                  size="small"
-                  fullWidth
-                  placeholder="Enter manager email"
-                  InputProps={{
-                    startAdornment: <InputAdornment position="start"><SupervisorAccountIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
-                  }}
-                  InputLabelProps={{ 
-                    shrink: true, 
-                    sx: { 
-                      fontSize: '0.9rem',
-                      color: '#666',
-                      fontWeight: 500,
-                      '&.Mui-focused': {
-                        color: '#333'
-                      }
-                    } 
-                  }}
-                  sx={{ 
-                    '& .MuiInputBase-input': { fontSize: '0.9rem' },
-                    '& .MuiOutlinedInput-root': {
-                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-                        borderColor: '#ff6b35',
-                      }
-                    }
-                  }}
-                />
-              </Box>
-            </Box>
+  // Memoized filtered users for performance
+  const filteredUsers = useMemo(() => {
+    if (!search.trim()) return users;
+    
+    const searchLower = search.toLowerCase();
+    return users.filter(user => 
+      user.firstName?.toLowerCase().includes(searchLower) ||
+      user.lastName?.toLowerCase().includes(searchLower) ||
+      user.email?.toLowerCase().includes(searchLower) ||
+      user.employeeId?.toLowerCase().includes(searchLower) ||
+      user.designation?.toLowerCase().includes(searchLower)
+    );
+  }, [users, search]);
 
-            {/* Professional Information Section */}
-            <Box sx={{ bgcolor: 'white', p: 2.5, border: '1px solid #e0e0e0', borderRadius: 1.5 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                <Box sx={{ width: 3, height: 20, bgcolor: '#ff6b35', borderRadius: 1.5, mr: 1.5 }} />
-                <Typography variant="subtitle1" sx={{ fontSize: '1rem', fontWeight: 600, color: '#666' }}>
-                  Professional Information
-                </Typography>
-              </Box>
-              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr 1fr' }, gap: 2 }}>
-                <TextField
-                  select
-                  label="Employment Type"
-                  name="employmentType"
-                  value={addRowData.employmentType}
-                  onChange={handleAddChange}
-                  required
-                  size="small"
-                  fullWidth
-                  InputProps={{
-                    startAdornment: <InputAdornment position="start"><WorkIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
-                  }}
-                  InputLabelProps={{ 
-                    shrink: true, 
-                    sx: { 
-                      fontSize: '0.9rem',
-                      color: '#666',
-                      fontWeight: 500,
-                      '&.Mui-focused': {
-                        color: '#333'
-                      }
-                    } 
-                  }}
-                  sx={{ 
-                    '& .MuiInputBase-input': { fontSize: '0.9rem' },
-                    '& .MuiOutlinedInput-root': {
-                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-                        borderColor: '#ff6b35',
-                      }
-                    }
-                  }}
-                >
-                  <MenuItem value="" disabled sx={{ fontSize: '0.9rem' }}>Select employment type</MenuItem>
-                  <MenuItem value="contract" sx={{ fontSize: '0.9rem' }}>Contract</MenuItem>
-                  <MenuItem value="permanent" sx={{ fontSize: '0.9rem' }}>Permanent</MenuItem>
-                  <MenuItem value="intern" sx={{ fontSize: '0.9rem' }}>Intern</MenuItem>
-                </TextField>
-                <TextField
-                  label="Designation"
-                  name="designation"
-                  value={addRowData.designation}
-                  onChange={handleAddChange}
-                  required
-                  size="small"
-                  fullWidth
-                  placeholder="Enter designation"
-                  InputProps={{
-                    startAdornment: <InputAdornment position="start"><AdminIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
-                  }}
-                  InputLabelProps={{ 
-                    shrink: true, 
-                    sx: { 
-                      fontSize: '0.9rem',
-                      color: '#666',
-                      fontWeight: 500,
-                      '&.Mui-focused': {
-                        color: '#333'
-                      }
-                    } 
-                  }}
-                  sx={{ 
-                    '& .MuiInputBase-input': { fontSize: '0.9rem' },
-                    '& .MuiOutlinedInput-root': {
-                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-                        borderColor: '#ff6b35',
-                      }
-                    }
-                  }}
-                />
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                  <TextField
-                    label="Password"
-                    name="password"
-                    type="text"
-                    value={addRowData.password}
-                    readOnly
-                    size="small"
-                    fullWidth
-                    InputProps={{
-                      startAdornment: <InputAdornment position="start"><LockIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
-                      endAdornment: (
-                        <InputAdornment position="end">
-                          <IconButton
-                            size="small"
-                            onClick={() => setAddRowData({...addRowData, password: generatePassword()})}
-                            sx={{ 
-                              color: '#ff6b35',
-                              '&:hover': { bgcolor: '#fff3e0' }
-                            }}
-                          >
-                            <RefreshIcon fontSize="small" />
-                          </IconButton>
-                        </InputAdornment>
-                      )
-                    }}
-                    InputLabelProps={{ 
-                      shrink: true, 
-                      sx: { 
-                        fontSize: '0.9rem',
-                        color: '#666',
-                        fontWeight: 500
-                      } 
-                    }}
-                    sx={{ 
-                      '& .MuiInputBase-input': { 
-                        fontSize: '0.9rem',
-                        bgcolor: '#f5f5f5',
-                        color: '#666'
-                      },
-                      '& .MuiOutlinedInput-root': {
-                        '& fieldset': {
-                          borderColor: '#e0e0e0',
-                        }
-                      }
-                    }}
-                  />
-                  <Typography variant="caption" sx={{ fontSize: '0.75rem', color: '#666', ml: 1 }}>
-                    Auto-generated password
-                  </Typography>
-                </Box>
-              </Box>
-            </Box>
-          </Box>
-        </DialogContent>
-        
-        <DialogActions sx={{ py: 2, px: 3, bgcolor: '#f8f9fa', borderTop: '1px solid #e0e0e0' }}>
-          <Button 
-            onClick={handleAddCancel} 
-            variant="outlined" 
-            size="small"
-            sx={{ 
-              borderColor: '#ff6b35',
-              color: '#ff6b35',
-              '&:hover': {
-                borderColor: '#e55a2b',
-                bgcolor: '#fff3e0'
-              }
-            }}
-          >
-            Cancel
-          </Button>
-          <Button 
-            onClick={() => setAddRowData({...initialUserState, password: generatePassword()})}
-            variant="outlined" 
-            size="small"
-            startIcon={<RefreshIcon />}
-            sx={{ 
-              borderColor: '#ff6b35',
-              color: '#ff6b35',
-              '&:hover': {
-                borderColor: '#e55a2b',
-                bgcolor: '#fff3e0'
-              }
-            }}
-          >
-            Reset
-          </Button>
-          <Button 
-            onClick={handleAddSave}
-            variant="contained"
-            size="small"
-            startIcon={<PersonIcon />}
-            sx={{ 
-              bgcolor: '#ff6b35',
-              '&:hover': {
-                bgcolor: '#e55a2b'
-              }
-            }}
-          >
-            Add Engineer
-          </Button>
-        </DialogActions>
-      </Dialog>
-      
-      {/* Edit Engineer Modal */}
-      <Dialog
-        open={editRowId !== null}
-        onClose={handleEditCancel}
-        maxWidth="md"
-        fullWidth
-        PaperProps={{
-          sx: {
-            borderRadius: 0,
-            boxShadow: '0 8px 30px rgba(0,0,0,0.1)',
-            bgcolor: '#ffffff',
-          }
-        }}
-      >
-        <DialogTitle
-          className="flex justify-between items-center text-white px-5 py-4 border-b border-gray-200"
-          sx={{
-            background: '#283149',
-            minHeight: '50px',
-          }}
-        >
-          <Typography variant="h6" component="div" className="font-semibold" sx={{ fontSize: '1rem' }}>
-            Edit Engineer
-          </Typography>
-          <IconButton onClick={handleEditCancel} className="text-white hover:bg-white hover:bg-opacity-10 transition-colors">
-            <CloseIcon fontSize="small" />
-          </IconButton>
-        </DialogTitle>
+  const paginatedUsers = useMemo(() => {
+    return filteredUsers.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
+  }, [filteredUsers, page, rowsPerPage]);
 
-        <DialogContent className="p-4 sm:p-5 bg-gray-50">
-          <Box component="form" onSubmit={(e) => {
-            e.preventDefault();
-            handleEditSave(editRowId);
-          }} className="space-y-4" autoComplete="off">
-            {/* Engineer Information Section */}
-            <Box className="bg-white p-4 border border-gray-200">
-              <div className="flex items-center mb-3">
-                <PersonIcon className="text-gray-600 mr-2" fontSize="small" />
-                <Typography variant="subtitle1" className="font-semibold text-gray-800" sx={{ fontSize: '0.9rem' }}>Engineer Information</Typography>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <TextField 
-                  label="Employee ID *" 
-                  name="employeeid" 
-                  value={editRowData.employeeid || ''} 
-                  onChange={handleEditChange} 
-                  required 
-                  size="small"
-                  fullWidth
-                  InputProps={{
-                    startAdornment: <InputAdornment position="start"><BadgeIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
-                  }}
-                  InputLabelProps={{ 
-                    shrink: true, 
-                    sx: { 
-                      fontSize: '1rem',
-                      color: '#1976d2',
-                      fontWeight: 600,
-                      '&.Mui-focused': {
-                        color: '#1565c0'
-                      }
-                    } 
-                  }}
-                  sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
-                />
-                
-                <TextField 
-                  label="First Name *" 
-                  name="firstName" 
-                  value={editRowData.firstName || ''} 
-                  onChange={handleEditChange} 
-                  required 
-                  size="small"
-                  fullWidth
-                  InputLabelProps={{ 
-                    shrink: true, 
-                    sx: { 
-                      fontSize: '1rem',
-                      color: '#1976d2',
-                      fontWeight: 600,
-                      '&.Mui-focused': {
-                        color: '#1565c0'
-                      }
-                    } 
-                  }}
-                  sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
-                />
-                
-                <TextField 
-                  label="Last Name *" 
-                  name="lastName" 
-                  value={editRowData.lastName || ''} 
-                  onChange={handleEditChange} 
-                  required 
-                  size="small"
-                  fullWidth
-                  InputLabelProps={{ 
-                    shrink: true, 
-                    sx: { 
-                      fontSize: '1rem',
-                      color: '#1976d2',
-                      fontWeight: 600,
-                      '&.Mui-focused': {
-                        color: '#1565c0'
-                      }
-                    } 
-                  }}
-                  sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
-                />
-                
-                <TextField 
-                  label="Email *" 
-                  name="email" 
-                  value={editRowData.email || ''} 
-                  onChange={handleEditChange} 
-                  required 
-                  size="small"
-                  fullWidth
-                  InputProps={{
-                    startAdornment: <InputAdornment position="start"><EmailIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
-                  }}
-                  InputLabelProps={{ 
-                    shrink: true, 
-                    sx: { 
-                      fontSize: '1rem',
-                      color: '#1976d2',
-                      fontWeight: 600,
-                      '&.Mui-focused': {
-                        color: '#1565c0'
-                      }
-                    } 
-                  }}
-                  sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
-                />
-                
-                <TextField 
-                  label="Contact Number *" 
-                  name="contactNumber" 
-                  value={editRowData.contactNumber || ''} 
-                  onChange={handleEditChange} 
-                  required 
-                  size="small"
-                  fullWidth
-                  InputProps={{
-                    startAdornment: <InputAdornment position="start"><PhoneIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
-                  }}
-                  InputLabelProps={{ 
-                    shrink: true, 
-                    sx: { 
-                      fontSize: '1rem',
-                      color: '#1976d2',
-                      fontWeight: 600,
-                      '&.Mui-focused': {
-                        color: '#1565c0'
-                      }
-                    } 
-                  }}
-                  sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
-                />
-                
-                <TextField 
-                  label="Manager Email *" 
-                  name="managerEmail" 
-                  value={editRowData.managerEmail || ''} 
-                  onChange={handleEditChange} 
-                  required 
-                  size="small"
-                  fullWidth
-                  InputProps={{
-                    startAdornment: <InputAdornment position="start"><SupervisorAccountIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
-                  }}
-                  InputLabelProps={{ 
-                    shrink: true, 
-                    sx: { 
-                      fontSize: '1rem',
-                      color: '#1976d2',
-                      fontWeight: 600,
-                      '&.Mui-focused': {
-                        color: '#1565c0'
-                      }
-                    } 
-                  }}
-                  sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
-                />
-                
-                <TextField 
-                  select 
-                  label="Employment Type *" 
-                  name="employmentType" 
-                  value={editRowData.employmentType || ''} 
-                  onChange={handleEditChange} 
-                  required 
-                  size="small"
-                  fullWidth
-                  InputProps={{
-                    startAdornment: <InputAdornment position="start"><WorkIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
-                  }}
-                  InputLabelProps={{ 
-                    shrink: true, 
-                    sx: { 
-                      fontSize: '1rem',
-                      color: '#1976d2',
-                      fontWeight: 600,
-                      '&.Mui-focused': {
-                        color: '#1565c0'
-                      }
-                    } 
-                  }}
-                  sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
-                >
-                  <MenuItem value="contract" sx={{ fontSize: '0.85rem' }}>Contract</MenuItem>
-                  <MenuItem value="permanent" sx={{ fontSize: '0.85rem' }}>Permanent</MenuItem>
-                  <MenuItem value="intern" sx={{ fontSize: '0.85rem' }}>Intern</MenuItem>
-                </TextField>
-                
-                <TextField 
-                  label="Designation *" 
-                  name="designation" 
-                  value={editRowData.designation || ''} 
-                  onChange={handleEditChange} 
-                  required 
-                  size="small"
-                  fullWidth
-                  InputProps={{
-                    startAdornment: <InputAdornment position="start"><AdminIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
-                  }}
-                  InputLabelProps={{ 
-                    shrink: true, 
-                    sx: { 
-                      fontSize: '1rem',
-                      color: '#1976d2',
-                      fontWeight: 600,
-                      '&.Mui-focused': {
-                        color: '#1565c0'
-                      }
-                    } 
-                  }}
-                  sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
-                />
-              </div>
-            </Box>
-          </Box>
-        </DialogContent>
-        
-        <DialogActions sx={{ py: 2, px: 3, bgcolor: '#f8f9fa', borderTop: '1px solid #e0e0e0' }}>
-          <Button 
-            onClick={handleEditCancel} 
-            variant="outlined" 
-            size="small"
-            sx={{ 
-              textTransform: 'none', 
-              fontSize: '0.85rem',
-              borderRadius: 1,
-              px: 2
-            }}
-          >
-            Cancel
-          </Button>
-          <Button 
-            type="submit" 
-            variant="contained" 
-            color="primary" 
-            size="small"
-            onClick={(e) => {
-              e.preventDefault();
-              handleEditSave(editRowId);
-            }}
-            sx={{ 
-              textTransform: 'none', 
-              fontSize: '0.85rem',
-              borderRadius: 1,
-              px: 2,
-              boxShadow: 'none',
-              '&:hover': {
-                boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-              }
-            }}
-          >
-            Save Changes
-          </Button>
-        </DialogActions>
-      </Dialog>
-      
-      {/* Password Reset Modal */}
-      <Dialog
-        open={changePwdModalOpen}
-        onClose={closeChangePwdModal}
-        maxWidth="sm"
-        fullWidth
-        PaperProps={{
-          sx: {
-            borderRadius: 0,
-            boxShadow: '0 8px 30px rgba(0,0,0,0.1)',
-            bgcolor: '#ffffff',
-          }
-        }}
-      >
-        <DialogTitle
-          className="flex justify-between items-center text-white px-5 py-4 border-b border-gray-200"
-          sx={{
-            background: '#283149',
-            minHeight: '50px',
-          }}
-        >
-          <Typography variant="h6" component="div" className="font-semibold" sx={{ fontSize: '1rem' }}>
-            Reset Password
-          </Typography>
-          <IconButton onClick={closeChangePwdModal} className="text-white hover:bg-white hover:bg-opacity-10 transition-colors">
-            <CloseIcon fontSize="small" />
-          </IconButton>
-        </DialogTitle>
-
-        <DialogContent className="p-4 sm:p-5 bg-gray-50">
-          <Box component="form" onSubmit={(e) => {
-            e.preventDefault();
-            handleChangePassword(e);
-          }} className="space-y-4" autoComplete="off">
-            {/* Password Reset Section */}
-            <Box className="bg-white p-4 border border-gray-200">
-              <div className="flex items-center mb-3">
-                <LockIcon className="text-gray-600 mr-2" fontSize="small" />
-                <Typography variant="subtitle1" className="font-semibold text-gray-800" sx={{ fontSize: '0.9rem' }}>New Password</Typography>
-              </div>
-              <TextField 
-                label="New Password *" 
-                value={newPassword} 
-                onChange={e => setNewPassword(e.target.value)} 
-                required 
-                size="small"
-                fullWidth
-                InputProps={{
-                  startAdornment: <InputAdornment position="start"><LockIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
-                }}
-                InputLabelProps={{ 
-                  shrink: true, 
-                  sx: { 
-                    fontSize: '0.8rem',
-                    color: '#1976d2',
-                    fontWeight: 600,
-                    '&.Mui-focused': {
-                      color: '#1565c0'
-                    }
-                  } 
-                }}
-                sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
-              />
-              {changePwdError && (
-                <Typography variant="body2" color="error" sx={{ mt: 1 }}>{changePwdError}</Typography>
-              )}
-            </Box>
-          </Box>
-        </DialogContent>
-        
-        <DialogActions sx={{ py: 2, px: 3, bgcolor: '#f8f9fa', borderTop: '1px solid #e0e0e0' }}>
-          <Button 
-            onClick={closeChangePwdModal} 
-            variant="outlined" 
-            size="small"
-            sx={{ 
-              textTransform: 'none', 
-              fontSize: '0.85rem',
-              borderRadius: 1,
-              px: 2
-            }}
-          >
-            Cancel
-          </Button>
-          <Button 
-            type="submit" 
-            variant="contained" 
-            color="primary" 
-            size="small"
-            onClick={(e) => {
-              e.preventDefault();
-              handleChangePassword(e);
-            }}
-            sx={{ 
-              textTransform: 'none', 
-              fontSize: '0.85rem',
-              borderRadius: 1,
-              px: 2,
-              boxShadow: 'none',
-              '&:hover': {
-                boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-              }
-            }}
-          >
-            Reset Password
-          </Button>
-        </DialogActions>
-      </Dialog>
-      
-      {/* Delete Confirmation Dialog */}
-      <Dialog
-        open={openConfirmPopover}
-        onClose={handleCancelDelete}
-        maxWidth="sm"
-        fullWidth
-        PaperProps={{
-          sx: {
-            borderRadius: 0,
-            boxShadow: '0 8px 30px rgba(0,0,0,0.1)',
-            bgcolor: '#ffffff',
-          }
-        }}
-      >
-        <DialogTitle
-          className="flex justify-between items-center text-white px-5 py-4 border-b border-gray-200"
-          sx={{
-            background: '#d32f2f',
-            minHeight: '50px',
-          }}
-        >
-          <Typography variant="h6" component="div" className="font-semibold" sx={{ fontSize: '1rem' }}>
-            ⚠️ Delete Engineer
-          </Typography>
-          <IconButton onClick={handleCancelDelete} className="text-white hover:bg-white hover:bg-opacity-10 transition-colors">
-            <CloseIcon fontSize="small" />
-          </IconButton>
-        </DialogTitle>
-
-        <DialogContent className="p-4 sm:p-5 bg-gray-50">
-          <Box className="bg-white p-4 border border-gray-200">
-            <div className="flex items-center mb-3">
-              <Typography variant="subtitle1" className="font-semibold text-gray-800" sx={{ fontSize: '0.9rem' }}>
-                Confirm Deletion
-              </Typography>
+  if (loading) {
+    return (
+      <div className="p-6 bg-gray-50 min-h-screen">
+        <div className="mb-6">
+          <div className="flex justify-between items-center mb-4">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Engineer Management</h1>
+              <p className="text-gray-600">Manage engineers in your organization</p>
             </div>
-            <Typography variant="body2" sx={{ mb: 2, fontSize: '0.85rem', lineHeight: 1.5 }}>
-              Are you sure you want to delete <strong>{currentUserEmailToDelete}</strong>? 
-            </Typography>
-            <Typography variant="body2" sx={{ fontSize: '0.8rem', color: '#d32f2f', fontWeight: 500 }}>
-              ⚠️ This action cannot be undone and will permanently remove the engineer from the system.
-            </Typography>
-          </Box>
-        </DialogContent>
-        
-        <DialogActions sx={{ py: 2, px: 3, bgcolor: '#f8f9fa', borderTop: '1px solid #e0e0e0' }}>
-          <Button 
-            onClick={handleCancelDelete} 
-            variant="outlined" 
-            size="small"
-            sx={{ 
-              textTransform: 'none', 
-              fontSize: '0.85rem',
-              borderRadius: 1,
-              px: 2
-            }}
-          >
-            Cancel
-          </Button>
-          <Button 
-            onClick={handleConfirmDelete} 
-            variant="contained" 
-            color="error" 
-            size="small"
-            autoFocus
-            sx={{ 
-              textTransform: 'none', 
-              fontSize: '0.85rem',
-              borderRadius: 1,
-              px: 2,
-              boxShadow: 'none',
-              '&:hover': {
-                boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-              }
-            }}
-          >
-            Delete Engineer
-          </Button>
-        </DialogActions>
-      </Dialog>
-      
-      {/* Snackbar for notifications */}
-      <Snackbar 
-        open={snackbar.open} 
-        autoHideDuration={3000} 
-        onClose={() => setSnackbar({ ...snackbar, open: false })}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+          </div>
+          
+          <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e5e7eb' }}>
+            <Box sx={{ p: 2, borderBottom: '1px solid #e5e7eb', bgcolor: '#f8fafc' }}>
+              <Skeleton variant="rectangular" width={300} height={36} />
+            </Box>
+            
+            <Box sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 200 }}>
+              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                <CircularProgress size={40} />
+                <Typography variant="body2" color="text.secondary">
+                  Loading engineers...
+                </Typography>
+              </Box>
+        </Box>
+          </Paper>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <Box sx={{ p: 3 }}>
+        <Alert severity="error">{error}</Alert>
+        </Box>
+    );
+  }
+
+  return (
+    <div className="p-6 bg-gray-50 min-h-screen">
+      <div className="mb-6">
+        <div className="flex justify-between items-center mb-4">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Engineer Management</h1>
+            <p className="text-gray-600">Manage engineers in your organization</p>
+          </div>
+          <div className="flex gap-2">
+      <div
+        onClick={handleAdd}
+        className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded transition-all duration-200 ease-in-out cursor-pointer"
       >
-        <Alert 
-          onClose={() => setSnackbar({ ...snackbar, open: false })} 
-          severity={snackbar.severity} 
-          sx={{ width: '100%', fontSize: '0.85rem' }}
-          variant="filled"
-        >
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
+        <AddIcon sx={{ fontSize: '16px' }} />
+        Add Engineer
+      </div>
+      <div
+        onClick={() => setShowActionsColumn(!showActionsColumn)}
+        className={`inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded transition-all duration-200 ease-in-out cursor-pointer ${
+          showActionsColumn 
+            ? 'text-red-600 hover:text-red-700 hover:bg-red-50' 
+            : 'text-purple-600 hover:text-purple-700 hover:bg-purple-50'
+        }`}
+      >
+        <AdminIcon sx={{ fontSize: '16px' }} />
+        {showActionsColumn ? 'Cancel' : 'Manage'}
+      </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm">
+          {/* Search Bar */}
+          <div className="px-4 py-3 border-b border-gray-200 bg-gray-50">
+            <div className="relative max-w-sm">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <SearchIcon className="h-4 w-4 text-gray-400" />
+              </div>
+              <input
+                type="text"
+              placeholder="Search engineers..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+                className="block w-full pl-10 pr-10 py-2 border border-gray-300 rounded-md text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+              {search && (
+                <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
+                  <button
+                    onClick={() => setSearch('')}
+                    className="text-gray-400 hover:text-gray-600 focus:outline-none"
+                  >
+                    <ClearIcon className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Table */}
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200 table-fixed">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className={`px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider truncate ${showActionsColumn ? 'w-1/6' : 'w-1/5'}`}>
+                    Name
+                  </th>
+                  <th className={`px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider truncate ${showActionsColumn ? 'w-1/6' : 'w-1/5'}`}>
+                    Email
+                  </th>
+                  <th className={`px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider truncate ${showActionsColumn ? 'w-1/6' : 'w-1/5'}`}>
+                    Employee ID
+                  </th>
+                  <th className={`px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider truncate ${showActionsColumn ? 'w-1/6' : 'w-1/5'}`}>
+                    Designation
+                  </th>
+                  <th className={`px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider truncate ${showActionsColumn ? 'w-1/6' : 'w-1/5'}`}>
+                    Role
+                  </th>
+                  <th className={`px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider truncate ${showActionsColumn ? 'w-1/6' : 'w-1/5'}`}>
+                    Status
+                  </th>
+                   {showActionsColumn && (
+                    <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider w-1/6 truncate">
+                      Actions
+                    </th>
+                  )}
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {paginatedUsers.map((user) => (
+                  <EngineerTableRow
+                    key={user.uid}
+                    user={user}
+                    showActionsColumn={showActionsColumn}
+                    onViewClick={handleViewClick}
+                    onEditClick={handleEditClick}
+                    onDeleteClick={handleDeleteClick}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+          
+          {/* Pagination */}
+          <div className="bg-white px-4 py-3 border-t border-gray-200 sm:px-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <span className="text-sm text-gray-700">
+                  Showing {page * rowsPerPage + 1} to {Math.min((page + 1) * rowsPerPage, filteredUsers.length)} of {filteredUsers.length} results
+                </span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <span className="text-sm text-gray-700">Rows per page:</span>
+                <select
+                  value={rowsPerPage}
+                  onChange={handleChangeRowsPerPage}
+                  className="border border-gray-300 rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value={5}>5</option>
+                  <option value={10}>10</option>
+                  <option value={25}>25</option>
+                </select>
+                <div className="flex items-center space-x-1">
+                  <button
+                    onClick={() => handleChangePage(null, page - 1)}
+                    disabled={page === 0}
+                    className="px-3 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Previous
+                  </button>
+                  <span className="px-3 py-1 text-sm text-gray-700">
+                    Page {page + 1} of {Math.ceil(filteredUsers.length / rowsPerPage)}
+                  </span>
+                  <button
+                    onClick={() => handleChangePage(null, page + 1)}
+                    disabled={page >= Math.ceil(filteredUsers.length / rowsPerPage) - 1}
+                    className="px-3 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Delete Confirmation Modal */}
+      {openConfirmPopover && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">Delete Engineer</h3>
+            </div>
+            <div className="px-6 py-4">
+              <p className="text-sm text-gray-600 mb-4">
+                Are you sure you want to delete {currentUserEmailToDelete}? This action cannot be undone.
+              </p>
+            </div>
+            <div className="px-6 py-4 bg-gray-50 rounded-b-lg flex justify-end space-x-3">
+              <button
+                onClick={handleDeleteCancel}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+            Cancel
+              </button>
+              <button
+                onClick={handleDeleteConfirm}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500"
+              >
+              Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Custom Notification */}
+      {snackbar.open && (
+        <div className="fixed top-4 right-4 z-50 max-w-sm">
+          <div className={`rounded-md shadow-lg p-4 ${
+            snackbar.severity === 'success' ? 'bg-green-50 border border-green-200' :
+            snackbar.severity === 'error' ? 'bg-red-50 border border-red-200' :
+            snackbar.severity === 'warning' ? 'bg-yellow-50 border border-yellow-200' :
+            'bg-blue-50 border border-blue-200'
+          }`}>
+            <div className="flex items-start">
+              <div className="flex-shrink-0">
+                {snackbar.severity === 'success' && (
+                  <svg className="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                )}
+                {snackbar.severity === 'error' && (
+                  <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                  </svg>
+                )}
+                {snackbar.severity === 'warning' && (
+                  <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                  </svg>
+                )}
+                {snackbar.severity === 'info' && (
+                  <svg className="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                  </svg>
+                )}
+              </div>
+              <div className="ml-3 flex-1">
+                <p className={`text-sm font-medium ${
+                  snackbar.severity === 'success' ? 'text-green-800' :
+                  snackbar.severity === 'error' ? 'text-red-800' :
+                  snackbar.severity === 'warning' ? 'text-yellow-800' :
+                  'text-blue-800'
+                }`}>
+                  {snackbar.message}
+                </p>
+              </div>
+              <div className="ml-4 flex-shrink-0">
+                <button
+                  onClick={() => setSnackbar(prev => ({ ...prev, open: false }))}
+                  className={`inline-flex rounded-md p-1.5 ${
+                    snackbar.severity === 'success' ? 'text-green-500 hover:bg-green-100' :
+                    snackbar.severity === 'error' ? 'text-red-500 hover:bg-red-100' :
+                    snackbar.severity === 'warning' ? 'text-yellow-500 hover:bg-yellow-100' :
+                    'text-blue-500 hover:bg-blue-100'
+                  } focus:outline-none focus:ring-2 focus:ring-offset-2`}
+                >
+                  <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
-export default EngineerManagementComponent;
+export default memo(EngineerManagementComponent);

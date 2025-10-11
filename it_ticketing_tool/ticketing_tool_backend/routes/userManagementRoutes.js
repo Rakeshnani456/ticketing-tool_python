@@ -32,33 +32,34 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
             }
             
             let snapshot;
-            if (userRole === 'site_admin' && userClientName) {
-                // For site_admin, get users from their company/client
-                
-                // OPTIMIZED: Use a single query with 'in' operator to check both fields
-                try {
-                    // First try client_name
-                    snapshot = await usersCollection.where('client_name', '==', userClientName).limit(500).get();
+            if (userRole === 'site_admin') {
+                if (userClientName) {
+                    // For site_admin, get users from their company/client
                     
-                    // If no users found, try companyName
-                    if (snapshot.empty) {
-                        snapshot = await usersCollection.where('companyName', '==', userClientName).limit(500).get();
+                    // OPTIMIZED: Use a single query with 'in' operator to check both fields
+                    try {
+                        // First try client_name
+                        snapshot = await usersCollection.where('client_name', '==', userClientName).limit(500).get();
+                        
+                        // If no users found, try companyName
+                        if (snapshot.empty) {
+                            snapshot = await usersCollection.where('companyName', '==', userClientName).limit(500).get();
+                        }
+                        
+                        // If still empty, try a compound query (if supported by your indexes)
+                        if (snapshot.empty) {
+                            // This would require a composite index, but provides better performance
+                            // For now, we'll keep the two separate queries but add better logging
+                            console.log(`No users found for client_name or companyName: ${userClientName}`);
+                        }
+                    } catch (queryError) {
+                        console.error('Error in Firestore query:', queryError);
+                        throw queryError;
                     }
-                    
-                    // If still empty, try a compound query (if supported by your indexes)
-                    if (snapshot.empty) {
-                        // This would require a composite index, but provides better performance
-                        // For now, we'll keep the two separate queries but add better logging
-                        console.log(`No users found for client_name or companyName: ${userClientName}`);
-                    }
-                } catch (queryError) {
-                    console.error('Error in Firestore query:', queryError);
-                    throw queryError;
+                } else {
+                    console.error('Site admin has no client_name set, returning empty result');
+                    return res.status(200).json([]);
                 }
-                
-            } else if (userRole === 'site_admin' && !userClientName) {
-                console.error('Site admin has no client_name set, returning empty result');
-                return res.status(200).json([]);
             } else if (userRole === 'support') {
                 // For support role, get all support users
                 snapshot = await usersCollection.where('role', '==', 'support').limit(500).get();
@@ -364,6 +365,38 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
         } catch (err) {
             console.error('Error updating password:', err);
             return res.status(500).json({ error: err.message || 'Failed to update password.' });
+        }
+    });
+
+    // POST /api/users/:uid/reset-password - Reset user password (admin only)
+    router.post('/:uid/reset-password', verifyFirebaseToken, async (req, res) => {
+        const { uid } = req.params;
+        
+        try {
+            // Check if user exists
+            const userDoc = await usersCollection.doc(uid).get();
+            if (!userDoc.exists) {
+                return res.status(404).json({ error: 'User not found' });
+            }
+            
+            const userData = userDoc.data();
+            
+            // Generate a new random password
+            const newPassword = Math.random().toString(36).slice(-12) + Math.random().toString(36).slice(-12);
+            
+            // Update the user's password in Firebase Auth
+            await admin.auth().updateUser(uid, { password: newPassword });
+            
+            // Set mustChangePassword to true in Firestore
+            await usersCollection.doc(uid).update({ mustChangePassword: true });
+            
+            return res.status(200).json({ 
+                message: 'Password reset successfully.',
+                newPassword: newPassword
+            });
+        } catch (err) {
+            console.error('Error resetting password:', err);
+            return res.status(500).json({ error: err.message || 'Failed to reset password.' });
         }
     });
 

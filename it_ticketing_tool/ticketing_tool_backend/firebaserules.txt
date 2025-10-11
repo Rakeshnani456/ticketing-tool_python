@@ -55,11 +55,20 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Helper: site_admin can read users from their own company/client
+    function isSiteAdminForUser() {
+      return exists(/databases/$(database)/documents/users/$(getUserId())) &&
+        get(/databases/$(database)/documents/users/$(getUserId())).data.role == 'site_admin' &&
+        get(/databases/$(database)/documents/users/$(getUserId())).data.client_name == resource.data.client_name;
+    }
+
     // Rules for the 'users' collection
     match /users/{userId} {
       // Allow users to read their own profile data (e.g., roles)
       allow read: if isAuthenticated() && (
-        getUserId() == userId || hasSupportAdminOrSuperAdminRole()
+        getUserId() == userId || 
+        hasSupportAdminOrSuperAdminRole() ||
+        isSiteAdminForUser()
       );
       // Allow users to update their own profile (e.g., mustChangePassword)
       allow update: if isAuthenticated() && getUserId() == userId;
@@ -69,8 +78,8 @@ service cloud.firestore {
 
     // --- NEW RULES FOR 'clients' COLLECTION ---
     match /clients/{clientId} {
-      // Allow authenticated users to read client data.
-      allow read: if isAuthenticated();
+      // Allow only Super Admins to read client data (site_admin should not access clients collection)
+      allow read: if hasSuperAdminRole();
       // Allow only Super Admins to create, update, or delete client documents.
       allow create, update, delete: if hasSuperAdminRole();
     }

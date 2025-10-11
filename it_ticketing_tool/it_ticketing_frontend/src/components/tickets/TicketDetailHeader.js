@@ -28,8 +28,8 @@ const TicketDetailHeader = ({
             <div className="w-full mx-auto min-w-0 max-w-full mb-1 sm:mb-2 overflow-x-hidden">
                 <div className="bg-white py-1 sm:py-1.5 px-1 sm:px-1.5 md:px-2 flex flex-col sm:flex-row items-start sm:items-center w-full min-w-0 max-w-full justify-between gap-1 sm:gap-1.5 overflow-x-hidden">
                     <div className="flex items-center w-full min-w-0 max-w-full overflow-x-hidden">
-                        {/* Back button and ticket ID */}
-                        <div className="flex items-center space-x-1 sm:space-x-1.5 flex-shrink-0 mr-1 sm:mr-1.5">
+                        {/* Back button */}
+                        <div className="flex items-center flex-shrink-0 mr-1 sm:mr-1.5">
                             <button
                                 onClick={handleBackClick}
                                 className="flex items-center justify-center 
@@ -43,9 +43,6 @@ const TicketDetailHeader = ({
                             >
                                 <ArrowLeft className="w-4 h-4 sm:w-4.5 sm:h-4.5 hover:text-white" />
                             </button>
-                            <div className="flex flex-col min-w-0">
-                                <h1 className="text-m sm:text-sm text-gray-600 font-semibold whitespace-nowrap truncate">{ticket.display_id}</h1>
-                            </div>
                         </div>
                         {/* Subject line */}
                         <div className="flex items-center min-w-0 bg-gray-50 rounded-md px-1.5 sm:px-2 py-1.5 border border-gray-200 flex-1 max-w-full overflow-hidden">

@@ -238,12 +238,12 @@ const AdvancedSearchComponent = ({
         <div className={`relative ${className}`} ref={searchRef}>
             {/* Search Input Bar */}
             <div 
-                className={`bg-white rounded-2xl theme-elevation-shadow border border-gray-200 transition-all duration-300 ${
+                className={`bg-white border border-gray-300 transition-all duration-300 ${
                     isSearchOpen 
                         ? openUpward 
-                            ? 'rounded-t-none shadow-2xl' 
-                            : 'rounded-b-none shadow-2xl'
-                        : 'shadow-lg'
+                            ? 'rounded-t-none' 
+                            : 'rounded-b-none'
+                        : ''
                 }`}
                 style={{ width: width }}
             >
@@ -279,10 +279,10 @@ const AdvancedSearchComponent = ({
             {isSearchOpen && (
                 <div
                     ref={searchWindowRef}
-                    className={`absolute left-0 right-0 bg-white theme-elevation-shadow border border-gray-200 animate-in slide-in-from-top-2 duration-300 overflow-hidden z-50 ${
+                    className={`absolute left-0 right-0 bg-white border border-gray-300 animate-in slide-in-from-top-2 duration-300 overflow-hidden z-50 ${
                         openUpward 
-                            ? 'bottom-full rounded-t-2xl border-b-0' 
-                            : 'top-full rounded-b-2xl border-t-0'
+                            ? 'bottom-full border-b-0' 
+                            : 'top-full border-t-0'
                     }`}
                     style={{ 
                         width: width,

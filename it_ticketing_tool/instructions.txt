@@ -1,4 +1,4 @@
-
+Run App Local:
 
 cd ticketing_tool_backend
 node server.js
@@ -6,7 +6,7 @@ node server.js
 cd it_ticketing_frontend
 npm start
 
-
+-----------------------------------------
 
 
 ### Frontend Deployment

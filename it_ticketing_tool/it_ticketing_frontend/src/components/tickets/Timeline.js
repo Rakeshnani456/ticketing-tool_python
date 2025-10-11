@@ -250,7 +250,7 @@ const Timeline = ({ events = [] }) => {
             {/* Toggle button */}
             <div className="flex items-center justify-center">
                 <button
-                    className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold rounded-b-md bg-white text-orange-500 hover:bg-orange-50 transition-colors"
+                    className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold rounded-b-md bg-orange-50 text-orange-500 hover:bg-orange-100 transition-colors"
                     onClick={handleToggle}
                     aria-label={expanded ? 'Hide ticket workflow' : 'Show ticket workflow'}
                 >

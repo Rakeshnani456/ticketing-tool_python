@@ -1,6 +1,10 @@
-import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useRef, useMemo, memo } from 'react';
+import CustomDropdown from '../common/CustomDropdown';
+import CustomButton from '../common/CustomButton';
+import ClientActionDropdown from '../common/ClientActionDropdown';
+import TooltipBubble from '../common/TooltipBubble';
 import {
-    Button, Chip, TextField, Box, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
+    Button, Chip, TextField, Box, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
     IconButton, Snackbar, Alert, Typography, Popover, Collapse, Dialog, DialogTitle, DialogContent, DialogActions, MenuItem, Select, useMediaQuery, Card, CardContent, CardActions, Grid, CircularProgress,
     FormControl, InputLabel, OutlinedInput, FormHelperText, Tooltip, TablePagination, Badge, Divider, Tabs, Tab, Autocomplete, InputAdornment, Switch, FormControlLabel, Avatar, Stack
 } from '@mui/material';
@@ -22,7 +26,6 @@ import {
     SupervisorAccount as SupervisorAccountIcon,
     Work as WorkIcon,
     Badge as BadgeIcon,
-    Refresh as RefreshIcon,
     Close as CloseIcon,
     AdminPanelSettings as AdminIcon,
     Download as DownloadIcon,
@@ -125,10 +128,11 @@ const USER_TEMPLATE_HEADERS = [
   'employmentType',
 ];
 
+
 const UserManagementComponent = ({ user, showFlashMessage }) => {
     const [users, setUsers] = useState([]);
     const [clients, setClients] = useState([]);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [search, setSearch] = useState('');
     const [addMode, setAddMode] = useState(false);
@@ -138,7 +142,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
     const navigate = useNavigate();
     const location = useLocation();
-    const db = getFirestore(app);
+    const db = useMemo(() => getFirestore(app), []);
     const [addUserModalOpen, setAddUserModalOpen] = useState(false);
     const [addUserData, setAddUserData] = useState(initialUserState);
     const theme = useTheme();
@@ -158,8 +162,6 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
     const [importedUsers, setImportedUsers] = useState([]);
     const [importError, setImportError] = useState('');
     
-    // OPTIMIZED: Add debouncing to prevent rapid successive API calls
-    const fetchUsersDebounced = useRef(null);
     const [importResults, setImportResults] = useState(null);
     const [importedPasswords, setImportedPasswords] = useState([]);
     const [credentialsDownloaded, setCredentialsDownloaded] = useState(false);
@@ -168,6 +170,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
     const [uploadedRows, setUploadedRows] = useState(new Set());
     const fileInputRef = useRef();
     const [collapsedClients, setCollapsedClients] = useState({});
+    const [showActionsColumn, setShowActionsColumn] = useState({});
     const previousUsersRef = useRef([]);
     const previousClientsRef = useRef([]);
     const [clientFilter, setClientFilter] = useState('');
@@ -180,27 +183,35 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
     const [changePwdError, setChangePwdError] = useState('');
     const [passwordResetStatus, setPasswordResetStatus] = useState('');
     const [isPasswordResetting, setIsPasswordResetting] = useState(false);
-    const [viewMode, setViewMode] = useState('table'); // 'table' or 'cards'
-    const [activeTab, setActiveTab] = useState(0);
-    const [filterStatus, setFilterStatus] = useState('all');
     const [filterRole, setFilterRole] = useState('all');
     const [filtersChanged, setFiltersChanged] = useState(false);
  
     const [selectedUsers, setSelectedUsers] = useState([]);
+    
+    // Debug logging to identify re-render causes
+    console.log('🔄 UserManagementComponent RENDER', { 
+        userId: user?.uid, 
+        userRole: user?.role, 
+        userCompany: user?.companyName,
+        usersCount: users?.length || 0,
+        loading,
+        timestamp: new Date().toISOString(),
+        showFlashMessageType: typeof showFlashMessage
+    });
     const [bulkAction, setBulkAction] = useState('');
     const [bulkActionModalOpen, setBulkActionModalOpen] = useState(false);
     const [showCheckboxes, setShowCheckboxes] = useState(false);
-    const [userStats, setUserStats] = useState({
-        total: 0,
-        active: 0,
-        inactive: 0,
-        siteAdmins: 0,
-        regularUsers: 0
-    });
-    const [isRefreshing, setIsRefreshing] = useState(false);
+    const [selectedClientForAction, setSelectedClientForAction] = useState(null);
 
     const handleToggleClientCollapse = (client) => {
       setCollapsedClients(prev => ({ ...prev, [client]: !prev[client] }));
+    };
+
+    const handleToggleActionsColumn = (clientName) => {
+        setShowActionsColumn(prev => ({
+            ...prev,
+            [clientName]: !prev[clientName]
+        }));
     };
 
     useEffect(() => {
@@ -234,15 +245,10 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                 u.companyName === clientFilter ||
                 u.clientname === clientFilter;
             
-            // Apply status filter
-            const matchesStatus = filterStatus === 'all' || 
-                (filterStatus === 'active' && u.active) ||
-                (filterStatus === 'inactive' && !u.active);
-            
             // Apply role filter
             const matchesRole = filterRole === 'all' || u.role === filterRole;
             
-            return matchesSearch && matchesClient && matchesStatus && matchesRole;
+            return matchesSearch && matchesClient && matchesRole;
         });
         
         // Sort users: site admins first, then by client name, then by email
@@ -262,9 +268,10 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
             // Within same client, sort by email
             return a.email.localeCompare(b.email);
         });
-    }, [users, search, clientFilter, filterStatus, filterRole]);
+    }, [users, search, clientFilter, filterRole]);
 
-    // Group users by client for card view and table view
+
+    // Group users by client for display
     const groupedUsersByClient = useMemo(() => {
         const grouped = {};
         
@@ -286,13 +293,14 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                     return a.email.localeCompare(b.email);
                 });
                 
-                return { clientName, users: sortedUsers };
+                return {
+                    clientName,
+                    users: sortedUsers
+                };
             })
             .sort((a, b) => a.clientName.localeCompare(b.clientName));
         
-        return {
-            clientGroups
-        };
+        return clientGroups;
     }, [filteredUsers]);
 
     const clearClientFilter = () => {
@@ -314,11 +322,9 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
         }
     }, []);
 
-    useEffect(() => {
-        fetchClients();
-    }, []);
+    // Remove this useEffect as fetchClients is called in the main useEffect
 
-    // Load initial data from cache if available
+    // Load initial data from cache if available - optimized for performance
     useEffect(() => {
         if (!user || !user.firebaseUser) return;
         
@@ -332,32 +338,48 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
         
         if (cachedData && cacheTime) {
             const cacheAge = Date.now() - parseInt(cacheTime);
-            const cacheValidDuration = 5 * 60 * 1000; // 5 minutes
+            const cacheValidDuration = 10 * 60 * 1000; // 10 minutes - longer cache for better performance
             
             if (cacheAge < cacheValidDuration) {
                 console.log("Loading initial users from cache...");
-                const cachedUsers = JSON.parse(cachedData);
-                setUsers(cachedUsers);
-                previousUsersRef.current = cachedUsers;
-                setLastFetchTime(parseInt(cacheTime));
-                setLoading(false);
+                try {
+                    const cachedUsers = JSON.parse(cachedData);
+                    // Only update if data is different to prevent unnecessary re-renders
+                    if (!areUsersEqual(previousUsersRef.current, cachedUsers)) {
+                        setUsers(cachedUsers);
+                        previousUsersRef.current = cachedUsers;
+                        setLastFetchTime(parseInt(cacheTime));
+                    }
+                    // If we have cached data, we're not loading anymore
+                    console.log("✅ Cache loaded, setting loading to false");
+                    setLoading(false);
+                } catch (error) {
+                    console.error("Error parsing cached users:", error);
+                    // Clear invalid cache
+                    localStorage.removeItem(cacheKey);
+                    localStorage.removeItem(cacheTimeKey);
+                }
             }
         }
     }, [user?.uid, user?.role, user?.companyName]);
 
-    // Calculate user statistics
-    useEffect(() => {
+    // Calculate user statistics - memoized for performance
+    const userStats = useMemo(() => {
         if (users.length > 0) {
-            const stats = {
+            return {
                 total: users.length,
-                active: users.filter(u => u.active !== false).length,
-                inactive: users.filter(u => u.active === false).length,
                 siteAdmins: users.filter(u => u.role === 'site_admin').length,
-                regularUsers: users.filter(u => u.role === 'user').length
+                regularUsers: users.filter(u => u.role === 'user').length,
+                totalClients: clients.length
             };
-            setUserStats(stats);
         }
-    }, [users]);
+        return {
+            total: 0,
+            siteAdmins: 0,
+            regularUsers: 0,
+            totalClients: 0
+        };
+    }, [users, clients]);
 
     useEffect(() => {
         if (!user || !user.firebaseUser) {
@@ -366,10 +388,20 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
         }
         
         console.log("Setting up users data fetching...");
-        setLoading(true);
+        // Only set loading if we have absolutely no data
+        if (users.length === 0 && !previousUsersRef.current.length) {
+            console.log("🔄 Setting loading to true - no data available");
+            setLoading(true);
+        } else {
+            console.log("✅ Not setting loading - data available", { 
+                usersLength: users.length, 
+                previousUsersLength: previousUsersRef.current.length 
+            });
+        }
         setError(null);
         
         let unsubscribe = null;
+        let websocketCleanup = null;
         
         const setupRealTimeListener = async () => {
             try {
@@ -378,93 +410,178 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                     await fetchClients();
                 }
                 
-                // For site_admin, use API polling instead of Firestore listener
+                // Use different approach for site_admin vs other roles
                 if (user.role === 'site_admin') {
-                    console.log("Setting up API polling for site admin...");
+                    // For site_admin, use API endpoint instead of direct Firestore access
+                    console.log("Site admin detected, using API endpoint for user data...");
                     
-                    // Initial fetch
-                    await fetchUsersFromAPI();
-                    
-                    // OPTIMIZED: Much less aggressive polling - every 2 minutes instead of 5 seconds
-                    const pollInterval = setInterval(() => {
+                    const fetchUsersViaAPI = async () => {
                         try {
-                            fetchUsersDebouncedFn(); // Use debounced version
-                        } catch (error) {
-                            console.error("Error in API polling:", error);
-                        }
-                    }, 120000); // Poll every 2 minutes (120 seconds)
-                    
-                    unsubscribe = () => clearInterval(pollInterval);
-                    
-                } else {
-                    // For other admin roles, use Firestore real-time listener
-                    const usersRef = collection(db, 'users');
-                    console.log("Setting up Firestore listener for real-time updates...");
-                    
-                    unsubscribe = onSnapshot(usersRef, 
-                        async (snapshot) => {
-                            try {
-                                console.log("Real-time update received, snapshot size:", snapshot.size);
-                                
-                                const fetchedUsers = [];
-                                snapshot.forEach((doc) => {
-                                    const userData = doc.data();
-                                    // Only include users and site_admins
-                                    if (userData.role === 'user' || userData.role === 'site_admin') {
-                                        fetchedUsers.push({
-                                            uid: doc.id,
-                                            ...userData
-                                        });
-                                    }
-                                });
-                                
-                                const usersWithClientDetails = fetchedUsers.map(u => {
-                                    const clientMatch = previousClientsRef.current.find(c => c['Client name'] === u.client_name);
-                                    return {
-                                        ...u,
-                                        asset_id: u.asset_id || u.assetid || '',
-                                        domain: clientMatch ? clientMatch.Domain : (u.domain || ''),
-                                        clientname: clientMatch ? clientMatch['Client name'] : (u.client_name || 'Unknown Client'),
-                                        companyName: u.client_name || u.companyName || 'Unknown Company',
-                                        firstName: u.firstName || '',
-                                        lastName: u.lastName || '',
-                                        contactNumber: u.contactNumber || '',
-                                        managerEmail: u.managerEmail || '',
-                                        employmentType: u.employmentType || '',
-                                        designation: u.designation || '',
-                                        employeeId: u.employeeId || '',
-                                    };
-                                });
-                                
-                                if (!areUsersEqual(previousUsersRef.current, usersWithClientDetails)) {
-                                    console.log("Updating users state with real-time data");
-                                    setUsers(usersWithClientDetails);
-                                    previousUsersRef.current = usersWithClientDetails;
-                                    
-                                    // Update cache with real-time data
-                                    const currentTime = Date.now();
-                                    const cacheKey = `userManagement_cache_${user.role}`;
-                                    const cacheTimeKey = `${cacheKey}_time`;
-                                    localStorage.setItem(cacheKey, JSON.stringify(usersWithClientDetails));
-                                    localStorage.setItem(cacheTimeKey, currentTime.toString());
-                                    setLastFetchTime(currentTime);
+                            const idToken = await user.firebaseUser.getIdToken();
+                            const res = await fetch(`${API_BASE_URL}/api/users`, {
+                                headers: {
+                                    'Authorization': `Bearer ${idToken}`,
+                                    'Content-Type': 'application/json'
                                 }
+                            });
+                            
+                            if (!res.ok) throw new Error('Failed to fetch users');
+                            const data = await res.json();
+                            
+                            // Filter to only show users from the same company
+                            const filteredUsers = data.filter(u => 
+                                (u.role === 'user' || u.role === 'site_admin') && 
+                                u.client_name === user.companyName
+                            );
+                            
+                            const usersWithClientDetails = filteredUsers.map(u => {
+                                const clientMatch = previousClientsRef.current.find(c => c['Client name'] === u.client_name);
+                                return {
+                                    uid: u.uid,
+                                    ...u,
+                                    asset_id: u.asset_id || u.assetid || '',
+                                    domain: clientMatch ? clientMatch.Domain : (u.domain || ''),
+                                    clientname: clientMatch ? clientMatch['Client name'] : (u.client_name || 'Unknown Client'),
+                                    companyName: u.client_name || u.companyName || 'Unknown Company',
+                                    firstName: u.firstName || '',
+                                    lastName: u.lastName || '',
+                                    contactNumber: u.contactNumber || '',
+                                    managerEmail: u.managerEmail || '',
+                                    employmentType: u.employmentType || '',
+                                    designation: u.designation || '',
+                                    employeeId: u.employeeId || '',
+                                };
+                            });
+                            
+                            // Only update state if data actually changed
+                            if (!areUsersEqual(previousUsersRef.current, usersWithClientDetails)) {
+                                console.log("🔄 UPDATING users state with API data for site_admin");
+                                setUsers(usersWithClientDetails);
+                                previousUsersRef.current = usersWithClientDetails;
                                 
-                                setLoading(false);
-                                setError(null);
-                            } catch (error) {
-                                console.error("Error processing real-time users update:", error);
-                                setError(`Real-time update error: ${error.message}`);
-                                setLoading(false);
+                                // Update cache
+                                const currentTime = Date.now();
+                                const cacheKey = `userManagement_cache_${user.role}_${user.companyName}`;
+                                const cacheTimeKey = `${cacheKey}_time`;
+                                localStorage.setItem(cacheKey, JSON.stringify(usersWithClientDetails));
+                                localStorage.setItem(cacheTimeKey, currentTime.toString());
+                                setLastFetchTime(currentTime);
                             }
-                        },
-                        (error) => {
-                            console.error("Error in real-time users listener:", error);
-                            setError(`Listener error: ${error.message}`);
+                            
+                            setLoading(false);
+                            setError(null);
+                        } catch (error) {
+                            console.error("Error fetching users via API:", error);
+                            setError(`API error: ${error.message}`);
                             setLoading(false);
                         }
-                    );
+                    };
+                    
+                    // Initial fetch
+                    fetchUsersViaAPI();
+                    
+                    // Set up periodic refresh for site_admin (every 30 seconds)
+                    const refreshInterval = setInterval(fetchUsersViaAPI, 30000);
+                    
+                    unsubscribe = () => {
+                        clearInterval(refreshInterval);
+                    };
+                } else {
+                    // For admin and super_admin, use Firestore real-time listener
+                const usersRef = collection(db, 'users');
+                console.log("Setting up Firestore listener for real-time updates...");
+                
+                unsubscribe = onSnapshot(usersRef, 
+                    async (snapshot) => {
+                        try {
+                            console.log("🔥 Firestore real-time update received, snapshot size:", snapshot.size, "users count:", users.length);
+                            
+                            const fetchedUsers = [];
+                            snapshot.forEach((doc) => {
+                                const userData = doc.data();
+                                // Only include users and site_admins
+                                if (userData.role === 'user' || userData.role === 'site_admin') {
+                                    fetchedUsers.push({
+                                        uid: doc.id,
+                                        ...userData
+                                    });
+                                }
+                            });
+                            
+                            const usersWithClientDetails = fetchedUsers.map(u => {
+                                const clientMatch = previousClientsRef.current.find(c => c['Client name'] === u.client_name);
+                                return {
+                                    ...u,
+                                    asset_id: u.asset_id || u.assetid || '',
+                                    domain: clientMatch ? clientMatch.Domain : (u.domain || ''),
+                                    clientname: clientMatch ? clientMatch['Client name'] : (u.client_name || 'Unknown Client'),
+                                    companyName: u.client_name || u.companyName || 'Unknown Company',
+                                    firstName: u.firstName || '',
+                                    lastName: u.lastName || '',
+                                    contactNumber: u.contactNumber || '',
+                                    managerEmail: u.managerEmail || '',
+                                    employmentType: u.employmentType || '',
+                                    designation: u.designation || '',
+                                    employeeId: u.employeeId || '',
+                                };
+                            });
+                            
+                            // Only update state if data actually changed
+                                if (!areUsersEqual(previousUsersRef.current, usersWithClientDetails)) {
+                                console.log("🔄 UPDATING users state with real-time data - this will cause a re-render", {
+                                    previousCount: previousUsersRef.current.length,
+                                        newCount: usersWithClientDetails.length,
+                                    timestamp: new Date().toISOString()
+                                });
+                                    setUsers(usersWithClientDetails);
+                                    previousUsersRef.current = usersWithClientDetails;
+                                
+                                // Update cache with real-time data
+                                const currentTime = Date.now();
+                                    const cacheKey = `userManagement_cache_${user.role}`;
+                                const cacheTimeKey = `${cacheKey}_time`;
+                                    localStorage.setItem(cacheKey, JSON.stringify(usersWithClientDetails));
+                                localStorage.setItem(cacheTimeKey, currentTime.toString());
+                                setLastFetchTime(currentTime);
+                            } else {
+                                console.log("✅ Users data unchanged, no state update needed");
+                            }
+                            
+                            // Set loading to false when we get data
+                            console.log("✅ Firestore data received, setting loading to false");
+                            setLoading(false);
+                            setError(null);
+                        } catch (error) {
+                            console.error("Error processing real-time users update:", error);
+                            setError(`Real-time update error: ${error.message}`);
+                            setLoading(false);
+                        }
+                    },
+                    (error) => {
+                        console.error("Error in real-time users listener:", error);
+                        setError(`Listener error: ${error.message}`);
+                        setLoading(false);
+                    }
+                );
                 }
+                
+                // Set up WebSocket for additional real-time updates
+                try {
+                    const { default: websocketClient } = await import('../../utils/websocketClient');
+                    
+                    const handleUserUpdate = (data) => {
+                        console.log('👤 WebSocket user update received:', data);
+                        // WebSocket updates are handled by Firestore listener, no need for additional processing
+                    };
+                    
+                    websocketClient.addListener('user_update', handleUserUpdate);
+                    websocketCleanup = () => {
+                        websocketClient.removeListener('user_update', handleUserUpdate);
+                    };
+                } catch (wsError) {
+                    console.log("WebSocket not available, using Firestore only:", wsError.message);
+                }
+                
             } catch (error) {
                 console.error("Error setting up data fetching:", error);
                 setError(`Setup error: ${error.message}`);
@@ -479,8 +596,11 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
             if (unsubscribe) {
                 unsubscribe();
             }
+            if (websocketCleanup) {
+                websocketCleanup();
+            }
         };
-    }, [user?.uid, user?.role, user?.companyName, db]); // Only depend on specific user properties, not the entire user object
+    }, [user?.uid, user?.role, user?.companyName]); // Removed db dependency as it's stable
 
     const handleAdd = () => {
         setAddMode(true);
@@ -586,12 +706,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
     };
 
     const handleEditClick = (user) => {
-        setEditRowId(user.uid);
-        setEditRowData({
-            ...user,
-            emailPrefix: user.email ? user.email.split('@')[0] : '',
-            domain: user.email ? user.email.split('@')[1] : (user.domain || ''),
-        });
+        navigate(`/user-management/user-detail/${user.uid}?edit=true`);
     };
 
     const handleEditChange = (e) => {
@@ -662,10 +777,8 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
               });
             }, 5000);
             
-            // Force refresh the users list to show the updated user
-            if (user.role === 'site_admin') {
-              await fetchUsersFromAPI(true);
-            }
+            // Real-time updates will be handled by Firestore listener
+            console.log("User updated, real-time listener will handle refresh");
         } catch (err) {
             setSnackbar({ open: true, message: err.message, severity: 'error' });
         }
@@ -674,6 +787,10 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
     const handleEditCancel = () => {
         setEditRowId(null);
         setEditRowData({ ...initialUserState });
+    };
+
+    const handleViewUser = (user) => {
+        navigate(`/user-management/user-detail/${user.uid}`);
     };
 
     const handleDeleteClick = (event, uid, email) => {
@@ -721,10 +838,8 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
               });
             }, 5000);
             
-            // Force refresh the users list to remove the deleted user
-            if (user.role === 'site_admin') {
-              await fetchUsersFromAPI(true);
-            }
+            // Real-time updates will be handled by Firestore listener
+            console.log("User deleted, real-time listener will handle refresh");
             
             userToDeleteUidRef.current = null;
             setCurrentUserEmailToDelete('');
@@ -740,17 +855,23 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
     };
 
     const openAddUserModal = () => {
-      const initialData = { ...initialUserState, password: generatePassword() };
-      if (user && user.role === 'site_admin' && user.companyName) {
-        initialData.companyName = user.companyName;
-      }
-      setAddUserData(initialData);
-      setAddUserModalOpen(true);
+      navigate('/user-management/create-user');
     };
+
+    // Update addUserData when selectedClientForAction changes
+    useEffect(() => {
+        if (selectedClientForAction && addUserModalOpen) {
+            setAddUserData(prev => ({
+                ...prev,
+                companyName: selectedClientForAction
+            }));
+        }
+    }, [selectedClientForAction, addUserModalOpen]);
 
     const closeAddUserModal = () => {
       setAddUserModalOpen(false);
       setAddUserData(initialUserState);
+      setSelectedClientForAction(null);
     };
 
     const handleAddUserChange = (e) => {
@@ -827,10 +948,8 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
         setAddUserModalOpen(false);
         setSnackbar({ open: true, message: 'User created successfully.', severity: 'success' });
         
-        // Force refresh the users list to show the new user
-        if (user.role === 'site_admin') {
-          await fetchUsersFromAPI(true);
-        }
+        // Real-time updates will be handled by Firestore listener
+        console.log("User created, real-time listener will handle refresh");
       } catch (err) {
         setAddUserError(err.message || 'Failed to create user');
       }
@@ -951,10 +1070,8 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
           setPasswordResetStatus('');
         }, 2000);
         
-        // Force refresh the users list to show the updated user
-        if (user.role === 'site_admin') {
-          await fetchUsersFromAPI(true);
-        }
+        // Real-time updates will be handled by Firestore listener
+        console.log("Password changed, real-time listener will handle refresh");
       } catch (err) {
         setPasswordResetStatus('Password reset failed!');
         setChangePwdError(err.message || 'Failed to change password');
@@ -1029,13 +1146,24 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
       }
       
       console.log('Final headers:', templateHeaders);
-      const csvContent = templateHeaders.join(',');
+      
+      // Create CSV content with headers and sample row
+      const csvContent = [
+        templateHeaders.join(','),
+        // Add sample row with empty values, but pre-fill companyName if client is selected
+        templateHeaders.map(header => {
+          if (header === 'companyName' && selectedClientForAction) {
+            return selectedClientForAction;
+          }
+          return '';
+        }).join(',')
+      ].join('\n');
       
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const link = document.createElement('a');
       const url = URL.createObjectURL(blob);
       link.setAttribute('href', url);
-      link.setAttribute('download', 'user_import_template.csv');
+      link.setAttribute('download', selectedClientForAction ? `${selectedClientForAction}_user_template.csv` : 'user_import_template.csv');
       link.style.visibility = 'hidden';
       document.body.appendChild(link);
       link.click();
@@ -1145,6 +1273,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
       setShowCloseConfirmation(false);
       setImportProgress({ show: false, current: 0, total: 0, status: '' });
       setUploadedRows(new Set());
+      setSelectedClientForAction(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
     };
 
@@ -1248,6 +1377,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
       setCredentialsDownloaded(true);
     };
 
+
     const handleChangePage = (event, newPage) => {
       setPage(newPage);
     };
@@ -1257,136 +1387,8 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
       setPage(0);
     };
 
-    // OPTIMIZED: Debounced version of fetchUsersFromAPI
-    const fetchUsersDebouncedFn = useCallback((forceRefresh = false) => {
-        if (fetchUsersDebounced.current) {
-            clearTimeout(fetchUsersDebounced.current);
-        }
-        
-        fetchUsersDebounced.current = setTimeout(() => {
-            fetchUsersFromAPI(forceRefresh);
-        }, 500); // 500ms debounce
-    }, []);
 
-    const fetchUsersFromAPI = useCallback(async (forceRefresh = false) => {
-        try {
-            if (previousClientsRef.current.length === 0) {
-                await fetchClients();
-            }
-            
-            const cacheKey = user.role === 'site_admin' ? 
-                `userManagement_cache_${user.role}_${user.companyName}` : 
-                `userManagement_cache_${user.role}`;
-            
-            // Use smart cache manager with intelligent caching
-            const result = await SmartCacheManager.smartFetch(
-                async () => {
-                    console.log("🔄 Fetching users from API...", { userRole: user.role, userCompanyName: user.companyName });
-                    const idToken = await user.firebaseUser.getIdToken();
-                    const response = await fetch(`${API_BASE_URL}/api/users`, {
-                        headers: {
-                            'Authorization': `Bearer ${idToken}`,
-                            'Content-Type': 'application/json'
-                        }
-                    });
-                    if (!response.ok) {
-                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                    }
-                    const fetchedUsers = await response.json();
-                    console.log("Fetched users from API:", fetchedUsers.length, "users");
-                    
-                    const usersWithClientDetails = fetchedUsers.map(u => {
-                        const clientMatch = previousClientsRef.current.find(c => c['Client name'] === u.client_name);
-                        return {
-                            ...u,
-                            asset_id: u.asset_id || u.assetid || '',
-                            domain: clientMatch ? clientMatch.Domain : (u.domain || ''),
-                            clientname: clientMatch ? clientMatch['Client name'] : (u.client_name || 'Unknown Client'),
-                            companyName: u.client_name || u.companyName || 'Unknown Company',
-                            firstName: u.firstName || '',
-                            lastName: u.lastName || '',
-                            contactNumber: u.contactNumber || '',
-                            managerEmail: u.managerEmail || '',
-                            employmentType: u.employmentType || '',
-                            designation: u.designation || '',
-                            employeeId: u.employeeId || '',
-                        };
-                    });
-                    
-                    // For site_admin, filter users to only show their company's users
-                    let filteredUsers = usersWithClientDetails;
-                    if (user.role === 'site_admin' && user.companyName) {
-                        const beforeFilter = filteredUsers.length;
-                        filteredUsers = usersWithClientDetails.filter(u => 
-                            u.clientname === user.companyName || 
-                            u.companyName === user.companyName
-                        );
-                        console.log(`Site admin filtering: ${beforeFilter} -> ${filteredUsers.length} users for company ${user.companyName}`);
-                    }
-                    
-                    return filteredUsers;
-                },
-                cacheKey,
-                'USERS',
-                user.uid,
-                { forceRefresh, checkChanges: true }
-            );
-            
-            // Only update state if data actually changed
-            if (!areUsersEqual(previousUsersRef.current, result.data)) {
-                console.log("Updating users state with", result.fromCache ? "cached" : "fresh", "data");
-                setUsers(result.data);
-                previousUsersRef.current = result.data;
-                setLastFetchTime(Date.now());
-            } else {
-                console.log("✅ Users data unchanged, no state update needed");
-            }
-            
-            setLoading(false);
-            setError(null);
-            
-            if (result.fromCache) {
-                console.log(`📦 Users loaded from cache (age: ${Math.round(result.age / 1000)}s)`);
-            } else {
-                console.log(`✅ Fresh users data loaded and cached`);
-            }
-            
-        } catch (error) {
-            console.error("Error fetching users from API:", error);
-            setError(`API error: ${error.message}`);
-            setUsers([]);
-            setLoading(false);
-        }
-    }, [user?.uid, user?.role, user?.companyName, fetchClients]);
 
-    const handleRefresh = async () => {
-        console.log("Manual refresh requested...");
-        setIsRefreshing(true);
-        setLoading(true);
-        
-        try {
-            if (user.role === 'site_admin') {
-                // For site admin, force refresh from API
-                await fetchUsersFromAPI(true);
-            } else {
-                // For other roles, clear cache and let Firestore listener handle it
-                const cacheKey = `userManagement_cache_${user.role}`;
-                const cacheTimeKey = `${cacheKey}_time`;
-                localStorage.removeItem(cacheKey);
-                localStorage.removeItem(cacheTimeKey);
-                setLoading(false);
-                
-                // Add a small delay to ensure the spinner is visible for non-site-admin users
-                await new Promise(resolve => setTimeout(resolve, 500));
-            }
-        } finally {
-            setIsRefreshing(false);
-        }
-    };
-
-    const handleTabChange = (event, newValue) => {
-        setActiveTab(newValue);
-    };
 
     const handleSelectUser = (userId) => {
         setSelectedUsers(prev => {
@@ -1457,10 +1459,8 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
             setSelectedUsers([]);
             closeBulkActionModal();
             
-            // Force refresh the users list
-            if (user.role === 'site_admin') {
-                await fetchUsersFromAPI(true);
-            }
+            // Real-time updates will be handled by Firestore listener
+            console.log("Bulk action completed, real-time listener will handle refresh");
         } catch (err) {
             setSnackbar({ open: true, message: `Bulk action failed: ${err.message}`, severity: 'error' });
         }
@@ -1471,8 +1471,65 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
     const clearAllFilters = () => {
         setSearch('');
         setClientFilter('');
-        setFilterStatus('all');
         setFilterRole('all');
+    };
+
+    // Client-specific action handlers
+    const handleClientAddUser = (clientName) => {
+        // Navigate to create-user page with client name as URL parameter
+        navigate(`/user-management/create-user?client=${encodeURIComponent(clientName)}`);
+    };
+
+
+    const handleClientImportUsers = (clientName) => {
+        navigate(`/user-management/import?client=${encodeURIComponent(clientName)}`);
+    };
+
+    const handleClientExportUsers = async (clientName) => {
+        try {
+            // Filter users for the specific client
+            const clientUsers = users.filter(user => 
+                user.clientname === clientName || 
+                user.client_name === clientName || 
+                user.companyName === clientName
+            );
+
+            if (clientUsers.length === 0) {
+                showFlashMessage('No users found for this client.', 'warning');
+                return;
+            }
+
+            // Create CSV content
+            const headers = ['Email', 'First Name', 'Last Name', 'Employee ID', 'Contact Number', 'Role', 'Active'];
+            const csvContent = [
+                headers.join(','),
+                ...clientUsers.map(user => [
+                    user.email || '',
+                    user.firstName || '',
+                    user.lastName || '',
+                    user.employeeId || '',
+                    user.contactNumber || '',
+                    user.role || '',
+                    user.active !== false ? 'Yes' : 'No'
+                ].join(','))
+            ].join('\n');
+
+            // Download CSV
+            const blob = new Blob([csvContent], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `${clientName}_users_${new Date().toISOString().split('T')[0]}.csv`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+
+            showFlashMessage(`Exported ${clientUsers.length} users for ${clientName}`, 'success');
+        } catch (error) {
+            console.error('Export failed:', error);
+            showFlashMessage('Export failed. Please try again.', 'error');
+        }
     };
 
     return (
@@ -1496,6 +1553,10 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                     @keyframes pulse {
                         0%, 100% { opacity: 1; }
                         50% { opacity: 0.7; }
+                    }
+                    @keyframes fadeIn {
+                        from { opacity: 0; }
+                        to { opacity: 1; }
                     }
                     .user-card {
                         transition: all 0.3s ease;
@@ -1529,6 +1590,239 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                     .role-site_admin {
                         background-color: #fff3e0;
                         color: #f57c00;
+                    }
+                    
+                    /* Table Styles */
+                    .table-container {
+                        width: 100%;
+                        border-radius: 8px;
+                        background: white;
+                    }
+                    
+                    .table-wrapper {
+                        width: 100%;
+                        overflow-x: auto;
+                        border-radius: 8px;
+                        border: 1px solid #e0e0e0;
+                        background: white;
+                    }
+                    
+                    .user-table {
+                        width: 100%;
+                        min-width: 750px;
+                        border-collapse: collapse;
+                        font-size: 0.8rem;
+                        table-layout: fixed;
+                    }
+                    
+                    .user-table th {
+                        background-color: #f8f9fa;
+                        padding: 8px 12px;
+                        text-align: left;
+                        font-weight: 600;
+                        color: #455a64;
+                        border-bottom: 2px solid #e0e0e0;
+                        border-right: 1px solid #e0e0e0;
+                        white-space: nowrap;
+                    }
+                    
+                    .user-table th:first-child { width: 30px; } /* Checkbox */
+                    .user-table th:nth-child(2) { width: 40px; } /* # */
+                    .user-table th:nth-child(3) { width: 200px; } /* Name - wider for full names */
+                    .user-table th:nth-child(4) { width: 180px; } /* Email - compact but readable */
+                    .user-table th:nth-child(5) { width: 100px; } /* Contact - compact for phone numbers */
+                    .user-table th:nth-child(6) { width: 80px; } /* Role - compact for role badges */
+                    .user-table th:last-child { width: 140px; border-right: none; } /* Actions - wider for buttons */
+                    
+                    .user-table td {
+                        padding: 8px 12px;
+                        border-bottom: 1px solid #e0e0e0;
+                        border-right: 1px solid #e0e0e0;
+                        vertical-align: middle;
+                        max-width: 0;
+                        overflow: hidden;
+                        text-overflow: ellipsis;
+                        white-space: nowrap;
+                    }
+                    
+                    .user-table td:last-child {
+                        border-right: none;
+                        overflow: visible;
+                        white-space: normal;
+                    }
+                    
+                    /* Name column - allow wrapping for long names */
+                    .user-table td:nth-child(3) {
+                        white-space: normal;
+                        overflow: visible;
+                        max-width: none;
+                    }
+                    
+                    /* Email column - allow wrapping for long emails */
+                    .user-table td:nth-child(4) {
+                        white-space: normal;
+                        overflow: visible;
+                        max-width: none;
+                    }
+                    
+                    .user-row:hover {
+                        background-color: #f5f5f5;
+                    }
+                    
+                    .user-row:nth-child(even) {
+                        background-color: #fafafa;
+                    }
+                    
+                    .user-name {
+                        display: flex;
+                        flex-direction: column;
+                    }
+                    
+                    .user-name-primary {
+                        font-weight: 500;
+                        color: #1e293b;
+                    }
+                    
+                    .user-name-secondary {
+                        font-size: 0.75rem;
+                        color: #64748b;
+                    }
+                    
+                    .clickable-name {
+                        transition: all 0.2s ease;
+                    }
+                    
+                    .clickable-name:hover {
+                        color: #1976d2;
+                        text-decoration: underline;
+                    }
+                    
+                    .action-buttons {
+                        display: flex;
+                        gap: 4px;
+                        justify-content: center;
+                    }
+                    
+                    .action-btn {
+                        background: none;
+                        border: none;
+                        padding: 6px;
+                        border-radius: 4px;
+                        cursor: pointer;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        transition: all 0.2s;
+                    }
+                    
+                    .action-btn:hover {
+                        background-color: rgba(0, 0, 0, 0.1);
+                    }
+                    
+                    .action-btn.reset-password {
+                        color: #607d8b;
+                    }
+                    
+                    .action-btn.reset-password:hover {
+                        color: #455a64;
+                        background-color: rgba(96, 125, 139, 0.1);
+                    }
+                    
+                    .action-btn.view {
+                        color: #4caf50;
+                    }
+                    
+                    .action-btn.view:hover {
+                        color: #388e3c;
+                        background-color: rgba(76, 175, 80, 0.1);
+                    }
+                    
+                    .action-btn.edit {
+                        color: #607d8b;
+                    }
+                    
+                    .action-btn.edit:hover {
+                        color: #455a64;
+                        background-color: rgba(96, 125, 139, 0.1);
+                    }
+                    
+                    .action-btn.delete {
+                        color: #e57373;
+                    }
+                    
+                    .action-btn.delete:hover {
+                        color: #f44336;
+                        background-color: rgba(244, 67, 54, 0.1);
+                    }
+                    
+                    .password-notification {
+                        font-size: 0.7rem;
+                        font-weight: 500;
+                        color: #2e7d32;
+                    }
+                    
+                    .checkbox {
+                        width: 16px;
+                        height: 16px;
+                        cursor: pointer;
+                    }
+                    
+                    /* Client Group Styles */
+                    .client-group {
+                        margin-bottom: 16px;
+                        border: 1px solid #e0e0e0;
+                        border-radius: 8px;
+                        overflow: hidden;
+                        background: white;
+                    }
+                    
+                    .client-header {
+                        display: flex;
+                        align-items: center;
+                        justify-content: space-between;
+                        padding: 12px 16px;
+                        background-color: #f8f9fa;
+                        border-bottom: 1px solid #e0e0e0;
+                        transition: background-color 0.2s;
+                    }
+                    
+                    .client-header:hover {
+                        background-color: #eeeeee;
+                    }
+                    
+                    .client-actions {
+                        display: flex;
+                        align-items: center;
+                        gap: 8px;
+                    }
+                    
+                    .client-info {
+                        display: flex;
+                        align-items: center;
+                        gap: 8px;
+                    }
+                    
+                    .client-icon {
+                        color: #1976d2;
+                        font-size: 1rem;
+                    }
+                    
+                    .client-name {
+                        font-weight: 600;
+                        font-size: 1.1rem;
+                        color: #1976d2;
+                    }
+                    
+                    .user-count {
+                        font-size: 0.8rem;
+                        color: #64748b;
+                        margin-left: 8px;
+                    }
+                    
+                    .client-toggle {
+                        display: flex;
+                        align-items: center;
+                        color: #64748b;
                     }
                 `}
             </style>
@@ -1572,79 +1866,6 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                     </Box>
                     
                     {/* Action Buttons */}
-                    <Box sx={{ 
-                        display: 'flex', 
-                        flexDirection: { xs: 'column', sm: 'row' }, 
-                        gap: 1, 
-                        mt: { xs: 2, sm: 0 }
-                    }}>
-                        <Button
-                            variant="contained"
-                            color="primary"
-                            startIcon={<AddIcon sx={{ fontSize: '0.75rem' }} />}
-                            onClick={openAddUserModal}
-                            size="small"
-                            sx={{
-                                borderRadius: 0.5,
-                                textTransform: 'none',
-                                fontWeight: 500,
-                                fontSize: '0.75rem',
-                                px: 1.25,
-                                py: 0.2,
-                                minHeight: '24px',
-                                boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-                                '&:hover': {
-                                    boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
-                                }
-                            }}
-                        >
-                            Add User
-                        </Button>
-                        <Button
-                            variant="outlined"
-                            color="primary"
-                            onClick={openImportModal}
-                            size="small"
-                            sx={{
-                                borderRadius: 0.5,
-                                textTransform: 'none',
-                                fontWeight: 500,
-                                fontSize: '0.75rem',
-                                px: 1.25,
-                                py: 0.2,
-                                minHeight: '24px',
-                                borderWidth: 1,
-                                '&:hover': {
-                                    borderWidth: 1.5,
-                                }
-                            }}
-                        >
-                            Import Users
-                        </Button>
-                        <Button
-                            variant="outlined"
-                            color="primary"
-                            onClick={handleRefresh}
-                            disabled={loading || isRefreshing}
-                            startIcon={isRefreshing ? <CircularProgress size={16} color="primary" /> : <RefreshIcon sx={{ fontSize: '0.75rem' }} />}
-                            size="small"
-                            sx={{
-                                borderRadius: 0.5,
-                                textTransform: 'none',
-                                fontWeight: 500,
-                                fontSize: '0.75rem',
-                                px: 1.25,
-                                py: 0.2,
-                                minHeight: '24px',
-                                borderWidth: 1,
-                                '&:hover': {
-                                    borderWidth: 1.5,
-                                }
-                            }}
-                        >
-                            Refresh
-                        </Button>
-                    </Box>
                 </Box>
                 
                 {/* Stats Cards */}
@@ -1665,28 +1886,20 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                             </Box>
                         </CardContent>
                     </Card>
+                    {/* Hide Total Clients card for site_admin - they shouldn't see client-based information */}
+                    {user.role !== 'site_admin' && (
                     <Card sx={{ borderRadius: 1, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
                             <CardContent sx={{ p: 1.5, display: 'flex', alignItems: 'center' }}>
-                                <Avatar sx={{ bgcolor: '#4caf50', mr: 1.5, width: 32, height: 32 }}>
-                                    <CheckCircleIcon sx={{ fontSize: '1rem' }} />
+                                <Avatar sx={{ bgcolor: '#9c27b0', mr: 1.5, width: 32, height: 32 }}>
+                                    <GroupIcon sx={{ fontSize: '1rem' }} />
                             </Avatar>
                             <Box>
-                                    <Typography variant="caption" color="textSecondary" sx={{ fontSize: '0.7rem' }}>Active Users</Typography>
-                                    <Typography variant="h6" sx={{ fontWeight: 600, fontSize: '1.1rem' }}>{userStats.active}</Typography>
+                                    <Typography variant="caption" color="textSecondary" sx={{ fontSize: '0.7rem' }}>Total Clients</Typography>
+                                    <Typography variant="h6" sx={{ fontWeight: 600, fontSize: '1.1rem' }}>{userStats.totalClients}</Typography>
                             </Box>
                         </CardContent>
                     </Card>
-                    <Card sx={{ borderRadius: 1, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
-                            <CardContent sx={{ p: 1.5, display: 'flex', alignItems: 'center' }}>
-                                <Avatar sx={{ bgcolor: '#f44336', mr: 1.5, width: 32, height: 32 }}>
-                                    <ErrorIcon sx={{ fontSize: '1rem' }} />
-                            </Avatar>
-                            <Box>
-                                    <Typography variant="caption" color="textSecondary" sx={{ fontSize: '0.7rem' }}>Inactive Users</Typography>
-                                    <Typography variant="h6" sx={{ fontWeight: 600, fontSize: '1.1rem' }}>{userStats.inactive}</Typography>
-                            </Box>
-                        </CardContent>
-                    </Card>
+                    )}
                     <Card sx={{ borderRadius: 1, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
                             <CardContent sx={{ p: 1.5, display: 'flex', alignItems: 'center' }}>
                                 <Avatar sx={{ bgcolor: '#ff9800', mr: 1.5, width: 32, height: 32 }}>
@@ -1700,27 +1913,8 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                     </Card>
                 </Box>
                 
-                {/* Tabs and Filters */}
+                {/* Filters */}
                 <Box sx={{ mb: 2 }}>
-                    <Tabs 
-                        value={activeTab} 
-                        onChange={handleTabChange} 
-                        sx={{ 
-                            borderBottom: 1, 
-                            borderColor: 'divider',
-                            '& .MuiTab-root': {
-                                textTransform: 'none',
-                                fontSize: '0.875rem',
-                                minHeight: '40px',
-                            }
-                        }}
-                    >
-                        <Tab label="All Users" />
-                        <Tab label="Active Users" />
-                        <Tab label="Inactive Users" />
-                        <Tab label="Site Admins" />
-                    </Tabs>
-                    
                     <Box sx={{ 
                         display: 'flex', 
                         flexDirection: { xs: 'column', sm: 'row' }, 
@@ -1734,7 +1928,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                             display: 'flex', 
                             alignItems: 'center',
                             gap: 1, 
-                            width: { xs: '100%', sm: 'auto' },
+                            width: '100%',
                             flexGrow: 1,
                             height: '35px'
                         }}>
@@ -1747,7 +1941,8 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                                 placeholder="Search by email, name, employee ID..."
                                 size="small"
                                 sx={{ 
-                                    width: { xs: '100%', sm: 250 },
+                                    flexGrow: 1,
+                                    minWidth: 200,
                                     '& .MuiOutlinedInput-root': {
                                         height: '35px',
                                         fontSize: '0.75rem',
@@ -1771,156 +1966,68 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                             />
                             
                             {user?.role !== 'site_admin' && (
-                                <FormControl size="small" sx={{ minWidth: 120, maxWidth: 150 }}>
-                                    <InputLabel sx={{ fontSize: '0.8rem' }}>Client</InputLabel>
-                                    <Select
+                                <Box sx={{ minWidth: 150, maxWidth: 200 }}>
+                                    <CustomDropdown
                                         value={clientFilter}
-                                        onChange={e => {
-                                            setClientFilter(e.target.value);
+                                        onChange={(value) => {
+                                            setClientFilter(value);
                                             setFiltersChanged(true);
                                         }}
-                                        label="Client"
-                                        sx={{ 
-                                            height: '35px',
-                                            '& .MuiSelect-select': { 
-                                                fontSize: '0.8rem',
-                                                py: 1,
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                height: '35px'
-                                            },
-                                            '& .MuiOutlinedInput-root': {
-                                                height: '35px'
-                                            }
-                                        }}
-                                    >
-                                        <MenuItem value="" sx={{ fontSize: '0.8rem' }}>All Clients</MenuItem>
-                                        {clients.map(client => (
-                                            <MenuItem key={client.id} value={client['Client name'] || client.companyName} sx={{ fontSize: '0.8rem' }}>
-                                                {client['Client name'] || client.companyName}
-                                            </MenuItem>
-                                        ))}
-                                    </Select>
-                                </FormControl>
+                                        options={[
+                                            { value: '', label: 'All Clients' },
+                                            ...clients.map(client => ({
+                                                value: client['Client name'] || client.companyName,
+                                                label: client['Client name'] || client.companyName
+                                            }))
+                                        ]}
+                                        placeholder="Select Client"
+                                        size="sm"
+                                    />
+                                </Box>
                             )}
                             
-                            <FormControl size="small" sx={{ minWidth: 100, maxWidth: 120 }}>
-                                <InputLabel sx={{ fontSize: '0.8rem' }}>Status</InputLabel>
-                                <Select
-                                    value={filterStatus}
-                                    onChange={e => {
-                                        setFilterStatus(e.target.value);
-                                        setFiltersChanged(true);
-                                    }}
-                                    label="Status"
-                                    sx={{ 
-                                        height: '35px',
-                                        '& .MuiSelect-select': { 
-                                            fontSize: '0.8rem',
-                                            py: 1,
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            height: '35px'
-                                        },
-                                        '& .MuiOutlinedInput-root': {
-                                            height: '35px'
-                                        }
-                                    }}
-                                >
-                                    <MenuItem value="all" sx={{ fontSize: '0.8rem' }}>All</MenuItem>
-                                    <MenuItem value="active" sx={{ fontSize: '0.8rem' }}>Active</MenuItem>
-                                    <MenuItem value="inactive" sx={{ fontSize: '0.8rem' }}>Inactive</MenuItem>
-                                </Select>
-                            </FormControl>
                             
-                            <FormControl size="small" sx={{ minWidth: 100, maxWidth: 120 }}>
-                                <InputLabel sx={{ fontSize: '0.8rem' }}>Role</InputLabel>
-                                <Select
+                            <Box sx={{ minWidth: 120, maxWidth: 150 }}>
+                                <CustomDropdown
                                     value={filterRole}
-                                    onChange={e => {
-                                        setFilterRole(e.target.value);
+                                    onChange={(value) => {
+                                        setFilterRole(value);
                                         setFiltersChanged(true);
                                     }}
-                                    label="Role"
-                                    sx={{ 
-                                        height: '35px',
-                                        '& .MuiSelect-select': { 
-                                            fontSize: '0.8rem',
-                                            py: 1,
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            height: '35px'
-                                        },
-                                        '& .MuiOutlinedInput-root': {
-                                            height: '35px'
-                                        }
-                                    }}
-                                >
-                                    <MenuItem value="all" sx={{ fontSize: '0.8rem' }}>All Roles</MenuItem>
-                                    <MenuItem value="user" sx={{ fontSize: '0.8rem' }}>User</MenuItem>
-                                    <MenuItem value="site_admin" sx={{ fontSize: '0.8rem' }}>Site Admin</MenuItem>
-                                </Select>
-                            </FormControl>
+                                    options={[
+                                        { value: 'all', label: 'All Roles' },
+                                        { value: 'user', label: 'User' },
+                                        { value: 'site_admin', label: 'Site Admin' }
+                                    ]}
+                                    placeholder="Select Role"
+                                    size="sm"
+                                />
+                            </Box>
                             
                             {filtersChanged && (
-                            <Button
-                                variant="outlined"
-                                size="small"
+                                <CustomButton
+                                    variant="outline-danger"
+                                    size="sm"
                                     onClick={() => {
                                         clearAllFilters();
                                         setFiltersChanged(false);
                                     }}
-                                sx={{
-                                        height: '35px',
-                                    borderRadius: 1,
-                                    textTransform: 'none',
-                                    fontWeight: 500,
-                                        fontSize: '0.7rem',
-                                    px: 1.5,
-                                    borderWidth: 1,
-                                        color: '#d32f2f',
-                                        borderColor: '#d32f2f',
-                                    '&:hover': {
-                                        borderWidth: 1.5,
-                                            borderColor: '#b71c1c',
-                                            color: '#b71c1c',
-                                        }
-                                    }}
                                 >
                                     Clear Filters
-                                </Button>
+                                </CustomButton>
                             )}
-                            <Button
-                                variant={showCheckboxes ? "contained" : "outlined"}
-                                size="small"
+                            <CustomButton
+                                variant={showCheckboxes ? "danger" : "outline"}
+                                size="sm"
                                 onClick={() => {
                                     setShowCheckboxes(!showCheckboxes);
                                     if (!showCheckboxes) {
                                         setSelectedUsers([]); // Clear selections when hiding
                                     }
                                 }}
-                                sx={{
-                                    height: '35px',
-                                    borderRadius: 1,
-                                    textTransform: 'none',
-                                    fontWeight: 500,
-                                    fontSize: '0.7rem',
-                                    px: 1.5,
-                                    borderWidth: 1,
-                                    ...(showCheckboxes && {
-                                        bgcolor: '#d32f2f',
-                                        color: 'white',
-                                        '&:hover': {
-                                            bgcolor: '#b71c1c',
-                                        }
-                                    }),
-                                    '&:hover': {
-                                        borderWidth: 1.5,
-                                    }
-                                }}
                             >
                                 {showCheckboxes ? 'Cancel Select' : 'Select'}
-                            </Button>
+                            </CustomButton>
                         </Box>
                         
                         {/* View Toggle and Bulk Actions */}
@@ -1931,72 +2038,23 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                         }}>
                             {showCheckboxes && selectedUsers.length > 0 && (
                                 <Box sx={{ display: 'flex', gap: 1 }}>
-                                    <Button
-                                        variant="outlined"
-                                        size="small"
+                                    <CustomButton
+                                        variant="outline"
+                                        size="sm"
                                         onClick={() => openBulkActionModal('resetPassword')}
-                                        sx={{
-                                            borderRadius: 1,
-                                            textTransform: 'none',
-                                            fontWeight: 500,
-                                            fontSize: '0.75rem',
-                                            px: 1.5,
-                                            py: 0.5,
-                                            minHeight: '32px',
-                                            borderWidth: 1,
-                                            '&:hover': {
-                                                borderWidth: 1.5,
-                                            }
-                                        }}
                                     >
                                         Reset Passwords ({selectedUsers.length})
-                                    </Button>
-                                    <Button
-                                        variant="outlined"
-                                        color="error"
-                                        size="small"
+                                    </CustomButton>
+                                    <CustomButton
+                                        variant="outline-danger"
+                                        size="sm"
                                         onClick={() => openBulkActionModal('delete')}
-                                        sx={{
-                                            borderRadius: 1,
-                                            textTransform: 'none',
-                                            fontWeight: 500,
-                                            fontSize: '0.75rem',
-                                            px: 1.5,
-                                            py: 0.5,
-                                            minHeight: '32px',
-                                            borderWidth: 1,
-                                            '&:hover': {
-                                                borderWidth: 1.5,
-                                            }
-                                        }}
                                     >
                                         Delete ({selectedUsers.length})
-                                    </Button>
+                                    </CustomButton>
                                 </Box>
                             )}
                             
-                            <Box sx={{ display: 'flex', border: '1px solid #e0e0e0', borderRadius: 1 }}>
-                                <Tooltip title="List View" placement="top">
-                                    <IconButton 
-                                        size="small" 
-                                        onClick={() => setViewMode('table')}
-                                        color={viewMode === 'table' ? 'primary' : 'default'}
-                                        sx={{ borderRadius: 0 }}
-                                    >
-                                        <ViewListIcon fontSize="small" />
-                                    </IconButton>
-                                </Tooltip>
-                                <Tooltip title="Card View" placement="top">
-                                    <IconButton 
-                                        size="small" 
-                                        onClick={() => setViewMode('cards')}
-                                        color={viewMode === 'cards' ? 'primary' : 'default'}
-                                        sx={{ borderRadius: 0 }}
-                                    >
-                                        <ViewModuleIcon fontSize="small" />
-                                    </IconButton>
-                                </Tooltip>
-                            </Box>
                         </Box>
                     </Box>
                     
@@ -2018,15 +2076,6 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                                 icon={<GroupIcon />}
                                 label={`Client: ${clientFilter}`}
                                 onDelete={clearClientFilter}
-                                size="small"
-                                color="primary"
-                                variant="outlined"
-                            />
-                        )}
-                        {filterStatus !== 'all' && (
-                            <Chip
-                                label={`Status: ${filterStatus}`}
-                                onDelete={() => setFilterStatus('all')}
                                 size="small"
                                 color="primary"
                                 variant="outlined"
@@ -2119,7 +2168,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                                 inputProps={{ style: { fontSize: '0.8rem' } }}
                                 placeholder="Employee ID"
                                 sx={{ minWidth: 150, flex: 1 }}
-                                error={addRowData.employeeId && checkDuplicateEmployeeId(addRowData.employeeId)}
+                                error={!!(addRowData.employeeId && checkDuplicateEmployeeId(addRowData.employeeId))}
                                 helperText={addRowData.employeeId && checkDuplicateEmployeeId(addRowData.employeeId) ? 'Employee ID already exists' : ''}
                             />
                             <TextField
@@ -2293,422 +2342,211 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                                 </Typography>
                             </Box>
                         ) : (
-                            <>
-                                {/* Card View */}
-                                {viewMode === 'cards' && user && (user.role === 'super_admin' || user.role === 'admin') && groupedUsersByClient && (
-                                    <Box sx={{ width: '100%', m: 0, p: 0 }}>
-                                        {groupedUsersByClient.clientGroups.length > 0 && (
-                                            groupedUsersByClient.clientGroups.map(({ clientName, users }, index) => (
-                                                <Box key={clientName} sx={{ mb: 3 }}>
-                                                    <Box 
-                                                        sx={{ 
-                                                            display: 'flex', 
-                                                            alignItems: 'center', 
-                                                            p: 1, 
-                                                            bgcolor: '#f5f5f5', 
-                                                            borderRadius: 1,
-                                                            cursor: 'pointer',
-                                                            '&:hover': { bgcolor: '#eeeeee' }
-                                                        }}
-                                                        onClick={() => handleToggleClientCollapse(clientName)}
-                                                    >
-                                                        <BusinessIcon sx={{ mr: 1, color: '#1976d2', fontSize: '1rem' }} />
-                                                        <Typography variant="subtitle1" sx={{ flexGrow: 1, fontWeight: 500, fontSize: '0.9rem' }}>
-                                                            {clientName}
-                                                        </Typography>
-                                                        <Typography variant="body2" sx={{ mr: 2 }}>
-                                                            {users.length} users
-                                                        </Typography>
-                                                        <IconButton size="small">
-                                                            {collapsedClients[clientName] ? <ExpandMoreIcon /> : <ExpandLessIcon />}
-                                                        </IconButton>
-                                                    </Box>
-                                                    
-                                                    <Collapse in={!collapsedClients[clientName]} timeout="auto" unmountOnExit>
-                                                        <Grid container spacing={2} sx={{ p: 2 }}>
-                                                            {users.map(user => (
-                                                                <Grid item xs={12} sm={6} md={4} lg={3} key={user.uid}>
-                                                                    <Card className="user-card" sx={{ height: '100%' }}>
-                                                                        <CardContent sx={{ pb: 1 }}>
-                                                                            <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                                                                                <Avatar sx={{ mr: 1, bgcolor: '#1976d2' }}>
-                                                                                    {user.firstName ? user.firstName.charAt(0) : user.email.charAt(0)}
-                                                                                </Avatar>
-                                                                                <Box>
-                                                                                    <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-                                                                                        {user.firstName} {user.lastName}
-                                                                                    </Typography>
-                                                                                    <Typography variant="body2" color="textSecondary">
-                                                                                        {user.email}
-                                                                                    </Typography>
-                                                                                </Box>
-                                                                            </Box>
-                                                                            
-                                                                            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: 1 }}>
-                                                                                <Chip 
-                                                                                    label={user.role === 'user' ? 'User' : user.role === 'site_admin' ? 'Site Admin' : user.role}
-                                                                                    size="small"
-                                                                                    className={`role-badge role-${user.role}`}
-                                                                                />
-                                                                                <Chip 
-                                                                                    label={user.employmentType || 'N/A'}
-                                                                                    size="small"
-                                                                                    variant="outlined"
-                                                                                />
-                                                                            </Box>
-                                                                            
-                                                                            <Divider sx={{ my: 1 }} />
-                                                                            
-                                                                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                                                                                <Typography variant="body2">
-                                                                                    <strong>Employee ID:</strong> {user.employeeId || 'N/A'}
-                                                                                </Typography>
-                                                                                <Typography variant="body2">
-                                                                                    <strong>Designation:</strong> {user.designation || 'N/A'}
-                                                                                </Typography>
-                                                                                <Typography variant="body2">
-                                                                                    <strong>Contact:</strong> {user.contactNumber || 'N/A'}
-                                                                                </Typography>
-                                                                                <Typography variant="body2">
-                                                                                    <strong>Manager:</strong> {user.managerEmail || 'N/A'}
-                                                                                </Typography>
-                                                                            </Box>
-                                                                        </CardContent>
-                                                                        <CardActions sx={{ pt: 0, justifyContent: 'flex-end' }}>
-                                                                            <Tooltip title="Reset Password">
-                                                                                <IconButton 
-                                                                                    onClick={() => openChangePwdModal(user.uid)} 
-                                                                                    size="small" 
-                                                                                    sx={{ 
-                                                                                        p: 0.7,
-                                                                                        color: '#607d8b',
-                                                                                        '&:hover': { color: '#455a64', bgcolor: 'rgba(96, 125, 139, 0.1)' }
-                                                                                    }}
-                                                                                >
-                                                                                    <LockResetIcon fontSize="small" />
-                                                                                </IconButton>
-                                                                            </Tooltip>
-                                                                            <Tooltip title="Edit">
-                                                                                <IconButton 
-                                                                                    onClick={() => handleEditClick(user)} 
-                                                                                    size="small" 
-                                                                                    sx={{ 
-                                                                                        p: 0.7,
-                                                                                        color: '#607d8b',
-                                                                                        '&:hover': { color: '#455a64', bgcolor: 'rgba(96, 125, 139, 0.1)' }
-                                                                                    }}
-                                                                                >
-                                                                                    <EditIcon fontSize="small" />
-                                                                                </IconButton>
-                                                                            </Tooltip>
-                                                                            <Tooltip title="Delete">
-                                                                                <IconButton 
-                                                                                    onClick={(event) => handleDeleteClick(event, user.uid, user.email)} 
-                                                                                    size="small" 
-                                                                                    sx={{ 
-                                                                                        p: 0.7,
-                                                                                        color: '#e57373',
-                                                                                        '&:hover': { color: '#f44336', bgcolor: 'rgba(244, 67, 54, 0.1)' }
-                                                                                    }}
-                                                                                >
-                                                                                    <DeleteIcon fontSize="small" />
-                                                                                </IconButton>
-                                                                            </Tooltip>
-                                                                        </CardActions>
-                                                                    </Card>
-                                                                </Grid>
-                                                            ))}
-                                                        </Grid>
-                                                    </Collapse>
-                                                </Box>
-                                            ))
-                                        )}
-                                    </Box>
-                                )}
-                                
-                                {/* Table View */}
-                                {(viewMode === 'table' || !user || user.role === 'site_admin') && (
-                                    <Box sx={{ width: '100%' }}>
-                                        {filteredUsers.length === 0 ? (
-                                            <Box sx={{ p: 4, textAlign: 'center' }}>
-                                                <Typography variant="body2" color="textSecondary">
-                                                    No user profiles found.
-                                                </Typography>
-                                            </Box>
-                                        ) : (
-                                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                                                {/* Client Groups */}
-                                                {groupedUsersByClient.clientGroups.map(({ clientName, users }, groupIndex) => (
-    <Box key={clientName} sx={{ mb: 2 }}>
-        <Box 
-            sx={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                p: 1, 
-                bgcolor: '#f5f5f5', 
-                borderRadius: 1,
-                cursor: 'pointer',
-                border: '1px solid #e0e0e0',
-                '&:hover': { bgcolor: '#eeeeee' }
-            }}
-            onClick={() => handleToggleClientCollapse(clientName)}
-        >
-            <BusinessIcon sx={{ mr: 1, color: '#1976d2', fontSize: '1rem' }} />
-            <Typography variant="subtitle1" sx={{ flexGrow: 1, fontWeight: 500, fontSize: '0.9rem' }}>
-                {clientName}
-            </Typography>
-            <Typography variant="body2" sx={{ mr: 2 }}>
-                {users.length} users
-            </Typography>
-            <IconButton size="small">
-                {collapsedClients[clientName] ? <ExpandMoreIcon /> : <ExpandLessIcon />}
-            </IconButton>
-        </Box>
-        
-        <Collapse in={!collapsedClients[clientName]} timeout="auto" unmountOnExit>
-            <TableContainer sx={{ 
-                width: '100%',
-                overflowX: 'auto',
-                '&::-webkit-scrollbar': {
-                    height: '8px',
-                },
-                '&::-webkit-scrollbar-track': {
-                    backgroundColor: '#f1f1f1',
-                    borderRadius: '4px',
-                },
-                '&::-webkit-scrollbar-thumb': {
-                    backgroundColor: '#c1c1c1',
-                    borderRadius: '4px',
-                    '&:hover': {
-                        backgroundColor: '#a8a8a8',
-                    },
-                },
-            }}>
-                <Table size="small" sx={{ 
-                    minWidth: { xs: '800px', sm: '900px', md: '1000px' }, 
-                    borderCollapse: 'collapse',
-                    width: '100%'
-                }}>
-                    <TableHead sx={{ bgcolor: '#ffffff' }}>
-                        <TableRow>
+                            <div className="table-container">
+                                {groupedUsersByClient.map(({ clientName, users }, groupIndex) => (
+                                    <div key={clientName} className="client-group">
+                                        <div className="client-header">
+                                            <div className="client-info" onClick={() => handleToggleClientCollapse(clientName)}>
+                                                <span className="client-name">{clientName}</span>
+                                                <span className="user-count">{users.length} users</span>
+                                            </div>
+                                            <div className="client-actions">
+                                                <ClientActionDropdown
+                                                    clientName={clientName}
+                                                    onAddUser={() => handleClientAddUser(clientName)}
+                                                    onImportUsers={() => handleClientImportUsers(clientName)}
+                                                    onExportUsers={() => handleClientExportUsers(clientName)}
+                                                />
+      <div
+          onClick={() => handleToggleActionsColumn(clientName)}
+          className={`inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded transition-all duration-200 ease-in-out cursor-pointer ${
+              showActionsColumn[clientName]
+                  ? 'text-red-600 hover:text-red-700 hover:bg-red-50'
+                  : 'text-purple-600 hover:text-purple-700 hover:bg-purple-50'
+          }`}
+      >
+          <AdminIcon sx={{ fontSize: '16px' }} />
+          {showActionsColumn[clientName] ? 'Cancel' : 'Manage'}
+      </div>
+                                                <div className="client-toggle" onClick={() => handleToggleClientCollapse(clientName)}>
+                                                    {collapsedClients[clientName] ? <ExpandMoreIcon /> : <ExpandLessIcon />}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        {!collapsedClients[clientName] && (
+                                            <div className="table-wrapper">
+                                                <table className="user-table">
+                                                    <thead>
+                                                        <tr>
                             {showCheckboxes && (
-                            <TableCell padding="checkbox" sx={{ py: 0.4, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
-                                <Checkbox
+                                                                <th style={{ width: '30px', minWidth: '30px', maxWidth: '30px' }}>
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        className="checkbox"
                                         checked={users.length > 0 && users.every(u => selectedUsers.includes(u.uid))}
-                                        indeterminate={users.some(u => selectedUsers.includes(u.uid)) && !users.every(u => selectedUsers.includes(u.uid))}
                                     onChange={() => {
-                                            const currentUserIds = users.map(u => u.uid);
-                                            const allSelected = users.every(u => selectedUsers.includes(u.uid));
-                                            
-                                            if (allSelected) {
-                                                // Deselect all users in this group
-                                                setSelectedUsers(selectedUsers.filter(id => !currentUserIds.includes(id)));
+                                                                            if (users.every(u => selectedUsers.includes(u.uid))) {
+                                                                                setSelectedUsers(selectedUsers.filter(id => !users.map(u => u.uid).includes(id)));
                                         } else {
-                                                // Select all users in this group
-                                                const newSelectedUsers = [...selectedUsers];
-                                                currentUserIds.forEach(id => {
-                                                    if (!newSelectedUsers.includes(id)) {
-                                                        newSelectedUsers.push(id);
-                                                    }
-                                                });
-                                                setSelectedUsers(newSelectedUsers);
+                                                                                setSelectedUsers([...selectedUsers, ...users.map(u => u.uid)]);
                                         }
                                     }}
                                 />
-                            </TableCell>
-                            )}
-                            <TableCell sx={{ py: 0.4, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
-                                #
-                            </TableCell>
-                            {!(user && user.role === 'site_admin') && (
-                                <TableCell sx={{ py: 0.4, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
-                                    Company Name
-                                </TableCell>
-                            )}
-                            <TableCell sx={{ py: 0.4, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
-                                Name
-                            </TableCell>
-                            <TableCell sx={{ py: 0.4, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
-                                Employee ID
-                            </TableCell>
-                            <TableCell sx={{ py: 0.4, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
-                                Designation
-                            </TableCell>
-                            <TableCell sx={{ py: 0.4, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
-                                Email
-                            </TableCell>
-                            <TableCell sx={{ py: 0.4, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
-                                Contact
-                            </TableCell>
-                            <TableCell sx={{ py: 0.4, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
-                                Manager
-                            </TableCell>
-                            <TableCell sx={{ py: 0.4, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
-                                Role
-                            </TableCell>
-                            <TableCell align="right" sx={{ py: 0.4, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem' }}>
-                                Actions
-                            </TableCell>
-                        </TableRow>
-                    </TableHead>
-                    <TableBody>
+                                                                </th>
+                                                            )}
+                                                            <th style={{ width: '40px', minWidth: '40px', maxWidth: '40px' }}>#</th>
+                                                            <th style={{ 
+                                                                width: showActionsColumn[clientName] ? '160px' : '200px', 
+                                                                minWidth: showActionsColumn[clientName] ? '160px' : '200px' 
+                                                            }}>Name</th>
+                                                            <th style={{ 
+                                                                width: showActionsColumn[clientName] ? '140px' : '180px', 
+                                                                minWidth: showActionsColumn[clientName] ? '140px' : '180px' 
+                                                            }}>Email</th>
+                                                            <th style={{ 
+                                                                width: showActionsColumn[clientName] ? '80px' : '100px', 
+                                                                minWidth: showActionsColumn[clientName] ? '80px' : '100px',
+                                                                maxWidth: showActionsColumn[clientName] ? '80px' : '100px'
+                                                            }}>Contact</th>
+                                                            <th style={{ 
+                                                                width: showActionsColumn[clientName] ? '60px' : '80px', 
+                                                                minWidth: showActionsColumn[clientName] ? '60px' : '80px',
+                                                                maxWidth: showActionsColumn[clientName] ? '60px' : '80px'
+                                                            }}>Role</th>
+                                                            {showActionsColumn[clientName] && (
+                                                                <th style={{ width: '120px', minWidth: '120px', textAlign: 'center' }}>Actions</th>
+                                                            )}
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
                         {users.map((u, i) => (
-                            <TableRow 
-                                key={u.uid}
-                                hover
-                                sx={{ 
-                                    bgcolor: '#ffffff',
-                                    '&:hover': { bgcolor: '#f5f5f5' }
-                                }}
-                            >
+                                                            <tr key={u.uid} className="user-row">
                                 {showCheckboxes && (
-                                <TableCell padding="checkbox" sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
-                                    <Checkbox
+                                                                    <td style={{ width: '30px', minWidth: '30px', maxWidth: '30px' }}>
+                                                                        <input
+                                                                            type="checkbox"
+                                                                            className="checkbox"
                                         checked={selectedUsers.includes(u.uid)}
                                         onChange={() => handleSelectUser(u.uid)}
                                     />
-                                </TableCell>
-                                )}
-                                <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
-                                    {i + 1}
-                                </TableCell>
-                                {!(user && user.role === 'site_admin') && (
-                                    <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
-                                        {u.companyName || u.client_name || '-'}
-                                    </TableCell>
-                                )}
-                                <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
-                                    <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-                                        <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                                                                    </td>
+                                                                )}
+                                                                <td style={{ width: '40px', minWidth: '40px', maxWidth: '40px' }}>{i + 1}</td>
+                                                                <td style={{ 
+                                                                    width: showActionsColumn[clientName] ? '160px' : '200px', 
+                                                                    minWidth: showActionsColumn[clientName] ? '160px' : '200px' 
+                                                                }}>
+                                                                    <div 
+                                                                        className="user-name clickable-name" 
+                                                                        onClick={() => handleViewUser(u)}
+                                                                        style={{ cursor: 'pointer' }}
+                                                                    >
+                                                                        <div className="user-name-primary" style={{ 
+                                                                            overflow: 'hidden', 
+                                                                            textOverflow: 'ellipsis', 
+                                                                            whiteSpace: 'nowrap' 
+                                                                        }}>
                                             {u.firstName || (u.name ? u.name.split(' ')[0] : '')}
-                                        </Typography>
-                                        <Typography variant="body2" color="textSecondary">
+                                                                        </div>
+                                                                        <div className="user-name-secondary" style={{ 
+                                                                            overflow: 'hidden', 
+                                                                            textOverflow: 'ellipsis', 
+                                                                            whiteSpace: 'nowrap' 
+                                                                        }}>
                                             {u.lastName || (u.name ? u.name.split(' ').slice(1).join(' ') : '')}
-                                        </Typography>
-                                    </Box>
-                                </TableCell>
-                                <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
-                                    {u.employeeId || '-'}
-                                </TableCell>
-                                <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
-                                    {u.designation || '-'}
-                                </TableCell>
-                                <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
-                                    {u.email}
-                                </TableCell>
-                                <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
-                                    {u.contactNumber || '-'}
-                                </TableCell>
-                                <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
-                                    {u.managerEmail || '-'}
-                                </TableCell>
-                                <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0' }}>
-                                    <Chip 
-                                        label={u.role === 'user' ? 'User' : u.role === 'site_admin' ? 'Site Admin' : u.role || 'User'} 
-                                        size="small" 
-                                        color={u.role === 'site_admin' ? 'primary' : u.role === 'user' ? 'secondary' : 'default'} 
-                                        sx={{ 
-                                            fontSize: '0.7rem', 
-                                            height: 22,
-                                            fontWeight: 500,
-                                            '&.MuiChip-colorPrimary': { bgcolor: '#e3f2fd', color: '#1976d2' },
-                                            '&.MuiChip-colorSecondary': { bgcolor: '#e8f5e9', color: '#388e3c' }
-                                        }} 
-                                    />
-                                </TableCell>
-                                <TableCell align="right" sx={{ py: 0.4, px: 2 }}>
-                                    {passwordChangeNotifications[u.uid] ? (
-                                        <Typography 
-                                            variant="body2" 
-                                            sx={{ 
-                                                fontSize: '0.7rem',
-                                                color: passwordChangeNotifications[u.uid].message.includes('success') ? '#2e7d32' : '#d32f2f',
-                                                fontWeight: 500,
-                                                textAlign: 'right',
-                                                py: 0.5
-                                            }}
-                                        >
-                                            {passwordChangeNotifications[u.uid].message}
-                                        </Typography>
-                                    ) : (
-                                        <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-                                            <Tooltip title="Reset Password">
-                                                <IconButton 
-                                                    onClick={() => openChangePwdModal(u.uid)} 
-                                                    size="small" 
-                                                    sx={{ 
-                                                        p: 0.7,
-                                                        color: '#607d8b',
-                                                        '&:hover': { color: '#455a64', bgcolor: 'rgba(96, 125, 139, 0.1)' }
-                                                    }}
-                                                >
-                                                    <LockResetIcon fontSize="small" />
-                                                </IconButton>
-                                            </Tooltip>
-                                            <Tooltip title="Edit">
-                                                <IconButton 
-                                                    onClick={() => handleEditClick(u)} 
-                                                    size="small" 
-                                                    sx={{ 
-                                                        p: 0.7,
-                                                        color: '#607d8b',
-                                                        '&:hover': { color: '#455a64', bgcolor: 'rgba(96, 125, 139, 0.1)' }
-                                                    }}
-                                                >
-                                                    <EditIcon fontSize="small" />
-                                                </IconButton>
-                                            </Tooltip>
-                                            <Tooltip title="Delete">
-                                                <IconButton 
-                                                    onClick={(event) => handleDeleteClick(event, u.uid, u.email)} 
-                                                    size="small" 
-                                                    sx={{ 
-                                                        p: 0.7,
-                                                        color: '#e57373',
-                                                        '&:hover': { color: '#f44336', bgcolor: 'rgba(244, 67, 54, 0.1)' }
-                                                    }}
-                                                >
-                                                    <DeleteIcon fontSize="small" />
-                                                </IconButton>
-                                            </Tooltip>
-                                        </Box>
-                                    )}
-                                </TableCell>
-                            </TableRow>
-                        ))}
-                    </TableBody>
-                </Table>
-            </TableContainer>
-        </Collapse>
-    </Box>
-))}
-                                   
-                                               
-
-                                            </Box>
+                                                                        </div>
+                                                                    </div>
+                                                                </td>
+                                                                <td style={{ 
+                                                                    width: showActionsColumn[clientName] ? '140px' : '180px', 
+                                                                    minWidth: showActionsColumn[clientName] ? '140px' : '180px' 
+                                                                }}>
+                                                                    <div style={{ 
+                                                                        overflow: 'hidden', 
+                                                                        textOverflow: 'ellipsis', 
+                                                                        whiteSpace: 'nowrap' 
+                                                                    }} title={u.email}>
+                                                                        {u.email}
+                                                                    </div>
+                                                                </td>
+                                                                <td style={{ 
+                                                                    width: showActionsColumn[clientName] ? '80px' : '100px', 
+                                                                    minWidth: showActionsColumn[clientName] ? '80px' : '100px',
+                                                                    maxWidth: showActionsColumn[clientName] ? '80px' : '100px'
+                                                                }}>
+                                                                    <div style={{ 
+                                                                        overflow: 'hidden', 
+                                                                        textOverflow: 'ellipsis', 
+                                                                        whiteSpace: 'nowrap' 
+                                                                    }} title={u.contactNumber || '-'}>
+                                                                        {u.contactNumber || '-'}
+                                                                    </div>
+                                                                </td>
+                                                                <td style={{ 
+                                                                    width: showActionsColumn[clientName] ? '60px' : '80px', 
+                                                                    minWidth: showActionsColumn[clientName] ? '60px' : '80px',
+                                                                    maxWidth: showActionsColumn[clientName] ? '60px' : '80px'
+                                                                }}>
+                                                                    <span className={`role-badge role-${u.role}`} style={{ 
+                                                                        fontSize: showActionsColumn[clientName] ? '10px' : '12px',
+                                                                        padding: showActionsColumn[clientName] ? '2px 6px' : '4px 8px'
+                                                                    }}>
+                                                                        {u.role === 'user' ? 'User' : u.role === 'site_admin' ? 'Site Admin' : u.role || 'User'}
+                                                                    </span>
+                                                                </td>
+                                                                {showActionsColumn[clientName] && (
+                                                                    <td style={{ 
+                                                                        width: '120px', 
+                                                                        minWidth: '120px',
+                                                                        textAlign: 'center'
+                                                                    }}>
+                                        {passwordChangeNotifications[u.uid] ? (
+                                                                            <span className="password-notification">
+                                                {passwordChangeNotifications[u.uid].message}
+                                                                            </span>
+                                                                        ) : (
+                                                                            <div className="action-buttons">
+                                                                                <TooltipBubble title="View User">
+                                                                                    <button
+                                                                                        className="action-btn view"
+                                                        onClick={() => handleViewUser(u)} 
+                                                                                    >
+                                                                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                                                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                                                                                            <circle cx="12" cy="12" r="3"/>
+                                                                                        </svg>
+                                                                                    </button>
+                                                                                </TooltipBubble>
+                                                                                <TooltipBubble title="Edit User">
+                                                                                    <button
+                                                                                        className="action-btn edit"
+                                                        onClick={() => handleEditClick(u)} 
+                                                                                    >
+                                                                                        <EditIcon fontSize="small" />
+                                                                                    </button>
+                                                                                </TooltipBubble>
+                                                                                <TooltipBubble title="Delete User">
+                                                                                    <button
+                                                                                        className="action-btn delete"
+                                                        onClick={(event) => handleDeleteClick(event, u.uid, u.email)} 
+                                                                                    >
+                                                                                        <DeleteIcon fontSize="small" />
+                                                                                    </button>
+                                                                                </TooltipBubble>
+                                                                            </div>
+                                                                        )}
+                                                                    </td>
+                                                                )}
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
                                         )}
-                                    </Box>
-                                )}
-                                {filteredUsers.length > 10 && (
-                                    <TablePagination
-                                        rowsPerPageOptions={[5, 10, 25, 50]}
-                                        component="div"
-                                        count={filteredUsers.length}
-                                        rowsPerPage={rowsPerPage}
-                                        page={page}
-                                        onPageChange={handleChangePage}
-                                        onRowsPerPageChange={handleChangeRowsPerPage}
-                                        sx={{
-                                            '.MuiTablePagination-selectLabel, .MuiTablePagination-displayedRows': {
-                                                fontSize: '0.8rem'
-                                            },
-                                            '.MuiTablePagination-toolbar': {
-                                                minHeight: '40px'
-                                            }
-                                        }}
-                                    />
-                                )}
-                            </>
+                                    </div>
+                                ))}
+                            </div>
                         )}
                     </Paper>
                 )}
@@ -2817,6 +2655,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                                             required
                                             size="small"
                                             fullWidth
+                                            disabled={!!selectedClientForAction}
                                             InputProps={{
                                                 startAdornment: <InputAdornment position="start"><BusinessIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
                                             }}
@@ -2839,6 +2678,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                                                     }
                                                 }
                                             }}
+                                            helperText={selectedClientForAction ? `Pre-filled for ${selectedClientForAction}` : ''}
                                         >
                                             <MenuItem value="" disabled sx={{ fontSize: '0.85rem' }}>Select Company</MenuItem>
                                             {previousClientsRef.current.map(c => (
@@ -2857,7 +2697,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                                         required 
                                         size="small"
                                         fullWidth
-                                        error={addUserData.employeeId && checkDuplicateEmployeeId(addUserData.employeeId)}
+                                        error={!!(addUserData.employeeId && checkDuplicateEmployeeId(addUserData.employeeId))}
                                         helperText={addUserData.employeeId && checkDuplicateEmployeeId(addUserData.employeeId) ? 'Employee ID already exists' : ''}
                                         InputProps={{
                                             startAdornment: <InputAdornment position="start"><BadgeIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
@@ -3163,36 +3003,22 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                     </DialogContent>
                     
                     <DialogActions sx={{ py: 2, px: 3, bgcolor: '#f8f9fa', borderTop: '1px solid #e0e0e0' }}>
-                        <Button 
+                        <CustomButton 
                             onClick={closeAddUserModal} 
-                            variant="outlined" 
-                            size="small"
-                            sx={{ 
-                                borderColor: '#ff6b35',
-                                color: '#ff6b35',
-                                '&:hover': {
-                                    borderColor: '#e55a2b',
-                                    bgcolor: '#fff3e0'
-                                }
-                            }}
+                            variant="outline" 
+                            size="sm"
                         >
                             Cancel
-                        </Button>
-                        <Button 
+                        </CustomButton>
+                        <CustomButton 
                             type="submit" 
-                            variant="contained" 
-                            size="small"
+                            variant="primary" 
+                            size="sm"
                             onClick={handleAddUserSave}
                             startIcon={<PersonIcon />}
-                            sx={{ 
-                                bgcolor: '#ff6b35',
-                                '&:hover': {
-                                    bgcolor: '#e55a2b'
-                                }
-                            }}
                         >
                             Add User
-                        </Button>
+                        </CustomButton>
                     </DialogActions>
                 </Dialog>
                 
@@ -3500,17 +3326,16 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                     </DialogContent>
                     
                     <DialogActions sx={{ py: 2, px: 3, bgcolor: '#f5f5f5' }}>
-                        <Button onClick={handleEditCancel} variant="outlined" size="small">
+                        <CustomButton onClick={handleEditCancel} variant="outline" size="sm">
                             Cancel
-                        </Button>
-                        <Button 
+                        </CustomButton>
+                        <CustomButton 
                             onClick={() => handleEditSave(editRowId)} 
-                            variant="contained" 
-                            color="primary" 
-                            size="small"
+                            variant="primary" 
+                            size="sm"
                         >
                             Save Changes
-                        </Button>
+                        </CustomButton>
                     </DialogActions>
                 </Dialog>
                 
@@ -3691,9 +3516,9 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                         {!importResults && !importedUsers.length && (
                             <>
                                 <Box sx={{ mt: 2 }}>
-                                    <Button onClick={handleDownloadTemplate} variant="outlined" size="small" sx={{ mb: 1, width: 'fit-content' }}>
+                                    <CustomButton onClick={handleDownloadTemplate} variant="outline" size="sm" className="mb-1 w-fit">
                                         Download CSV Template
-                                    </Button>
+                                    </CustomButton>
                                 </Box>
                                 <Box sx={{ 
                                     border: '2px dashed #ccc', 
@@ -3866,42 +3691,40 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                     <DialogActions sx={{ py: 1, px: 2 }}>
                         {importResults && importedPasswords.length > 0 && !credentialsDownloaded ? (
                             <>
-                                <Button 
+                                <CustomButton 
                                     onClick={() => setShowCloseConfirmation(true)} 
-                                    size="small" 
-                                    color="error"
+                                    size="sm" 
+                                    variant="danger"
                                 >
                                     Close Anyway
-                                </Button>
-                                <Button 
+                                </CustomButton>
+                                <CustomButton 
                                     onClick={handleDownloadCredentials} 
-                                    variant="contained" 
-                                    color="primary" 
-                                    size="small"
+                                    variant="primary" 
+                                    size="sm"
                                 >
                                     Download User Credentials
-                                </Button>
+                                </CustomButton>
                             </>
                         ) : importResults && importedPasswords.length > 0 && credentialsDownloaded ? (
                             <>
-                                <Button onClick={closeImportModal} size="small" color="primary">
+                                <CustomButton onClick={closeImportModal} size="sm" variant="primary">
                                     Close
-                                </Button>
+                                </CustomButton>
                             </>
                         ) : (
                             <>
-                                <Button onClick={closeImportModal} size="small" color="error">
+                                <CustomButton onClick={closeImportModal} size="sm" variant="danger">
                                     Cancel
-                                </Button>
-                                <Button 
+                                </CustomButton>
+                                <CustomButton 
                                     onClick={handleConfirmImport} 
-                                    variant="contained" 
-                                    color="primary" 
-                                    size="small" 
+                                    variant="primary" 
+                                    size="sm" 
                                     disabled={importedUsers.length === 0 || !!importResults}
                                 >
                                     Confirm Import
-                                </Button>
+                                </CustomButton>
                             </>
                         )}
                     </DialogActions>
@@ -3959,38 +3782,20 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                     </DialogContent>
                     
                     <DialogActions sx={{ py: 2, px: 3, bgcolor: '#f8f9fa', borderTop: '1px solid #e0e0e0' }}>
-                        <Button 
+                        <CustomButton 
                             onClick={closeBulkActionModal} 
-                            variant="outlined" 
-                            size="small"
-                            sx={{ 
-                                textTransform: 'none', 
-                                fontSize: '0.85rem',
-                                borderRadius: 1,
-                                px: 2
-                            }}
+                            variant="outline" 
+                            size="sm"
                         >
                             Cancel
-                        </Button>
-                        <Button 
+                        </CustomButton>
+                        <CustomButton 
                             onClick={handleBulkAction} 
-                            variant="contained" 
-                            color={bulkAction === 'delete' ? 'error' : 'primary'} 
-                            size="small"
-                            autoFocus
-                            sx={{ 
-                                textTransform: 'none', 
-                                fontSize: '0.85rem',
-                                borderRadius: 1,
-                                px: 2,
-                                boxShadow: 'none',
-                                '&:hover': {
-                                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-                                }
-                            }}
+                            variant={bulkAction === 'delete' ? 'danger' : 'primary'} 
+                            size="sm"
                         >
                             {bulkAction === 'delete' ? 'Delete Users' : 'Reset Passwords'}
-                        </Button>
+                        </CustomButton>
                     </DialogActions>
                 </Dialog>
                 
@@ -4138,4 +3943,17 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
     );
 };
 
-export default UserManagementComponent;
+UserManagementComponent.displayName = 'UserManagementComponent';
+
+// Custom comparison function to prevent unnecessary re-renders
+const arePropsEqual = (prevProps, nextProps) => {
+    // Only re-render if user ID, role, or company name changes
+    // Ignore showFlashMessage as it's recreated on every parent render
+    return (
+        prevProps.user?.uid === nextProps.user?.uid &&
+        prevProps.user?.role === nextProps.user?.role &&
+        prevProps.user?.companyName === nextProps.user?.companyName
+    );
+};
+
+export default React.memo(UserManagementComponent, arePropsEqual);

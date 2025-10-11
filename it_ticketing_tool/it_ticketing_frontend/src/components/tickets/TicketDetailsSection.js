@@ -282,7 +282,7 @@ const TicketDetailsSection = ({
 
     return (
         <div className="bg-white p-3 sm:p-4 w-full min-w-0 max-w-full overflow-x-hidden">
-            <div className="mb-3 sm:mb-4 flex items-center justify-between gap-2">
+            <div className="mb-3 sm:mb-4 flex items-center gap-2">
                 <div className="flex items-center gap-2">
                     <div className="w-1 h-5 bg-gradient-to-b from-blue-600 to-blue-800 rounded-full"></div>
                     <span className="text-xs sm:text-sm font-bold">Ticket Details</span>

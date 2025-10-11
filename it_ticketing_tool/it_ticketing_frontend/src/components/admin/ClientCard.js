@@ -257,7 +257,7 @@ const ClientCard = ({ client, index, onEdit, onRemove, showEdit, showRemove, use
         
         <Box display="flex" alignItems="center" gap={1} sx={{ pl: 1 }}>
           <BusinessIcon sx={{ color: 'primary.main', fontSize: '1.1rem' }} />
-          <Typography variant="h6" sx={{ fontWeight: 700, fontSize: '0.85rem', minWidth: 100 }}>
+          <Typography variant="h6" sx={{ fontWeight: 700, fontSize: '0.85rem', minWidth: 100, color: '#1e293b' }}>
             {client.companyName || '-'}
           </Typography>
         </Box>

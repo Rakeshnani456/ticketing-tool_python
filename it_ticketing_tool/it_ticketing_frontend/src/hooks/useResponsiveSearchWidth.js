@@ -30,23 +30,23 @@ export const useResponsiveSearchWidth = (userRole, screenWidth) => {
                 // Admin roles have more navigation items (Dashboard + Management + Search + Create)
                 // More space needed for navigation, less for search
                 baseWidths = {
-                    lg: Math.min(350, Math.max(200, screenWidth * 0.25)),
-                    md: Math.min(280, Math.max(180, screenWidth * 0.3)),
-                    sm: Math.min(200, Math.max(150, screenWidth * 0.35))
+                    lg: Math.min(450, Math.max(300, screenWidth * 0.35)),
+                    md: Math.min(380, Math.max(250, screenWidth * 0.4)),
+                    sm: Math.min(300, Math.max(200, screenWidth * 0.45))
                 };
             } else if (isSupport) {
                 // Support has Dashboard + Search + Create
                 baseWidths = {
-                    lg: Math.min(400, Math.max(250, screenWidth * 0.3)),
-                    md: Math.min(320, Math.max(200, screenWidth * 0.35)),
-                    sm: Math.min(250, Math.max(180, screenWidth * 0.4))
+                    lg: Math.min(500, Math.max(350, screenWidth * 0.4)),
+                    md: Math.min(420, Math.max(300, screenWidth * 0.45)),
+                    sm: Math.min(350, Math.max(250, screenWidth * 0.5))
                 };
             } else {
-                // Regular users have only Search + Create
+                // Regular users have only Search + Create - use same width as site admin
                 baseWidths = {
-                    lg: Math.min(500, Math.max(300, screenWidth * 0.4)),
-                    md: Math.min(400, Math.max(250, screenWidth * 0.45)),
-                    sm: Math.min(300, Math.max(200, screenWidth * 0.5))
+                    lg: Math.min(450, Math.max(300, screenWidth * 0.35)),
+                    md: Math.min(380, Math.max(250, screenWidth * 0.4)),
+                    sm: Math.min(300, Math.max(200, screenWidth * 0.45))
                 };
             }
 

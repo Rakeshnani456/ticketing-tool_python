@@ -1,6 +1,9 @@
 // src/components/PersonalNotesComponent.js
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
+import { useNavigate } from 'react-router-dom';
+import CustomDropdown from './common/CustomDropdown';
 import { 
     Plus, 
     Search, 
@@ -15,11 +18,195 @@ import {
     Calendar,
     Tag,
     MoreVertical,
-    Loader2
+    Loader2,
+    Eye,
+    Clock
 } from 'lucide-react';
 
-// Add custom styles for line clamping and button overrides
+// Optimized styles for clean note card layout
 const styles = `
+    /* Container and layout */
+    .personal-notes-container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 16px;
+        width: 100%;
+        box-sizing: border-box;
+    }
+    
+    /* Note card container */
+    .personal-notes-container .note-card {
+        width: 100%;
+        max-width: 100%;
+        box-sizing: border-box;
+        margin-bottom: 12px;
+        overflow: hidden;
+        border-radius: 8px;
+        transition: all 0.2s ease;
+    }
+    
+    .personal-notes-container .note-card:hover {
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+    
+    /* Main flex container for note content */
+    .personal-notes-container .note-card .flex {
+        display: flex;
+        align-items: stretch;
+        gap: 12px;
+        width: 100%;
+        min-height: 100px;
+    }
+    
+    /* Content area - takes up most space */
+    .personal-notes-container .note-content {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        justify-content: space-between;
+    }
+    
+    /* Note title */
+    .personal-notes-container .note-content h3 {
+        font-size: 14px;
+        font-weight: 600;
+        color: #1f2937;
+        margin: 0;
+        line-height: 1.4;
+        word-break: break-word;
+        overflow: hidden;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        transition: color 0.2s ease;
+    }
+    
+    /* Hover effects for note title */
+    .personal-notes-container .note-card:hover .note-content h3 {
+        color: #3b82f6;
+    }
+    
+    .personal-notes-container .note-content h3:hover {
+        color: #3b82f6;
+        text-decoration: underline;
+    }
+    
+    /* Note content text */
+    .personal-notes-container .note-content .line-clamp-2 {
+        font-size: 12px;
+        color: #6b7280;
+        line-height: 1.4;
+        margin: 0;
+        word-break: break-word;
+        overflow: hidden;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+    }
+    
+    /* Date container at bottom */
+    .personal-notes-container .note-content .date-container {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-top: auto;
+        gap: 8px;
+        flex-shrink: 0;
+    }
+    
+    /* Created date */
+    .personal-notes-container .note-content .created-date {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 11px;
+        color: #9ca3af;
+        flex-shrink: 0;
+    }
+    
+    .personal-notes-container .note-content .created-date svg {
+        width: 12px;
+        height: 12px;
+        flex-shrink: 0;
+    }
+    
+    /* Updated date */
+    .personal-notes-container .note-content .updated-date {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 11px;
+        color: #9ca3af;
+        flex-shrink: 0;
+    }
+    
+    .personal-notes-container .note-content .updated-date svg {
+        width: 12px;
+        height: 12px;
+        flex-shrink: 0;
+    }
+    
+    /* Actions area - positioned at bottom right */
+    .personal-notes-container .note-actions {
+        flex-shrink: 0;
+        width: 120px;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        justify-content: flex-end;
+        gap: 8px;
+        align-self: stretch;
+    }
+    
+    /* Category tag */
+    .personal-notes-container .note-actions .category-tag {
+        font-size: 10px;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-weight: 500;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+    }
+    
+    /* Action buttons container - positioned at bottom */
+    .personal-notes-container .note-actions .action-buttons {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        margin-top: auto;
+    }
+    
+    /* Individual action buttons - larger size */
+    .personal-notes-container .note-actions .action-buttons button {
+        padding: 6px;
+        border-radius: 6px;
+        transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 32px;
+        min-height: 32px;
+    }
+    
+    .personal-notes-container .note-actions .action-buttons button:hover {
+        background-color: #f3f4f6;
+        transform: scale(1.05);
+    }
+    
+    .personal-notes-container .note-actions .action-buttons button svg {
+        width: 16px;
+        height: 16px;
+    }
+    
+    
+    /* Line clamp utility */
     .line-clamp-2 {
         display: -webkit-box;
         -webkit-line-clamp: 2;
@@ -27,7 +214,7 @@ const styles = `
         overflow: hidden;
     }
     
-    /* Override global button styles specifically for Add Note buttons */
+    /* Add note button styles */
     .personal-notes-container .add-note-btn {
         background-color: #ea580c !important;
         background: #ea580c !important;
@@ -51,32 +238,114 @@ const styles = `
     
     .personal-notes-container .add-note-btn:active {
         background-color: #c2410c !important;
-        background: #c2410c !important;
-        background-image: none !important;
-        background-gradient: none !important;
-    }
-    
-    /* Override any global button styles that might be applied */
-    .personal-notes-container .add-note-btn.MuiButton-root,
-    .personal-notes-container .add-note-btn.compact-ui {
-        background-color: #ea580c !important;
         background: #ea580c !important;
         background-image: none !important;
         background-gradient: none !important;
     }
     
-    .personal-notes-container .add-note-btn.MuiButton-root:hover,
-    .personal-notes-container .add-note-btn.compact-ui:hover {
-        background-color: #c2410c !important;
-        background: #c2410c !important;
-        background-image: none !important;
-        background-gradient: none !important;
+    
+    /* Responsive design */
+    @media (max-width: 768px) {
+        .personal-notes-container .note-card .flex {
+            flex-direction: column;
+            gap: 8px;
+        }
+        
+        .personal-notes-container .note-actions {
+            width: 100%;
+            flex-direction: row;
+            justify-content: space-between;
+            align-items: flex-end;
+        }
+        
+        .personal-notes-container .note-actions .action-buttons {
+            order: 2;
+            margin-top: 0;
+        }
+        
+        .personal-notes-container .note-actions .category-tag {
+            order: 1;
+        }
+        
+        .personal-notes-container .note-content .date-container {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 4px;
+        }
     }
 `;
 
+// TooltipBubble component for hover tooltips
+function TooltipBubble({ title, children }) {
+    const [show, setShow] = useState(false);
+    const [coords, setCoords] = useState({ top: 0, left: 0 });
+    const iconRef = useRef(null);
+
+    useEffect(() => {
+        if (show && iconRef.current) {
+            const rect = iconRef.current.getBoundingClientRect();
+            const viewportWidth = window.innerWidth;
+            const tooltipWidth = 120; // Approximate tooltip width for button tooltips
+            
+            // Center the tooltip under the element
+            let leftPosition = rect.left + (rect.width / 2) - (tooltipWidth / 2);
+            
+            // Ensure tooltip doesn't go off-screen to the right
+            if (leftPosition + tooltipWidth > viewportWidth - 10) {
+                leftPosition = viewportWidth - tooltipWidth - 10;
+            }
+            
+            // Ensure tooltip doesn't go off-screen to the left
+            if (leftPosition < 10) {
+                leftPosition = 10;
+            }
+            
+            setCoords({
+                top: rect.bottom + 8, // Position directly under the element
+                left: leftPosition,
+            });
+        }
+    }, [show]);
+
+    return (
+        <div
+            style={{ position: 'relative', display: 'inline-block' }}
+            onMouseEnter={() => setShow(true)}
+            onMouseLeave={() => setShow(false)}
+            ref={iconRef}
+        >
+            {children}
+            {show && createPortal(
+                <div
+                    className="fade-in"
+                    style={{
+                        position: 'fixed',
+                        left: coords.left,
+                        top: coords.top,
+                        background: '#000000',
+                        color: '#ffffff',
+                        borderRadius: 8,
+                        padding: '6px 12px',
+                        fontSize: 11,
+                        fontWeight: 500,
+                        whiteSpace: 'nowrap',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                        zIndex: 9999,
+                        pointerEvents: 'none',
+                    }}
+                >
+                    {title}
+                </div>,
+                document.body
+            )}
+        </div>
+    );
+}
+
 const PersonalNotesComponent = ({ user, showFlashMessage }) => {
+    const navigate = useNavigate();
     const [notes, setNotes] = useState([]);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedCategory, setSelectedCategory] = useState('all');
     const [showAddForm, setShowAddForm] = useState(false);
@@ -88,6 +357,37 @@ const PersonalNotesComponent = ({ user, showFlashMessage }) => {
         category: 'general'
     });
 
+    // Cache configuration
+    const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+    const CACHE_KEY = `personal_notes_${user?.uid}`;
+    
+    // Cache utility functions
+    const getCachedNotes = useCallback(() => {
+        try {
+            const cached = localStorage.getItem(CACHE_KEY);
+            const cacheTime = localStorage.getItem(`${CACHE_KEY}_time`);
+            if (cached && cacheTime) {
+                const age = Date.now() - parseInt(cacheTime);
+                if (age < CACHE_DURATION) {
+                    console.log('📦 Loading notes from cache');
+                    return JSON.parse(cached);
+                }
+            }
+        } catch (error) {
+            console.warn('Failed to read notes cache:', error);
+        }
+        return null;
+    }, [CACHE_KEY, CACHE_DURATION]);
+    
+    const setCachedNotes = useCallback((data) => {
+        try {
+            localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+            localStorage.setItem(`${CACHE_KEY}_time`, Date.now().toString());
+        } catch (error) {
+            console.warn('Failed to write notes cache:', error);
+        }
+    }, [CACHE_KEY]);
+
     const categories = [
         { value: 'all', label: 'All Categories' },
         { value: 'general', label: 'General' },
@@ -98,9 +398,24 @@ const PersonalNotesComponent = ({ user, showFlashMessage }) => {
     ];
 
     // Fetch personal notes
-    const fetchNotes = async () => {
+    const fetchNotes = useCallback(async (forceRefresh = false) => {
+        if (!user?.firebaseUser) return;
+
         try {
+            // Check cache first unless force refresh
+            if (!forceRefresh) {
+                const cachedNotes = getCachedNotes();
+                if (cachedNotes !== null) {
+                    setNotes(cachedNotes);
+                    setLoading(false);
+                    return;
+                }
+            }
+            
+            // Only set loading when we actually need to fetch
             setLoading(true);
+            console.log('🔄 Fetching fresh notes data');
+            
             const response = await fetch(`${process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000'}/api/personal-notes`, {
                 headers: {
                     'Authorization': `Bearer ${await user.firebaseUser.getIdToken()}`
@@ -110,18 +425,8 @@ const PersonalNotesComponent = ({ user, showFlashMessage }) => {
             if (response.ok) {
                 const data = await response.json();
                 console.log('Fetched notes data:', data.notes);
-                // Log each note's date fields
-                if (data.notes) {
-                    data.notes.forEach((note, index) => {
-                        console.log(`Note ${index}:`, {
-                            title: note.title,
-                            updated_at: note.updated_at,
-                            created_at: note.created_at,
-                            updated_at_type: typeof note.updated_at
-                        });
-                    });
-                }
                 setNotes(data.notes || []);
+                setCachedNotes(data.notes || []);
             } else {
                 showFlashMessage('Failed to fetch my notes', 'error');
             }
@@ -131,13 +436,29 @@ const PersonalNotesComponent = ({ user, showFlashMessage }) => {
         } finally {
             setLoading(false);
         }
-    };
+    }, [user?.firebaseUser, getCachedNotes, setCachedNotes, showFlashMessage]);
 
+    // Load notes on mount
     useEffect(() => {
+        console.log('🔄 PersonalNotesComponent useEffect triggered');
         if (user?.firebaseUser) {
+            // Check cache first - this is synchronous so no loading state needed
+            const cachedNotes = getCachedNotes();
+            if (cachedNotes !== null) {
+                console.log('📦 Loading notes from cache on mount, notes count:', cachedNotes.length);
+                setNotes(cachedNotes);
+                setLoading(false);
+                return; // Exit early, no loading state
+            }
+            
+            console.log('🔄 No cached data found, fetching fresh data');
+            // Only fetch if no cached data
             fetchNotes();
+        } else {
+            console.log('🔄 No user found, setting loading to false');
+            setLoading(false);
         }
-    }, [user]);
+    }, [user?.firebaseUser, getCachedNotes, fetchNotes]);
 
     // Add new note
     const handleAddNote = async (e) => {
@@ -160,7 +481,9 @@ const PersonalNotesComponent = ({ user, showFlashMessage }) => {
 
             if (response.ok) {
                 const data = await response.json();
-                setNotes(prev => [data.note, ...prev]);
+                const updatedNotes = [data.note, ...notes];
+                setNotes(updatedNotes);
+                setCachedNotes(updatedNotes);
                 setFormData({ title: '', content: '', category: 'general' });
                 setShowAddForm(false);
                 showFlashMessage('Note added successfully!', 'success');
@@ -197,9 +520,12 @@ const PersonalNotesComponent = ({ user, showFlashMessage }) => {
 
             if (response.ok) {
                 const data = await response.json();
-                setNotes(prev => prev.map(note => note.id === editingNote.id ? data.note : note));
+                const updatedNotes = notes.map(note => note.id === editingNote.id ? data.note : note);
+                setNotes(updatedNotes);
+                setCachedNotes(updatedNotes);
                 setEditingNote(null);
                 setFormData({ title: '', content: '', category: 'general' });
+                setShowAddForm(false);
                 showFlashMessage('Note updated successfully!', 'success');
             } else {
                 const errorData = await response.json();
@@ -228,7 +554,9 @@ const PersonalNotesComponent = ({ user, showFlashMessage }) => {
             });
 
             if (response.ok) {
-                setNotes(prev => prev.filter(note => note.id !== noteId));
+                const updatedNotes = notes.filter(note => note.id !== noteId);
+                setNotes(updatedNotes);
+                setCachedNotes(updatedNotes);
                 showFlashMessage('Note deleted successfully!', 'success');
             } else {
                 const errorData = await response.json();
@@ -252,7 +580,9 @@ const PersonalNotesComponent = ({ user, showFlashMessage }) => {
 
             if (response.ok) {
                 const data = await response.json();
-                setNotes(prev => prev.map(note => note.id === noteId ? data.note : note));
+                const updatedNotes = notes.map(note => note.id === noteId ? data.note : note);
+                setNotes(updatedNotes);
+                setCachedNotes(updatedNotes);
                 showFlashMessage(data.note.is_pinned ? 'Note pinned!' : 'Note unpinned!', 'success');
             } else {
                 const errorData = await response.json();
@@ -282,6 +612,7 @@ const PersonalNotesComponent = ({ user, showFlashMessage }) => {
         setShowAddForm(false);
     };
 
+
     // Filter notes
     const filteredNotes = notes.filter(note => {
         const matchesSearch = note.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -294,60 +625,24 @@ const PersonalNotesComponent = ({ user, showFlashMessage }) => {
     const sortedNotes = filteredNotes.sort((a, b) => {
         if (a.is_pinned && !b.is_pinned) return -1;
         if (!a.is_pinned && b.is_pinned) return 1;
-        
-        // Handle Firestore timestamp objects for sorting
-        const getDateValue = (dateValue) => {
-            if (!dateValue) return new Date(0); // Default to epoch for null/undefined
-            
-            if (dateValue && typeof dateValue === 'object' && dateValue._seconds) {
-                return new Date(dateValue._seconds * 1000);
-            }
-            if (dateValue && typeof dateValue === 'object' && dateValue.seconds) {
-                return new Date(dateValue.seconds * 1000);
-            }
-            if (dateValue && typeof dateValue === 'object' && typeof dateValue.toDate === 'function') {
-                return dateValue.toDate();
-            }
-            return new Date(dateValue);
-        };
-        
-        return getDateValue(b.updated_at) - getDateValue(a.updated_at);
+        return new Date(b.updated_at) - new Date(a.updated_at);
     });
 
     const formatDate = (dateValue) => {
-        // Debug logging
-        console.log('formatDate input:', dateValue, 'type:', typeof dateValue);
-        
-        // Handle null/undefined
-        if (!dateValue) {
-            return 'No date';
-        }
+        if (!dateValue) return 'No date';
         
         let date;
-        
-        // Handle Firestore timestamp objects (with underscores)
         if (dateValue && typeof dateValue === 'object' && dateValue._seconds) {
             date = new Date(dateValue._seconds * 1000);
-            console.log('Firestore timestamp (_seconds) converted to:', date);
-        }
-        // Handle Firestore timestamp objects (without underscores)
-        else if (dateValue && typeof dateValue === 'object' && dateValue.seconds) {
+        } else if (dateValue && typeof dateValue === 'object' && dateValue.seconds) {
             date = new Date(dateValue.seconds * 1000);
-            console.log('Firestore timestamp (seconds) converted to:', date);
-        }
-        // Handle Firestore timestamp with toDate method
-        else if (dateValue && typeof dateValue === 'object' && typeof dateValue.toDate === 'function') {
+        } else if (dateValue && typeof dateValue === 'object' && typeof dateValue.toDate === 'function') {
             date = dateValue.toDate();
-            console.log('Firestore timestamp (toDate) converted to:', date);
-        }
-        // Handle regular date strings or Date objects
-        else {
+        } else {
             date = new Date(dateValue);
-            console.log('Regular date converted to:', date, 'isValid:', !isNaN(date.getTime()));
         }
         
         if (isNaN(date.getTime())) {
-            console.error('Invalid date after conversion:', dateValue, '->', date);
             return 'Invalid Date';
         }
         
@@ -365,7 +660,8 @@ const PersonalNotesComponent = ({ user, showFlashMessage }) => {
         return colors[category] || colors.general;
     };
 
-    if (loading) {
+    // Only show loading spinner if we're actually loading AND don't have any notes
+    if (loading && notes.length === 0) {
         return (
             <div className="flex items-center justify-center h-64">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
@@ -376,7 +672,7 @@ const PersonalNotesComponent = ({ user, showFlashMessage }) => {
     return (
         <>
             <style>{styles}</style>
-            <div className="personal-notes-container max-w-7xl mx-auto p-4">
+            <div className="personal-notes-container">
             {/* Compact Header */}
             <div className="mb-4">
                 <div className="flex items-center justify-between mb-3">
@@ -398,7 +694,7 @@ const PersonalNotesComponent = ({ user, showFlashMessage }) => {
 
                 {/* Compact Search and Filter */}
                 <div className="flex items-center gap-3">
-                    <div className="relative flex-1 max-w-md">
+                    <div className="relative flex-1">
                         <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                         <input
                             type="text"
@@ -408,18 +704,16 @@ const PersonalNotesComponent = ({ user, showFlashMessage }) => {
                             className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                         />
                     </div>
-                    <select
-                        value={selectedCategory}
-                        onChange={(e) => setSelectedCategory(e.target.value)}
-                        className="px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                    >
-                        {categories.map(category => (
-                            <option key={category.value} value={category.value}>
-                                {category.label}
-                            </option>
-                        ))}
-                    </select>
-                    <div className="text-xs text-gray-500">
+                    <div className="w-48">
+                        <CustomDropdown
+                            value={selectedCategory}
+                            onChange={(value) => setSelectedCategory(value)}
+                            options={categories}
+                            placeholder="All Categories"
+                            className="w-full"
+                        />
+                    </div>
+                    <div className="text-xs text-gray-500 whitespace-nowrap">
                         {sortedNotes.length} note{sortedNotes.length !== 1 ? 's' : ''}
                     </div>
                 </div>
@@ -533,63 +827,82 @@ const PersonalNotesComponent = ({ user, showFlashMessage }) => {
                     )}
                 </div>
             ) : (
-                <div className="space-y-2">
+                <div className="space-y-2 w-full">
                     {sortedNotes.map((note) => (
                         <div
                             key={note.id}
-                            className={`bg-white border rounded-md p-3 hover:shadow-sm transition-all duration-200 ${
+                            className={`note-card bg-white border rounded-md p-3 hover:shadow-sm transition-all duration-200 w-full ${
                                 note.is_pinned ? 'border-yellow-300 bg-yellow-50' : 'border-gray-200'
                             }`}
                         >
-                            <div className="flex items-start justify-between">
-                                <div className="flex-1 min-w-0 mr-3">
-                                    <div className="flex items-center gap-2 mb-1">
-                                        <h3 className="font-medium text-sm text-gray-900 truncate">
-                                            {note.title}
-                                        </h3>
-                                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${getCategoryColor(note.category)}`}>
-                                            {categories.find(c => c.value === note.category)?.label}
-                                        </span>
-                                        {note.is_pinned && (
-                                            <Pin className="w-3 h-3 text-yellow-600 flex-shrink-0" />
+                            <div className="flex items-start justify-between w-full">
+                                {/* Content area */}
+                                <div className="note-content">
+                                    <h3 
+                                        className="font-medium text-sm text-gray-900 mb-2 cursor-pointer"
+                                        onClick={() => navigate(`/notes/${note.id}`, { state: { note } })}
+                                    >
+                                        {note.title}
+                                    </h3>
+                                    
+                                    <div className="text-xs text-gray-600 line-clamp-2 mb-3">
+                                        {note.content || 'No content available'}
+                                    </div>
+                                    
+                                    <div className="date-container">
+                                        <div className="created-date">
+                                            <Calendar className="w-3 h-3 mr-1" />
+                                            <span>Created: {formatDate(note.created_at || note.updated_at)}</span>
+                                        </div>
+                                        
+                                        {note.updated_at && note.created_at && note.updated_at !== note.created_at && (
+                                            <div className="updated-date">
+                                                <Calendar className="w-3 h-3 mr-1" />
+                                                <span>Updated: {formatDate(note.updated_at)}</span>
+                                            </div>
                                         )}
                                     </div>
-                                    <p className="text-xs text-gray-600 line-clamp-2 mb-1">
-                                        {note.content}
-                                    </p>
-                                    <div className="flex items-center text-xs text-gray-500">
-                                        <Calendar className="w-3 h-3 mr-1" />
-                                        {formatDate(note.updated_at)}
-                                    </div>
                                 </div>
-                                <div className="flex items-center space-x-0.5 flex-shrink-0">
-                                    <button
-                                        onClick={() => handleTogglePin(note.id)}
-                                        className="p-1.5 text-gray-400 hover:text-yellow-600 transition-colors rounded"
-                                        title={note.is_pinned ? 'Unpin note' : 'Pin note'}
-                                    >
-                                        {note.is_pinned ? <Pin className="w-3.5 h-3.5" /> : <PinOff className="w-3.5 h-3.5" />}
-                                    </button>
-                                    <button
-                                        onClick={() => startEditing(note)}
-                                        className="p-1.5 text-gray-400 hover:text-blue-600 transition-colors rounded"
-                                        title="Edit note"
-                                    >
-                                        <Edit3 className="w-3.5 h-3.5" />
-                                    </button>
-                                    <button
-                                        onClick={() => handleDeleteNote(note.id)}
-                                        className="p-1.5 text-gray-400 hover:text-red-600 transition-colors rounded"
-                                        title="Delete note"
-                                    >
-                                        <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
+                                
+                                {/* Actions area */}
+                                <div className="note-actions">
+                                    <span className={`category-tag ${getCategoryColor(note.category)}`}>
+                                        {categories.find(c => c.value === note.category)?.label}
+                                    </span>
+                                    
+                                    <div className="action-buttons">
+                                        <TooltipBubble title={note.is_pinned ? 'Unpin note' : 'Pin note'}>
+                                            <button
+                                                onClick={() => handleTogglePin(note.id)}
+                                                className="text-gray-400 hover:text-yellow-600 transition-colors"
+                                            >
+                                                {note.is_pinned ? <Pin className="w-3 h-3" /> : <PinOff className="w-3 h-3" />}
+                                            </button>
+                                        </TooltipBubble>
+                                        <TooltipBubble title="Edit note">
+                                            <button
+                                                onClick={() => startEditing(note)}
+                                                className="text-gray-400 hover:text-blue-600 transition-colors"
+                                            >
+                                                <Edit3 className="w-3 h-3" />
+                                            </button>
+                                        </TooltipBubble>
+                                        <TooltipBubble title="Delete note">
+                                            <button
+                                                onClick={() => handleDeleteNote(note.id)}
+                                                className="text-gray-400 hover:text-red-600 transition-colors"
+                                            >
+                                                <Trash2 className="w-3 h-3" />
+                                            </button>
+                                        </TooltipBubble>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     ))}
                 </div>
             )}
+
             </div>
         </>
     );

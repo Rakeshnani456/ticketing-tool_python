@@ -40,23 +40,184 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
         }
     };
 
-    // --- Helper for generating a simple display ID (if not moved to a shared utility) ---
-    // Make sure generateDisplayId is accessible, either passed in or in a utility file
+    // --- Helper for generating a simple display ID using atomic counter ---
     async function generateDisplayIdInternal() {
-        const lastTicketQuery = await ticketsCollection.orderBy('created_at', 'desc').limit(1).get();
-        let nextIdNum = 1;
-        if (!lastTicketQuery.empty) {
-            const lastTicket = lastTicketQuery.docs[0].data();
-            const lastDisplayId = lastTicket.display_id;
-            if (lastDisplayId && lastDisplayId.startsWith('TT')) {
-                const numPart = parseInt(lastDisplayId.substring(2));
-                if (!isNaN(numPart)) {
-                    nextIdNum = numPart + 1;
+        try {
+            const counterRef = db.collection('counters').doc('ticket_display_id');
+            
+            // Use Firestore transaction to atomically increment the counter
+            const result = await db.runTransaction(async (transaction) => {
+                const counterDoc = await transaction.get(counterRef);
+                
+                let nextNumber = 1;
+                
+                if (counterDoc.exists) {
+                    const counterData = counterDoc.data();
+                    nextNumber = (counterData.count || 0) + 1;
+                    console.log('🔍 Current counter value:', counterData.count, 'Next will be:', nextNumber);
+                } else {
+                    console.log('🔍 Counter document does not exist, starting from 1');
                 }
+                
+                // Ensure we don't exceed 6 digits (max 999999)
+                if (nextNumber > 999999) {
+                    console.error('🔍 Display ID counter exceeded 999999, resetting to 1');
+                    nextNumber = 1;
+                }
+                
+                // Update the counter
+                transaction.set(counterRef, { 
+                    count: nextNumber,
+                    last_updated: admin.firestore.FieldValue.serverTimestamp()
+                }, { merge: true });
+                
+                return nextNumber;
+            });
+            
+            // Format as 6-digit number with leading zeros
+            const displayId = `TT${result.toString().padStart(6, '0')}`;
+            console.log('🎫 Generated sequential display ID:', displayId, 'from counter:', result);
+            return displayId;
+            
+        } catch (error) {
+            console.error('Error generating display ID with counter:', error);
+            
+            // Fallback: Get the highest existing display ID and increment
+            try {
+                const lastTicketQuery = await ticketsCollection
+                    .orderBy('display_id', 'desc')
+                    .limit(1)
+                    .get();
+                
+                let nextNumber = 1;
+                
+                if (!lastTicketQuery.empty) {
+                    const lastTicket = lastTicketQuery.docs[0].data();
+                    const lastDisplayId = lastTicket.display_id;
+                    console.log('🔍 Fallback - Last ticket display_id:', lastDisplayId);
+                    
+                    if (lastDisplayId && lastDisplayId.startsWith('TT')) {
+                        const numberPart = lastDisplayId.substring(2);
+                        const lastNumber = parseInt(numberPart, 10);
+                        if (!isNaN(lastNumber) && lastNumber > 0) {
+                            nextNumber = lastNumber + 1;
+                        }
+                    }
+                }
+                
+                // Ensure we don't exceed 6 digits
+                if (nextNumber > 999999) {
+                    nextNumber = 1;
+                }
+                
+                const displayId = `TT${nextNumber.toString().padStart(6, '0')}`;
+                console.log('🎫 Generated fallback display ID:', displayId);
+                return displayId;
+                
+            } catch (fallbackError) {
+                console.error('Fallback display ID generation failed:', fallbackError);
+                // Final fallback to timestamp
+                const timestamp = Date.now();
+                const fallbackNumber = parseInt(timestamp.toString().slice(-6), 10);
+                return `TT${fallbackNumber.toString().padStart(6, '0')}`;
             }
         }
-        return `TT${String(nextIdNum).padStart(6, '0')}`;
     }
+
+    // --- Helper to initialize counter from existing tickets ---
+    async function initializeCounterFromExistingTickets() {
+        try {
+            const counterRef = db.collection('counters').doc('ticket_display_id');
+            const counterDoc = await counterRef.get();
+            
+            if (counterDoc.exists) {
+                console.log('🔍 Counter already exists, no initialization needed');
+                return;
+            }
+            
+            console.log('🔍 Initializing counter from existing tickets...');
+            
+            // Get the highest existing display ID
+            const lastTicketQuery = await ticketsCollection
+                .orderBy('display_id', 'desc')
+                .limit(1)
+                .get();
+            
+            let highestNumber = 0;
+            
+            if (!lastTicketQuery.empty) {
+                const lastTicket = lastTicketQuery.docs[0].data();
+                const lastDisplayId = lastTicket.display_id;
+                console.log('🔍 Highest existing display_id:', lastDisplayId);
+                
+                if (lastDisplayId && lastDisplayId.startsWith('TT')) {
+                    const numberPart = lastDisplayId.substring(2);
+                    const lastNumber = parseInt(numberPart, 10);
+                    if (!isNaN(lastNumber) && lastNumber > 0) {
+                        highestNumber = lastNumber;
+                    }
+                }
+            }
+            
+            // Set the counter to the highest existing number
+            await counterRef.set({
+                count: highestNumber,
+                initialized_at: admin.firestore.FieldValue.serverTimestamp(),
+                last_updated: admin.firestore.FieldValue.serverTimestamp()
+            });
+            
+            console.log('🔍 Counter initialized with value:', highestNumber);
+            
+        } catch (error) {
+            console.error('Error initializing counter:', error);
+        }
+    }
+
+    // --- Initialize counter on server start ---
+    initializeCounterFromExistingTickets();
+
+    // --- New Endpoint: Initialize Display ID Counter ---
+    router.post('/initialize-counter', verifyFirebaseToken, checkRole(['admin', 'super_admin']), async (req, res) => {
+        try {
+            await initializeCounterFromExistingTickets();
+            res.status(200).json({ 
+                message: 'Display ID counter initialized successfully',
+                success: true 
+            });
+        } catch (error) {
+            console.error('Error initializing counter:', error);
+            res.status(500).json({ 
+                error: 'Failed to initialize counter',
+                success: false 
+            });
+        }
+    });
+
+    // --- New Endpoint: Get Display ID Counter Status ---
+    router.get('/counter-status', verifyFirebaseToken, checkRole(['admin', 'super_admin']), async (req, res) => {
+        try {
+            const counterRef = db.collection('counters').doc('ticket_display_id');
+            const counterDoc = await counterRef.get();
+            
+            if (counterDoc.exists) {
+                const counterData = counterDoc.data();
+                res.status(200).json({
+                    exists: true,
+                    current_count: counterData.count || 0,
+                    last_updated: counterData.last_updated,
+                    initialized_at: counterData.initialized_at
+                });
+            } else {
+                res.status(200).json({
+                    exists: false,
+                    message: 'Counter not initialized'
+                });
+            }
+        } catch (error) {
+            console.error('Error getting counter status:', error);
+            res.status(500).json({ error: 'Failed to get counter status' });
+        }
+    });
 
     // --- New Endpoint: Get Ticket Summary Counts ---
     router.get('/summary-counts', verifyFirebaseToken, async (req, res) => {
@@ -64,18 +225,19 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
 
         try {
             let activeTicketsQuery = ticketsCollection.where('status', 'in', ['Open', 'In Progress', 'Hold']);
-            let assignedToMeTicketsQuery = ticketsCollection.where('assigned_to_id', '==', authenticatedUid);
+            // Changed: Count tickets created by the user instead of assigned to the user
+            let createdByMeTicketsQuery = ticketsCollection.where('reporter_id', '==', authenticatedUid);
             let totalTicketsQuery = ticketsCollection;
 
-            const [activeSnapshot, assignedSnapshot, totalSnapshot] = await Promise.all([
+            const [activeSnapshot, createdByMeSnapshot, totalSnapshot] = await Promise.all([
                 activeTicketsQuery.get(),
-                assignedToMeTicketsQuery.get(),
+                createdByMeTicketsQuery.get(),
                 totalTicketsQuery.get()
             ]);
 
             const counts = {
                 active_tickets: activeSnapshot.size,
-                assigned_to_me: assignedSnapshot.size,
+                assigned_to_me: createdByMeSnapshot.size, // This now represents tickets created by the user
                 total_tickets: totalSnapshot.size,
             };
 
@@ -114,8 +276,11 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
         }
     });
 
-    // --- New Route: Create a new ticket ---
+    // --- New Route: Create a new ticket (ULTRA-FAST) ---
     router.post('/', verifyFirebaseToken, async (req, res) => {
+        const startTime = Date.now();
+        console.log('🚀 Ticket creation started at:', new Date().toISOString());
+        
         const {
             request_for_email,
             category,
@@ -145,62 +310,23 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
         }
 
         try {
-            // Look up client_name for reporter_email and request_for_email
+            // OPTIMIZATION: Skip client_name lookup entirely for maximum speed
+            // This will be populated later via a background job if needed
             let clientName = null;
-            // Try reporter_email first
-            let userSnap = await usersCollection.where('email', '==', reporterEmail).limit(1).get();
-            if (!userSnap.empty) {
-                const userData = userSnap.docs[0].data();
-                clientName = userData.client_name || null;
-                console.log("Found user by reporter_email:", {
-                    email: reporterEmail,
-                    client_name: userData.client_name,
-                    companyName: userData.companyName,
-                    role: userData.role
-                });
-            } else {
-                // Try request_for_email
-                userSnap = await usersCollection.where('email', '==', request_for_email).limit(1).get();
-                if (!userSnap.empty) {
-                    const userData = userSnap.docs[0].data();
-                    clientName = userData.client_name || null;
-                    console.log("Found user by request_for_email:", {
-                        email: request_for_email,
-                        client_name: userData.client_name,
-                        companyName: userData.companyName,
-                        role: userData.role
-                    });
-                } else {
-                    console.warn("No user found for either reporter_email or request_for_email:", {
-                        reporterEmail,
-                        request_for_email
-                    });
-                }
-            }
 
-            console.log("Final client_name for ticket:", clientName);
-
+            // OPTIMIZATION: Generate display ID sequentially
             const newDisplayId = await generateDisplayIdInternal();
 
-            // Get user data for storing name information
-            const userDoc = await usersCollection.doc(reporterId).get();
-            const userData = userDoc.exists ? userDoc.data() : {};
-            let reporterName = reporterEmail;
-            if (userData.firstName || userData.lastName) {
-                reporterName = `${userData.firstName || ''} ${userData.lastName || ''}`.trim();
-            } else if (userData.name) {
-                reporterName = userData.name;
-            } else if (userData.client_name) {
-                reporterName = userData.client_name;
-            }
+            // OPTIMIZATION: Use email as reporter name to avoid database lookup
+            const reporterName = reporterEmail;
 
             const newTicket = {
                 display_id: newDisplayId,
                 reporter_id: reporterId,
                 reporter_email: reporterEmail,
                 reporter_name: reporterName,
-                reporter_firstName: userData.firstName || null,
-                reporter_lastName: userData.lastName || null,
+                reporter_firstName: null,
+                reporter_lastName: null,
                 request_for_email: request_for_email,
                 category: category,
                 short_description: short_description,
@@ -212,7 +338,7 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                 created_at: admin.firestore.FieldValue.serverTimestamp(),
                 updated_at: admin.firestore.FieldValue.serverTimestamp(),
                 comments: [],
-                attachments: attachments,
+                attachments: attachments || [],
                 assigned_to_id: null,
                 assigned_to_email: null,
                 resolved_at: null,
@@ -221,76 +347,94 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                 status_history: [],
                 assigned_to_history: [],
                 notes: [], // Internal notes visible only to engineers/support
-                client_name: clientName,
+                client_name: clientName || null,
             };
 
             const docRef = await ticketsCollection.add(newTicket);
+            const dbTime = Date.now();
+            console.log('📊 Database write completed in:', dbTime - startTime, 'ms');
 
-            // Log ticket creation activity with enhanced context
-            await logTicketCreated(db, docRef.id, reporterName, reporterEmail, { 
-                ...newTicket, 
-                ticket_display_id: newDisplayId,
-                client_name: clientName 
+            // OPTIMIZATION: Return response immediately, handle all non-essential operations asynchronously
+            const responseData = { 
+                message: 'Ticket created successfully!', 
+                id: docRef.id, 
+                display_id: newDisplayId,
+                ticket_id: docRef.id // Add ticket_id for frontend compatibility
+            };
+
+            // Send response immediately
+            res.status(201).json(responseData);
+            const responseTime = Date.now();
+            console.log('⚡ Response sent in:', responseTime - startTime, 'ms');
+
+            // OPTIMIZATION: Handle all non-essential operations asynchronously after response
+            setImmediate(async () => {
+                try {
+                    // OPTIMIZATION: Populate client_name in background
+                    let resolvedClientName = null;
+                    try {
+                        if (reporterEmail !== request_for_email) {
+                            const [reporterSnap, requestSnap] = await Promise.all([
+                                usersCollection.where('email', '==', reporterEmail).limit(1).get(),
+                                usersCollection.where('email', '==', request_for_email).limit(1).get()
+                            ]);
+                            
+                            if (!reporterSnap.empty) {
+                                const userData = reporterSnap.docs[0].data();
+                                resolvedClientName = userData.client_name || null;
+                            } else if (!requestSnap.empty) {
+                                const userData = requestSnap.docs[0].data();
+                                resolvedClientName = userData.client_name || null;
+                            }
+                        } else {
+                            const reporterSnap = await usersCollection.where('email', '==', reporterEmail).limit(1).get();
+                            if (!reporterSnap.empty) {
+                                const userData = reporterSnap.docs[0].data();
+                                resolvedClientName = userData.client_name || null;
+                            }
+                        }
+                        
+                        // Update ticket with client_name if found
+                        if (resolvedClientName) {
+                            await ticketsCollection.doc(docRef.id).update({
+                                client_name: resolvedClientName
+                            });
+                        }
+                    } catch (lookupError) {
+                        console.warn("Background client lookup failed:", lookupError.message);
+                    }
+
+                    // Log ticket creation activity (non-blocking)
+                    await logTicketCreated(db, docRef.id, reporterName, reporterEmail, { 
+                        ...newTicket, 
+                        ticket_display_id: newDisplayId,
+                        client_name: resolvedClientName || clientName 
+                    });
+
+                    // Add notification (non-blocking)
+                    const reporterUserRole = req.user.role;
+                    if (reporterUserRole === 'user') {
+                        await notificationsCollection.add({
+                            userId: reporterId,
+                            message: `Your ticket ${newDisplayId} - "${short_description}" has been created.`,
+                            type: 'ticket_created',
+                            read: false,
+                            timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                            ticketId: docRef.id
+                        });
+                    }
+
+                    // Trigger analytics update (non-blocking)
+                    await triggerAnalyticsUpdate('created', { ...newTicket, id: docRef.id });
+                } catch (error) {
+                    console.error('Error in post-creation tasks:', error);
+                }
             });
 
-            const reporterUserRole = req.user.role;
-            if (reporterUserRole === 'user') {
-                await notificationsCollection.add({
-                    userId: reporterId,
-                    message: `Your ticket ${newDisplayId} - "${short_description}" has been created.`,
-                    type: 'ticket_created',
-                    read: false,
-                    timestamp: admin.firestore.FieldValue.serverTimestamp(),
-                    ticketId: docRef.id
-                });
-            }
-
-            // Prepare email content before setImmediate
-            const emailSubject = `🔔 New IT Support Ticket Logged – ${newDisplayId}: ${short_description}`;
-            const emailText = `Dear Team,\n\nA new IT support request has been logged in the Kriasol Helpdesk. Please review the details below and take appropriate action as needed.\n\nTicket ID: ${newDisplayId}\nIssue Summary: ${short_description}\nCategory: ${category}\nPriority: ${priority || 'Low'}\nRequested For: ${request_for_email}\nRequested By: ${reporterEmail}\nContact Number: ${contact_number}\n\nAccess the Kriasol Helpdesk to view, assign, or update the ticket.\n\nThank you for your prompt attention.\n\nBest regards,\nIT Service Desk\nKriasol Technologies`;
-            const baseUrl = getBaseUrl(req);
-            const ticketLink = `${baseUrl}/tickets/${docRef.id}`;
-            const emailHtml = `
-                <div style=\"font-family: Arial, sans-serif; color: #222;\">
-                    <p>Dear Team,</p>
-                    <p>A new IT support request has been logged in the <strong>Kriasol Helpdesk</strong>. Please review the details below and take appropriate action as needed.</p>
-                    <div style=\"margin: 18px 0 10px 0; font-size: 1.1em;\">📌 <strong>Ticket Information</strong></div>
-                    <table style=\"border-collapse: collapse; margin: 10px 0 18px 0;\">
-                        <tr><td style=\"padding: 4px 8px; font-weight: bold;\">Ticket ID:</td><td style=\"padding: 4px 8px;\"><a href=\"${ticketLink}\" style=\"color: #2563eb; text-decoration: underline; font-weight: bold;\" target=\"_blank\">${newDisplayId}</a></td></tr>
-                        <tr><td style=\"padding: 4px 8px; font-weight: bold;\">Issue Summary:</td><td style=\"padding: 4px 8px;\">${short_description}</td></tr>
-                        <tr><td style=\"padding: 4px 8px; font-weight: bold;\">Category:</td><td style=\"padding: 4px 8px;\">${category}</td></tr>
-                        <tr><td style=\"padding: 4px 8px; font-weight: bold;\">Priority:</td><td style=\"padding: 4px 8px;\">${priority || 'Low'}</td></tr>
-                        <tr><td style=\"padding: 4px 8px; font-weight: bold;\">Requested For:</td><td style=\"padding: 4px 8px;\">${request_for_email}</td></tr>
-                        <tr><td style=\"padding: 4px 8px; font-weight: bold;\">Requested By:</td><td style=\"padding: 4px 8px;\">${reporterEmail}</td></tr>
-                        <tr><td style=\"padding: 4px 8px; font-weight: bold;\">Contact Number:</td><td style=\"padding: 4px 8px;\">${contact_number}</td></tr>
-                    </table>
-                    <div style=\"margin: 18px 0 10px 0;\">🔗 <a href=\"${ticketLink}\" style=\"color: #2563eb; text-decoration: underline; font-weight: bold;\" target=\"_blank\">Access the Kriasol Helpdesk to view, assign, or update the ticket.</a></div>
-                    <p>Thank you for your prompt attention.</p>
-                    <p style=\"margin-top: 24px;\">Best regards,<br/>IT Service Desk<br/>Kriasol Technologies</p>
-                </div>
-            `;
-            // Send email with proper To and CC fields
+            // OPTIMIZATION: Move email processing to the async setImmediate block
             setImmediate(async () => {
-                const toEmail = 'process.env.DISTRIBUTION_EMAIL';
-                let ccList = [];
-                
-                // Add requested by email and requested for email to CC (if they're different)
-                if (request_for_email && reporterEmail) {
-                    if (request_for_email === reporterEmail) {
-                        ccList.push(request_for_email);
-                    } else {
-                        ccList.push(request_for_email, reporterEmail);
-                    }
-                } else if (request_for_email) {
-                    ccList.push(request_for_email);
-                } else if (reporterEmail) {
-                    ccList.push(reporterEmail);
-                }
-                
-                const ccEmail = ccList.length > 0 ? ccList.join(',') : null;
-                
-                // Use new EmailService instead of old sendEmailAlert
                 try {
+                    // Send email notification (non-blocking)
                     const baseUrl = getBaseUrl(req);
                     const ticketUrl = `${baseUrl}/tickets/${docRef.id}`;
                     
@@ -302,8 +446,8 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                         category: category,
                         reporterName: reporterEmail,
                         ticketUrl: ticketUrl,
-                        toEmail: toEmail,
-                        ccEmail: ccEmail
+                        toEmail: 'process.env.DISTRIBUTION_EMAIL',
+                        ccEmail: request_for_email === reporterEmail ? request_for_email : `${request_for_email},${reporterEmail}`
                     };
                     
                     await emailService.sendTicketNotificationEmail(ticketData);
@@ -311,11 +455,6 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                     console.error('Error sending ticket notification email:', error);
                 }
             });
-
-            // Trigger analytics update for real-time reports
-            await triggerAnalyticsUpdate('created', { ...newTicket, id: docRef.id });
-
-            return res.status(201).json({ message: 'Ticket created successfully!', id: docRef.id, display_id: newDisplayId });
         } catch (error) {
             console.error(`Error creating ticket: ${error.message}`);
             return res.status(500).json({ error: `Error creating ticket: ${error.message}` });

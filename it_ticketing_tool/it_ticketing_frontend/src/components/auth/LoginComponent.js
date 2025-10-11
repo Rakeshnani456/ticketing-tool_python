@@ -420,82 +420,135 @@ const LoginComponent = ({ onLoginSuccess, navigateTo, showFlashMessage }) => {
     return (
         <>
             <Toast {...toast} onClose={hideToast} />
-            <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-gray-50 to-blue-100 p-4">
-                <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md border border-gray-100 animate-fade-in">
-                    <div className="flex flex-col items-center mb-6">
-                        <img src={require('../../assets/logo/logo.png')} alt="Company Logo" className="h-20 mb-2" />
-                        <p className="text-gray-500 text-sm">Sign in to continue</p>
+            <div className="h-screen bg-gray-50 flex overflow-hidden">
+                {/* Left side - Company Name */}
+                <div className="hidden lg:flex lg:w-1/2 xl:w-3/5 bg-white relative overflow-hidden" style={{
+                    backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23f3f4f6' fill-opacity='0.4'%3E%3Ccircle cx='30' cy='30' r='2'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
+                    backgroundRepeat: 'repeat'
+                }}>
+                    <div className="relative z-10 flex flex-col justify-center items-center px-12 py-16 text-gray-800">
+                        <img src={require('../../assets/logo/logo_final.png')} alt="Company Logo" className="h-20 mb-8" />
                     </div>
-
-                    <NetworkStatus isOnline={isOnline} />
-                    <ErrorAlert error={formError} onDismiss={() => setFormError('')} />
                     
-                    {showSecurityAlert ? (
-                        <SecurityAlert 
-                            onProceed={handleSecurityAlertProceed}
-                            onCancel={handleSecurityAlertCancel}
-                        />
-                    ) : (
-                        <form onSubmit={handleSubmit} className="space-y-4">
-                            <div>
-                                <FormInput
-                                    id="email"
-                                    label="Email"
-                                    type="email"
-                                    value={email}
-                                    onChange={(e) => setEmail(e.target.value)}
-                                    onFocus={() => handleInputFocus('email')}
-                                    required
-                                    autoComplete="username"
-                                    error={!!fieldErrors.email}
+                    {/* Footer copyright */}
+                    <div className="absolute bottom-6 left-6 right-6">
+                        <div className="text-center">
+                            <p className="text-xs text-gray-600">Copyright © 2024 KriaSol Technologies LLP. All Rights Reserved.</p>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Right side - Login Form */}
+                <div className="w-full lg:w-1/2 xl:w-2/5 flex items-center justify-center p-4 overflow-y-auto">
+                    <div className="w-full max-w-md">
+                        {/* Mobile logo */}
+                        <div className="lg:hidden flex justify-center mb-4">
+                            <img src={require('../../assets/logo/logo_final.png')} alt="Company Logo" className="h-10" />
+                        </div>
+
+                        <div className="bg-white rounded-2xl border border-gray-100 p-6">
+                            <div className="text-center mb-6">
+                                <h2 className="text-xl font-bold text-gray-900 mb-1">Sign In</h2>
+                                <p className="text-gray-600 text-sm">Enter your credentials to access your account</p>
+                            </div>
+
+                            <NetworkStatus isOnline={isOnline} />
+                            <ErrorAlert error={formError} onDismiss={() => setFormError('')} />
+                            
+                            {showSecurityAlert ? (
+                                <SecurityAlert 
+                                    onProceed={handleSecurityAlertProceed}
+                                    onCancel={handleSecurityAlertCancel}
                                 />
-                                {fieldErrors.email && (
-                                    <p className="text-red-500 text-xs mt-1">{fieldErrors.email}</p>
-                                )}
-                            </div>
+                            ) : (
+                                <form onSubmit={handleSubmit} className="space-y-4">
+                                    <div>
+                                        <FormInput
+                                            id="email"
+                                            label="Email Address"
+                                            type="email"
+                                            value={email}
+                                            onChange={(e) => setEmail(e.target.value)}
+                                            onFocus={() => handleInputFocus('email')}
+                                            required
+                                            autoComplete="username"
+                                            error={!!fieldErrors.email}
+                                            className="h-10"
+                                        />
+                                        {fieldErrors.email && (
+                                            <p className="text-red-500 text-xs mt-1">{fieldErrors.email}</p>
+                                        )}
+                                    </div>
 
-                            <div>
-                                <FormInput
-                                    id="password"
-                                    label="Password"
-                                    type="password"
-                                    value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
-                                    onFocus={() => handleInputFocus('password')}
-                                    required
-                                    error={!!fieldErrors.password}
-                                    showPasswordToggle={true}
-                                    autoComplete="current-password"
-                                />
-                                {fieldErrors.password && (
-                                    <p className="text-red-500 text-xs mt-1">{fieldErrors.password}</p>
-                                )}
-                            </div>
+                                    <div>
+                                        <FormInput
+                                            id="password"
+                                            label="Password"
+                                            type="password"
+                                            value={password}
+                                            onChange={(e) => setPassword(e.target.value)}
+                                            onFocus={() => handleInputFocus('password')}
+                                            required
+                                            error={!!fieldErrors.password}
+                                            showPasswordToggle={true}
+                                            autoComplete="current-password"
+                                            className="h-10"
+                                        />
+                                        {fieldErrors.password && (
+                                            <p className="text-red-500 text-xs mt-1">{fieldErrors.password}</p>
+                                        )}
+                                    </div>
 
-                            <div className="flex items-center justify-center pt-4">
-                                <PrimaryButton 
-                                    type="submit" 
-                                    loading={loading} 
-                                    Icon={LogIn} 
-                                    className="w-full"
-                                    disabled={!isOnline}
-                                >
-                                    {loading ? "Signing In..." : "Sign In"}
-                                </PrimaryButton>
-                            </div>
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center">
+                                            <input
+                                                id="remember-me"
+                                                name="remember-me"
+                                                type="checkbox"
+                                                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                                            />
+                                            <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-700">
+                                                Remember me
+                                            </label>
+                                        </div>
 
-                            {attemptCount >= 3 && (
-                                <div className="text-center mt-4">
-                                    <LinkButton 
-                                        onClick={() => navigateTo('forgot-password')}
-                                        className="text-sm text-blue-600 hover:text-blue-800"
-                                    >
-                                        Forgot your password?
-                                    </LinkButton>
-                                </div>
+                                        {attemptCount >= 3 && (
+                                            <LinkButton 
+                                                onClick={() => navigateTo('forgot-password')}
+                                                className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                                            >
+                                                Forgot password?
+                                            </LinkButton>
+                                        )}
+                                    </div>
+
+                                    <div className="pt-1">
+                                        <PrimaryButton 
+                                            type="submit" 
+                                            loading={loading} 
+                                            Icon={LogIn} 
+                                            className="w-full h-10 text-sm font-semibold"
+                                            disabled={!isOnline}
+                                        >
+                                            {loading ? "Signing In..." : "Sign In"}
+                                        </PrimaryButton>
+                                    </div>
+                                </form>
                             )}
-                        </form>
-                    )}
+
+                        </div>
+                        
+                        {/* Footer links */}
+                        <div className="mt-6 pt-4 border-t border-gray-200">
+                            <div className="flex items-center justify-center space-x-4 text-xs text-gray-600">
+                                <a href="#" className="hover:text-gray-800 transition-colors">Privacy Policy</a>
+                                <span>•</span>
+                                <a href="#" className="hover:text-gray-800 transition-colors">Terms of Service</a>
+                                <span>•</span>
+                                <a href="#" className="hover:text-gray-800 transition-colors">Contact</a>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </>

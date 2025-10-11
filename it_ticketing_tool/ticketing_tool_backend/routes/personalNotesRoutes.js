@@ -5,7 +5,7 @@ const router = express.Router();
 module.exports = (db, admin, usersCollection, authenticateToken, checkRole, jsonSerializableNotification) => {
     
     // --- Get Personal Notes for User ---
-    router.get('/', authenticateToken, checkRole(['support', 'admin', 'super_admin', 'site_admin']), async (req, res) => {
+    router.get('/', authenticateToken, checkRole(['user', 'support', 'admin', 'super_admin', 'site_admin']), async (req, res) => {
         const userId = req.user.uid;
         
         try {
@@ -24,8 +24,34 @@ module.exports = (db, admin, usersCollection, authenticateToken, checkRole, json
         }
     });
     
+    // --- Get Single Personal Note ---
+    router.get('/:noteId', authenticateToken, checkRole(['user', 'support', 'admin', 'super_admin', 'site_admin']), async (req, res) => {
+        const userId = req.user.uid;
+        const noteId = req.params.noteId;
+        
+        try {
+            const userDoc = await usersCollection.doc(userId).get();
+            if (!userDoc.exists) {
+                return res.status(404).json({ error: 'User not found.' });
+            }
+            
+            const userData = userDoc.data();
+            const personalNotes = userData.personal_notes || [];
+            
+            const note = personalNotes.find(note => note.id === noteId);
+            if (!note) {
+                return res.status(404).json({ error: 'Note not found!' });
+            }
+            
+            return res.status(200).json({ note: note });
+        } catch (error) {
+            console.error(`Error fetching note: ${error.message}`);
+            return res.status(500).json({ error: `Failed to fetch note: ${error.message}` });
+        }
+    });
+    
     // --- Add Personal Note ---
-    router.post('/', authenticateToken, checkRole(['support', 'admin', 'super_admin', 'site_admin']), async (req, res) => {
+    router.post('/', authenticateToken, checkRole(['user', 'support', 'admin', 'super_admin', 'site_admin']), async (req, res) => {
         const userId = req.user.uid;
         const { title, content, category = 'general' } = req.body;
         
@@ -70,7 +96,7 @@ module.exports = (db, admin, usersCollection, authenticateToken, checkRole, json
     });
     
     // --- Update Personal Note ---
-    router.put('/:noteId', authenticateToken, checkRole(['support', 'admin', 'super_admin', 'site_admin']), async (req, res) => {
+    router.put('/:noteId', authenticateToken, checkRole(['user', 'support', 'admin', 'super_admin', 'site_admin']), async (req, res) => {
         const userId = req.user.uid;
         const noteId = req.params.noteId;
         const { title, content, category, is_pinned } = req.body;
@@ -120,7 +146,7 @@ module.exports = (db, admin, usersCollection, authenticateToken, checkRole, json
     });
     
     // --- Delete Personal Note ---
-    router.delete('/:noteId', authenticateToken, checkRole(['support', 'admin', 'super_admin', 'site_admin']), async (req, res) => {
+    router.delete('/:noteId', authenticateToken, checkRole(['user', 'support', 'admin', 'super_admin', 'site_admin']), async (req, res) => {
         const userId = req.user.uid;
         const noteId = req.params.noteId;
         
@@ -153,7 +179,7 @@ module.exports = (db, admin, usersCollection, authenticateToken, checkRole, json
     });
     
     // --- Toggle Pin Status ---
-    router.patch('/:noteId/pin', authenticateToken, checkRole(['support', 'admin', 'super_admin', 'site_admin']), async (req, res) => {
+    router.patch('/:noteId/pin', authenticateToken, checkRole(['user', 'support', 'admin', 'super_admin', 'site_admin']), async (req, res) => {
         const userId = req.user.uid;
         const noteId = req.params.noteId;
         

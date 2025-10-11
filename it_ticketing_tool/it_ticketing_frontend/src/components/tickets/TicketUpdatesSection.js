@@ -3,6 +3,7 @@
 import React, { useRef, useState } from 'react';
 import { MessageSquare, CheckCircle2, Loader2, XCircle } from 'lucide-react';
 import UserProfilePopup from '../common/UserProfilePopup';
+import sendMailIcon from '../../assets/icons/send_mail.png';
 
 const EditableTextarea = ({ id, value, onChange, rows = 3, className = "", disabled, hasError = false, inputRef, maxLength }) => (
     <textarea
@@ -87,11 +88,9 @@ const TicketUpdatesSection = ({
 
                 {activeTab === 'comments' && (
                     <>
-                        <label className="block text-xs font-bold text-gray-800 mb-1 sm:mb-1.5">
-                            Comments:
-                        </label>
+                        
                         {/* Comments List with Smooth Scrolling */}
-                        <div className="relative mb-2 sm:mb-3 w-full min-w-0 max-w-full overflow-x-hidden border border-gray-300 rounded-lg p-2 bg-gray-100">
+                        <div className="relative mb-2 sm:mb-3 w-full min-w-0 max-w-full overflow-x-hidden border border-gray-200 rounded-lg p-3 bg-gradient-to-br from-gray-50 to-gray-100 shadow-sm">
                             {/* Scrollable Comments Container */}
                             <div 
                                 id="comments-container"
@@ -129,7 +128,7 @@ const TicketUpdatesSection = ({
                                                                     
                                                                     {/* Comment Content */}
                                                                     <div className={`flex items-end gap-1 min-w-0 flex-1 ${isCurrentUser ? 'flex-row-reverse' : ''}`}>
-                                                                                                                                        <div className={`relative inline-block px-3 py-2 rounded-lg min-w-0 flex-1 overflow-hidden bg-white border border-gray-200 shadow-sm ${
+                                                                                                                                        <div className={`relative inline-block px-3 py-2 rounded-lg min-w-0 flex-1 overflow-hidden bg-white border border-gray-200 shadow-md hover:shadow-lg transition-shadow duration-200 ${
                                                                     isCurrentUser ? 'ml-2' : 'mr-2'
                                                                 }`}>
                                                                     {/* Orange vertical bar - left for others, right for current user */}
@@ -192,13 +191,13 @@ const TicketUpdatesSection = ({
 
                         {/* Add Comment Form */}
                         {canAddComments && (
-                            <div className="bg-gray-100 border border-gray-200 rounded-lg p-3 w-full min-w-0 max-w-full overflow-x-hidden shadow-sm">
-                                <div className="flex gap-2 w-full min-w-0 max-w-full overflow-x-hidden">
+                            <div className="w-full min-w-0 max-w-full overflow-x-hidden">
+                                <div className="relative w-full min-w-0 max-w-full overflow-x-hidden">
                                     <textarea
                                         value={commentText || ''}
                                         onChange={(e) => setCommentText(e.target.value)}
                                         rows={6}
-                                        className="flex-1 rounded-lg px-3 py-2 focus:outline-none text-sm resize-none min-w-0 max-w-full cursor-text placeholder:text-gray-700 placeholder:text-sm bg-white border border-orange-300 transition-all duration-200"
+                                        className="w-full rounded-lg px-3 py-2 pr-12 focus:outline-none text-sm resize-none min-w-0 max-w-full cursor-text placeholder:text-gray-700 placeholder:text-sm bg-gradient-to-br from-gray-50 to-white border border-orange-300 shadow-sm focus:shadow-md transition-all duration-200"
                                         placeholder="Add a comment..."
                                         disabled={commentLoading || !canAddComments}
                                         tabIndex={0}
@@ -212,10 +211,18 @@ const TicketUpdatesSection = ({
                                     <button
                                         onClick={handleAddComment}
                                         disabled={commentLoading || !commentText.trim() || !canAddComments}
-                                        className="px-2 py-1 text-xs font-semibold text-white bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 rounded-md shadow-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-orange-300 focus:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
-                                        style={{ height: '24px', minHeight: '24px' }}
+                                        className="absolute bottom-2 right-2 p-1.5 rounded-md transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-orange-300 focus:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center hover:bg-gray-100 hover:shadow-md shadow-sm"
+                                        title="Send comment"
                                     >
-                                        {commentLoading ? <Loader2 className="animate-spin w-4 h-4" /> : 'Post'}
+                                        {commentLoading ? (
+                                            <Loader2 className="animate-spin w-4 h-4 text-orange-600" />
+                                        ) : (
+                                            <img 
+                                                src={sendMailIcon} 
+                                                alt="Send" 
+                                                className="w-8 h-8"
+                                            />
+                                        )}
                                     </button>
                                 </div>
                             </div>
@@ -255,14 +262,13 @@ const TicketUpdatesSection = ({
                                         (closureNotes.trim() === '' && closeButtonState === 'default') ||
                                         assignedToHasError || timeSpentHasError || closureNotesError
                                     }
-                                    className={`px-2 py-1 text-xs font-semibold text-white rounded-md shadow-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1 ${
+                                    className={`px-3 py-1.5 text-xs font-medium text-white rounded-md transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1 ${
                                         closeButtonState === 'success' 
-                                            ? 'bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 focus:ring-green-300' 
+                                            ? 'bg-green-600 hover:bg-green-700 focus:ring-green-300' 
                                             : closeButtonState === 'error' 
-                                            ? 'bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 focus:ring-red-300'
-                                            : 'bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 focus:ring-blue-300'
+                                            ? 'bg-red-600 hover:bg-red-700 focus:ring-red-300'
+                                            : 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-300'
                                     }`}
-                                    style={{ height: '24px', minHeight: '24px' }}
                                 >
                                     {closeButtonState === 'closing' && <Loader2 className="animate-spin w-3 h-3" />}
                                     {closeButtonState === 'success' && <CheckCircle2 className="w-3 h-3" />}

@@ -1,6 +1,6 @@
 // src/components/common/CustomDropdown.js
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 
 /**
@@ -36,11 +36,14 @@ const CustomDropdown = ({
     const dropdownRef = useRef(null);
     const buttonRef = useRef(null);
 
+    // Memoize options to prevent unnecessary re-renders
+    const memoizedOptions = useMemo(() => options, [JSON.stringify(options)]);
+    
     // Find the selected option based on value
     useEffect(() => {
-        const option = options.find(opt => opt.value === value);
+        const option = memoizedOptions.find(opt => opt.value === value);
         setSelectedOption(option);
-    }, [value, options]);
+    }, [value, memoizedOptions]);
 
     // Close dropdown when clicking outside
     useEffect(() => {
@@ -91,7 +94,7 @@ const CustomDropdown = ({
             
             // Calculate optimal width based on content
             const maxContentWidth = Math.max(
-                ...options.map(option => {
+                ...memoizedOptions.map(option => {
                     const label = typeof option.label === 'string' ? option.label : option.label?.props?.children || '';
                     return label.length * 8; // Approximate character width
                 })
@@ -99,8 +102,9 @@ const CustomDropdown = ({
             // Use button width as minimum, but ensure dropdown is at least as wide as the button
             const optimalWidth = Math.max(rect.width, Math.min(maxContentWidth + 32, 300));
             
-            // Estimate dropdown height (approximate 32px per option + padding)
-            const estimatedDropdownHeight = Math.min(options.length * 32 + 16, 200); // Max 200px height
+            // Fixed dropdown height with scrollbar
+            const maxDropdownHeight = 200; // Fixed max height
+            const estimatedDropdownHeight = Math.min(memoizedOptions.length * 32 + 16, maxDropdownHeight);
             
             // Check if dropdown would go out of viewport when opening below
             const spaceBelow = viewportHeight - rect.bottom;
@@ -108,19 +112,19 @@ const CustomDropdown = ({
             
             // Determine if dropdown should open upward
             // Open upward if there's not enough space below AND there's more space above
-            const shouldOpenUpward = spaceBelow < estimatedDropdownHeight && 
-                                   spaceAbove > estimatedDropdownHeight && 
+            const shouldOpenUpward = spaceBelow < maxDropdownHeight && 
+                                   spaceAbove > maxDropdownHeight && 
                                    spaceAbove > spaceBelow;
             
             // Calculate position
             let top, left;
             
             if (shouldOpenUpward) {
-                // Open above the button
-                top = Math.max(10, rect.top + window.scrollY - estimatedDropdownHeight);
+                // Open above the button with proper gap to avoid overlap
+                top = Math.max(10, rect.top + window.scrollY - estimatedDropdownHeight - 8);
             } else {
                 // Open below the button (default)
-                top = rect.bottom + window.scrollY;
+                top = rect.bottom + window.scrollY + 2;
             }
             
             // Ensure dropdown doesn't go off the edges of viewport
@@ -158,11 +162,79 @@ const CustomDropdown = ({
 
     // Compute size classes
     const sizeTextClass = size === 'sm' ? 'text-xs' : 'text-sm';
-    const sizePadDefault = size === 'sm' ? 'px-2 py-1' : 'px-3 py-1.5';
-    const sizePadMinimal = size === 'sm' ? 'px-1 py-0.5' : 'px-1.5 py-1';
+    const sizePadDefault = size === 'sm' ? 'px-3 py-2.5' : 'px-3 py-3';
+    const sizePadMinimal = size === 'sm' ? 'px-2 py-1.5' : 'px-2 py-2';
 
     return (
-        <div className={`relative ${className}`}>
+        <>
+            <style>{`
+                .custom-dropdown-scroll::-webkit-scrollbar {
+                    width: 6px;
+                }
+                .custom-dropdown-scroll::-webkit-scrollbar-track {
+                    background: #f1f1f1;
+                    border-radius: 3px;
+                }
+                .custom-dropdown-scroll::-webkit-scrollbar-thumb {
+                    background: #c1c1c1;
+                    border-radius: 3px;
+                }
+                .custom-dropdown-scroll::-webkit-scrollbar-thumb:hover {
+                    background: #a8a8a8;
+                }
+                .custom-dropdown-scroll {
+                    scrollbar-width: thin;
+                    scrollbar-color: #c1c1c1 #f1f1f1;
+                }
+                .dropdown-option {
+                    min-height: 40px;
+                    display: flex;
+                    align-items: center;
+                    color: #1f2937 !important;
+                }
+                .dropdown-option * {
+                    color: #1f2937 !important;
+                }
+                .dropdown-option .flag {
+                    font-size: 18px;
+                    line-height: 1;
+                }
+                .dropdown-option:hover {
+                    color: #1f2937 !important;
+                    background-color: #e5e7eb !important;
+                    border-left: 3px solid #3b82f6 !important;
+                }
+                .dropdown-option:hover * {
+                    color: #1f2937 !important;
+                }
+                .dropdown-option:focus {
+                    color: #1f2937 !important;
+                    background-color: #e5e7eb !important;
+                    border-left: 3px solid #3b82f6 !important;
+                }
+                .dropdown-option:focus * {
+                    color: #1f2937 !important;
+                }
+                .dropdown-option span {
+                    color: #1f2937 !important;
+                }
+                .dropdown-option div {
+                    color: #1f2937 !important;
+                }
+                .dropdown-option div span {
+                    color: #1f2937 !important;
+                }
+                .dropdown-option button {
+                    color: #1f2937 !important;
+                }
+                .dropdown-option * {
+                    color: #1f2937 !important;
+                }
+                .custom-dropdown-button {
+                    min-height: 40px;
+                }
+            `}</style>
+            <div className={`relative ${className}`}>
             {label && (
                 <label className="block text-[10px] font-semibold text-gray-700 mb-1">
                     {label}
@@ -174,7 +246,7 @@ const CustomDropdown = ({
                     type="button"
                     onClick={handleToggle}
                     disabled={disabled}
-                    className={`w-full ${sizeTextClass} focus:outline-none transition-all duration-200 flex items-center ${
+                    className={`custom-dropdown-button w-full ${sizeTextClass} focus:outline-none transition-all duration-200 flex items-center ${
                         variant === 'minimal' 
                             ? `${sizePadMinimal} border-0 bg-transparent hover:bg-gray-50 rounded ${
                                 disabled 
@@ -183,22 +255,28 @@ const CustomDropdown = ({
                                         ? 'bg-gray-50'
                                         : 'text-gray-700 hover:text-gray-900'
                             }`
-                            : `${sizePadDefault} border rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${
+                            : `${sizePadDefault} border rounded-md focus:outline-none ${
                                 disabled 
                                     ? 'bg-gray-100 cursor-not-allowed text-gray-500 border-gray-200' 
                                     : isOpen
-                                        ? 'border-blue-500 bg-white shadow-sm ring-2 ring-blue-200'
+                                        ? 'border-blue-500 bg-white shadow-sm'
                                         : 'border-gray-300 bg-white hover:border-gray-400'
                             }`
                     }`}
-                    style={{ fontFamily: 'Source Sans 3, sans-serif', fontWeight: 400, fontOpticalSizing: 'auto', fontStyle: 'normal' }}
+                    style={{ fontFamily: 'Arial, sans-serif', fontWeight: 400, fontOpticalSizing: 'auto', fontStyle: 'normal' }}
                 >
                     <div className="flex items-center gap-2 min-w-0 flex-1 text-left">
                         <div 
                             className="min-w-0 flex-1 truncate"
                             title={selectedOption?.fullLabel || (typeof selectedOption?.label === 'string' ? selectedOption.label : selectedOption?.label?.props?.children || '')}
                         >
-                            {customDisplay && selectedOption ? customDisplay : (selectedOption ? selectedOption.label : placeholder)}
+                            {customDisplay && selectedOption ? customDisplay : (selectedOption ? (
+                                typeof selectedOption.label === 'string' ? (
+                                    selectedOption.label
+                                ) : (
+                                    selectedOption.label
+                                )
+                            ) : placeholder)}
                         </div>
                     </div>
                     <svg 
@@ -218,36 +296,50 @@ const CustomDropdown = ({
                         onClick={(e) => e.stopPropagation()}
                         onMouseDown={(e) => e.stopPropagation()}
                         onMouseUp={(e) => e.stopPropagation()}
-                        className={`fixed bg-white/95 backdrop-blur-lg border border-gray-300 rounded-md shadow-lg z-[10000] ${
+                        className={`fixed bg-white/95 backdrop-blur-lg border border-gray-300 rounded-md shadow-lg z-[10000] custom-dropdown-scroll ${
                             dropdownPosition.openUpward ? 'rounded-b-none' : 'rounded-t-none'
                         }`}
                         style={{
                             top: dropdownPosition.top,
                             left: dropdownPosition.left,
                             width: dropdownPosition.width,
+                            maxHeight: '200px',
+                            overflowY: 'auto',
                             boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
                             animation: dropdownPosition.openUpward ? 'fadeInUp 0.15s ease-out' : 'fadeInDown 0.15s ease-out'
                         }}
                     >
-                        {options.map((option, index) => (
+                        {memoizedOptions.map((option, index) => (
                             <button
                                 key={option.value}
                                 type="button"
                                 onClick={(e) => handleOptionClick(option, e)}
                                 onMouseDown={(e) => e.stopPropagation()}
                                 onMouseUp={(e) => e.stopPropagation()}
-                                className={`w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100/80 transition-all duration-200 flex items-center min-w-0 ${
+                                className={`dropdown-option w-full text-left px-3 py-2 text-sm text-gray-800 hover:bg-gray-200 hover:text-gray-900 transition-all duration-200 flex items-center min-w-0 ${
                                     index === 0 ? 'rounded-t-md' : ''
                                 } ${
-                                    index === options.length - 1 ? 'rounded-b-md' : ''
+                                    index === memoizedOptions.length - 1 ? 'rounded-b-md' : ''
                                 } ${
-                                    option.value === value ? 'bg-blue-50 text-blue-700 font-medium' : ''
+                                    option.value === value ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-800'
                                 }`}
-                                style={{ fontFamily: 'Source Sans 3, sans-serif', fontWeight: 400, fontOpticalSizing: 'auto', fontStyle: 'normal' }}
+                                style={{ 
+                                    fontFamily: 'Arial, sans-serif', 
+                                    fontWeight: 400, 
+                                    fontOpticalSizing: 'auto', 
+                                    fontStyle: 'normal',
+                                    color: '#1f2937'
+                                }}
                                 title={option.fullLabel || (typeof option.label === 'string' ? option.label : option.label?.props?.children || '')}
                             >
-                                <div className="min-w-0 flex-1 whitespace-nowrap">
-                                    {typeof option.label === 'string' ? option.label : option.label}
+                                <div className="min-w-0 flex-1 whitespace-nowrap flex items-center gap-2">
+                                    {typeof option.label === 'string' ? (
+                                        <span style={{ color: '#1f2937' }}>
+                                            {option.label}
+                                        </span>
+                                    ) : (
+                                        option.label
+                                    )}
                                 </div>
                             </button>
                         ))}
@@ -256,6 +348,7 @@ const CustomDropdown = ({
                 )}
             </div>
         </div>
+        </>
     );
 };
 

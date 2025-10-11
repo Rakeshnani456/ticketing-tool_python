@@ -409,37 +409,47 @@ textarea.max-w-none.w-full::-webkit-scrollbar-corner {
 
 /* --- Glassmorphism Sidebar Styles --- */
 .sidebar-glass {
-  background: #f8fafc; /* Offwhite (Tailwind's slate-50) */
+  background: #175873; /* Dark blue-green background */
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
   border-radius: 0;
   box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.08);
   transition: background 0.3s, box-shadow 0.3s;
   font-family: 'Poppins', sans-serif;
+  height: calc(100vh - 56px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  box-sizing: border-box;
 }
 
 .sidebar-glass .menu-item {
-  color: #000000; /* Black text */
+  color: #ffffff; /* White text for dark background */
   background: transparent;
-  border-radius: 12px;
+  border-radius: 8px;
   transition: background 0.2s, color 0.2s, box-shadow 0.2s;
   font-weight: 400;
   font-family: 'Poppins', sans-serif;
+  padding: 0.75rem 1rem; /* Increased padding for bigger menu items */
+  margin: 0.25rem 0; /* Increased margin for better spacing */
+  font-size: 1rem; /* Larger font size for better readability */
+  box-sizing: border-box;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .sidebar-glass .menu-item:hover {
-  background: rgba(244, 76, 35, 0.12); /* #f44c23 tint */
-  color: #f44c23;
-  box-shadow: 0 2px 8px 0 rgba(244, 76, 35, 0.10);
+  background: rgba(156, 163, 175, 0.15); /* Gray tint */
+  color: #e5e7eb;
+  box-shadow: 0 2px 8px 0 rgba(156, 163, 175, 0.10);
   border-radius: 0;
 }
 
 .sidebar-glass .menu-item.active, .sidebar-glass .menu-item[aria-current="page"] {
-  background: #ffffff !important; /* White background when selected */
-  color: #000000 !important;
-  border-radius: 8px !important;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2) !important; /* Black shadow */
-  border: 1px solid rgba(244, 76, 35, 0.6) !important; /* Orange outline */
+  background: rgba(156, 163, 175, 0.25) !important; /* Brighter light grey background when selected */
+  color: #e5e7eb !important; /* Light text for contrast */
+  border-radius: 0 !important; /* No rounded corners */
+  box-shadow: 0 2px 8px 0 rgba(156, 163, 175, 0.10) !important; /* Same shadow as hover */
+  border: none !important; /* Remove border */
   filter: none;
   position: relative;
   z-index: 1;
@@ -447,27 +457,28 @@ textarea.max-w-none.w-full::-webkit-scrollbar-corner {
 
 .sidebar-glass .menu-item.active svg,
 .sidebar-glass .menu-item[aria-current="page"] svg {
-  /* Keep original icon colors - no color changes */
+  /* Light grey icons for contrast on light background */
+  color: #e5e7eb !important;
 }
 
 /* Focus state for menu items */
 .sidebar-glass .menu-item:focus,
 .sidebar-glass .menu-item:focus-visible {
   outline: none;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-  border: 1px solid rgba(244, 76, 35, 0.6);
-  background: #ffffff;
+  border-radius: 0;
+  box-shadow: none;
+  border: none;
+  background: rgba(156, 163, 175, 0.25); /* Brighter light grey background for focus */
 }
 
 /* Persistent focus for active menu items */
 .sidebar-glass .menu-item.active:focus,
 .sidebar-glass .menu-item[aria-current="page"]:focus {
   outline: none;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-  border: 1px solid rgba(244, 76, 35, 0.6);
-  background: #ffffff;
+  border-radius: 0;
+  box-shadow: none;
+  border: none;
+  background: rgba(156, 163, 175, 0.25); /* Brighter light grey background for focus */
 }
 
 .sidebar-glass .menu-item.active .sidebar-count-badge {
@@ -492,12 +503,14 @@ textarea.max-w-none.w-full::-webkit-scrollbar-corner {
 }
 
 .sidebar-glass .sidebar-section-header {
-  font-size: 0.77rem;
+  font-size: 0.8rem;
   font-weight: 600;
-  letter-spacing: 0.08em;
-  margin-top: 1rem;
+  letter-spacing: 0.05em;
+  margin-top: 0.75rem;
   margin-bottom: 0.25rem;
   padding-left: 0.5rem;
+  padding-top: 0.375rem;
+  padding-bottom: 0.1875rem;
   color: #f05118;
 }
 
@@ -530,8 +543,10 @@ textarea.max-w-none.w-full::-webkit-scrollbar-corner {
 }
 
 .sidebar-glass .menu-item svg {
-  color: #758CA3; /* Default icon color matches text */
+  color: #9CA3AF; /* Thicker grey color for icons */
   transition: color 0.2s, fill 0.2s, stroke 0.2s;
+  stroke-width: 2; /* Make icons thicker */
+  font-weight: 600; /* Make icons bolder */
 }
 
 /* Ensure proper vertical alignment for collapsed sidebar icons */
@@ -593,14 +608,14 @@ textarea.max-w-none.w-full::-webkit-scrollbar-corner {
 .sidebar-glass .group.flex.items-center {
   font-family: 'Poppins', sans-serif;
   font-weight: 400;
-  color: #000000;
+  color: #ffffff;
 }
 
 /* Poppins font for sidebar section headers */
 .sidebar-glass .sidebar-section-header {
   font-family: 'Poppins', sans-serif;
   font-weight: 400;
-  color: #6b7280;
+  color: #e5e7eb;
 }
 
 /* Poppins font for sidebar count badges */
@@ -611,9 +626,70 @@ textarea.max-w-none.w-full::-webkit-scrollbar-corner {
 
 /* Main app header - fixed top header */
 header.fixed.top-0 {
-  background: #ffffff !important; /* Main app header color */
-  box-shadow: none !important;
-  border-bottom: 1px solid #e5e7eb !important;
+  background: #f8f9fa !important; /* Main app header color */
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1) !important;
+  border-bottom: 1px solid #d1d5db !important;
+}
+
+/* Responsive sidebar adjustments - Maintain good sizing while fitting content */
+@media (max-height: 900px) {
+  .sidebar-glass .menu-item {
+    padding: 0.625rem 0.75rem;
+    font-size: 0.95rem;
+    margin: 0.1875rem 0;
+  }
+  
+  .sidebar-glass .sidebar-section-header {
+    font-size: 0.75rem;
+    margin-top: 0.625rem;
+    margin-bottom: 0.1875rem;
+    padding: 0.3125rem 0.4375rem;
+  }
+}
+
+@media (max-height: 800px) {
+  .sidebar-glass .menu-item {
+    padding: 0.5rem 0.625rem;
+    font-size: 0.9rem;
+    margin: 0.125rem 0;
+  }
+  
+  .sidebar-glass .sidebar-section-header {
+    font-size: 0.7rem;
+    margin-top: 0.5rem;
+    margin-bottom: 0.125rem;
+    padding: 0.25rem 0.375rem;
+  }
+}
+
+@media (max-height: 700px) {
+  .sidebar-glass .menu-item {
+    padding: 0.375rem 0.5rem;
+    font-size: 0.85rem;
+    margin: 0.0625rem 0;
+  }
+  
+  .sidebar-glass .sidebar-section-header {
+    font-size: 0.65rem;
+    margin-top: 0.375rem;
+    margin-bottom: 0.0625rem;
+    padding: 0.1875rem 0.3125rem;
+  }
+}
+
+@media (max-height: 600px) {
+  .sidebar-glass .menu-item {
+    padding: 0.25rem 0.375rem;
+    font-size: 0.8rem;
+    margin: 0.03125rem 0;
+  }
+  
+  .sidebar-glass .sidebar-section-header {
+    font-size: 0.6rem;
+    margin-top: 0.25rem;
+    margin-bottom: 0.03125rem;
+    padding: 0.125rem 0.25rem;
+  }
 }
 
 /* Header button styles */
@@ -826,10 +902,16 @@ body {
 
 /* Disable all hover scale/transform effects on client management page */
 .client-management-page *,
-.client-management-page *:hover {
+.client-management-page *:hover,
+.client-management-page *:active,
+.client-management-page *:focus {
     transform: none !important;
     transition: none !important;
     animation: none !important;
+    -webkit-transform: none !important;
+    -moz-transform: none !important;
+    -ms-transform: none !important;
+    -o-transform: none !important;
 }
 
 /* Specifically target Material-UI components on client management page */
@@ -840,10 +922,79 @@ body {
 .client-management-page .MuiButton-root,
 .client-management-page .MuiButton-root:hover,
 .client-management-page .MuiIconButton-root,
-.client-management-page .MuiIconButton-root:hover {
+.client-management-page .MuiIconButton-root:hover,
+.client-management-page .MuiTableRow-root,
+.client-management-page .MuiTableRow-root:hover,
+.client-management-page .MuiTableCell-root,
+.client-management-page .MuiTableCell-root:hover,
+.client-management-page .MuiAvatar-root,
+.client-management-page .MuiAvatar-root:hover,
+.client-management-page .MuiFab-root,
+.client-management-page .MuiFab-root:hover {
     transform: none !important;
     transition: none !important;
     animation: none !important;
+    box-shadow: inherit !important;
+}
+
+/* Force override the global MuiCard hover transform that causes bounce */
+.client-management-page .MuiCard-root:hover {
+    transform: translateY(0px) !important;
+    -webkit-transform: translateY(0px) !important;
+}
+
+/* Ensure no elevation or shadow changes that might suggest movement */
+.client-management-page .MuiCard-root,
+.client-management-page .MuiPaper-root {
+    box-shadow: none !important;
+}
+
+/* Disable all hover scale/transform effects on client detail page */
+.client-detail-page *,
+.client-detail-page *:hover,
+.client-detail-page *:active,
+.client-detail-page *:focus {
+    transform: none !important;
+    transition: none !important;
+    animation: none !important;
+    -webkit-transform: none !important;
+    -moz-transform: none !important;
+    -ms-transform: none !important;
+    -o-transform: none !important;
+}
+
+/* Specifically target Material-UI components on client detail page */
+.client-detail-page .MuiCard-root,
+.client-detail-page .MuiCard-root:hover,
+.client-detail-page .MuiChip-root,
+.client-detail-page .MuiChip-root:hover,
+.client-detail-page .MuiButton-root,
+.client-detail-page .MuiButton-root:hover,
+.client-detail-page .MuiIconButton-root,
+.client-detail-page .MuiIconButton-root:hover,
+.client-detail-page .MuiTableRow-root,
+.client-detail-page .MuiTableRow-root:hover,
+.client-detail-page .MuiTableCell-root,
+.client-detail-page .MuiTableCell-root:hover,
+.client-detail-page .MuiAvatar-root,
+.client-detail-page .MuiAvatar-root:hover,
+.client-detail-page .MuiTab-root,
+.client-detail-page .MuiTab-root:hover,
+.client-detail-page .MuiList-root,
+.client-detail-page .MuiListItem-root,
+.client-detail-page .MuiListItem-root:hover,
+.client-detail-page .MuiPaper-root,
+.client-detail-page .MuiPaper-root:hover {
+    transform: none !important;
+    transition: none !important;
+    animation: none !important;
+    box-shadow: inherit !important;
+}
+
+/* Force override the global MuiCard hover transform for client detail page */
+.client-detail-page .MuiCard-root:hover {
+    transform: translateY(0px) !important;
+    -webkit-transform: translateY(0px) !important;
 }
 
 /* Responsive grid adjustments */
@@ -859,6 +1010,168 @@ body {
     .ticket-detail-container .lg\:col-span-2 {
         grid-column: span 1 / span 1;
     }
+}
+
+/* Color variations for different ticket detail elements */
+.ticket-detail-container .text-orange-600 {
+    color: #f59e0b !important; /* Softer orange for highlights */
+    font-weight: 400 !important; /* Normal weight */
+}
+
+.ticket-detail-container .text-gray-500 {
+    color: #9ca3af !important; /* Medium gray for secondary text */
+}
+
+.ticket-detail-container .text-gray-400 {
+    color: #d1d5db !important; /* Light gray for tertiary text */
+}
+
+.ticket-detail-container .underline {
+    text-decoration-color: #9ca3af !important; /* Softer underline color */
+}
+
+/* Button variations */
+.ticket-detail-container button {
+    font-weight: 400 !important; /* Normal weight for buttons */
+}
+
+.ticket-detail-container .MuiButton-root {
+    font-weight: 400 !important; /* Normal weight for Material-UI buttons */
+}
+
+.ticket-detail-container .MuiButton-root .MuiButton-label {
+    font-weight: 400 !important;
+}
+
+/* Field box variations with different colors */
+.ticket-detail-container .FieldBox {
+    color: #374151 !important; /* Darker gray for field content */
+}
+
+.ticket-detail-container .FieldBox span {
+    color: #4a5568 !important; /* Medium gray for field labels */
+    font-weight: 400 !important;
+}
+
+/* Comment section color variations */
+.ticket-detail-container .comment-item {
+    color: #4a5568 !important; /* Medium gray for comments */
+}
+
+.ticket-detail-container .comment-item .text-xs {
+    color: #6b7280 !important; /* Lighter gray for comment metadata */
+}
+
+/* Status and priority color variations */
+.ticket-detail-container .status-badge {
+    color: #374151 !important; /* Darker for status badges */
+    font-weight: 500 !important; /* Medium weight for emphasis */
+}
+
+.ticket-detail-container .priority-high {
+    color: #dc2626 !important; /* Red for high priority */
+}
+
+.ticket-detail-container .priority-medium {
+    color: #f59e0b !important; /* Orange for medium priority */
+}
+
+.ticket-detail-container .priority-low {
+    color: #10b981 !important; /* Green for low priority */
+}
+
+/* Timeline and activity color variations */
+.ticket-detail-container .timeline-item {
+    color: #6b7280 !important; /* Lighter gray for timeline */
+}
+
+.ticket-detail-container .activity-text {
+    color: #4a5568 !important; /* Medium gray for activities */
+}
+
+/* Fix edit button text color */
+.ticket-detail-container .ticket-progress-section button {
+    color: inherit !important; /* Use the button's original color */
+}
+
+.ticket-detail-container .ticket-progress-section button[class*="text-white"] {
+    color: #ffffff !important; /* Ensure white text for edit button */
+}
+
+.ticket-detail-container .ticket-progress-section button[class*="text-gray-600"] {
+    color: #4b5563 !important; /* Ensure proper gray for cancel button */
+}
+
+/* Main ticket details color variations */
+.ticket-detail-container .ticket-id {
+    color: #1e40af !important; /* Blue for ticket ID */
+    font-weight: 500 !important;
+}
+
+.ticket-detail-container .ticket-status {
+    color: #059669 !important; /* Green for status */
+    font-weight: 500 !important;
+}
+
+.ticket-detail-container .ticket-priority {
+    color: #dc2626 !important; /* Red for priority */
+    font-weight: 500 !important;
+}
+
+.ticket-detail-container .ticket-assigned {
+    color: #7c3aed !important; /* Purple for assigned user */
+    font-weight: 500 !important;
+}
+
+.ticket-detail-container .ticket-created {
+    color: #ea580c !important; /* Orange for creation date */
+    font-weight: 400 !important;
+}
+
+.ticket-detail-container .ticket-updated {
+    color: #0891b2 !important; /* Cyan for last updated */
+    font-weight: 400 !important;
+}
+
+.ticket-detail-container .ticket-category {
+    color: #be185d !important; /* Pink for category */
+    font-weight: 500 !important;
+}
+
+.ticket-detail-container .ticket-department {
+    color: #0d9488 !important; /* Teal for department */
+    font-weight: 500 !important;
+}
+
+.ticket-detail-container .ticket-description {
+    color: #374151 !important; /* Dark gray for description */
+    font-weight: 400 !important;
+}
+
+.ticket-detail-container .ticket-resolution {
+    color: #059669 !important; /* Green for resolution */
+    font-weight: 400 !important;
+}
+
+/* Field-specific color variations */
+.ticket-detail-container .field-label {
+    color: #6b7280 !important; /* Medium gray for field labels */
+    font-weight: 500 !important;
+}
+
+.ticket-detail-container .field-value {
+    color: #374151 !important; /* Dark gray for field values */
+    font-weight: 400 !important;
+}
+
+.ticket-detail-container .field-required {
+    color: #dc2626 !important; /* Red for required fields */
+    font-weight: 500 !important;
+}
+
+.ticket-detail-container .field-optional {
+    color: #9ca3af !important; /* Light gray for optional fields */
+    font-weight: 400 !important;
 }
 
 

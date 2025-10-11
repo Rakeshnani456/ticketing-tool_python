@@ -56,7 +56,7 @@ import TicketUpdatesSection from './TicketUpdatesSection';
 const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
     const { ticketId } = useParams();
     const [ticket, setTicket] = useState(null);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(false); // Start with false to avoid spinner flash
     const [error, setError] = useState(null);
     const [isEditing, setIsEditing] = useState(false);
     const [commentText, setCommentText] = useState('');
@@ -148,8 +148,8 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
         }
     }, [ticket?.short_description, subjectExpanded]);
 
-    const isSupportUser = user?.role === 'support' || user?.role === 'admin' || user?.role === 'super_admin' || user?.role === 'site_admin';
-    const isEngineer = user?.role === 'support' || user?.role === 'super_admin';
+    const isSupportUser = user?.role === 'support' || user?.role === 'admin' || user?.role === 'super_admin' || user?.role === 'site_admin' || user?.role === 'engineer';
+    const isEngineer = user?.role === 'support' || user?.role === 'super_admin' || user?.role === 'engineer';
 
     const priorities = [
         { value: 'Low', label: 'Low' },
@@ -430,7 +430,19 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
 
         const ticketDocRef = doc(db, 'tickets', ticketId);
 
+        // Add timeout to prevent infinite loading
+        const loadingTimeout = setTimeout(() => {
+            if (loading) {
+                console.warn('Ticket loading timeout - ticket may not exist yet');
+                setError('Ticket is still being created. Please wait a moment and refresh.');
+                showFlashMessage('Ticket is still being created. Please wait a moment and refresh.', 'warning');
+                setLoading(false);
+            }
+        }, 10000); // 10 second timeout
+
         const unsubscribe = onSnapshot(ticketDocRef, (docSnapshot) => {
+            clearTimeout(loadingTimeout); // Clear timeout when data is received
+            
             if (docSnapshot.exists()) {
                 const fetchedTicket = { id: docSnapshot.id, ...formatTicketData(docSnapshot.data()) };
 
@@ -462,19 +474,22 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                 setLoading(false);
                 setError(null);
             } else {
-                setError('Ticket not found.');
-                showFlashMessage('Ticket not found.', 'error');
-                setTicket(null);
-                setLoading(false);
+                // Ticket doesn't exist yet - this might be a newly created ticket
+                console.log('Ticket not found in Firestore yet, waiting...');
+                // Don't set error immediately, keep loading for a bit
             }
         }, (err) => {
+            clearTimeout(loadingTimeout);
             console.error("Firestore onSnapshot error (TicketDetailComponent):", err);
             setError(`Failed to load ticket details: ${err.message}`);
             showFlashMessage(`Failed to load ticket details: ${err.message}`, 'error');
             setLoading(false);
         });
 
-        return () => unsubscribe();
+        return () => {
+            clearTimeout(loadingTimeout);
+            unsubscribe();
+        };
     }, [ticketId, user, db, isSupportUser]);
 
     useEffect(() => {
@@ -1033,6 +1048,9 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
             <div className="bg-white rounded-xl shadow-lg p-8 border border-gray-200 max-w-md mx-auto">
                 <Loader2 className="animate-spin text-blue-600 mx-auto mb-4" size={48} />
                 <p className="text-gray-700 text-center font-medium">Loading ticket details...</p>
+                <p className="text-gray-500 text-center text-sm mt-2">
+                    {ticketId ? `Loading ticket ${ticketId}...` : 'Preparing ticket view...'}
+                </p>
             </div>
         </div>
     );

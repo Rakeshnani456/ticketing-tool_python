@@ -58,9 +58,21 @@ class WebSocketServer {
                             console.log(`WebSocket client authenticated: ${userId} (${userRole})`);
                         } catch (error) {
                             console.error('WebSocket authentication failed:', error);
+                            
+                            // Handle specific error types
+                            let errorMessage = 'Authentication failed';
+                            if (error.code === 'auth/id-token-expired') {
+                                errorMessage = 'Token expired. Please refresh your session.';
+                            } else if (error.code === 'auth/invalid-token') {
+                                errorMessage = 'Invalid token. Please log in again.';
+                            } else if (error.code === 'auth/argument-error') {
+                                errorMessage = 'Invalid token format.';
+                            }
+                            
                             ws.send(JSON.stringify({
                                 type: 'error',
-                                message: 'Authentication failed'
+                                message: errorMessage,
+                                code: error.code || 'auth/unknown'
                             }));
                             ws.close();
                         }
@@ -221,7 +233,10 @@ class WebSocketServer {
         // Apply role-based filtering
         if (userRole === 'site_admin' && clientName) {
             query = query.where('client_name', '==', clientName);
-        } else if (userRole === 'user') {
+        } else if (userRole === 'user' || userRole === 'engineer') {
+            // For regular users, get tickets they created OR tickets assigned to them
+            // We need to use a compound query or fetch all and filter
+            // For now, let's get tickets they created (this is for the main tickets list)
             query = query.where('reporter_id', '==', userId);
         }
 
@@ -237,11 +252,30 @@ class WebSocketServer {
     }
 
     async getTicketCountsData(userId, userRole, clientName) {
-        const tickets = await this.getTicketsData(userId, userRole, clientName);
+        const db = admin.firestore();
+        
+        // Get tickets based on role
+        let tickets = await this.getTicketsData(userId, userRole, clientName);
+        
+        // For assigned_to_me count, we need to query tickets assigned to the user
+        // This is different from the main tickets list for regular users
+        let assignedToMeTickets = 0;
+        
+        if (userRole === 'user' || userRole === 'engineer') {
+            // For regular users, get tickets assigned to them
+            const assignedQuery = db.collection('tickets')
+                .where('assigned_to_id', '==', userId)
+                .where('status', 'in', ['Open', 'In Progress', 'Hold']);
+            
+            const assignedSnapshot = await assignedQuery.get();
+            assignedToMeTickets = assignedSnapshot.docs.length;
+        } else {
+            // For admin/support roles, use the filtered tickets
+            assignedToMeTickets = tickets.filter(t => t.assigned_to_id === userId && !['Closed', 'Resolved'].includes(t.status)).length;
+        }
         
         const totalTickets = tickets.length;
         const activeTickets = tickets.filter(t => ['Open', 'In Progress', 'Hold'].includes(t.status)).length;
-        const assignedToMeTickets = tickets.filter(t => t.assigned_to_id === userId && !['Closed', 'Resolved'].includes(t.status)).length;
 
         return {
             total_tickets: totalTickets,

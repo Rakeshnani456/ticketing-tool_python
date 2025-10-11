@@ -330,73 +330,114 @@ const InitialPasswordChangeComponent = ({ navigateTo, showFlashMessage }) => {
     }
 
     return (
-        <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-gray-50 to-blue-100 p-4">
-            <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md border border-gray-100 animate-fade-in">
-                <div className="flex flex-col items-center mb-6">
-                    <img src={require('../../assets/logo/logo.png')} alt="Company Logo" className="h-10 mb-4" />
-                    <h2 className="text-2xl font-sm text-gray-800 mb-1 tracking-tight">Change Password</h2>
-                    <p className="text-gray-600 text-sm text-center">
-                        Changing password for <span className="font-medium text-gray-800">{userEmail}</span>
-                    </p>
+        <div className="h-screen bg-gray-50 flex overflow-hidden">
+            {/* Left side - Company Name */}
+            <div className="hidden lg:flex lg:w-1/2 xl:w-3/5 bg-white relative overflow-hidden" style={{
+                backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23f3f4f6' fill-opacity='0.4'%3E%3Ccircle cx='30' cy='30' r='2'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
+                backgroundRepeat: 'repeat'
+            }}>
+                <div className="relative z-10 flex flex-col justify-center items-center px-12 py-16 text-gray-800">
+                    <img src={require('../../assets/logo/logo_final.png')} alt="Company Logo" className="h-20 mb-8" />
                 </div>
-
-                <StatusAlert 
-                    message={statusMessage.message} 
-                    type={statusMessage.type} 
-                    onDismiss={clearStatus}
-                />
-
-                <form onSubmit={handleChangePassword} className="space-y-4">
-                        <div>
-                            <FormInput
-                                id="newPassword"
-                                label="New Password"
-                                type="password"
-                                value={newPassword}
-                                onChange={handleNewPasswordChange}
-                                onFocus={() => handleInputFocus('newPassword')}
-                                required
-                                showPasswordToggle={true}
-                                error={!!fieldErrors.newPassword}
-                            />
-                            {fieldErrors.newPassword && (
-                                <p className="text-red-500 text-xs mt-1">{fieldErrors.newPassword}</p>
-                            )}
-                            <PasswordStrengthIndicator strength={passwordStrength} />
-                        </div>
-
-                        <div>
-                            <FormInput
-                                id="confirmPassword"
-                                label="Confirm New Password"
-                                type="password"
-                                value={confirmPassword}
-                                onChange={(e) => setConfirmPassword(e.target.value)}
-                                onFocus={() => handleInputFocus('confirmPassword')}
-                                required
-                                showPasswordToggle={true}
-                                error={!!fieldErrors.confirmPassword}
-                            />
-                            {fieldErrors.confirmPassword && (
-                                <p className="text-red-500 text-xs mt-1">{fieldErrors.confirmPassword}</p>
-                            )}
-                        </div>
-
-                        <div className="flex items-center justify-center pt-4">
-                            <PrimaryButton 
-                                type="submit" 
-                                loading={passwordChangeLoading} 
-                                Icon={Lock} 
-                                className="w-full"
-                                disabled={passwordStrength.score < 3}
-                            >
-                                {passwordChangeLoading ? "Updating Password..." : "Update Password"}
-                            </PrimaryButton>
-                        </div>
-                    </form>
+                
+                {/* Footer copyright */}
+                <div className="absolute bottom-6 left-6 right-6">
+                    <div className="text-center">
+                        <p className="text-xs text-gray-600">Copyright © 2024 KriaSol Technologies LLP. All Rights Reserved.</p>
+                    </div>
                 </div>
             </div>
 
+            {/* Right side - Password Change Form */}
+            <div className="w-full lg:w-1/2 xl:w-2/5 flex items-center justify-center p-4 overflow-y-auto">
+                <div className="w-full max-w-md">
+                    {/* Mobile logo */}
+                    <div className="lg:hidden flex justify-center mb-4">
+                        <img src={require('../../assets/logo/logo_final.png')} alt="Company Logo" className="h-10" />
+                    </div>
+
+                    <div className="bg-white rounded-2xl border border-gray-100 p-6">
+                        <div className="text-center mb-6">
+                            <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                                <Shield className="w-6 h-6 text-orange-600" />
+                            </div>
+                            <h2 className="text-xl font-bold text-gray-900 mb-1">Update Password</h2>
+                            <p className="text-gray-600 text-sm">
+                                Create a new secure password for <span className="font-medium text-gray-800">{userEmail}</span>
+                            </p>
+                        </div>
+
+                        <StatusAlert 
+                            message={statusMessage.message} 
+                            type={statusMessage.type} 
+                            onDismiss={clearStatus}
+                        />
+
+                        <form onSubmit={handleChangePassword} className="space-y-4">
+                            <div>
+                                <FormInput
+                                    id="newPassword"
+                                    label="New Password"
+                                    type="password"
+                                    value={newPassword}
+                                    onChange={handleNewPasswordChange}
+                                    onFocus={() => handleInputFocus('newPassword')}
+                                    required
+                                    showPasswordToggle={true}
+                                    error={!!fieldErrors.newPassword}
+                                    className="h-10"
+                                />
+                                {fieldErrors.newPassword && (
+                                    <p className="text-red-500 text-xs mt-1">{fieldErrors.newPassword}</p>
+                                )}
+                                <PasswordStrengthIndicator strength={passwordStrength} />
+                            </div>
+
+                            <div>
+                                <FormInput
+                                    id="confirmPassword"
+                                    label="Confirm New Password"
+                                    type="password"
+                                    value={confirmPassword}
+                                    onChange={(e) => setConfirmPassword(e.target.value)}
+                                    onFocus={() => handleInputFocus('confirmPassword')}
+                                    required
+                                    showPasswordToggle={true}
+                                    error={!!fieldErrors.confirmPassword}
+                                    className="h-10"
+                                />
+                                {fieldErrors.confirmPassword && (
+                                    <p className="text-red-500 text-xs mt-1">{fieldErrors.confirmPassword}</p>
+                                )}
+                            </div>
+
+                            <div className="pt-1">
+                                <PrimaryButton 
+                                    type="submit" 
+                                    loading={passwordChangeLoading} 
+                                    Icon={Lock} 
+                                    className="w-full h-10 text-sm font-semibold"
+                                    disabled={passwordStrength.score < 3}
+                                >
+                                    {passwordChangeLoading ? "Updating Password..." : "Update Password"}
+                                </PrimaryButton>
+                            </div>
+                        </form>
+                        
+                        {/* Footer links */}
+                        <div className="mt-6 pt-4 border-t border-gray-200">
+                            <div className="flex items-center justify-center space-x-4 text-xs text-gray-600">
+                                <a href="#" className="hover:text-gray-800 transition-colors">Privacy Policy</a>
+                                <span>•</span>
+                                <a href="#" className="hover:text-gray-800 transition-colors">Terms of Service</a>
+                                <span>•</span>
+                                <a href="#" className="hover:text-gray-800 transition-colors">Contact</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     );
 };
 

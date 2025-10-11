@@ -312,13 +312,14 @@ const analyticsRoutes = require('./routes/analyticsRoutes');
 const knowledgeBaseRoutes = require('./routes/knowledgeBaseRoutes');
 const personalNotesRoutes = require('./routes/personalNotesRoutes');
 const searchRoutes = require('./routes/searchRoutes');
+const readStatesRoutes = require('./routes/readStatesRoutes');
 
 
 app.use('/', authRoutes(db, admin, usersCollection, authenticateToken));
 app.use('/tickets', ticketRoutes(db, admin, ticketsCollection, usersCollection, notificationsCollection, transporter, authenticateToken, checkRole, jsonSerializableTicket, jsonSerializableNotification, generateDisplayId, emailService));
 app.use('/admin', adminRoutes(db, admin, usersCollection, authenticateToken, checkRole));
 app.use('/notifications', notificationRoutes(db, notificationsCollection, authenticateToken, jsonSerializableNotification));
-app.use('/api/clients', clientRoutes(db, clientsCollection, usersCollection));
+app.use('/api/clients', clientRoutes(db, clientsCollection, usersCollection, authenticateToken));
 app.use('/api/users', userManagementRoutes(db, admin, usersCollection, clientsCollection, authenticateToken, emailService));
 app.use('/dashboard', dashboardRoutes(db, ticketsCollection, clientsCollection, usersCollection, requireSuperAdmin));
 app.use('/upload-attachment', attachmentRoutes(admin, authenticateToken));
@@ -327,6 +328,7 @@ app.use('/analytics', analyticsRoutes(db, admin, authenticateToken, checkRole));
 app.use('/api/knowledge-base', knowledgeBaseRoutes(db, admin, authenticateToken, checkRole));
 app.use('/api/personal-notes', personalNotesRoutes(db, admin, usersCollection, authenticateToken, checkRole, jsonSerializableNotification));
 app.use('/api/search', searchRoutes);
+app.use('/api/read-states', readStatesRoutes(db, admin, usersCollection, authenticateToken));
 
 // Add cache statistics endpoint
 app.get('/api/cache/stats', (req, res) => {

@@ -22,7 +22,7 @@ import { app, dbClient } from '../../config/firebase'; // Import 'app' and 'dbCl
  */
 const MyTicketsComponent = ({ user, navigateTo, showFlashMessage, searchKeyword, refreshKey }) => {
     const [tickets, setTickets] = useState([]);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(false); // Start with false to avoid spinner flash
     const [error, setError] = useState(null);
     const [currentPage, setCurrentPage] = useState(1);
     const ticketsPerPage = 30;
@@ -233,23 +233,41 @@ const MyTicketsComponent = ({ user, navigateTo, showFlashMessage, searchKeyword,
 
     return (
         <div className="p-4 bg-white flex-1 overflow-auto">
-            {/* Header layout: title and Create Ticket button on the left, pagination on the far right */}
+            {/* Header layout: title on the left, pagination on the far right */}
             <div className="flex items-center mb-4 gap-2 flex-wrap">
                 <h2 className="text-xl font-extrabold text-gray-800 mr-2">
                     {searchKeyword ? `Search Results for "${searchKeyword}" (including resolved and cancelled tickets)` : 'My Tickets'}
                 </h2>
-                <LinkButton onClick={() => navigateTo('create-ticket')} className="text-sm flex items-center space-x-1 ml-2">
-                    <PlusCircle size={16} /> <span>Create Ticket</span>
-                </LinkButton>
                 <div className="relative flex flex-col items-end ml-auto">
                     {renderPagination()}
                 </div>
             </div>
             {tickets.length === 0 ? (
                 // Message when no tickets are found
-                <div className="text-center text-gray-600 text-sm p-6 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50">
-                    <p className="mb-2">{searchKeyword ? `No tickets found matching "${searchKeyword}".` : "You haven't created any tickets yet."}</p>
-                    {!searchKeyword && <p className="font-semibold">Click "Create Ticket" to get started!</p>}
+                <div className="text-center text-gray-600 text-sm p-12 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50 min-h-[200px] flex flex-col justify-center">
+                    <div className="mb-4">
+                        <User className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                        <h3 className="text-lg font-semibold text-gray-800 mb-2">
+                            {searchKeyword ? `No tickets found matching "${searchKeyword}"` : "No tickets found"}
+                        </h3>
+                        <p className="text-gray-600">
+                            {searchKeyword 
+                                ? "Try adjusting your search criteria or create a new ticket." 
+                                : "Create your first support ticket to get started with our help desk system."
+                            }
+                        </p>
+                    </div>
+                    {!searchKeyword && (
+                        <div className="mt-4">
+                            <LinkButton 
+                                onClick={() => navigateTo('create-ticket')} 
+                                className="inline-flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+                            >
+                                <PlusCircle size={16} />
+                                <span>Create Ticket</span>
+                            </LinkButton>
+                        </div>
+                    )}
                 </div>
             ) : (
                 // Table to display tickets

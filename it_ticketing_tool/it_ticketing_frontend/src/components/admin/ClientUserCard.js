@@ -16,7 +16,10 @@ import {
     TableContainer,
     TableHead,
     TableRow,
-    Paper
+    Paper,
+    Menu,
+    MenuItem,
+    CircularProgress
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
@@ -27,7 +30,8 @@ import EmailIcon from '@mui/icons-material/Email';
 import WorkIcon from '@mui/icons-material/Work';
 import PhoneIcon from '@mui/icons-material/Phone';
 import BadgeIcon from '@mui/icons-material/Badge';
-import { Edit as EditIcon, Delete as DeleteIcon, LockReset as LockResetIcon } from '@mui/icons-material';
+import { Edit as EditIcon, Delete as DeleteIcon, LockReset as LockResetIcon, ArrowDropDown as ArrowDropDownIcon } from '@mui/icons-material';
+import { API_BASE_URL } from '../../config/constants';
 
 const InfoRow = ({ icon, label, value, itemSx }) => (
     <Box
@@ -78,7 +82,7 @@ const ClientUserCard = ({
     clientName, 
     users, 
     index, 
-    onEditUser, 
+    onEditUser,
     onDeleteUser, 
     onEditClick, 
     onDeleteClick,
@@ -86,13 +90,83 @@ const ClientUserCard = ({
     showEdit,
     showDelete,
     isOwnRow,
-    actionNotifications 
+    actionNotifications,
+    user // Current logged-in user for API calls
 }) => {
     const [expanded, setExpanded] = useState(false);
+    const [roleChangeAnchor, setRoleChangeAnchor] = useState(null);
+    const [changingRole, setChangingRole] = useState({});
+    const [roleChangeNotifications, setRoleChangeNotifications] = useState({});
 
     const userCount = users.length;
     const activeUsers = users.filter(user => user.role === 'user').length;
     const siteAdmins = users.filter(user => user.role === 'site_admin').length;
+
+    // Handle role change
+    const handleRoleChange = async (userId, newRole) => {
+        if (!user || !user.firebaseUser) return;
+        
+        setChangingRole(prev => ({ ...prev, [userId]: true }));
+        setRoleChangeAnchor(null);
+        
+        try {
+            const idToken = await user.firebaseUser.getIdToken();
+            
+            const response = await fetch(`${API_BASE_URL}/api/users/role/${userId}`, {
+                method: 'PUT',
+                headers: {
+                    'Authorization': `Bearer ${idToken}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    role: newRole
+                })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to update user role');
+            }
+
+            setRoleChangeNotifications(prev => ({
+                ...prev,
+                [userId]: {
+                    type: 'success',
+                    message: `Role updated to ${newRole === 'site_admin' ? 'Site Admin' : 'User'}`
+                }
+            }));
+
+            // Clear notification after 3 seconds
+            setTimeout(() => {
+                setRoleChangeNotifications(prev => {
+                    const newState = { ...prev };
+                    delete newState[userId];
+                    return newState;
+                });
+            }, 3000);
+            
+        } catch (error) {
+            console.error('Error updating user role:', error);
+            setRoleChangeNotifications(prev => ({
+                ...prev,
+                [userId]: {
+                    type: 'error',
+                    message: error.message || 'Failed to update role'
+                }
+            }));
+
+            // Clear error notification after 5 seconds
+            setTimeout(() => {
+                setRoleChangeNotifications(prev => {
+                    const newState = { ...prev };
+                    delete newState[userId];
+                    return newState;
+                });
+            }, 5000);
+        } finally {
+            setChangingRole(prev => ({ ...prev, [userId]: false }));
+        }
+    };
 
     return (
         <Card
@@ -147,7 +221,7 @@ const ClientUserCard = ({
                 
                 <Box display="flex" alignItems="center" gap={1} sx={{ pl: 1 }}>
                     <BusinessIcon sx={{ color: 'primary.main', fontSize: '1.2rem' }} />
-                    <Typography variant="h6" sx={{ fontWeight: 700, fontSize: '0.95rem', minWidth: 100 }}>
+                    <Typography variant="h6" sx={{ fontWeight: 700, fontSize: '0.95rem', minWidth: 100, color: '#1e293b' }}>
                         {clientName || 'Unknown Client'}
                     </Typography>
                 </Box>

@@ -3,13 +3,92 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Loader2, XCircle, ListFilter, User, ChevronLeft, ChevronRight, ChevronDown, Plus, Search, Pin, PinOff, Edit3, Trash2, Save, X, FileText, Calendar, ExternalLink, Copy, Link, Eye, ArrowRight, RefreshCw } from 'lucide-react';
+import selectionIcon from '../../assets/icons/selection.png';
+import stickyNoteIcon from '../../assets/icons/sticky-note.png';
 import { collection, query, where, orderBy, getFirestore, limit, getDocs, doc, updateDoc } from 'firebase/firestore';
 import ReactDOM, { createPortal } from 'react-dom';
 import { API_BASE_URL } from '../../config/constants';
 import { app, dbClient } from '../../config/firebase';
 import CustomDropdown from '../common/CustomDropdown';
+import CompactDropdown from '../common/CompactDropdown';
 import SelectButton from '../common/SelectButton';
 import { useTickets } from '../../hooks/useDataManager';
+
+// NotesTooltipBubble component for notes button - positions tooltip to the left
+function NotesTooltipBubble({ title, children }) {
+    const [show, setShow] = useState(false);
+    const [coords, setCoords] = useState({ top: 0, left: 0 });
+    const iconRef = useRef(null);
+
+    useEffect(() => {
+        if (show && iconRef.current) {
+            const rect = iconRef.current.getBoundingClientRect();
+            const viewportWidth = window.innerWidth;
+            const viewportHeight = window.innerHeight;
+            const tooltipWidth = 200; // Approximate tooltip width
+            const tooltipHeight = 40; // Approximate tooltip height
+            
+            // Position tooltip directly under the icon (like other tooltips)
+            let topPosition = rect.bottom + 8; // Position directly under the element
+            let leftPosition = rect.left + (rect.width / 2) - (tooltipWidth / 2); // Center horizontally
+            
+            // Ensure tooltip doesn't go off-screen to the right
+            if (leftPosition + tooltipWidth > viewportWidth - 10) {
+                leftPosition = viewportWidth - tooltipWidth - 10;
+            }
+            
+            // Ensure tooltip doesn't go off-screen to the left
+            if (leftPosition < 10) {
+                leftPosition = 10;
+            }
+            
+            // Check if tooltip would go off the bottom of viewport
+            if (topPosition + tooltipHeight > viewportHeight - 10) {
+                // Position above the icon instead
+                topPosition = rect.top - tooltipHeight - 8;
+            }
+            
+            setCoords({
+                top: topPosition,
+                left: leftPosition
+            });
+        }
+    }, [show]);
+
+    return (
+        <div
+            ref={iconRef}
+            onMouseEnter={() => setShow(true)}
+            onMouseLeave={() => setShow(false)}
+            style={{ position: 'relative', display: 'inline-block', isolation: 'isolate' }}
+        >
+            {children}
+            {show && createPortal(
+                <div
+                    style={{
+                        position: 'fixed',
+                        top: coords.top,
+                        left: coords.left,
+                        backgroundColor: '#1f2937',
+                        color: 'white',
+                        padding: '8px 12px',
+                        borderRadius: '6px',
+                        fontSize: '12px',
+                        fontWeight: '500',
+                        zIndex: 9999,
+                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+                        whiteSpace: 'nowrap',
+                        pointerEvents: 'none',
+                        animation: 'fadeIn 0.2s ease-out'
+                    }}
+                >
+                    {title}
+                </div>,
+                document.body
+            )}
+        </div>
+    );
+}
 
 // TooltipBubble component for hover tooltips
 function TooltipBubble({ title, children }) {
@@ -21,10 +100,10 @@ function TooltipBubble({ title, children }) {
         if (show && iconRef.current) {
             const rect = iconRef.current.getBoundingClientRect();
             const viewportWidth = window.innerWidth;
-            const tooltipWidth = 200; // Approximate tooltip width
+            const tooltipWidth = 120; // Approximate tooltip width for button tooltips
             
-            // Position tooltip directly under the text (left-aligned)
-            let leftPosition = rect.left;
+            // Center the tooltip under the element
+            let leftPosition = rect.left + (rect.width / 2) - (tooltipWidth / 2);
             
             // Ensure tooltip doesn't go off-screen to the right
             if (leftPosition + tooltipWidth > viewportWidth - 10) {
@@ -71,19 +150,6 @@ function TooltipBubble({ title, children }) {
                         // No transform needed - positioned directly under text
                     }}
                 >
-                    {/* Arrow pointing up */}
-                    <div
-                        style={{
-                            position: 'absolute',
-                            top: '-6px',
-                            left: '12px', // Position arrow near the left edge
-                            width: 0,
-                            height: 0,
-                            borderLeft: '6px solid transparent',
-                            borderRight: '6px solid transparent',
-                            borderBottom: '6px solid #000000',
-                        }}
-                    />
                     {title}
                 </div>,
                 document.body
@@ -137,7 +203,7 @@ const styles = `
 `;
 
 // ProfilePopup Component
-const ProfilePopup = ({ visible, position, user, copyStatus, onMouseEnter, onMouseLeave, onCopyEmail, onCopyName }) => {
+const ProfilePopup = ({ visible, position, user, copyStatus, onMouseEnter, onMouseLeave, onCopyEmail, onCopyName, currentUser }) => {
     if (!visible || !user) return null;
 
     // Calculate smart positioning
@@ -199,11 +265,12 @@ const ProfilePopup = ({ visible, position, user, copyStatus, onMouseEnter, onMou
     return ReactDOM.createPortal(
         <div
             data-profile-popup
-            className="fixed z-50 bg-white border border-gray-200 rounded-lg shadow-lg py-2 min-w-[200px]"
+            className="fixed z-50 bg-white border border-gray-300 rounded-xl shadow-2xl py-2 min-w-[220px] backdrop-blur-sm"
             style={{
                 left: smartPosition.left,
                 top: smartPosition.top,
-                zIndex: 9999
+                zIndex: 9999,
+                boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
             }}
             onMouseEnter={onMouseEnter}
             onMouseLeave={onMouseLeave}
@@ -217,7 +284,7 @@ const ProfilePopup = ({ visible, position, user, copyStatus, onMouseEnter, onMou
                         style={{
                             borderLeft: '8px solid transparent',
                             borderRight: '8px solid transparent',
-                            borderTop: '8px solid #e5e7eb' // border-gray-200
+                            borderTop: '8px solid #d1d5db' // border-gray-200
                         }}
                     />
                     <div 
@@ -237,7 +304,7 @@ const ProfilePopup = ({ visible, position, user, copyStatus, onMouseEnter, onMou
                         style={{
                             borderLeft: '8px solid transparent',
                             borderRight: '8px solid transparent',
-                            borderBottom: '8px solid #e5e7eb' // border-gray-200
+                            borderBottom: '8px solid #d1d5db' // border-gray-200
                         }}
                     />
                     <div 
@@ -251,42 +318,47 @@ const ProfilePopup = ({ visible, position, user, copyStatus, onMouseEnter, onMou
                 </>
             )}
             
-            <div className="px-3 py-2 text-sm font-medium text-gray-500 border-b border-gray-100">
-                User Profile
+            {/* Header */}
+            <div className="px-4 py-2 border-b border-gray-100">
+                <h3 className="text-sm font-semibold text-gray-800 tracking-wide">User Profile</h3>
             </div>
-            <div className="px-3 py-2 text-sm space-y-3">
+            
+            {/* Content */}
+            <div className="px-4 py-3 space-y-3">
+                {/* Requested By Email */}
                 <div className="flex items-center justify-between group">
-                    <span className="font-semibold text-gray-900">{user.fullName || 'Unknown'}</span>
-                    <button
-                        onClick={() => onCopyName(user.fullName || 'Unknown')}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-gray-100 rounded"
-                        title="Copy name"
-                    >
-                        <Copy className="w-3 h-3 text-gray-500" />
-                    </button>
-                </div>
-                <div className="flex items-center justify-between group">
-                    <span className="text-gray-600">{user.email}</span>
+                    <div className="flex-1">
+                        <div className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Requested By</div>
+                        <span className="text-sm text-gray-600 leading-tight break-all">{user.email}</span>
+                    </div>
                     <button
                         onClick={() => onCopyEmail(user.email)}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-gray-100 rounded"
+                        className="opacity-0 group-hover:opacity-100 transition-all duration-200 p-1.5 hover:bg-blue-50 rounded-md"
                         title="Copy email"
                     >
-                        <Copy className="w-3 h-3 text-gray-500" />
+                        <Copy className="w-3.5 h-3.5 text-blue-500 hover:text-blue-700 transition-colors" />
                     </button>
                 </div>
-                {user.clientName && (
-                    <div className="text-gray-700">
-                        <span className="font-medium">Client:</span> {user.clientName}
+                
+                {/* Client Info - Hide for site admins */}
+                {user.clientName && currentUser?.role !== 'site_admin' && (
+                    <div className="bg-gray-50 rounded-lg px-3 py-2">
+                        <div className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Client</div>
+                        <div className="text-sm text-gray-800 font-medium">{user.clientName}</div>
                     </div>
                 )}
+                
+                {/* Contact Info */}
                 {user.contactNumber && (
-                    <div className="text-gray-700">
-                        <span className="font-medium">Contact:</span> {user.contactNumber}
+                    <div className="bg-gray-50 rounded-lg px-3 py-2">
+                        <div className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Contact</div>
+                        <div className="text-sm text-gray-800 font-medium">{user.contactNumber}</div>
                     </div>
                 )}
+                
+                {/* Status Message */}
                 {copyStatus && (
-                    <div className={`text-sm text-center ${getStatusColor()}`}>
+                    <div className={`px-3 py-2 text-sm font-medium text-center rounded-lg border-t border-gray-100 ${getStatusColor()}`}>
                         {getStatusMessage()}
                     </div>
                 )}
@@ -359,11 +431,12 @@ const TicketIdPopup = ({ visible, position, ticketId, documentId, copyStatus, on
     return ReactDOM.createPortal(
         <div
             data-ticket-id-popup
-            className="fixed z-50 bg-white border border-gray-200 rounded-lg shadow-lg py-2 min-w-[180px]"
+            className="fixed z-50 bg-white border border-gray-300 rounded-lg shadow-xl py-1 min-w-[180px] backdrop-blur-sm"
             style={{
                 left: smartPosition.left,
                 top: smartPosition.top,
-                zIndex: 9999
+                zIndex: 9999,
+                boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
             }}
             onMouseEnter={onMouseEnter}
             onMouseLeave={onMouseLeave}
@@ -377,7 +450,7 @@ const TicketIdPopup = ({ visible, position, ticketId, documentId, copyStatus, on
                         style={{
                             borderLeft: '8px solid transparent',
                             borderRight: '8px solid transparent',
-                            borderTop: '8px solid #e5e7eb' // border-gray-200
+                            borderTop: '8px solid #d1d5db' // border-gray-300
                         }}
                     />
                     <div 
@@ -397,7 +470,7 @@ const TicketIdPopup = ({ visible, position, ticketId, documentId, copyStatus, on
                         style={{
                             borderLeft: '8px solid transparent',
                             borderRight: '8px solid transparent',
-                            borderBottom: '8px solid #e5e7eb' // border-gray-200
+                            borderBottom: '8px solid #d1d5db' // border-gray-200
                         }}
                     />
                     <div 
@@ -412,33 +485,43 @@ const TicketIdPopup = ({ visible, position, ticketId, documentId, copyStatus, on
             )}
             
             <div className="py-1">
-                <a
-                    href={`/tickets/${documentId}`}
-                    onClick={(e) => {
-                        e.preventDefault();
-                        onOpen(documentId);
-                    }}
-                    className="w-full flex items-center px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
-                >
-                    <ExternalLink className="w-4 h-4 mr-2" />
-                    Open
-                </a>
-                <button
-                    onClick={() => onCopyId(ticketId)}
-                    className="w-full flex items-center px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
-                >
-                    <Copy className="w-4 h-4 mr-2" />
-                    Copy Ticket ID
-                </button>
-                <button
-                    onClick={() => onCopyUrl(documentId)}
-                    className="w-full flex items-center px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
-                >
-                    <Link className="w-4 h-4 mr-2" />
-                    Copy Ticket URL
-                </button>
+                {/* Header */}
+                <div className="px-3 py-1 border-b border-gray-100">
+                    <h3 className="text-xs font-semibold text-gray-800 tracking-wide">Ticket Actions</h3>
+                </div>
+                
+                {/* Actions */}
+                <div>
+                    <a
+                        href={`/tickets/${documentId}`}
+                        onClick={(e) => {
+                            e.preventDefault();
+                            onOpen(documentId);
+                        }}
+                        className="w-full flex items-center px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50 transition-all duration-200 group"
+                    >
+                        <ExternalLink className="w-4 h-4 mr-2 text-blue-600 group-hover:text-blue-700 transition-colors" />
+                        <span className="font-medium">Open Ticket</span>
+                    </a>
+                    <button
+                        onClick={() => onCopyId(ticketId)}
+                        className="w-full flex items-center px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-all duration-200 group"
+                    >
+                        <Copy className="w-4 h-4 mr-2 text-gray-500 group-hover:text-gray-700 transition-colors" />
+                        <span className="font-medium">Copy Ticket ID</span>
+                    </button>
+                    <button
+                        onClick={() => onCopyUrl(documentId)}
+                        className="w-full flex items-center px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-all duration-200 group"
+                    >
+                        <Link className="w-4 h-4 mr-2 text-gray-500 group-hover:text-gray-700 transition-colors" />
+                        <span className="font-medium">Copy Ticket URL</span>
+                    </button>
+                </div>
+                
+                {/* Status Message */}
                 {copyStatus && (
-                    <div className={`px-3 py-1 text-sm font-medium ${getStatusColor()} text-center`}>
+                    <div className={`px-3 py-2 text-sm font-medium text-center border-t border-gray-100 ${getStatusColor()}`}>
                         {getStatusMessage()}
                     </div>
                 )}
@@ -539,7 +622,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
     // State for the tickets currently being displayed in the table (after client-side filtering)
     const [displayedTickets, setDisplayedTickets] = useState([]);
 
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(false); // Start with false to avoid spinner flash
     const [error, setError] = useState(null);
     // MODIFIED: Default filterStatus to '' to show all active tickets initially
     const [filterStatus, setFilterStatus] = useState(''); // State for status filter
@@ -613,6 +696,36 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
     // Ref to track if engineers have been fetched to prevent unnecessary re-fetching
     const engineersFetchedRef = useRef(false);
     const engineersCacheRef = useRef(null);
+    
+    // Engineers cache configuration
+    const ENGINEERS_CACHE_DURATION = 10 * 60 * 1000; // 10 minutes
+    const ENGINEERS_CACHE_KEY = `engineers_${user?.uid}_${user?.role}`;
+    
+    // Engineers cache utility functions
+    const getEngineersCache = useCallback(() => {
+        try {
+            const cached = localStorage.getItem(ENGINEERS_CACHE_KEY);
+            const cacheTime = localStorage.getItem(`${ENGINEERS_CACHE_KEY}_time`);
+            if (cached && cacheTime) {
+                const age = Date.now() - parseInt(cacheTime);
+                if (age < ENGINEERS_CACHE_DURATION) {
+                    return JSON.parse(cached);
+                }
+            }
+        } catch (error) {
+            console.warn('Failed to read engineers cache:', error);
+        }
+        return null;
+    }, [ENGINEERS_CACHE_KEY, ENGINEERS_CACHE_DURATION]);
+    
+    const setEngineersCache = (data) => {
+        try {
+            localStorage.setItem(ENGINEERS_CACHE_KEY, JSON.stringify(data));
+            localStorage.setItem(`${ENGINEERS_CACHE_KEY}_time`, Date.now().toString());
+        } catch (error) {
+            console.warn('Failed to write engineers cache:', error);
+        }
+    };
     const [notes, setNotes] = useState([]);
     const [notesLoading, setNotesLoading] = useState(false);
     const [notesSearchTerm, setNotesSearchTerm] = useState('');
@@ -647,19 +760,19 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
         { value: 'all', label: 'All Categories' },
         { value: 'general', label: 'General' },
         { value: 'technical', label: 'Technical' },
-        { value: 'meeting', label: 'Meeting Notes' },
+        { value: 'meeting', label: 'Meeting' },
         { value: 'todo', label: 'To-Do' },
         { value: 'reference', label: 'Reference' }
     ];
 
-    // Helper function to get category color
+    // Helper function to get category color - elegant tag style
     const getCategoryColor = (category) => {
         const colors = {
-            general: 'bg-yellow-100 text-black-800',
-            technical: 'bg-blue-100 text-blue-800',
-            meeting: 'bg-green-100 text-green-800',
-            todo: 'bg-orange-100 text-orange-800',
-            reference: 'bg-purple-100 text-purple-800'
+            general: 'text-amber-600 border-amber-200 bg-amber-50',
+            technical: 'text-blue-600 border-blue-200 bg-blue-50',
+            meeting: 'text-emerald-600 border-emerald-200 bg-emerald-50',
+            todo: 'text-orange-600 border-orange-200 bg-orange-50',
+            reference: 'text-purple-600 border-purple-200 bg-purple-50'
         };
         return colors[category] || colors.general;
     };
@@ -716,11 +829,56 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
     // Initialize Firestore DB client. This will be the same instance as exported from firebase.js.
     const db = dbClient; // Use the already initialized dbClient
 
-    // Notes API functions
-    const fetchNotes = async () => {
+    // Notes cache configuration
+    const NOTES_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+    const NOTES_CACHE_KEY = `personal_notes_${user?.uid}`;
+    
+    // Notes cache utility functions
+    const getCachedNotes = useCallback(() => {
         try {
+            const cached = localStorage.getItem(NOTES_CACHE_KEY);
+            const cacheTime = localStorage.getItem(`${NOTES_CACHE_KEY}_time`);
+            if (cached && cacheTime) {
+                const age = Date.now() - parseInt(cacheTime);
+                if (age < NOTES_CACHE_DURATION) {
+                    console.log('📦 Loading notes from cache');
+                    return JSON.parse(cached);
+                }
+            }
+        } catch (error) {
+            console.warn('Failed to read notes cache:', error);
+        }
+        return null;
+    }, [NOTES_CACHE_KEY, NOTES_CACHE_DURATION]);
+    
+    const setCachedNotes = useCallback((data) => {
+        try {
+            localStorage.setItem(NOTES_CACHE_KEY, JSON.stringify(data));
+            localStorage.setItem(`${NOTES_CACHE_KEY}_time`, Date.now().toString());
+        } catch (error) {
+            console.warn('Failed to write notes cache:', error);
+        }
+    }, [NOTES_CACHE_KEY]);
+
+    // Notes API functions
+    const fetchNotes = useCallback(async (forceRefresh = false) => {
+        if (!user?.firebaseUser) return;
+
+        try {
+            // Check cache first unless force refresh
+            if (!forceRefresh) {
+                const cachedNotes = getCachedNotes();
+                if (cachedNotes !== null) {
+                    setNotes(cachedNotes);
+                    setNotesLoading(false);
+                    return;
+                }
+            }
+            
+            // Only set loading when we actually need to fetch
             setNotesLoading(true);
-            console.log('Fetching notes...');
+            console.log('🔄 Fetching fresh notes data');
+            
             const response = await fetch(`${API_BASE_URL}/api/personal-notes`, {
                 headers: {
                     'Authorization': `Bearer ${await user.firebaseUser.getIdToken()}`
@@ -730,11 +888,8 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
             if (response.ok) {
                 const data = await response.json();
                 console.log('Notes fetched successfully:', data.notes);
-                // Debug: Check date formats
-                if (data.notes && data.notes.length > 0) {
-                    console.log('Sample note date formats:', data.notes[0]);
-                }
                 setNotes(data.notes || []);
+                setCachedNotes(data.notes || []);
             } else {
                 console.error('Failed to fetch notes:', response.status, response.statusText);
                 showFlashMessage('Failed to fetch notes', 'error');
@@ -745,7 +900,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
         } finally {
             setNotesLoading(false);
         }
-    };
+    }, [user?.firebaseUser, getCachedNotes, setCachedNotes, showFlashMessage]);
 
     const handleAddNote = async (e) => {
         e.preventDefault();
@@ -768,8 +923,10 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
             if (response.ok) {
                 const data = await response.json();
                 console.log('Note added successfully:', data.note);
-                // Update local state instead of refetching
-                setNotes(prevNotes => [data.note, ...prevNotes]);
+                // Update local state and cache
+                const updatedNotes = [data.note, ...notes];
+                setNotes(updatedNotes);
+                setCachedNotes(updatedNotes);
                 setNoteFormData({ title: '', content: '', category: 'general' });
                 setShowAddNoteForm(false);
                 showFlashMessage('Note added successfully!', 'success');
@@ -807,14 +964,14 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
             if (response.ok) {
                 const data = await response.json();
                 console.log('Note updated successfully:', data.note);
-                // Update local state instead of refetching
-                setNotes(prevNotes => 
-                    prevNotes.map(note => 
-                        note.id === editingNote.id 
-                            ? { ...note, ...data.note }
-                            : note
-                    )
+                // Update local state and cache
+                const updatedNotes = notes.map(note => 
+                    note.id === editingNote.id 
+                        ? { ...note, ...data.note }
+                        : note
                 );
+                setNotes(updatedNotes);
+                setCachedNotes(updatedNotes);
                 setEditingNote(null);
                 setNoteFormData({ title: '', content: '', category: 'general' });
                 setShowAddNoteForm(false);
@@ -842,8 +999,10 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
 
             if (response.ok) {
                 console.log('Note deleted successfully');
-                // Update local state instead of refetching
-                setNotes(prevNotes => prevNotes.filter(note => note.id !== noteId));
+                // Update local state and cache
+                const updatedNotes = notes.filter(note => note.id !== noteId);
+                setNotes(updatedNotes);
+                setCachedNotes(updatedNotes);
                 showFlashMessage('Note deleted successfully!', 'success');
             } else {
                 const errorData = await response.json();
@@ -867,14 +1026,14 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
             if (response.ok) {
                 const data = await response.json();
                 console.log('Note pin toggled successfully:', data.note);
-                // Update local state instead of refetching
-                setNotes(prevNotes => 
-                    prevNotes.map(note => 
-                        note.id === noteId 
-                            ? { ...note, is_pinned: data.note.is_pinned, updated_at: data.note.updated_at }
-                            : note
-                    )
+                // Update local state and cache
+                const updatedNotes = notes.map(note => 
+                    note.id === noteId 
+                        ? { ...note, is_pinned: data.note.is_pinned, updated_at: data.note.updated_at }
+                        : note
                 );
+                setNotes(updatedNotes);
+                setCachedNotes(updatedNotes);
                 showFlashMessage(data.note.is_pinned ? 'Note pinned!' : 'Note unpinned!', 'success');
             } else {
                 const errorData = await response.json();
@@ -937,14 +1096,24 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
         }
     }, [showDeleteConfirm]);
 
-    // Function to fetch companies for filtering
+    // Function to fetch companies for filtering (super_admin only)
     const fetchCompanies = useCallback(async () => {
+        // Only super_admin can access the companies endpoint
+        if (user?.role !== 'super_admin') {
+            console.log('Companies filtering not available for role:', user?.role);
+            return;
+        }
+        
         if (loadingCompanies || companiesFetchedRef.current) return;
         
         setLoadingCompanies(true);
         try {
             console.log('Fetching companies from:', `${API_BASE_URL}/api/clients`);
-            const response = await fetch(`${API_BASE_URL}/api/clients`);
+            const response = await fetch(`${API_BASE_URL}/api/clients`, {
+                headers: {
+                    'Authorization': `Bearer ${await user.firebaseUser.getIdToken()}`
+                }
+            });
             if (!response.ok) {
                 throw new Error(`Failed to fetch companies: ${response.status} ${response.statusText}`);
             }
@@ -958,13 +1127,23 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
         } finally {
             setLoadingCompanies(false);
         }
-    }, [loadingCompanies]); // Removed showFlashMessage dependency
+    }, [loadingCompanies, user]); // Added user dependency
 
     // Function to fetch available engineers
     const fetchEngineers = useCallback(async () => {
-        // Check cache first
+        // Check persistent cache first
+        const cachedEngineers = getEngineersCache();
+        if (cachedEngineers && cachedEngineers.length > 0) {
+            console.log('📦 Using cached engineers from localStorage');
+            setAvailableEngineers(cachedEngineers);
+            engineersCacheRef.current = cachedEngineers;
+            engineersFetchedRef.current = true;
+            return;
+        }
+
+        // Check in-memory cache
         if (engineersCacheRef.current && engineersCacheRef.current.length > 0) {
-            console.log('Using cached engineers from fetchEngineers');
+            console.log('Using cached engineers from memory');
             setAvailableEngineers(engineersCacheRef.current);
             return;
         }
@@ -1006,7 +1185,8 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                 });
                 
                 setAvailableEngineers(engineers);
-                engineersCacheRef.current = engineers; // Cache the engineers
+                engineersCacheRef.current = engineers; // Cache in memory
+                setEngineersCache(engineers); // Cache in localStorage
                 engineersFetchedRef.current = true;
                 return;
             } else {
@@ -1302,7 +1482,15 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
     // Function to handle popup leave
     const handleTicketIdPopupLeave = () => {
         setTicketIdPopupHovered(false);
-        hideTicketIdPopup();
+        // Clear any pending timeouts
+        if (ticketIdPopupHideTimeout.current) {
+            clearTimeout(ticketIdPopupHideTimeout.current);
+        }
+        if (ticketIdPopupShowTimeout.current) {
+            clearTimeout(ticketIdPopupShowTimeout.current);
+        }
+        // Immediately hide the popup
+        setTicketIdPopup(prev => ({ ...prev, visible: false }));
     };
 
     // Function to exit export selection mode
@@ -1565,7 +1753,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
 
     // Check and reset company filter if user doesn't have permission
     useEffect(() => {
-        const hasCompanyFilterPermission = user?.role === 'super_admin' || user?.role === 'admin' || user?.role === 'support' || user?.role === 'site_admin';
+        const hasCompanyFilterPermission = user?.role === 'super_admin';
         
         
         if (filterBy === 'company' && !hasCompanyFilterPermission) {
@@ -1574,21 +1762,21 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
         }
     }, [user?.role, filterBy]);
 
-    // Fetch companies when filterBy changes to 'company' (if not already loaded)
+    // Fetch companies when filterBy changes to 'company' (if not already loaded) - super_admin only
     useEffect(() => {
-        if (filterBy === 'company' && companies.length === 0 && !loadingCompanies) {
+        if (user?.role === 'super_admin' && filterBy === 'company' && companies.length === 0 && !loadingCompanies) {
             fetchCompanies();
         }
-    }, [filterBy]); // Remove companies.length from dependencies to prevent unnecessary re-fetching
+    }, [filterBy, user?.role]); // Remove companies.length from dependencies to prevent unnecessary re-fetching
 
-    // Fetch companies when component mounts (only once)
+    // Fetch companies when component mounts (only once) - super_admin only
     useEffect(() => {
-        // Only fetch if companies haven't been loaded yet
-        if (!companiesFetchedRef.current && !loadingCompanies) {
+        // Only fetch if user is super_admin and companies haven't been loaded yet
+        if (user?.role === 'super_admin' && !companiesFetchedRef.current && !loadingCompanies) {
             fetchCompanies();
-        } else {
         }
-    }, []); // Empty dependency array - only run once on mount
+    }, [user?.role]); // Only run when user role changes
+
 
     // Only allow assign mode and engineer loading for super_admin, admin, support (NOT site_admin)
     const canAssign = user?.role === 'super_admin' || user?.role === 'admin' || user?.role === 'support';
@@ -1596,9 +1784,19 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
     // Fetch notes when panel opens
     useEffect(() => {
         if (showNotesPanel && user?.firebaseUser) {
+            // Check cache first - this is synchronous so no loading state needed
+            const cachedNotes = getCachedNotes();
+            if (cachedNotes !== null) {
+                console.log('📦 Loading notes from cache on panel open, notes count:', cachedNotes.length);
+                setNotes(cachedNotes);
+                setNotesLoading(false);
+                return; // Exit early, no loading state
+            }
+            
+            // Only fetch if no cached data
             fetchNotes();
         }
-    }, [showNotesPanel, user]);
+    }, [showNotesPanel, user, getCachedNotes, fetchNotes]);
 
     // Filter notes
     const filteredNotes = notes.filter(note => {
@@ -1626,8 +1824,18 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
 
     // Fetch engineers for assignment dropdowns - single useEffect with better caching
     useEffect(() => {
-        if (user?.role === 'support' || user?.role === 'admin' || user?.role === 'super_admin') {
-            // Check if we have cached engineers first
+        if (user?.role === 'support' || user?.role === 'admin' || user?.role === 'super_admin' || user?.role === 'engineer') {
+            // Check persistent cache first
+            const cachedEngineers = getEngineersCache();
+            if (cachedEngineers && cachedEngineers.length > 0) {
+                console.log('📦 Loading engineers from localStorage cache');
+                setAvailableEngineers(cachedEngineers);
+                engineersCacheRef.current = cachedEngineers;
+                engineersFetchedRef.current = true;
+                return;
+            }
+            
+            // Check if we have cached engineers in memory
             if (engineersCacheRef.current && engineersCacheRef.current.length > 0) {
                 setAvailableEngineers(engineersCacheRef.current);
                 engineersFetchedRef.current = true; // Mark as fetched
@@ -1639,17 +1847,10 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                 fetchEngineers();
             }
         }
-    }, [user?.role]); // Only depend on user role
+    }, [user?.role]); // Only depend on user role to prevent infinite loop
 
-    // Cleanup cache only when component unmounts (not on every render)
-    useEffect(() => {
-        return () => {
-            // Only reset cache when component actually unmounts
-            console.log('Component unmounting, resetting cache');
-            engineersFetchedRef.current = false;
-            engineersCacheRef.current = null;
-        };
-    }, []);
+    // No cleanup needed - let cache persist across component mounts
+    // This prevents unnecessary re-fetching of engineers data
 
     // Status options for dropdown
     const statusOptions = [
@@ -1725,13 +1926,19 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
         }
     }, [ticketsData, searchKeyword]);
 
-    // Force refresh tickets data when component mounts or user changes
+    // Only refresh tickets data when user changes (not on every mount)
     useEffect(() => {
         if (user?.uid) {
-            console.log('🔄 Force refreshing tickets data for real-time updates');
-            refreshTicketsData();
+            // Check if we have cached data first
+            const cachedData = getCachedData();
+            if (!cachedData) {
+                console.log('🔄 No cached data found, loading tickets data');
+                refreshTicketsData();
+            } else {
+                console.log('📦 Using cached data, no refresh needed');
+            }
         }
-    }, [user?.uid, refreshTicketsData]);
+    }, [user?.uid]); // Removed refreshTicketsData from dependencies to prevent unnecessary refreshes
 
     // Listen for real-time updates via WebSocket instead of polling
     useEffect(() => {
@@ -1827,7 +2034,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
             if (filterAssignment === 'unassigned') {
                 currentFilteredTickets = currentFilteredTickets.filter(ticket => !ticket.assigned_to_email);
             } else if (filterAssignment === 'assigned_to_me') {
-                currentFilteredTickets = currentFilteredTickets.filter(ticket => ticket.assigned_to_id === user?.firebaseUser?.uid);
+                currentFilteredTickets = currentFilteredTickets.filter(ticket => ticket.assigned_to_email === user?.email);
             }
         }
 
@@ -2263,21 +2470,26 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
     const memoizedStatusOptions = useMemo(() => 
         statusOptions.map(option => ({
             ...option,
-            label: (
-                <span className={`px-2 py-0.5 text-sm font-medium rounded-full ${getStatusClasses(option.value)}`}>
-                    {option.label}
-                </span>
-            )
+            label: option.label
         }))
     , [statusOptions]);
 
     // Calculate counts based on the tickets after company filtering
-    const ticketsForCounts = filterCompany
+    let ticketsForCounts = filterCompany
         ? allTickets.filter(ticket => {
             const ticketCompany = ticket.client_name || ticket.companyName;
             return ticketCompany === filterCompany;
         })
         : allTickets;
+
+    // Apply site admin filtering to counts if user is site admin
+    if (user && user.role === 'site_admin' && user.client_name) {
+        ticketsForCounts = ticketsForCounts.filter(ticket => {
+            const ticketClientName = ticket.client_name || ticket.companyName;
+            const matches = ticketClientName === user.client_name || ticketClientName === user.companyName;
+            return matches;
+        });
+    }
     const counts = {
         total_tickets: searchKeyword 
             ? ticketsForCounts.length 
@@ -2289,6 +2501,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
         unassigned: searchKeyword 
             ? ticketsForCounts.filter(t => !t.assigned_to_email).length
             : ticketsForCounts.filter(t => !t.assigned_to_email && !['Closed', 'Resolved', 'Cancelled'].includes(t.status)).length,
+        assigned_to_me: allTickets.filter(t => t.assigned_to_email === user?.email).length,
     };
     // Function to determine the page heading based on active filters
     const getPageHeading = useCallback(() => {
@@ -2357,16 +2570,16 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
       if (end - start < 2) start = Math.max(1, end - 2);
       for (let i = start; i <= end; i++) {
         pages.push(
-          <button key={i} onClick={() => handlePageChange(i)} className={`mx-0.5 w-7 h-7 flex items-center justify-center rounded-full text-sm font-semibold transition-colors duration-200 ${i === currentPage ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}>{i}</button>
+          <button key={i} onClick={() => handlePageChange(i)} className={`mx-0.5 w-6 h-6 flex items-center justify-center rounded-full text-xs font-medium transition-colors duration-200 border ${i === currentPage ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50 hover:border-gray-400'}`}>{i}</button>
         );
       }
       const firstTicket = (currentPage - 1) * ticketsPerPage + 1;
       const lastTicket = Math.min(currentPage * ticketsPerPage, displayedTickets.length);
       return (
         <div className="inline-flex items-center gap-1 align-middle">
-          <button onClick={() => handlePageChange(currentPage - 1)} disabled={currentPage === 1} className="w-7 h-7 flex items-center justify-center rounded-full bg-gray-200 text-gray-800 hover:bg-gray-300 disabled:opacity-50"><ChevronLeft size={12} /></button>
+          <button onClick={() => handlePageChange(currentPage - 1)} disabled={currentPage === 1} className="w-6 h-6 flex items-center justify-center rounded-full bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 hover:border-gray-400 disabled:opacity-50 disabled:cursor-not-allowed"><ChevronLeft size={10} /></button>
           {pages}
-          <button onClick={() => handlePageChange(currentPage + 1)} disabled={currentPage === totalPages} className="w-7 h-7 flex items-center justify-center rounded-full bg-gray-200 text-gray-800 hover:bg-gray-300 disabled:opacity-50"><ChevronRight size={12} /></button>
+          <button onClick={() => handlePageChange(currentPage + 1)} disabled={currentPage === totalPages} className="w-6 h-6 flex items-center justify-center rounded-full bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 hover:border-gray-400 disabled:opacity-50 disabled:cursor-not-allowed"><ChevronRight size={10} /></button>
         </div>
       );
     }
@@ -2532,7 +2745,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                 document.body
             )}
             {/* Main App Content */}
-            <div className={`p-4 bg-white flex-1 overflow-auto transition-all duration-300 ${
+            <div className={`p-4 pb-2 bg-white flex-1 overflow-auto transition-all duration-300 ${
                 showNotesPanel && showPeekPanel ? 'mr-160' : 
                 showNotesPanel || showPeekPanel ? 'mr-80' : ''
             }`}>
@@ -2542,15 +2755,24 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                         <h2 className="text-lg font-extrabold text-gray-800">
                             {getPageHeading()}
                         </h2>
+                        <button
+                            onClick={refreshTickets}
+                            disabled={loading}
+                            className="inline-flex items-center justify-center px-2 py-1 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 hover:border-gray-400 transition-all duration-200 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="Refresh tickets data"
+                        >
+                            <RefreshCw className={`w-3 h-3 mr-1 ${loading ? 'animate-spin' : ''}`} />
+                            Refresh
+                        </button>
                     </div>
                     
                     {/* Centered Filter Options */}
                     <div className="flex items-center gap-3 flex-wrap justify-center flex-1">
-                        {/* Companies dropdown */}
-                        {(user?.role === 'super_admin' || user?.role === 'admin' || user?.role === 'support') && (
+                        {/* Companies dropdown - super_admin only */}
+                        {user?.role === 'super_admin' && (
                         <div className="flex items-center gap-2">
-                            <span className="text-sm font-semibold text-gray-700">Client:</span>
-                            <CustomDropdown
+                            <span className="text-xs font-semibold text-gray-700">Client:</span>
+                            <CompactDropdown
                                 value={filterCompany}
                                 onChange={value => {
                                     setFilterCompany(value);
@@ -2567,13 +2789,13 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                         }))
                                     )
                                 ]}
-                                className="w-48 h-8"
+                                className="w-32"
                             />
                         </div>
                         )}
                         <span className="text-sm font-semibold text-gray-700">Filter By:</span>
                         <div>
-                            <CustomDropdown
+                            <CompactDropdown
                                 value={filterBy}
                                 onChange={value => { 
                                     const newFilterBy = value;
@@ -2594,8 +2816,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                     { value: 'priority', label: 'Priority' },
                                     { value: 'history', label: 'History' }
                                 ]}
-                                className="w-24 h-7"
-                                size="sm"
+                                className="w-24"
                             />
                         </div>
                         {/* Clear Filters Button - Always reserve space to prevent layout shift */}
@@ -2603,9 +2824,9 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                             {(filterBy !== 'status' || filterStatus !== '' || filterPriority !== '' || filterAssignment !== '' || filterCompany !== '' || filterBy === 'history') && (
                                 <button
                                     onClick={clearAllFilters}
-                                    className="px-3 py-1.5 text-sm font-medium text-red-500 bg-transparent rounded-md border border-red-300 hover:bg-red-50 hover:border-red-400 transition-all duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-red-200 focus:ring-offset-1"
+                                    className="px-2 py-1 text-xs font-medium text-red-500 bg-transparent rounded-md border border-red-300 hover:bg-red-50 hover:border-red-400 transition-all duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-red-200 focus:ring-offset-1"
                                 >
-                                    <svg className="w-3 h-3 mr-1.5 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <svg className="w-2.5 h-2.5 mr-1 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                                     </svg>
                                     Clear Filters
@@ -2615,15 +2836,6 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                     </div>
                     
                     <div className="flex items-center gap-2">
-                        <button
-                            onClick={refreshTickets}
-                            disabled={loading}
-                            className="inline-flex items-center justify-center px-2 py-1 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 hover:border-gray-400 transition-all duration-200 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed"
-                            title="Refresh tickets data"
-                        >
-                            <RefreshCw className={`w-3 h-3 mr-1 ${loading ? 'animate-spin' : ''}`} />
-                            Refresh
-                        </button>
                         <button
                             onClick={async () => {
                                 if (!assignMode && selectedTickets.length > 0) {
@@ -2636,8 +2848,8 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                             ref={exportButtonRef}
                             className={`group relative inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded-md transition-all duration-200 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none ${
                                 !assignMode && selectedTickets.length > 0
-                                    ? 'text-white bg-blue-600 hover:bg-blue-700 shadow-md ring-2 ring-blue-200'
-                                    : 'text-blue-700 bg-white border border-blue-300 hover:bg-blue-50 hover:border-blue-400'
+                                    ? 'text-white bg-green-600 hover:bg-green-700'
+                                    : 'text-green-700 bg-[#f8f9fa] hover:bg-green-50'
                             }`}
                             title={!assignMode && selectedTickets.length > 0 ? 'Export selected tickets' : 'Export tickets with filters'}
                         >
@@ -2655,9 +2867,9 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                 <div className="flex flex-wrap items-center justify-between mb-2">
                     <div className="flex items-center gap-2 flex-wrap">
                         {/* Filters Section */}
-                        {filterBy === 'company' && (user?.role === 'super_admin' || user?.role === 'admin' || user?.role === 'support') && (
+                        {filterBy === 'company' && user?.role === 'super_admin' && (
                             <div>
-                                <CustomDropdown
+                                <CompactDropdown
                                     value={filterCompany}
                                     onChange={value => setFilterCompany(value)}
                                     options={[
@@ -2672,8 +2884,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                             }))
                                         )
                                     ]}
-                                    className="w-40 h-7"
-                                    size="sm"
+                                    className="w-28"
                                 />
                             </div>
                         )}
@@ -2681,7 +2892,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                             <div className="inline-flex bg-white shadow-sm overflow-visible">
                                 <button 
                                     onClick={() => { setFilterStatus(''); setFilterAssignment(''); }} 
-                                    className={`relative px-3 py-1.5 text-sm font-medium transition-all duration-200 ${filterStatus === '' && filterAssignment === '' ? 'text-gray-700 border-b-2 border-orange-600' : 'text-gray-700 border-b border-transparent'}`}
+                                    className={`relative px-3 py-1.5 text-xs font-medium transition-all duration-200 ${filterStatus === '' && filterAssignment === '' ? 'text-gray-700 border-b-2 border-orange-600' : 'text-gray-700 border-b border-transparent'}`}
                                 >
                                     All Tickets
                                     {counts.total_tickets > 0 && (
@@ -2692,7 +2903,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                 </button>
                                 <button 
                                     onClick={() => { setFilterStatus('Open'); setFilterAssignment(''); }} 
-                                    className={`relative px-3 py-1.5 text-sm font-medium transition-all duration-200 ${filterStatus === 'Open' && filterAssignment === '' ? 'text-gray-700 border-b-2 border-orange-600' : 'text-gray-700 border-b border-transparent'}`}
+                                    className={`relative px-3 py-1.5 text-xs font-medium transition-all duration-200 ${filterStatus === 'Open' && filterAssignment === '' ? 'text-gray-700 border-b-2 border-orange-600' : 'text-gray-700 border-b border-transparent'}`}
                                 >
                                     Open
                                     {counts.open_tickets > 0 && (
@@ -2703,7 +2914,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                 </button>
                                 <button 
                                     onClick={() => { setFilterStatus('In Progress'); setFilterAssignment(''); }} 
-                                    className={`relative px-3 py-1.5 text-sm font-medium transition-all duration-200 ${filterStatus === 'In Progress' && filterAssignment === '' ? 'text-gray-700 border-b-2 border-orange-600' : 'text-gray-700 border-b border-transparent'}`}
+                                    className={`relative px-3 py-1.5 text-xs font-medium transition-all duration-200 ${filterStatus === 'In Progress' && filterAssignment === '' ? 'text-gray-700 border-b-2 border-orange-600' : 'text-gray-700 border-b border-transparent'}`}
                                 >
                                     In Progress
                                     {counts.in_progress_tickets > 0 && (
@@ -2714,7 +2925,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                 </button>
                                 <button 
                                     onClick={() => { setFilterStatus('Hold'); setFilterAssignment(''); }} 
-                                    className={`relative px-3 py-1.5 text-sm font-medium transition-all duration-200 ${filterStatus === 'Hold' && filterAssignment === '' ? 'text-gray-700 border-b-2 border-orange-600' : 'text-gray-700 border-b border-transparent'}`}
+                                    className={`relative px-3 py-1.5 text-xs font-medium transition-all duration-200 ${filterStatus === 'Hold' && filterAssignment === '' ? 'text-gray-700 border-b-2 border-orange-600' : 'text-gray-700 border-b border-transparent'}`}
                                 >
                                     On Hold
                                     {counts.hold_tickets > 0 && (
@@ -2725,7 +2936,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                 </button>
                                 <button 
                                     onClick={() => { setFilterAssignment('unassigned'); setFilterStatus(''); }} 
-                                    className={`relative px-3 py-1.5 text-sm font-medium transition-all duration-200 ${filterAssignment === 'unassigned' && filterStatus === '' ? 'text-gray-700 border-b-2 border-orange-600' : 'text-gray-700 border-b border-transparent'}`}
+                                    className={`relative px-3 py-1.5 text-xs font-medium transition-all duration-200 ${filterAssignment === 'unassigned' && filterStatus === '' ? 'text-gray-700 border-b-2 border-orange-600' : 'text-gray-700 border-b border-transparent'}`}
                                 >
                                     Unassigned
                                     {counts.unassigned > 0 && (
@@ -2734,6 +2945,44 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                         </span>
                                     )}
                                 </button>
+                                {/* Assigned to Me filter - Only for engineers and super admin */}
+                                {(() => {
+                                    console.log('Debug - User role:', user?.role);
+                                    const shouldShow = (user?.role === 'engineer' || user?.role === 'senior_engineer' || user?.role === 'lead_engineer' || user?.role === 'principal_engineer' || user?.role === 'super_admin' || user?.role === 'support');
+                                    console.log('Debug - Should show assigned to me:', shouldShow);
+                                    return shouldShow;
+                                })() && (
+                                    <button 
+                                        onClick={() => { setFilterAssignment('assigned_to_me'); setFilterStatus(''); }} 
+                                        className={`relative px-3 py-1.5 text-xs font-medium transition-all duration-200 ${filterAssignment === 'assigned_to_me' && filterStatus === '' ? 'text-gray-700 border-b-2 border-blue-600' : 'text-gray-700 border-b border-transparent'}`}
+                                    >
+                                        Assigned to Me
+                                        {counts.assigned_to_me > 0 && (
+                                            <span className="absolute -top-2 -right-1 bg-blue-500 text-white font-bold text-[9px] rounded-full min-h-2 min-w-4 px-1 flex items-center justify-center">
+                                                {counts.assigned_to_me}
+                                            </span>
+                                        )}
+                                    </button>
+                                )}
+                                {!assignMode && !showCheckboxes && selectedTickets.length === 0 && (
+                                    <TooltipBubble title="Select tickets for export or assignment">
+                                        <img 
+                                            src={selectionIcon} 
+                                            alt="Select" 
+                                            onClick={enterExportSelectionMode}
+                                            className="w-6 h-6 ml-4 cursor-pointer hover:opacity-80 transition-opacity duration-200"
+                                        />
+                                    </TooltipBubble>
+                                )}
+                                {(assignMode || showCheckboxes || (selectedTickets.length > 0 && !assignMode)) && (
+                                    <button 
+                                        onClick={exitExportSelectionMode}
+                                        className="group relative inline-flex items-center justify-center px-2 py-1 text-xs font-medium text-white bg-gradient-to-r from-red-400 to-red-500 rounded-md shadow-sm hover:from-red-500 hover:to-red-600 hover:shadow-md transition-all duration-200 ease-in-out border-0 focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-1 ml-6"
+                                    >
+                                        <X className="w-3 h-3 mr-1 group-hover:scale-110 transition-transform duration-200" />
+                                        Cancel
+                                    </button>
+                                )}
                             </div>
                         )}
                         {filterBy === 'priority' && (
@@ -2785,16 +3034,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                         <div className="flex items-center gap-2 ml-3">
                             {/* Action Buttons: Assign, Select, Notes (copy logic from original) */}
                             {/* Copy from original code, lines 1291-1357 */}
-                            {!assignMode && !showCheckboxes ? (
-                                <>
-                                    <SelectButton 
-                                        onClick={enterExportSelectionMode}
-                                        className="px-2 py-1 text-xs min-w-[68px]"
-                                    >
-                                        Select
-                                    </SelectButton>
-                                </>
-                            ) : canAssign && assignMode && user?.role !== 'site_admin' ? (
+                            {canAssign && assignMode && user?.role !== 'site_admin' ? (
                                 // Assign mode - show Assign button with count and Cancel button
                                 <>
                                 <button 
@@ -2825,67 +3065,20 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                             Cancel
                                 </button>
                                 </>
-                            ) : !canAssign && assignMode ? null : (
-                                // Export selection mode - show Cancel button
-                                <button 
-                                    onClick={exitExportSelectionMode}
-                                    className="group relative inline-flex items-center justify-center px-3 py-1.5 text-sm font-medium text-white bg-gradient-to-r from-red-400 to-red-500 rounded-md shadow-sm hover:from-red-500 hover:to-red-600 hover:shadow-md transition-all duration-200 ease-in-out border-0 focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-1"
-                                >
-                                    <svg className="w-3 h-3 mr-1.5 group-hover:scale-110 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                    </svg>
-                                    Cancel
-                                </button>
-                            )}
-                            <button 
-                                onClick={() => setShowNotesPanel(!showNotesPanel)}
-                                className={`px-2 py-1 
-                rounded-md 
-                text-xs 
-                font-medium 
-                inline-flex 
-                items-center 
-                justify-center 
-                cursor-pointer 
-                transition-all 
-                duration-200 
-                ease-in-out 
-                text-center 
-                min-w-[72px]
-                font-['Source_Sans_Pro']
-                bg-white 
-                text-gray-800 
-                border
-                border-orange-400
-                hover:bg-gray-50 
-                hover:border-orange-500 
-                
-                hover:shadow-md
-                focus:outline-none 
-                focus:border-orange-500 
-                focus:ring-2 
-                focus:ring-orange-400
-                active:bg-gray-100 
-                active:border-gray-600 
-                active:translate-y-0.5 
-                active:shadow-sm
-                disabled:bg-white 
-                disabled:text-gray-400 
-                disabled:border-gray-300 
-                disabled:cursor-not-allowed
-                disabled:hover:transform-none
-                disabled:hover:shadow-nonei ${
-                                    showNotesPanel 
-                                        ? 'text-white bg-gradient-to-r from-blue-600 to-blue-700 border-orange-300 hover:from-blue-700 hover:to-blue-800 focus:ring-orange-500' 
-                                        : 'text-gray-700 bg-gradient-to-r from-gray-100 to-gray-200 border-orange-300 hover:from-gray-200 hover:to-gray-300 focus:ring-orange-500'
-                                }`}
-                            >
-                                
-                                My Notes
-                            </button>
+                            ) : !canAssign && assignMode ? null : null}
+                            <NotesTooltipBubble title="Open your personal notes">
+                                <img 
+                                    src={stickyNoteIcon} 
+                                    alt="My Notes" 
+                                    onClick={() => setShowNotesPanel(!showNotesPanel)}
+                                    className={`w-6 h-6 cursor-pointer hover:opacity-80 transition-opacity duration-200 ${
+                                        showNotesPanel ? 'opacity-100' : 'opacity-70'
+                                    }`}
+                                />
+                            </NotesTooltipBubble>
                         </div>
                     </div>
-                    {(assignMode || showCheckboxes) && (
+                    {(assignMode || showCheckboxes || selectedTickets.length > 0) && (
                         <div className={`w-full mt-2 px-3 py-2 text-sm rounded-md border ${
                             selectedTickets.length === 0
                                 ? 'text-blue-800 bg-blue-50/80 border-blue-300'
@@ -2922,97 +3115,148 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                 </div>
 
                 {displayedTickets.length === 0 ? (
-                    <p className="text-gray-600 text-sm text-center p-6 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50">
-                        {searchKeyword ? `No tickets found matching "${searchKeyword}".` : "No tickets found matching the criteria."}
-                    </p>
+                    loading || ticketsLoading ? (
+                        <div className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50">
+                            <RefreshCw className="animate-spin h-8 w-8 text-blue-500 mb-3" />
+                            <p className="text-gray-600 text-sm">Loading tickets...</p>
+                        </div>
+                    ) : (
+                        <p className="text-gray-600 text-sm text-center p-6 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50">
+                            {searchKeyword ? `No tickets found matching "${searchKeyword}".` : "No tickets found matching the criteria."}
+                        </p>
+                    )
                 ) : (
                     <>
                         {/* Ticket Count Display */}
-                        <div className="text-[12px] text-gray-500 text-center mb-2 px-0">
-                            Showing {((currentPage - 1) * ticketsPerPage) + 1}-{Math.min(currentPage * ticketsPerPage, displayedTickets.length)} of {displayedTickets.length} Tickets
+                        <div className="text-[12px] text-gray-500 text-center mb-1 px-0 -mt-2">
+                            Showing <span className="text-blue-600 font-semibold">{((currentPage - 1) * ticketsPerPage) + 1}-{Math.min(currentPage * ticketsPerPage, displayedTickets.length)}</span> of <span className="text-blue-600 font-semibold">{displayedTickets.length}</span> Tickets
                             {filterBy === 'company' && (
                                 <span className="ml-7 text-gray-600">
                                        Companies: {companies.length}, Selected: {filterCompany || 'None'}
                                 </span>
                             )}
                         </div>
-                        <div className="w-full max-w-full overflow-x-auto border border-gray-200 bg-white mt-0">
-                         <table className={`w-full min-w-0 bg-white text-sm font-light ${(showCheckboxes || assignMode) ? 'border border-orange-400' : ''}`} style={{ fontFamily: 'Source Sans 3, sans-serif', fontWeight: 300, fontOpticalSizing: 'auto', fontStyle: 'normal' }}>
+                        <div className="w-full max-w-full overflow-x-auto border border-gray-200 bg-white -mt-1">
+                         <table className={`w-full min-w-0 bg-white text-xs ${(showCheckboxes || assignMode) ? 'border border-orange-400' : ''}`} style={{ fontFamily: 'Arial, sans-serif', fontWeight: 400, fontOpticalSizing: 'auto', fontStyle: 'normal' }}>
                              <thead className="hidden sm:table-header-group bg-gray-100 border-b border-gray-200">
-                                <tr>
-                                    <th className="px-2 py-2 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">
-                                        <div className="flex flex-col items-start space-y-1">
-                                            {assignMode && (
-                                                <span className="text-sm text-gray-500 font-normal">
-                                                    
-                                                </span>
-                                            )}
-                                        <input 
-                                            type="checkbox" 
-                                            onChange={(e) => {
-                                                if (e.target.checked) {
-                                                        if (assignMode) {
-                                                            // In assign mode, select only unassigned tickets
-                                                    const unassignedTicketIds = paginatedTickets
-                                                        .filter(ticket => !ticket.assigned_to_email)
-                                                        .map(ticket => ticket.id);
-                                                    setSelectedTickets(unassignedTicketIds);
-                                                        } else if (showCheckboxes) {
-                                                            // In export mode, select all tickets
-                                                            const allTicketIds = paginatedTickets.map(ticket => ticket.id);
-                                                            setSelectedTickets(allTicketIds);
-                                                        }
-                                                } else {
-                                                    setSelectedTickets([]);
-                                                }
-                                            }}
-                                                checked={
-                                                    assignMode 
-                                                        ? selectedTickets.length > 0 && selectedTickets.length === paginatedTickets.filter(ticket => !ticket.assigned_to_email).length
-                                                        : selectedTickets.length > 0 && selectedTickets.length === paginatedTickets.length
-                                                }
-                                                disabled={!assignMode && !showCheckboxes}
-                                                className={`w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 ${
-                                                    !assignMode && !showCheckboxes ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
-                                                }`}
-                                            />
-                                        </div>
-                                    </th>
-                                    <th className="px-2 py-2 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">#</th>
-                                    <th className="px-2 py-2 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">Ticket ID</th>
-                                    <th className="px-2 py-2 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">Short Description</th>
-                                    <th className="px-2 py-2 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">Created Date</th>
-                                    <th className="px-2 py-2 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">Priority</th>
-                                    <th className="px-2 py-2 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">Status</th>
-                                    <th className="px-2 py-2 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">Requested by</th>
-                                    <th className="px-2 py-2 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">Assigned To</th>
-                                    <th className="px-2 py-2 text-center text-sm font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words w-16">Peek</th>
-                                </tr>
-                            </thead>
-                             <tbody className="divide-y divide-gray-200" style={{ fontFamily: 'Source Sans 3, sans-serif', fontWeight: 400, fontOpticalSizing: 'auto', fontStyle: 'normal' }}>
-                                {paginatedTickets.map((ticket, index) => (
-                                    <tr key={ticket.id} className={`block sm:table-row border-b border-gray-200 hover:bg-gray-50 transition-colors duration-150 text-sm h-16 ${
-                                        showPeekPanel && peekedTicket && peekedTicket.id === ticket.id 
-                                            ? 'bg-orange-50 border-orange-200' 
-                                            : 'bg-white'
-                                    }`}>
-                                        <td className="block sm:table-cell px-2 py-4 text-sm text-gray-800 whitespace-normal break-words">
-                                            <span className="block sm:hidden font-semibold text-gray-600">Select:</span>
+                                <tr className="h-10">
+                                    {(showCheckboxes || assignMode) && (
+                                        <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words min-w-[60px]">
+                                            <div className="flex flex-col items-start space-y-1">
+                                                {assignMode && (
+                                                    <span className="text-sm text-gray-500 font-normal">
+                                                        
+                                                    </span>
+                                                )}
                                             <input 
                                                 type="checkbox" 
-                                                checked={selectedTickets.includes(ticket.id)}
-                                                onChange={() => handleTicketSelection(ticket.id)}
-                                                disabled={(!assignMode && !showCheckboxes) || (assignMode && ticket.assigned_to_email)}
-                                                className={`w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 ${
-                                                    (!assignMode && !showCheckboxes) || (assignMode && ticket.assigned_to_email) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
-                                                }`}
-                                            />
-                                        </td>
-                                        <td className="block sm:table-cell px-2 py-4 text-sm text-gray-800 whitespace-normal break-words">
+                                                onChange={(e) => {
+                                                    if (e.target.checked) {
+                                                            if (assignMode) {
+                                                                // In assign mode, select only unassigned tickets
+                                                        const unassignedTicketIds = paginatedTickets
+                                                            .filter(ticket => !ticket.assigned_to_email)
+                                                            .map(ticket => ticket.id);
+                                                        setSelectedTickets(unassignedTicketIds);
+                                                            } else if (showCheckboxes) {
+                                                                // In export mode, select all tickets
+                                                                const allTicketIds = paginatedTickets.map(ticket => ticket.id);
+                                                                setSelectedTickets(allTicketIds);
+                                                            }
+                                                    } else {
+                                                        setSelectedTickets([]);
+                                                    }
+                                                }}
+                                                    checked={
+                                                        assignMode 
+                                                            ? selectedTickets.length > 0 && selectedTickets.length === paginatedTickets.filter(ticket => !ticket.assigned_to_email).length
+                                                            : selectedTickets.length > 0 && selectedTickets.length === paginatedTickets.length
+                                                    }
+                                                    disabled={!assignMode && !showCheckboxes}
+                                                    className={`w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 ${
+                                                        !assignMode && !showCheckboxes ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+                                                    }`}
+                                                />
+                                            </div>
+                                        </th>
+                                    )}
+                                    <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words min-w-[50px]">#</th>
+                                    <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words min-w-[120px]">Ticket ID</th>
+                                    <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words min-w-[200px]">Short Description</th>
+                                    <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words min-w-[140px]">Created Date</th>
+                                    <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words min-w-[100px]">Priority</th>
+                                    <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words min-w-[120px]">Status</th>
+                                    <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words min-w-[180px]">Requested by</th>
+                                    <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words min-w-[180px]">Assigned To</th>
+                                    <th className="px-2 py-2 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words min-w-[80px]">Peek</th>
+                                </tr>
+                            </thead>
+                             <tbody className="divide-y divide-gray-200" style={{ fontFamily: 'Arial, sans-serif', fontWeight: 400, fontOpticalSizing: 'auto', fontStyle: 'normal' }}>
+                                {paginatedTickets.map((ticket, index) => (
+                                    <tr key={ticket.id} 
+                                        className={`block sm:table-row bg-white border-b border-gray-200 hover:bg-gray-100 transition-colors duration-150 text-xs cursor-pointer group ${
+                                            showPeekPanel && peekedTicket && peekedTicket.id === ticket.id 
+                                                ? 'bg-orange-50 border-orange-200' 
+                                                : 'bg-white'
+                                        }`}
+                                        onClick={(e) => {
+                                            // Check if the click was on a dropdown or interactive element
+                                            const target = e.target;
+                                            const isDropdown = target.closest('.custom-dropdown') || 
+                                                             target.closest('[role="button"]') || 
+                                                             target.closest('input') || 
+                                                             target.closest('button') ||
+                                                             target.closest('a');
+                                            
+                                            // Check if click was in checkbox column (either regular or hover checkbox)
+                                            const isCheckboxColumn = target.closest('.checkbox-column');
+                                            
+                                            if (!isDropdown && !isCheckboxColumn) {
+                                                navigateTo('/tickets', ticket.id);
+                                            }
+                                        }}
+                                    >
+                                        {(showCheckboxes || assignMode) && (
+                                            <td className="checkbox-column block sm:table-cell px-2 py-4 text-xs text-gray-800 whitespace-normal break-words min-w-[60px] border-r border-gray-200 cursor-default">
+                                                <span className="block sm:hidden font-semibold text-gray-600">Select:</span>
+                                                <input 
+                                                    type="checkbox" 
+                                                    checked={selectedTickets.includes(ticket.id)}
+                                                    onChange={(e) => {
+                                                        e.stopPropagation();
+                                                        handleTicketSelection(ticket.id);
+                                                    }}
+                                                    disabled={(!assignMode && !showCheckboxes) || (assignMode && ticket.assigned_to_email)}
+                                                    className={`w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 ${
+                                                        (!assignMode && !showCheckboxes) || (assignMode && ticket.assigned_to_email) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+                                                    }`}
+                                                />
+                                            </td>
+                                        )}
+                                        <td className="checkbox-column block sm:table-cell px-2 py-4 text-xs text-gray-800 whitespace-normal break-words min-w-[50px] border-r border-gray-200 group-hover:bg-blue-50 cursor-default">
                                             <span className="block sm:hidden font-semibold text-gray-600">#:</span>
-                                            {index + 1}
+                                            <div className="relative">
+                                                <span className={`${selectedTickets.includes(ticket.id) ? 'hidden' : 'group-hover:hidden'} inline-block`}>{index + 1}</span>
+                                                {/* Only show hover checkbox when regular selection checkboxes are not visible */}
+                                                {!(showCheckboxes || assignMode) && (
+                                                    <div className={`${selectedTickets.includes(ticket.id) ? 'inline-block' : 'hidden group-hover:inline-block'}`}>
+                                                        <input 
+                                                            type="checkbox" 
+                                                            checked={selectedTickets.includes(ticket.id)}
+                                                            onChange={(e) => {
+                                                                e.stopPropagation();
+                                                                console.log('Hover checkbox clicked for ticket:', ticket.id);
+                                                                handleTicketSelection(ticket.id);
+                                                                // Don't automatically show all checkboxes - let user manually enter selection mode
+                                                            }}
+                                                            disabled={false}
+                                                            className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
+                                                        />
+                                                    </div>
+                                                )}
+                                            </div>
                                         </td>
-                                        <td className="block sm:table-cell px-2 py-4 text-sm text-gray-700 hover:text-gray-900 hover:underline font-medium cursor-pointer whitespace-normal break-words" 
+                                        <td className="block sm:table-cell px-2 py-4 text-xs text-blue-700 hover:underline font-medium cursor-pointer whitespace-normal break-words min-w-[120px] border-r border-gray-200" 
                                             onMouseEnter={(e) => showTicketIdPopup(ticket.display_id, ticket.id, e)}
                                             onMouseLeave={hideTicketIdPopup}
                                         >
@@ -3021,22 +3265,22 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                                 href={`/tickets/${ticket.id}`}
                                                 onClick={(e) => {
                                                     e.preventDefault();
+                                                    e.stopPropagation();
                                                     navigateTo('/tickets', ticket.id);
                                                 }}
                                             >
                                                 {ticket.display_id}
                                             </a>
                                         </td>
-                                        <td className="block sm:table-cell px-2 py-4 text-sm text-gray-800 max-w-xs" title={ticket.short_description}>
+                                        <td className="block sm:table-cell px-2 py-4 text-xs text-gray-800 max-w-xs truncate whitespace-normal break-words min-w-[200px] border-r border-gray-200" title={ticket.short_description}>
                                             <span className="block sm:hidden font-semibold text-gray-600">Short Description:</span>
                                             <div 
-                                                className="line-clamp-2 text-ellipsis overflow-hidden text-blue-600 hover:text-blue-800 hover:underline cursor-pointer transition-colors duration-200"
-                                                onClick={() => navigateTo('/tickets', ticket.id)}
+                                                className="line-clamp-2 text-ellipsis overflow-hidden text-gray-800"
                                             >
                                                 {ticket.short_description}
                                             </div>
                                         </td>
-                                        <td className="block sm:table-cell px-2 py-4 text-sm text-gray-800 min-w-[180px] max-w-[280px]">
+                                        <td className="block sm:table-cell px-2 py-4 text-xs text-gray-800 whitespace-normal break-words min-w-[140px] border-r border-gray-200">
                                             <span className="block sm:hidden font-semibold text-gray-600">Created Date:</span>
                                             <div className="truncate">
                                                 {ticket.created_at ? (
@@ -3062,42 +3306,47 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                                 ) : 'N/A'}
                                             </div>
                                         </td>
-                                        <td className="block sm:table-cell px-2 py-4 text-sm text-gray-800 whitespace-normal break-words">
-                                            <span className="block sm:hidden font-medium text-gray-600">Priority:</span>
-                                            <span className={`px-2 py-0.5 text-sm font-medium rounded-full ${getPriorityClasses(ticket.priority)}`}>{ticket.priority}</span>
+                                        <td className="block sm:table-cell px-2 py-4 text-xs text-gray-800 whitespace-normal break-words min-w-[100px] border-r border-gray-200">
+                                            <span className="block sm:hidden font-semibold text-gray-600">Priority:</span>
+                                            <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getPriorityClasses(ticket.priority)}`}>{ticket.priority}</span>
                                         </td>
-                                        <td className="block sm:table-cell px-2 py-4 whitespace-normal break-words text-sm text-gray-800">
-                                            <span className="block sm:hidden font-medium text-gray-600">Status:</span>
+                                        <td className="block sm:table-cell px-2 py-4 whitespace-normal break-words text-xs text-gray-800 text-left min-w-[120px] border-r border-gray-200">
+                                            <span className="block sm:hidden font-semibold text-gray-600">Status:</span>
                                             {/* Show status dropdown for engineers and super admins */}
-                                            {(user?.role === 'support' || user?.role === 'admin' || user?.role === 'super_admin') ? (
-                                                <div className="min-w-[120px] max-w-[160px] overflow-hidden">
+                                            {(user?.role === 'support' || user?.role === 'admin' || user?.role === 'super_admin' || user?.role === 'engineer') ? (
+                                                <div className="w-full">
                                                     {changingStatusTickets.has(ticket.id) ? (
                                                         <div className="flex items-center gap-1 text-sm text-blue-600">
-                                                            <Loader2 className="w-3 h-3 animate-spin" />
+                                                            <Loader2 className="w-4 h-4 animate-spin" />
                                                             <span>Updating...</span>
                                                         </div>
                                                     ) : (
-                                                        <CustomDropdown
-                                                            value={ticket.status}
-                                                            onChange={(value) => handleTicketStatusChange(ticket.id, value)}
-                                                            options={memoizedStatusOptions}
-                                                            placeholder={ticket.status}
-                                                            className="text-sm w-full"
-                                                            disabled={['Resolved', 'Cancelled', 'Closed'].includes(ticket.status)}
-                                                            variant="minimal"
-                                                            customDisplay={(
-                                                                <span className={`px-2 py-0.5 text-sm font-medium rounded-full truncate ${getStatusClasses(ticket.status)}`}>
-                                                                    {ticket.status}
-                                                                </span>
-                                                            )}
-                                                        />
+                                                        <div 
+                                                            className="custom-dropdown"
+                                                            onClick={(e) => e.stopPropagation()}
+                                                        >
+                                                            <CustomDropdown
+                                                                value={ticket.status}
+                                                                onChange={(value) => handleTicketStatusChange(ticket.id, value)}
+                                                                options={memoizedStatusOptions}
+                                                                placeholder={ticket.status}
+                                                                className="text-sm w-full"
+                                                                disabled={['Resolved', 'Cancelled', 'Closed'].includes(ticket.status)}
+                                                                variant="minimal"
+                                                                customDisplay={(
+                                                                    <span className={`px-2 py-0.5 text-xs font-semibold rounded-full truncate ${getStatusClasses(ticket.status)}`}>
+                                                                        {ticket.status}
+                                                                    </span>
+                                                                )}
+                                                            />
+                                                        </div>
                                                     )}
                                                 </div>
                                             ) : (
-                                                <span className={`px-2 py-0.5 text-sm font-medium rounded-full ${getStatusClasses(ticket.status)}`}>{ticket.status}</span>
+                                                <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getStatusClasses(ticket.status)}`}>{ticket.status}</span>
                                             )}
                                         </td>
-                                        <td className="block sm:table-cell px-2 py-4 text-sm text-gray-800 min-w-[180px] max-w-[280px]">
+                                        <td className="block sm:table-cell px-2 py-4 text-xs text-gray-800 whitespace-normal break-words min-w-[180px] border-r border-gray-200">
                                             <span className="block sm:hidden font-semibold text-gray-600">Requested by:</span>
                                             <div className="truncate">
                                             <span 
@@ -3124,41 +3373,49 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                             </span>
                                             </div>
                                         </td>
-                                        <td className="block sm:table-cell px-2 py-4 text-sm text-gray-800 min-w-[180px] max-w-[280px]" style={{ fontFamily: 'Source Sans 3, sans-serif', fontWeight: 300, fontOpticalSizing: 'auto', fontStyle: 'normal' }}>
+                                        <td className="block sm:table-cell px-2 py-4 text-xs text-gray-800 whitespace-normal break-words min-w-[180px] border-r border-gray-200" style={{ fontFamily: 'Arial, sans-serif', fontWeight: 400, fontOpticalSizing: 'auto', fontStyle: 'normal' }}>
                                             <span className="block sm:hidden font-semibold text-gray-600">Assigned To:</span>
                                             {/* Show assignment dropdown for engineers and super admins */}
-                                            {(user?.role === 'support' || user?.role === 'admin' || user?.role === 'super_admin') ? (
+                                            {(user?.role === 'support' || user?.role === 'admin' || user?.role === 'super_admin' || user?.role === 'engineer') ? (
                                                 <div className="min-w-[180px] max-w-[280px] w-full">
                                                     {engineersLoading && availableEngineers.length === 0 ? (
                                                         <span className="text-sm text-gray-500">Loading...</span>
                                                     ) : assigningTickets.has(ticket.id) ? (
                                                         <div className="flex items-center gap-1 text-sm text-blue-600">
-                                                            <Loader2 className="w-3 h-3 animate-spin" />
+                                                            <Loader2 className="w-4 h-4 animate-spin" />
                                                             <span>Assigning...</span>
                                                         </div>
                                                     ) : (
-                                                        <CustomDropdown
-                                                            value={ticket.assigned_to_email || 'unassigned'}
-                                                            onChange={(value) => handleTicketAssignment(ticket.id, value)}
-                                                            options={assignmentOptions}
-                                                            placeholder={ticket.assigned_to_email || 'Unassigned'}
-                                                            className="text-sm w-full"
-                                                            disabled={['Resolved', 'Cancelled', 'Closed'].includes(ticket.status)}
-                                                            variant="minimal"
-                                                        />
+                                                        <div 
+                                                            className="custom-dropdown"
+                                                            onClick={(e) => e.stopPropagation()}
+                                                        >
+                                                            <CustomDropdown
+                                                                value={ticket.assigned_to_email || 'unassigned'}
+                                                                onChange={(value) => handleTicketAssignment(ticket.id, value)}
+                                                                options={assignmentOptions}
+                                                                placeholder={ticket.assigned_to_email || 'Unassigned'}
+                                                                className="text-sm w-full"
+                                                                disabled={['Resolved', 'Cancelled', 'Closed'].includes(ticket.status)}
+                                                                variant="minimal"
+                                                            />
+                                                        </div>
                                                     )}
                                                 </div>
                                             ) : (
-                                                <div className="truncate" style={{ fontFamily: 'Source Sans 3, sans-serif', fontWeight: 300, fontOpticalSizing: 'auto', fontStyle: 'normal' }}>
-                                                <span>{ticket.assigned_to_email || 'Unassigned'}</span>
+                                                <div className="truncate" style={{ fontFamily: 'Arial, sans-serif', fontWeight: 400, fontOpticalSizing: 'auto', fontStyle: 'normal' }}>
+                                                <span className="text-sm">{ticket.assigned_to_email || 'Unassigned'}</span>
                                                 </div>
                                             )}
                                         </td>
-                                        <td className="block sm:table-cell px-2 py-4 text-center whitespace-normal break-words">
+                                        <td className="block sm:table-cell px-2 py-4 text-center whitespace-normal break-words text-xs text-gray-800 min-w-[80px]">
                                             <span className="block sm:hidden font-semibold text-gray-600">Peek:</span>
                                             {showPeekPanel && peekedTicket && peekedTicket.id === ticket.id ? (
                                                 <button
-                                                    onClick={handleClosePeek}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleClosePeek();
+                                                    }}
                                                     className="inline-flex items-center justify-center w-8 h-8 text-orange-600 hover:text-orange-700 hover:bg-orange-50 rounded-full transition-colors duration-200"
                                                     title="Close preview"
                                                 >
@@ -3166,7 +3423,10 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                                 </button>
                                             ) : (
                                                 <button
-                                                    onClick={() => handlePeekTicket(ticket)}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handlePeekTicket(ticket);
+                                                    }}
                                                     className="inline-flex items-center justify-center w-8 h-8 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors duration-200"
                                                     title="Peek at ticket details"
                                                 >
@@ -3202,9 +3462,10 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                             <h3 className="text-lg font-semibold text-gray-900">My Notes</h3>
                             <button
                                 onClick={() => setShowNotesPanel(false)}
-                                className="text-gray-400 hover:text-gray-600 p-1"
+                                className="flex items-center justify-center w-8 h-8 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-all duration-200 group"
+                                title="Close Notes Panel"
                             >
-                                <X className="w-5 h-5" />
+                                <X className="w-5 h-5 group-hover:scale-110 transition-transform duration-200" strokeWidth={2.5} />
                             </button>
                         </div>
                         
@@ -3312,9 +3573,9 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                         {!showAddNoteForm && !viewingNote && (
                             <button
                                 onClick={() => setShowAddNoteForm(true)}
-                                className="w-full mb-4 px-3 py-2 text-sm font-medium text-white bg-orange-500 rounded-md hover:bg-orange-600 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 transition-all duration-200 flex items-center justify-center shadow-sm hover:shadow-md transform hover:scale-[1.01]"
+                                className="w-full mb-4 px-2 py-1.5 text-xs font-medium text-white bg-orange-500 rounded-md hover:bg-orange-600 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 transition-all duration-200 flex items-center justify-center shadow-sm hover:shadow-md"
                             >
-                                <Plus className="w-3 h-3 mr-1.5" />
+                                <Plus className="w-3 h-3 mr-1" />
                                 Add Note
                             </button>
                         )}
@@ -3351,9 +3612,9 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
         {/* Category Tag */}
         <div className="flex items-center gap-2">
           <span
-            className={`inline-flex items-center px-3 py-1 rounded-md text-sm font-medium ${getCategoryColor(
+            className={`inline-flex items-center px-2.5 py-1 border text-sm font-medium rounded ${getCategoryColor(
               viewingNote.category
-            )}`}
+            )} whitespace-nowrap`}
           >
             {
               noteCategories.find((c) => c.value === viewingNote.category)
@@ -3367,34 +3628,37 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
 
         {/* Action Buttons */}
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => handleTogglePin(viewingNote.id)}
-            className={`p-1.5 rounded-md border text-gray-400 hover:text-orange-600 hover:border-orange-300 transition`}
-            title={viewingNote.is_pinned ? "Unpin note" : "Pin note"}
-          >
-            {viewingNote.is_pinned ? (
-              <Pin className="w-4 h-4" />
-            ) : (
-              <PinOff className="w-4 h-4" />
-            )}
-          </button>
+          <TooltipBubble title={viewingNote.is_pinned ? "Unpin note" : "Pin note"}>
+            <button
+              onClick={() => handleTogglePin(viewingNote.id)}
+              className={`p-1.5 rounded-md border text-gray-400 hover:text-orange-600 hover:border-orange-300 transition`}
+            >
+              {viewingNote.is_pinned ? (
+                <Pin className="w-4 h-4" />
+              ) : (
+                <PinOff className="w-4 h-4" />
+              )}
+            </button>
+          </TooltipBubble>
 
-          <button
-            onClick={() => startEditing(viewingNote)}
-            className="p-1.5 rounded-md border text-gray-400 hover:text-blue-600 hover:border-blue-300 transition"
-            title="Edit note"
-          >
-            <Edit3 className="w-4 h-4" />
-          </button>
+          <TooltipBubble title="Edit note">
+            <button
+              onClick={() => startEditing(viewingNote)}
+              className="p-1.5 rounded-md border text-gray-400 hover:text-blue-600 hover:border-blue-300 transition"
+            >
+              <Edit3 className="w-4 h-4" />
+            </button>
+          </TooltipBubble>
 
            <div className="relative">
-             <button
-               onClick={() => handleDeleteClick(viewingNote.id)}
-               className="p-1.5 rounded-md border text-gray-400 hover:text-red-600 hover:border-red-300 transition"
-               title="Delete note"
-             >
-               <Trash2 className="w-4 h-4" />
-             </button>
+             <TooltipBubble title="Delete note">
+               <button
+                 onClick={() => handleDeleteClick(viewingNote.id)}
+                 className="p-1.5 rounded-md border text-gray-400 hover:text-red-600 hover:border-red-300 transition"
+               >
+                 <Trash2 className="w-4 h-4" />
+               </button>
+             </TooltipBubble>
              
              {/* Delete Confirmation Popup */}
              {showDeleteConfirm === viewingNote.id && (
@@ -3461,92 +3725,102 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                         {/* Pinned Notes Section */}
                                         {pinnedNotes.length > 0 && (
                                             <div>
-                                                <div className="flex items-center gap-2 mb-3 px-1">
+                                                <div className="flex items-center justify-center gap-2 mb-3 px-1">
+                                                    <div className="flex-1 h-px bg-yellow-200"></div>
                                                     <Pin className="w-4 h-4 text-yellow-600" />
                                                     <h3 className="text-sm font-semibold text-gray-700">Pinned Notes</h3>
                                                     <div className="flex-1 h-px bg-yellow-200"></div>
                                                 </div>
                                     <div className="space-y-2">
                                                     {pinnedNotes.map((note) => (
-                                    <div
-                                        key={note.id}
+                                                        <div
+                                                            key={note.id}
                                                             onClick={() => handleViewNote(note)}
-                                                            className="p-3 border border-orange-400 bg-white rounded-md hover:shadow-sm transition-all duration-200 cursor-pointer"
-                                    >
-                                        <div className="flex items-start justify-between">
-                                            <div className="flex-1 min-w-0 mr-2">
-                                                <div className="flex items-center gap-2 mb-1">
-                                                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-sm font-medium ${getCategoryColor(note.category)}`}>
-                                                        {noteCategories.find(c => c.value === note.category)?.label}
-                                                    </span>
-                                                </div>
-                                                                    <div className="flex items-center text-[10px] text-gray-500 mb-2">
-                                                                        <Calendar className="w-3 h-3 mr-1" />
-                                                                        {formatDate(note.updated_at)}
-                                                                    </div>
-                                                                    <h4 className="font-medium text-sm text-gray-900 mb-2">
-                                                                        {note.title}
-                                                                    </h4>
-                                                                    <p className="text-sm text-gray-600 line-clamp-4 mb-1">
-                                                    {note.content}
-                                                </p>
+                                                            className="p-3 border border-orange-300 bg-gradient-to-r from-orange-50 to-yellow-50 rounded-lg hover:shadow-md transition-all duration-200 cursor-pointer group"
+                                                        >
+                                                            {/* Header with category and pin indicator */}
+                                                            <div className="flex items-center justify-between mb-2">
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className={`inline-flex items-center px-2 py-0.5 border text-xs font-medium rounded ${getCategoryColor(note.category)} whitespace-nowrap`}>
+                                                                        {noteCategories.find(c => c.value === note.category)?.label}
+                                                                    </span>
+                                                                    <Pin className="w-3 h-3 text-orange-600" />
                                                                 </div>
-                                                                <div className="flex items-center space-x-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                                                                <div className="flex items-center text-xs text-gray-500">
+                                                                    <Calendar className="w-3 h-3 mr-1" />
+                                                                    {formatDate(note.updated_at)}
+                                                                </div>
+                                                            </div>
+
+                                                            {/* Title */}
+                                                            <h4 className="font-semibold text-sm text-gray-900 mb-2 line-clamp-1">
+                                                                {note.title}
+                                                            </h4>
+
+                                                            {/* Content preview */}
+                                                            <p className="text-xs text-gray-600 line-clamp-3 mb-3">
+                                                                {note.content}
+                                                            </p>
+
+                                                            {/* Action buttons */}
+                                                            <div className="flex items-center justify-end space-x-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200" onClick={(e) => e.stopPropagation()}>
+                                                                <TooltipBubble title="Unpin note">
                                                                     <button
                                                                         onClick={(e) => {
                                                                             e.stopPropagation();
                                                                             handleTogglePin(note.id);
                                                                         }}
-                                                                        className="p-1.5 text-yellow-600 bg-yellow-50 border border-yellow-200 rounded-md hover:bg-yellow-100 hover:border-yellow-300 transition-all duration-200"
-                                                                        title="Unpin note"
+                                                                        className="p-1.5 text-orange-600 hover:bg-orange-100 rounded-md transition-colors duration-200"
                                                                     >
-                                                                        <Pin className="w-3.5 h-3.5" />
+                                                                        <PinOff className="w-3.5 h-3.5" />
                                                                     </button>
+                                                                </TooltipBubble>
+                                                                <TooltipBubble title="Edit note">
                                                                     <button
                                                                         onClick={(e) => {
                                                                             e.stopPropagation();
                                                                             startEditing(note);
                                                                         }}
-                                                                        className="p-1.5 text-gray-400 bg-gray-50 border border-gray-200 rounded-md hover:text-blue-600 hover:bg-blue-50 hover:border-blue-200 transition-all duration-200"
-                                                                        title="Edit note"
+                                                                        className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors duration-200"
                                                                     >
                                                                         <Edit3 className="w-3.5 h-3.5" />
                                                                     </button>
-                                                                    <div className="relative">
+                                                                </TooltipBubble>
+                                                                <div className="relative">
+                                                                    <TooltipBubble title="Delete note">
                                                                         <button
                                                                             onClick={(e) => {
                                                                                 e.stopPropagation();
                                                                                 handleDeleteClick(note.id);
                                                                             }}
-                                                                            className="p-1.5 text-gray-400 bg-gray-50 border border-gray-200 rounded-md hover:text-red-600 hover:bg-red-50 hover:border-red-200 transition-all duration-200"
-                                                                            title="Delete note"
+                                                                            className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors duration-200"
                                                                         >
                                                                             <Trash2 className="w-3.5 h-3.5" />
                                                                         </button>
-                                                                        
-                                                                        {/* Delete Confirmation Popup */}
-                                                                        {showDeleteConfirm === note.id && (
-                                                                            <div className="delete-confirmation-container absolute top-8 right-0 z-50 bg-white border border-gray-200 rounded-lg shadow-lg p-3 min-w-[180px]">
-                                                                                <div className="text-sm text-gray-700 mb-2">
-                                                                                    Delete this note?
-                                                                                </div>
-                                                                                <div className="flex gap-1.5">
-                                                                                    <button
-                                                                                        onClick={() => handleDeleteConfirm(note.id)}
-                                                                                        className="px-2.5 py-1 bg-red-600 text-white text-sm rounded-md hover:bg-red-700 transition-colors"
-                                                                                    >
-                                                                                        Delete
-                                                                                    </button>
-                                                                                    <button
-                                                                                        onClick={handleDeleteCancel}
-                                                                                        className="px-2.5 py-1 bg-gray-100 text-gray-700 text-sm rounded-md hover:bg-gray-200 transition-colors"
-                                                                                    >
-                                                                                        Cancel
-                                                                                    </button>
-                                                                                </div>
+                                                                    </TooltipBubble>
+                                                                    
+                                                                    {/* Delete Confirmation Popup */}
+                                                                    {showDeleteConfirm === note.id && (
+                                                                        <div className="delete-confirmation-container absolute top-8 right-0 z-50 bg-white border border-gray-200 rounded-lg shadow-lg p-3 min-w-[180px]">
+                                                                            <div className="text-sm text-gray-700 mb-2">
+                                                                                Delete this note?
                                                                             </div>
-                                                                        )}
-                                                                    </div>
+                                                                            <div className="flex gap-1.5">
+                                                                                <button
+                                                                                    onClick={() => handleDeleteConfirm(note.id)}
+                                                                                    className="px-2.5 py-1 bg-red-600 text-white text-sm rounded-md hover:bg-red-700 transition-colors"
+                                                                                >
+                                                                                    Delete
+                                                                                </button>
+                                                                                <button
+                                                                                    onClick={handleDeleteCancel}
+                                                                                    className="px-2.5 py-1 bg-gray-100 text-gray-700 text-sm rounded-md hover:bg-gray-200 transition-colors"
+                                                                                >
+                                                                                    Cancel
+                                                                                </button>
+                                                                            </div>
+                                                                        </div>
+                                                                    )}
                                                                 </div>
                                                             </div>
                                                         </div>
@@ -3558,7 +3832,8 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                         {/* Other Notes Section */}
                                         {unpinnedNotes.length > 0 && (
                                             <div>
-                                                <div className="flex items-center gap-2 mb-3 px-1">
+                                                <div className="flex items-center justify-center gap-2 mb-3 px-1">
+                                                    <div className="flex-1 h-px bg-gray-200"></div>
                                                     <FileText className="w-4 h-4 text-gray-500" />
                                                     <h3 className="text-sm font-semibold text-gray-700">Other Notes</h3>
                                                     <div className="flex-1 h-px bg-gray-200"></div>
@@ -3568,92 +3843,100 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                                         <div
                                                             key={note.id}
                                                             onClick={() => handleViewNote(note)}
-                                                            className="p-3 border border-gray-200 bg-white rounded-md hover:shadow-sm transition-all duration-200 cursor-pointer"
+                                                            className="p-3 border border-gray-200 bg-white rounded-lg hover:shadow-md transition-all duration-200 cursor-pointer group"
                                                         >
-                                                            <div className="flex items-start justify-between">
-                                                                <div className="flex-1 min-w-0 mr-2">
-                                                                    <div className="flex items-center gap-2 mb-1">
-                                                                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-sm font-medium ${getCategoryColor(note.category)}`}>
-                                                                            {noteCategories.find(c => c.value === note.category)?.label}
-                                                                        </span>
-                                                                    </div>
-                                                                    <div className="flex items-center text-[10px] text-gray-500 mb-2">
-                                                    <Calendar className="w-3 h-3 mr-1" />
-                                                    {formatDate(note.updated_at)}
-                                                </div>
-                                                                    <h4 className="font-medium text-sm text-gray-900 mb-2">
-                                                                        {note.title}
-                                                                    </h4>
-                                                                    <p className="text-sm text-gray-600 line-clamp-4 mb-1">
-                                                                        {note.content}
-                                                                    </p>
-                                            </div>
-                                             <div className="flex items-center space-x-1 flex-shrink-0">
-                                                 <button
-                                                     onClick={(e) => {
-                                                         e.stopPropagation();
-                                                         handleTogglePin(note.id);
-                                                     }}
-                                                                        className="p-1.5 text-gray-400 bg-gray-50 border border-gray-200 rounded-md hover:text-yellow-600 hover:bg-yellow-50 hover:border-yellow-200 transition-all duration-200"
-                                                                        title="Pin note"
+                                                            {/* Header with category and date */}
+                                                            <div className="flex items-center justify-between mb-2">
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className={`inline-flex items-center px-2 py-0.5 border text-xs font-medium rounded ${getCategoryColor(note.category)} whitespace-nowrap`}>
+                                                                        {noteCategories.find(c => c.value === note.category)?.label}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="flex items-center text-xs text-gray-500">
+                                                                    <Calendar className="w-3 h-3 mr-1" />
+                                                                    {formatDate(note.updated_at)}
+                                                                </div>
+                                                            </div>
+
+                                                            {/* Title */}
+                                                            <h4 className="font-semibold text-sm text-gray-900 mb-2 line-clamp-1">
+                                                                {note.title}
+                                                            </h4>
+
+                                                            {/* Content preview */}
+                                                            <p className="text-xs text-gray-600 line-clamp-3 mb-3">
+                                                                {note.content}
+                                                            </p>
+
+                                                            {/* Action buttons */}
+                                                            <div className="flex items-center justify-end space-x-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200" onClick={(e) => e.stopPropagation()}>
+                                                                <TooltipBubble title="Pin note">
+                                                                    <button
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            handleTogglePin(note.id);
+                                                                        }}
+                                                                        className="p-1.5 text-gray-500 hover:text-yellow-600 hover:bg-yellow-50 rounded-md transition-colors duration-200"
                                                                     >
-                                                                        <PinOff className="w-3.5 h-3.5" />
-                                                  </button>
-                                                 <button
-                                                     onClick={(e) => {
-                                                         e.stopPropagation();
-                                                         startEditing(note);
-                                                     }}
-                                                     className="p-1.5 text-gray-400 bg-gray-50 border border-gray-200 rounded-md hover:text-blue-600 hover:bg-blue-50 hover:border-blue-200 transition-all duration-200"
-                                                     title="Edit note"
-                                                 >
-                                                     <Edit3 className="w-3.5 h-3.5" />
-                                                 </button>
-                                                 <div className="relative">
-                                                 <button
-                                                         onClick={(e) => {
-                                                             e.stopPropagation();
-                                                             handleDeleteClick(note.id);
-                                                         }}
-                                                     className="p-1.5 text-gray-400 bg-gray-50 border border-gray-200 rounded-md hover:text-red-600 hover:bg-red-50 hover:border-red-200 transition-all duration-200"
-                                                     title="Delete note"
-                                                 >
-                                                     <Trash2 className="w-3.5 h-3.5" />
-                                                 </button>
-                                                     
-                                                     {/* Delete Confirmation Popup */}
-                                                     {showDeleteConfirm === note.id && (
-                                                         <div className="delete-confirmation-container absolute top-8 right-0 z-50 bg-white border border-gray-200 rounded-lg shadow-lg p-3 min-w-[180px]">
-                                                             <div className="text-sm text-gray-700 mb-2">
-                                                                 Delete this note?
-                                                             </div>
-                                                             <div className="flex gap-1.5">
-                                                                 <button
-                                                                     onClick={(e) => {
-                                                                         e.stopPropagation();
-                                                                         handleDeleteConfirm(note.id);
-                                                                     }}
-                                                                     className="px-2.5 py-1 bg-red-600 text-white text-sm rounded-md hover:bg-red-700 transition-colors"
-                                                                 >
-                                                                     Delete
-                                                                 </button>
-                                                                 <button
-                                                                     onClick={(e) => {
-                                                                         e.stopPropagation();
-                                                                         handleDeleteCancel();
-                                                                     }}
-                                                                     className="px-2.5 py-1 bg-gray-100 text-gray-700 text-sm rounded-md hover:bg-gray-200 transition-colors"
-                                                                 >
-                                                                     Cancel
-                                                                 </button>
-                                                             </div>
-                                                         </div>
-                                                     )}
-                                                 </div>
-                                             </div>
-                                        </div>
-                                    </div>
-                                        ))}
+                                                                        <Pin className="w-3.5 h-3.5" />
+                                                                    </button>
+                                                                </TooltipBubble>
+                                                                <TooltipBubble title="Edit note">
+                                                                    <button
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            startEditing(note);
+                                                                        }}
+                                                                        className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors duration-200"
+                                                                    >
+                                                                        <Edit3 className="w-3.5 h-3.5" />
+                                                                    </button>
+                                                                </TooltipBubble>
+                                                                <div className="relative">
+                                                                    <TooltipBubble title="Delete note">
+                                                                        <button
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                handleDeleteClick(note.id);
+                                                                            }}
+                                                                            className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors duration-200"
+                                                                        >
+                                                                            <Trash2 className="w-3.5 h-3.5" />
+                                                                        </button>
+                                                                    </TooltipBubble>
+                                                                    
+                                                                    {/* Delete Confirmation Popup */}
+                                                                    {showDeleteConfirm === note.id && (
+                                                                        <div className="delete-confirmation-container absolute top-8 right-0 z-50 bg-white border border-gray-200 rounded-lg shadow-lg p-3 min-w-[180px]">
+                                                                            <div className="text-sm text-gray-700 mb-2">
+                                                                                Delete this note?
+                                                                            </div>
+                                                                            <div className="flex gap-1.5">
+                                                                                <button
+                                                                                    onClick={(e) => {
+                                                                                        e.stopPropagation();
+                                                                                        handleDeleteConfirm(note.id);
+                                                                                    }}
+                                                                                    className="px-2.5 py-1 bg-red-600 text-white text-sm rounded-md hover:bg-red-700 transition-colors"
+                                                                                >
+                                                                                    Delete
+                                                                                </button>
+                                                                                <button
+                                                                                    onClick={(e) => {
+                                                                                        e.stopPropagation();
+                                                                                        handleDeleteCancel();
+                                                                                    }}
+                                                                                    className="px-2.5 py-1 bg-gray-100 text-gray-700 text-sm rounded-md hover:bg-gray-200 transition-colors"
+                                                                                >
+                                                                                    Cancel
+                                                                                </button>
+                                                                            </div>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    ))}
                                                 </div>
                                             </div>
                                         )}
@@ -3833,10 +4116,19 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                 position={profilePopup.position}
                 user={profilePopup.user}
                 copyStatus={profilePopup.copyStatus}
+                currentUser={user}
                 onMouseEnter={() => setPopupHovered(true)}
                 onMouseLeave={() => {
                     setPopupHovered(false);
-                    hideProfilePopup();
+                    // Clear any pending timeouts
+                    if (popupHideTimeout.current) {
+                        clearTimeout(popupHideTimeout.current);
+                    }
+                    if (popupShowTimeout.current) {
+                        clearTimeout(popupShowTimeout.current);
+                    }
+                    // Immediately hide the popup
+                    setProfilePopup(prev => ({ ...prev, visible: false }));
                 }}
                 onCopyEmail={copyUserEmail}
                 onCopyName={copyUserName}

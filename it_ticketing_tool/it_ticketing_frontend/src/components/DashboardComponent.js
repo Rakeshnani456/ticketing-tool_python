@@ -1,5 +1,5 @@
 // src/components/ModernDashboard.js
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   AreaChart, Area
@@ -18,13 +18,16 @@ import { Bar as ChartBar, Doughnut } from 'react-chartjs-2';
 import { 
   TrendingUp, Users, Clock, AlertCircle, CheckCircle, 
   Activity, Filter, Settings, Sun, Moon, RefreshCw,
-  FileText, Plus, ExternalLink
+  FileText, Plus, ExternalLink, CheckCircle2, RotateCcw
 } from 'lucide-react';
 import CustomDropdown from './common/CustomDropdown';
-import { collection, query, orderBy, limit, getFirestore, where } from 'firebase/firestore';
+import CompactDropdown from './common/CompactDropdown';
+import UpdatesComponent from './common/UpdatesComponent';
+import { collection, query, orderBy, limit, getFirestore, where, onSnapshot } from 'firebase/firestore';
 import { dbClient } from '../config/firebase';
 import { COLORS } from '../config/constants';
 import { useDashboardData } from '../hooks/useDataManager';
+import readStatesService from '../services/readStatesService';
 
 // Register Chart.js components
 ChartJS.register(
@@ -45,8 +48,8 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
   // State management
   const [tickets, setTickets] = useState([]);
 
-  // Utility function for timestamp formatting to avoid duplication
-  const formatTimestamp = (timestamp, format = 'relative') => {
+  // Utility function for timestamp formatting to avoid duplication - MEMOIZED
+  const formatTimestamp = useCallback((timestamp, format = 'relative') => {
     // Ensure timestamp is a proper Date object
     let safeTimestamp = timestamp;
     
@@ -79,15 +82,196 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
       if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}h ago`;
       return `${Math.floor(diffInMinutes / 1440)}d ago`;
     } else {
-      return `${safeTimestamp.toLocaleDateString()} at ${safeTimestamp.toLocaleTimeString([], { 
-        hour: '2-digit', 
-        minute: '2-digit' 
-      })}`;
+      return `${safeTimestamp.getDate().toString().padStart(2, '0')}-${safeTimestamp.toLocaleDateString('en-US', { month: 'short' })}-${safeTimestamp.getFullYear()}`;
+    }
+  }, []);
+
+  // Load read states from database and sync with localStorage
+  useEffect(() => {
+    const loadReadStates = async () => {
+      try {
+        console.log('Loading read states from database...');
+        const readStates = await readStatesService.getReadStates();
+        console.log('Loaded read states:', readStates);
+        
+        // Update state with database values
+        const dbActivities = new Set(readStates.activities || []);
+        const dbTickets = new Set(readStates.tickets || []);
+        const dbShowReadActivities = readStates.showReadActivities !== undefined ? readStates.showReadActivities : true;
+        const dbShowReadTickets = readStates.showReadTickets !== undefined ? readStates.showReadTickets : true;
+        
+        setReadActivities(dbActivities);
+        setReadTickets(dbTickets);
+        setShowReadActivities(dbShowReadActivities);
+        setShowReadTickets(dbShowReadTickets);
+        
+        // Update localStorage with database values
+        localStorage.setItem('dashboard_readActivities', JSON.stringify(Array.from(dbActivities)));
+        localStorage.setItem('dashboard_readTickets', JSON.stringify(Array.from(dbTickets)));
+        localStorage.setItem('dashboard_showReadActivities', JSON.stringify(dbShowReadActivities));
+        localStorage.setItem('dashboard_showReadTickets', JSON.stringify(dbShowReadTickets));
+        
+        setReadStatesLoaded(true);
+        
+        console.log('Read states loaded and synced successfully:', {
+          activities: Array.from(dbActivities),
+          tickets: Array.from(dbTickets),
+          showReadActivities: dbShowReadActivities,
+          showReadTickets: dbShowReadTickets
+        });
+      } catch (error) {
+        console.error('Error loading read states:', error);
+        setReadStatesLoaded(true); // Still set loaded to true to prevent infinite loading
+      }
+    };
+
+    if (user) {
+      loadReadStates();
+    }
+  }, [user]);
+
+  // Interactive functions
+  const markActivityAsRead = async (activityId) => {
+    try {
+      console.log('Marking activity as read:', activityId);
+      const updatedReadStates = await readStatesService.markActivityAsRead(activityId);
+      console.log('Updated read states from API:', updatedReadStates);
+      
+      const newActivities = new Set(updatedReadStates.activities || []);
+      setReadActivities(newActivities);
+      
+      // Update localStorage immediately
+      localStorage.setItem('dashboard_readActivities', JSON.stringify(Array.from(newActivities)));
+    } catch (error) {
+      console.error('Error marking activity as read:', error);
+      // Fallback to local state update
+      const newActivities = new Set([...readActivities, activityId]);
+      setReadActivities(newActivities);
+      localStorage.setItem('dashboard_readActivities', JSON.stringify(Array.from(newActivities)));
     }
   };
 
-  // Utility function to clean activity descriptions
-  const cleanActivityDescription = (activity) => {
+  const markTicketAsRead = async (ticketId) => {
+    try {
+      const updatedReadStates = await readStatesService.markTicketAsRead(ticketId);
+      const newTickets = new Set(updatedReadStates.tickets || []);
+      setReadTickets(newTickets);
+      
+      // Update localStorage immediately
+      localStorage.setItem('dashboard_readTickets', JSON.stringify(Array.from(newTickets)));
+    } catch (error) {
+      console.error('Error marking ticket as read:', error);
+      // Fallback to local state update
+      const newTickets = new Set([...readTickets, ticketId]);
+      setReadTickets(newTickets);
+      localStorage.setItem('dashboard_readTickets', JSON.stringify(Array.from(newTickets)));
+    }
+  };
+
+  const markAllActivitiesAsRead = async () => {
+    try {
+      const allActivityIds = filteredActivities.map(activity => activity.id);
+      const updatedReadStates = await readStatesService.updateReadStates({
+        activities: allActivityIds,
+        tickets: Array.from(readTickets),
+        showReadActivities,
+        showReadTickets
+      });
+      setReadActivities(new Set(updatedReadStates.activities || []));
+    } catch (error) {
+      console.error('Error marking all activities as read:', error);
+      // Fallback to local state update
+      const allActivityIds = filteredActivities.map(activity => activity.id);
+      setReadActivities(new Set(allActivityIds));
+    }
+  };
+
+  const markAllTicketsAsRead = async () => {
+    try {
+      const allTicketIds = processedDashboardData.recentTickets.map(ticket => ticket.id);
+      const updatedReadStates = await readStatesService.updateReadStates({
+        activities: Array.from(readActivities),
+        tickets: allTicketIds,
+        showReadActivities,
+        showReadTickets
+      });
+      setReadTickets(new Set(updatedReadStates.tickets || []));
+    } catch (error) {
+      console.error('Error marking all tickets as read:', error);
+      // Fallback to local state update
+      const allTicketIds = processedDashboardData.recentTickets.map(ticket => ticket.id);
+      setReadTickets(new Set(allTicketIds));
+    }
+  };
+
+  const clearReadActivities = async () => {
+    try {
+      const updatedReadStates = await readStatesService.updateReadStates({
+        activities: [],
+        tickets: Array.from(readTickets),
+        showReadActivities,
+        showReadTickets
+      });
+      setReadActivities(new Set(updatedReadStates.activities || []));
+    } catch (error) {
+      console.error('Error clearing read activities:', error);
+      // Fallback to local state update
+      setReadActivities(new Set());
+    }
+  };
+
+  const clearReadTickets = async () => {
+    try {
+      const updatedReadStates = await readStatesService.updateReadStates({
+        activities: Array.from(readActivities),
+        tickets: [],
+        showReadActivities,
+        showReadTickets
+      });
+      setReadTickets(new Set(updatedReadStates.tickets || []));
+    } catch (error) {
+      console.error('Error clearing read tickets:', error);
+      // Fallback to local state update
+      setReadTickets(new Set());
+    }
+  };
+
+  const toggleShowReadActivities = async () => {
+    const newValue = !showReadActivities;
+    try {
+      const updatedReadStates = await readStatesService.updateReadStates({
+        activities: Array.from(readActivities),
+        tickets: Array.from(readTickets),
+        showReadActivities: newValue,
+        showReadTickets
+      });
+      setShowReadActivities(updatedReadStates.showReadActivities);
+    } catch (error) {
+      console.error('Error toggling show read activities:', error);
+      // Fallback to local state update
+      setShowReadActivities(newValue);
+    }
+  };
+
+  const toggleShowReadTickets = async () => {
+    const newValue = !showReadTickets;
+    try {
+      const updatedReadStates = await readStatesService.updateReadStates({
+        activities: Array.from(readActivities),
+        tickets: Array.from(readTickets),
+        showReadActivities,
+        showReadTickets: newValue
+      });
+      setShowReadTickets(updatedReadStates.showReadTickets);
+    } catch (error) {
+      console.error('Error toggling show read tickets:', error);
+      // Fallback to local state update
+      setShowReadTickets(newValue);
+    }
+  };
+
+  // Utility function to clean activity descriptions - MEMOIZED
+  const cleanActivityDescription = useCallback((activity) => {
     let cleanDescription = activity.description || activity.details || '';
     
     // Remove redundant ticket ID information
@@ -116,10 +300,10 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
     }
     
     return cleanDescription.trim();
-  };
+  }, []);
 
-  // Utility function to highlight email addresses in text
-  const highlightEmails = (text) => {
+  // Utility function to highlight email addresses in text - MEMOIZED
+  const highlightEmails = useCallback((text) => {
     if (!text) return text;
     
     // Email regex pattern
@@ -135,16 +319,53 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
       }
       return part;
     });
-  };
+  }, []);
   const [agents, setAgents] = useState([]);
   const [timeRange, setTimeRange] = useState('week');
   const [darkMode, setDarkMode] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false); // Start with false to avoid spinner flash
   const [selectedAgent, setSelectedAgent] = useState(null);
   const [activeTab, setActiveTab] = useState('activity'); // 'activity' or 'tickets'
   
   // State for activities
   const [activities, setActivities] = useState([]);
+  
+  // State for interactive features
+  const [readActivities, setReadActivities] = useState(() => {
+    // Initialize from localStorage for immediate display
+    try {
+      const saved = localStorage.getItem('dashboard_readActivities');
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch (error) {
+      return new Set();
+    }
+  });
+  const [readTickets, setReadTickets] = useState(() => {
+    // Initialize from localStorage for immediate display
+    try {
+      const saved = localStorage.getItem('dashboard_readTickets');
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch (error) {
+      return new Set();
+    }
+  });
+  const [showReadActivities, setShowReadActivities] = useState(() => {
+    try {
+      const saved = localStorage.getItem('dashboard_showReadActivities');
+      return saved ? JSON.parse(saved) : true;
+    } catch (error) {
+      return true;
+    }
+  });
+  const [showReadTickets, setShowReadTickets] = useState(() => {
+    try {
+      const saved = localStorage.getItem('dashboard_showReadTickets');
+      return saved ? JSON.parse(saved) : true;
+    } catch (error) {
+      return true;
+    }
+  });
+  const [readStatesLoaded, setReadStatesLoaded] = useState(false);
   
   // State for company users (for site admin filtering)
   const [companyUsers, setCompanyUsers] = useState([]);
@@ -163,16 +384,135 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
     user?.client_name
   );
 
+  // Debug logging
+  useEffect(() => {
+    console.log('Dashboard Debug:', {
+      user: user ? { uid: user.uid, role: user.role, client_name: user.client_name } : null,
+      dashboardData: dashboardData ? 'Data loaded' : 'No data',
+      dashboardLoading,
+      dashboardError
+    });
+  }, [user, dashboardData, dashboardLoading, dashboardError]);
+
   // Update state when dashboard data changes
   useEffect(() => {
     if (dashboardData) {
-      setTickets(processedDashboardData.tickets || []);
-      setCompanyUsers(processedDashboardData.companyUsers || []);
-      setActivities(processedDashboardData.activities || []);
-      setAgents(processedDashboardData.agents || []);
+      setTickets(dashboardData.tickets || []);
+      setCompanyUsers(dashboardData.companyUsers || []);
+      setActivities(dashboardData.activities || []);
+      setAgents(dashboardData.agents || []);
       setLoading(false);
     }
   }, [dashboardData]);
+
+  // Extract unique companies from tickets for dropdown
+  useEffect(() => {
+    if (tickets.length > 0) {
+      const uniqueCompanies = [...new Set(
+        tickets
+          .map(ticket => ticket.client_name || ticket.companyName)
+          .filter(Boolean)
+      )].sort();
+      
+      console.log('Extracted companies for dropdown:', uniqueCompanies);
+      setAvailableCompanies(uniqueCompanies);
+    }
+  }, [tickets]);
+
+  // Additional real-time listener for tickets to ensure cards update immediately
+  useEffect(() => {
+    if (!user?.uid || !dbClient) return;
+
+    console.log('🔄 Setting up real-time tickets listener for dashboard cards');
+    
+    let ticketsQuery;
+    try {
+      // Create query for all tickets (for dashboard cards)
+      ticketsQuery = query(
+        collection(dbClient, 'tickets'),
+        orderBy('created_at', 'desc')
+      );
+    } catch (error) {
+      console.error('Error creating tickets query for dashboard:', error);
+      return;
+    }
+
+    const unsubscribe = onSnapshot(
+      ticketsQuery,
+      (snapshot) => {
+        const newTickets = [];
+        snapshot.forEach((doc) => {
+          const ticket = { id: doc.id, ...doc.data() };
+          newTickets.push(ticket);
+        });
+        
+        console.log('🔄 Real-time tickets update for dashboard cards:', newTickets.length, 'tickets');
+        setTickets(newTickets);
+        
+        // Update available companies from real-time data
+        const uniqueCompanies = [...new Set(
+          newTickets
+            .map(ticket => ticket.client_name || ticket.companyName)
+            .filter(Boolean)
+        )].sort();
+        
+        if (uniqueCompanies.length > 0) {
+          console.log('🔄 Updated companies from real-time data:', uniqueCompanies);
+          setAvailableCompanies(uniqueCompanies);
+        }
+      },
+      (error) => {
+        console.error('Error in real-time tickets listener for dashboard:', error);
+      }
+    );
+
+    return () => {
+      console.log('🔄 Cleaning up real-time tickets listener for dashboard cards');
+      unsubscribe();
+    };
+  }, [user?.uid]);
+
+  // Additional real-time listener for activities to ensure updates section gets fresh data
+  useEffect(() => {
+    if (!user?.uid || !dbClient) return;
+
+    console.log('🔄 Setting up real-time activities listener for dashboard');
+    
+    let activitiesQuery;
+    try {
+      // Create query for recent activities
+      activitiesQuery = query(
+        collection(dbClient, 'activities'),
+        orderBy('timestamp', 'desc'),
+        limit(50)
+      );
+    } catch (error) {
+      console.error('Error creating activities query for dashboard:', error);
+      return;
+    }
+
+    const unsubscribe = onSnapshot(
+      activitiesQuery,
+      (snapshot) => {
+        const newActivities = [];
+        snapshot.forEach((doc) => {
+          const activity = { id: doc.id, ...doc.data() };
+          newActivities.push(activity);
+        });
+        
+        console.log('🔄 Real-time activities update for dashboard:', newActivities.length, 'activities');
+        setActivities(newActivities);
+      },
+      (error) => {
+        console.error('Error in real-time activities listener for dashboard:', error);
+      }
+    );
+
+    return () => {
+      console.log('🔄 Cleaning up real-time activities listener for dashboard');
+      unsubscribe();
+    };
+  }, [user?.uid]);
   
   // State for time period filter (Ticket Volume Trend)
   const [selectedTimePeriod, setSelectedTimePeriod] = useState('7');
@@ -273,39 +613,56 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
     return { displayIdToDocIdMap, docIdToDisplayIdMap };
   }, [tickets]);
 
-  // Process data for visualizations
-  const processedDashboardData = useMemo(() => {
-    // Calculate ticket metrics
-    const now = new Date();
-    const lastWeek = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    const lastMonth = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    
-    // Use all tickets for dashboard counts (no time filtering)
-    let filteredTickets = tickets;
-    
-    // Status counts
+  // Basic ticket filtering - OPTIMIZED
+  const filteredTickets = useMemo(() => {
+    if (user?.role === 'site_admin' && user?.client_name) {
+      return tickets.filter(ticket => {
+        const ticketClientName = ticket.client_name || ticket.companyName;
+        return ticketClientName === user.client_name || ticketClientName === user.companyName;
+      });
+    }
+    return tickets;
+  }, [tickets, user?.role, user?.client_name]);
+
+  // Basic metrics - OPTIMIZED
+  const basicMetrics = useMemo(() => {
     const statusCounts = filteredTickets.reduce((acc, ticket) => {
       acc[ticket.status] = (acc[ticket.status] || 0) + 1;
       return acc;
     }, {});
+    
+    const totalActiveTickets = (statusCounts['Open'] || 0) + (statusCounts['In Progress'] || 0) + (statusCounts['Hold'] || 0);
+    const openTickets = statusCounts['Open'] || 0;
+    const inProgressTickets = statusCounts['In Progress'] || 0;
+    
+    const assignedToMe = (user?.role === 'support' || user?.role === 'engineer' || user?.role === 'senior_engineer' || user?.role === 'lead_engineer' || user?.role === 'principal_engineer') ? 
+      filteredTickets.filter(ticket => 
+        ticket.assigned_to_email === user.email && 
+        ['Open', 'In Progress', 'Hold'].includes(ticket.status)
+      ).length : 0;
+
+    return {
+      statusCounts,
+      totalActiveTickets,
+      openTickets,
+      inProgressTickets,
+      assignedToMe
+    };
+  }, [filteredTickets, user?.role, user?.email]);
+
+  // Process data for visualizations - OPTIMIZED
+  const processedDashboardData = useMemo(() => {
+    // Calculate current time once for all calculations
+    const now = new Date();
+    
+    // Use pre-calculated basic metrics
+    const { statusCounts, totalActiveTickets, openTickets, inProgressTickets, assignedToMe } = basicMetrics;
     
     // Priority counts
     const priorityCounts = filteredTickets.reduce((acc, ticket) => {
       acc[ticket.priority] = (acc[ticket.priority] || 0) + 1;
       return acc;
     }, {});
-    
-    // Calculate real-time metrics
-    const totalActiveTickets = (statusCounts['Open'] || 0) + (statusCounts['In Progress'] || 0) + (statusCounts['Hold'] || 0);
-    const openTickets = statusCounts['Open'] || 0;
-    const inProgressTickets = statusCounts['In Progress'] || 0;
-    
-    // Calculate assigned tickets for current support
-    const assignedToMe = (user?.role === 'support') ? 
-      tickets.filter(ticket => 
-        ticket.assigned_to_email === user.email && 
-        ['Open', 'In Progress', 'Hold'].includes(ticket.status)
-      ).length : 0;
     
     // Enhanced Resolution Time Analytics
     let avgResolutionTime = 0;
@@ -318,7 +675,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
     // Allow admin, super_admin, support, and site_admin to see resolution analytics
     if (user?.role === 'admin' || user?.role === 'super_admin' || user?.role === 'support' || user?.role === 'site_admin') {
       // Get resolved tickets with proper data and apply filters
-      let resolvedTickets = tickets.filter(ticket => 
+      let resolvedTickets = filteredTickets.filter(ticket => 
         (ticket.status === 'Resolved' || ticket.status === 'Closed') && 
         ticket.created_at && 
         ticket.updated_at
@@ -468,7 +825,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
           percentage: Math.round((count / ticketResolutionData.length) * 100)
         }));
         
-        // Resolution Time Trend (last 30 days)
+        // Resolution Time Trend (last 30 days including current day)
         const trendDays = 30;
       const trendData = [];
       
@@ -556,28 +913,33 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
     const volumeTrend = (() => {
       let days = 30; // Default to 30 days
       let startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-      let endDate = now;
+      let endDate = new Date(now); // Include current day
       
       // Calculate time period based on selection
       if (selectedTimePeriod === '1') {
         days = 1;
         startDate = new Date(now.getTime() - 1 * 24 * 60 * 60 * 1000);
+        endDate = new Date(now); // Include current day
       } else if (selectedTimePeriod === '7') {
         days = 7;
         startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        endDate = new Date(now); // Include current day
       } else if (selectedTimePeriod === '30') {
         days = 30;
         startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        endDate = new Date(now); // Include current day
       } else if (selectedTimePeriod === '90') {
         days = 90;
         startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+        endDate = new Date(now); // Include current day
       } else if (selectedTimePeriod === '180') {
         days = 180;
         startDate = new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000);
+        endDate = new Date(now); // Include current day
       } else if (selectedTimePeriod === 'custom' && customStartDate && customEndDate) {
         startDate = new Date(customStartDate);
         endDate = new Date(customEndDate);
-        days = Math.ceil((endDate - startDate) / (24 * 60 * 60 * 1000));
+        days = Math.ceil((endDate - startDate) / (24 * 60 * 60 * 1000)) + 1; // Include end date
       }
       
       const trendData = [];
@@ -639,7 +1001,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
     })();
     
     // Recent tickets logic - get tickets from last 2 days that are unassigned/unresolved
-    const recentTickets = tickets.filter(ticket => {
+    const recentTickets = filteredTickets.filter(ticket => {
       // Ensure ticketDate is a proper Date object
       let ticketDate = ticket.created_at;
       
@@ -689,15 +1051,48 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
       assignedToMe,
       avgResolutionTime,
       totalResolvedTickets: (user?.role === 'admin' || user?.role === 'super_admin') ? 
-        tickets.filter(t => t.status === 'Resolved' || t.status === 'Closed').length : 0
+        filteredTickets.filter(t => t.status === 'Resolved' || t.status === 'Closed').length : 0
     };
-  }, [tickets, agents, timeRange, user, selectedCompany, selectedTimePeriod, customStartDate, customEndDate, resolutionTimePeriod, resolutionTimeCompany, resolutionTimeStartDate, resolutionTimeEndDate]);
+  }, [basicMetrics, filteredTickets, agents, user, selectedCompany, selectedTimePeriod, customStartDate, customEndDate, resolutionTimePeriod, resolutionTimeCompany, resolutionTimeStartDate, resolutionTimeEndDate]);
 
   // Filter activities by selected company for Super Admin and Engineer - DISABLED
   const filteredActivities = useMemo(() => {
-    // Company filtering disabled - return all activities
+    // For site_admin, filter activities to only show their company's activities
+    if (user?.role === 'site_admin' && user?.client_name) {
+      return activities.filter(activity => {
+        // First, check if activity has direct client information
+        const activityClientName = activity.client_name || activity.companyName;
+        if (activityClientName) {
+          const matches = activityClientName === user.client_name || activityClientName === user.companyName;
+          return matches;
+        }
+        
+        // Check if the activity was performed by a company user
+        if (activity.user_email && companyUsers.length > 0) {
+          const companyUserEmails = companyUsers.map(u => u.email).filter(Boolean);
+          if (companyUserEmails.includes(activity.user_email)) {
+            return true;
+          }
+        }
+        
+        // If no direct client info, look up the associated ticket
+        if (activity.ticket_id) {
+          const associatedTicket = tickets.find(ticket => ticket.id === activity.ticket_id);
+          if (associatedTicket) {
+            const ticketClientName = associatedTicket.client_name || associatedTicket.companyName;
+            const matches = ticketClientName === user.client_name || ticketClientName === user.companyName;
+            return matches;
+          }
+        }
+        
+        // If we can't determine the company, exclude it for security
+        return false;
+      });
+    }
+    
+    // For other roles, return all activities
     return activities;
-  }, [activities]);
+  }, [activities, user, companyUsers, tickets]);
 
   // Status colors for charts
   const statusColors = {
@@ -717,7 +1112,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
   };
 
   // Loading state
-  if (loading) {
+  if (loading || dashboardLoading) {
     return (
       <div className={`flex justify-center items-center h-screen ${bgClass}`}>
         <RefreshCw className="animate-spin h-12 w-12 text-blue-500" />
@@ -726,13 +1121,47 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
     );
   }
 
+  if (dashboardError) {
+    return (
+      <div className={`flex flex-col justify-center items-center h-screen ${bgClass}`}>
+        <AlertCircle className="h-12 w-12 text-red-500 mb-4" />
+        <h2 className={`text-xl font-bold ${textClass} mb-2`}>Dashboard Error</h2>
+        <p className={`${textClass} text-center max-w-md`}>
+          {dashboardError}
+        </p>
+        <button 
+          onClick={() => window.location.reload()} 
+          className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
   return (
-    <div className={`min-h-screen ${bgClass} ${textClass} transition-colors duration-300`}>
+    <div className={`min-h-screen ${bgClass} ${textClass} transition-colors duration-300`} style={{
+      fontFamily: 'Arial, sans-serif'
+    }}>
       {/* Main content with top padding to account for fixed header */}
       <main className={`px-6 py-8 ${bgClass}`} style={{ paddingTop: '5px' }}>
         {/* Header Section */}
         <div className="mb-3">
-          <h1 className="text-xl font-bold text-gray-800">Overview</h1>
+          <h1 className="text-xl font-medium text-gray-600" style={{
+            textShadow: '0.2px 0.2px 0.4px rgba(0,0,0,0.05)',
+            fontWeight: '500',
+            opacity: '0.8'
+          }}>
+            {user?.role === 'site_admin' && user?.client_name 
+              ? `${user.client_name} Dashboard` 
+              : 'Overview'
+            }
+          </h1>
+          {user?.role === 'site_admin' && user?.client_name && (
+            <p className="text-sm text-gray-600 mt-1">
+              Tickets and updates
+            </p>
+          )}
         </div>
         
         {/* Stats Overview */}
@@ -744,17 +1173,27 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                e.preventDefault();
                navigateTo('/all-tickets');
              }}
-             className={`rounded-lg p-3 border cursor-pointer transition-all duration-200 hover:scale-100 transition duration-100 group relative theme-elevation-shadow block ${darkMode ? 'bg-blue-900/70 border-gray-700' : 'bg-blue-50/70 border-gray-300'}`}
+             className={`rounded-lg p-3 border cursor-pointer transition-all duration-200 hover:scale-100 transition duration-100 group relative shadow-sm block ${darkMode ? 'bg-gray-800/70 border-gray-400' : 'bg-white border-gray-300'}`}
            >
             <div className="flex justify-between items-start">
-              <div>
-                <p className="opacity-75 font-semibold text-sm">Total Tickets</p>
-                <p className="text-2xl font-bold mt-1">{processedDashboardData.totalActiveTickets}</p>
-                <p className="text-blue-500 text-xs font-bold mt-1 flex items-center">
-                  <Activity size={12} className="mr-1" /> Active tickets
-                </p>
+              <div className="flex-1">
+                <p className="opacity-75 font-normal text-sm" style={{
+                  textShadow: '0.1px 0.1px 0.2px rgba(0,0,0,0.03)',
+                  fontWeight: '400',
+                  opacity: '0.7'
+                }}>Total Tickets</p>
+                <p className="text-2xl font-medium mt-1" style={{
+                  textShadow: '0.2px 0.2px 0.4px rgba(0,0,0,0.05)',
+                  fontWeight: '500',
+                  opacity: '0.8'
+                }}>{processedDashboardData.totalActiveTickets}</p>
+                <div className="flex justify-end mt-1">
+                  <p className="text-blue-500 text-xs font-normal">
+                    Active tickets
+                  </p>
+                </div>
               </div>
-              <div className="p-2 rounded-md bg-blue-500/20 text-blue-500">
+              <div className="text-gray-600">
                 <Activity size={18} />
               </div>
             </div>
@@ -771,17 +1210,27 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                e.preventDefault();
                navigateTo('/all-tickets?status=Open');
              }}
-             className={`rounded-lg p-3 border cursor-pointer transition-all duration-200 hover:scale-100 transition duration-100 group relative theme-elevation-shadow block ${darkMode ? 'bg-orange-900/70 border-gray-700' : 'bg-orange-50/70 border-gray-300'}`}
+             className={`rounded-lg p-3 border cursor-pointer transition-all duration-200 hover:scale-100 transition duration-100 group relative shadow-sm block ${darkMode ? 'bg-gray-800/70 border-gray-400' : 'bg-white border-gray-300'}`}
            >
             <div className="flex justify-between items-start">
-              <div>
-                <p className="opacity-75 font-semibold text-sm">Open Tickets</p>
-                <p className="text-2xl font-bold mt-1">{processedDashboardData.openTickets}</p>
-                <p className="text-orange-500 text-xs font-bold mt-1 flex items-center">
-                  <AlertCircle size={12} className="mr-1" /> Need attention
-                </p>
+              <div className="flex-1">
+                <p className="opacity-75 font-normal text-sm" style={{
+                  textShadow: '0.1px 0.1px 0.2px rgba(0,0,0,0.03)',
+                  fontWeight: '400',
+                  opacity: '0.7'
+                }}>Open Tickets</p>
+                <p className="text-2xl font-medium mt-1" style={{
+                  textShadow: '0.2px 0.2px 0.4px rgba(0,0,0,0.05)',
+                  fontWeight: '500',
+                  opacity: '0.8'
+                }}>{processedDashboardData.openTickets}</p>
+                <div className="flex justify-end mt-1">
+                  <p className="text-orange-500 text-xs font-normal">
+                    Need attention
+                  </p>
+                </div>
               </div>
-              <div className="p-2 rounded-md bg-orange-500/20 text-orange-500">
+              <div className="text-gray-600">
                 <AlertCircle size={18} />
               </div>
             </div>
@@ -798,17 +1247,27 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                e.preventDefault();
                navigateTo('/all-tickets?status=In Progress');
              }}
-             className={`rounded-lg p-3 border cursor-pointer transition-all duration-200 hover:scale-100 transition duration-100 group relative theme-elevation-shadow block ${darkMode ? 'bg-yellow-900/70 border-gray-700' : 'bg-yellow-50/70 border-gray-300'}`}
+             className={`rounded-lg p-3 border cursor-pointer transition-all duration-200 hover:scale-100 transition duration-100 group relative shadow-sm block ${darkMode ? 'bg-gray-800/70 border-gray-400' : 'bg-white border-gray-300'}`}
            >
             <div className="flex justify-between items-start">
-              <div>
-                <p className="opacity-75 font-semibold text-sm">In Progress</p>
-                <p className="text-2xl font-bold mt-1">{processedDashboardData.inProgressTickets}</p>
-                <p className="text-yellow-500 text-xs font-bold mt-1 flex items-center">
-                  <Clock size={12} className="mr-1" /> Being worked on
-                </p>
+              <div className="flex-1">
+                <p className="opacity-75 font-normal text-sm" style={{
+                  textShadow: '0.1px 0.1px 0.2px rgba(0,0,0,0.03)',
+                  fontWeight: '400',
+                  opacity: '0.7'
+                }}>In Progress</p>
+                <p className="text-2xl font-medium mt-1" style={{
+                  textShadow: '0.2px 0.2px 0.4px rgba(0,0,0,0.05)',
+                  fontWeight: '500',
+                  opacity: '0.8'
+                }}>{processedDashboardData.inProgressTickets}</p>
+                <div className="flex justify-end mt-1">
+                  <p className="text-yellow-500 text-xs font-normal">
+                    Being worked on
+                  </p>
+                </div>
               </div>
-              <div className="p-2 rounded-md bg-yellow-500/20 text-yellow-500">
+              <div className="text-gray-600">
                 <Clock size={18} />
               </div>
             </div>
@@ -818,25 +1277,35 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
             </div>
           </a>
           
-                     {/* Assigned to Me - Only Support */}
-           {(user?.role === 'support') && (
+                     {/* Assigned to Me - Support and Engineers */}
+           {(user?.role === 'support' || user?.role === 'engineer' || user?.role === 'senior_engineer' || user?.role === 'lead_engineer' || user?.role === 'principal_engineer') && (
              <a 
                href="/assigned-to-me"
                onClick={(e) => {
                  e.preventDefault();
                  navigateTo('/assigned-to-me');
                }}
-               className={`rounded-lg p-3 border cursor-pointer transition-all duration-200 hover:scale-100 transition duration-100 group relative theme-elevation-shadow block ${darkMode ? 'bg-green-900/70 border-gray-700' : 'bg-green-50/70 border-gray-300'}`}
+               className={`rounded-lg p-3 border cursor-pointer transition-all duration-200 hover:scale-100 transition duration-100 group relative shadow-sm block ${darkMode ? 'bg-gray-800/70 border-gray-400' : 'bg-white border-gray-300'}`}
              >
               <div className="flex justify-between items-start">
-                <div>
-                  <p className="opacity-75 font-semibold text-sm">Assigned to Me</p>
-                  <p className="text-2xl font-bold mt-1">{processedDashboardData.assignedToMe}</p>
-                  <p className="text-green-500 text-xs font-bold mt-1 flex items-center">
-                    <Users size={12} className="mr-1" /> My tickets
-                  </p>
+                <div className="flex-1">
+                  <p className="opacity-75 font-normal text-sm" style={{
+                    textShadow: '0.1px 0.1px 0.2px rgba(0,0,0,0.03)',
+                    fontWeight: '400',
+                    opacity: '0.7'
+                  }}>Assigned to Me</p>
+                  <p className="text-2xl font-medium mt-1" style={{
+                    textShadow: '0.2px 0.2px 0.4px rgba(0,0,0,0.05)',
+                    fontWeight: '500',
+                    opacity: '0.8'
+                  }}>{processedDashboardData.assignedToMe}</p>
+                  <div className="flex justify-end mt-1">
+                    <p className="text-green-500 text-xs font-normal">
+                      My tickets
+                    </p>
+                  </div>
                 </div>
-                <div className="p-2 rounded-md bg-green-500/20 text-green-500">
+                <div className="text-gray-600">
                   <Users size={18} />
                 </div>
               </div>
@@ -850,17 +1319,27 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
           {/* Avg Resolution - Only Admin/Super Admin - NOT CLICKABLE */}
           {(user?.role === 'admin' || user?.role === 'super_admin') && (
             <div 
-              className={`rounded-lg p-3 border hover:scale-100 transition duration-100 theme-elevation-shadow ${darkMode ? 'bg-purple-900/70 border-gray-700' : 'bg-purple-50/70 border-gray-300'}`}
+              className={`rounded-lg p-3 border hover:scale-100 transition duration-100 shadow-sm ${darkMode ? 'bg-gray-800/70 border-gray-400' : 'bg-white border-gray-300'}`}
             >
               <div className="flex justify-between items-start">
-                <div>
-                  <p className="opacity-75 font-semibold text-sm">Avg. Resolution</p>
-                  <p className="text-2xl font-bold mt-1">{processedDashboardData.avgResolutionTime}m</p>
-                  <p className="text-purple-500 text-xs font-bold mt-1 flex items-center">
-                    <TrendingUp size={12} className="mr-1" /> Minutes avg
-                  </p>
+                <div className="flex-1">
+                  <p className="opacity-75 font-normal text-sm" style={{
+                    textShadow: '0.1px 0.1px 0.2px rgba(0,0,0,0.03)',
+                    fontWeight: '400',
+                    opacity: '0.7'
+                  }}>Avg. Resolution</p>
+                  <p className="text-2xl font-medium mt-1" style={{
+                    textShadow: '0.2px 0.2px 0.4px rgba(0,0,0,0.05)',
+                    fontWeight: '500',
+                    opacity: '0.8'
+                  }}>{processedDashboardData.avgResolutionTime}m</p>
+                  <div className="flex justify-end mt-1">
+                    <p className="text-purple-500 text-xs font-normal">
+                      Minutes avg
+                    </p>
+                  </div>
                 </div>
-                <div className="p-2 rounded-md bg-purple-500/20 text-purple-500">
+                <div className="text-gray-600">
                   <TrendingUp size={18} />
                 </div>
               </div>
@@ -870,371 +1349,178 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
 
 
 
-        {/* Recent Activity & Tickets Section */}
+
+        {/* System Updates Section */}
+        <div className="mb-4">
+          <UpdatesComponent
+            user={user}
+            activities={filteredActivities}
+            tickets={processedDashboardData.recentTickets}
+            darkMode={darkMode}
+            onNavigateTo={navigateTo}
+            onMarkAsRead={(update) => {
+              if (update.type === 'activity') {
+                markActivityAsRead(update.id.replace('activity-', ''));
+              } else if (update.type === 'ticket') {
+                markTicketAsRead(update.id.replace('ticket-', ''));
+              }
+            }}
+            onMarkAsUnread={(update) => {
+              if (update.type === 'activity') {
+                // Handle marking activity as unread
+                const activityId = update.id.replace('activity-', '');
+                const newActivities = new Set(readActivities);
+                newActivities.delete(activityId);
+                setReadActivities(newActivities);
+                localStorage.setItem('dashboard_readActivities', JSON.stringify(Array.from(newActivities)));
+              } else if (update.type === 'ticket') {
+                // Handle marking ticket as unread
+                const ticketId = update.id.replace('ticket-', '');
+                const newTickets = new Set(readTickets);
+                newTickets.delete(ticketId);
+                setReadTickets(newTickets);
+                localStorage.setItem('dashboard_readTickets', JSON.stringify(Array.from(newTickets)));
+              }
+            }}
+            readStates={{
+              activities: readActivities,
+              tickets: readTickets
+            }}
+            showRead={showReadActivities}
+          />
+        </div>
+
+        {/* Recent Tickets Section */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-4">
-          {/* Activity & Tickets Tabs */}
           <div 
             className={`${cardClass} rounded-lg p-2 border lg:col-span-2 theme-elevation-shadow`}
-              style={{ 
-                fontFamily: '"Source Sans 3", sans-serif'
-              }}
+            style={{ 
+              fontFamily: 'Arial, sans-serif'
+            }}
           >
             <div className="flex justify-between items-center mb-2">
-              <h2 className="text-l font-medium text-gray-600">Updates</h2>
-              <div className="relative bg-gray-200 rounded-full p-0.5 flex w-48">
-                <button 
-                  onClick={() => setActiveTab('activity')}
-                  className={`flex-1 py-1 px-2 rounded-full text-xs font-medium transition-all duration-300 ${
-                    activeTab === 'activity' 
-                      ? 'bg-[#e85c34] text-white theme-elevation-shadow transform scale-105' 
-                      : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'
-                  }`}
-                >
-                  Activity
-                </button>
-                <button 
-                  onClick={() => setActiveTab('tickets')}
-                  className={`flex-1 py-1 px-2 rounded-full text-xs font-medium transition-all duration-300 ${
-                    activeTab === 'tickets' 
-                      ? 'bg-[#e85c34] text-white theme-elevation-shadow transform scale-105' 
-                      : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'
-                  }`}
-                >
-                  Recents ({processedDashboardData.recentTickets.length})
-                </button>
+              <div className="flex items-center gap-3">
+                <h2 className="text-l font-normal text-gray-500" style={{
+                  textShadow: '0.1px 0.1px 0.2px rgba(0,0,0,0.03)',
+                  fontWeight: '400',
+                  opacity: '0.7'
+                }}>Recent Tickets</h2>
+                <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
+                  {processedDashboardData.recentTickets.length} tickets
+                </span>
               </div>
             </div>
             
-            {activeTab === 'activity' && (
-              <div className="space-y-0 max-h-72 overflow-y-auto">
-                {filteredActivities.length > 0 ? (
-                  filteredActivities.map((activity, index) => {
-                    // Get activity icon and color based on type
-                    const getActivityIcon = (type) => {
-                      switch (type) {
-                        case 'status_change':
-                          return <AlertCircle size={12} />;
-                        case 'assignment':
-                          return <Users size={12} />;
-                        case 'comment':
-                          return <Activity size={12} />;
-                        case 'resolved':
-                          return <CheckCircle size={12} />;
-                        case 'attachment':
-                          return <FileText size={12} />;
-                        case 'created':
-                          return <Plus size={12} />;
-                        case 'priority_change':
-                          return <TrendingUp size={12} />;
-                        case 'cancelled':
-                          return <AlertCircle size={12} />;
-                        default:
-                          return <Activity size={12} />;
-                      }
-                    };
+            <div className="space-y-1 max-h-64 overflow-y-auto">
+              {processedDashboardData.recentTickets.length > 0 ? (
+                processedDashboardData.recentTickets.map((ticket, index) => {
+                  const getPriorityColor = (priority) => {
+                    switch (priority) {
+                      case 'Critical': return 'bg-red-100 text-red-800 border-red-200';
+                      case 'High': return 'bg-orange-100 text-orange-800 border-orange-200';
+                      case 'Medium': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+                      case 'Low': return 'bg-green-100 text-green-800 border-green-200';
+                      default: return 'bg-gray-100 text-gray-800 border-gray-200';
+                    }
+                  };
 
-                    const getActivityColor = (type) => {
-                      switch (type) {
-                        case 'status_change':
-                          return 'bg-amber-100 text-amber-700 border border-amber-200';
-                        case 'assignment':
-                          return 'bg-sky-100 text-sky-700 border border-sky-200';
-                        case 'comment':
-                          return 'bg-emerald-100 text-emerald-700 border border-emerald-200';
-                        case 'resolved':
-                          return 'bg-green-100 text-green-700 border border-green-200';
-                        case 'attachment':
-                          return 'bg-violet-100 text-violet-700 border border-violet-200';
-                        case 'created':
-                          return 'bg-blue-100 text-blue-700 border border-blue-200';
-                        case 'priority_change':
-                          return 'bg-orange-100 text-orange-700 border border-orange-200';
-                        case 'cancelled':
-                          return 'bg-red-100 text-red-700 border border-red-200';
-                        default:
-                          return 'bg-slate-100 text-slate-700 border border-slate-200';
-                      }
-                    };
+                  const getStatusColor = (status) => {
+                    switch (status) {
+                      case 'Open': return 'bg-orange-100 text-orange-800 border-orange-200';
+                      case 'In Progress': return 'bg-blue-100 text-blue-800 border-blue-200';
+                      case 'Resolved': return 'bg-green-100 text-green-800 border-green-200';
+                      case 'Hold': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+                      default: return 'bg-gray-100 text-gray-800 border-gray-200';
+                    }
+                  };
 
-                    // Enhanced zebra effect with better contrast
-                    const isEven = index % 2 === 0;
-                    const itemBg = darkMode 
-                      ? (isEven ? 'bg-gray-800/60' : 'bg-gray-700/60') 
-                      : (isEven ? 'bg-white' : 'bg-gray-50/80');
-                    
-                    const itemBorder = darkMode
-                      ? 'border-gray-600/30'
-                      : 'border-gray-200/60';
-                    
-                    const itemHover = 'hover:bg-opacity-80 transition-all duration-200';
-
-                    return (
-                      <div key={activity.id} className={`h-24 px-3 border-b ${itemBorder} last:border-b-0 ${itemBg} ${itemHover} flex items-center`}>
-                        <div className="flex justify-between w-full">
-                          <div className="flex items-start">
-                            <div className={`w-5 h-5 rounded-full flex items-center justify-center mr-2 mt-0.5 ${getActivityColor(activity.type)}`}>
-                              {getActivityIcon(activity.type)}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              {/* New format: User full name • TicketID : Subjectline */}
-                              <div className="mb-1">
-                                <div className="flex items-center text-base">
-                                  <span className="text-gray-600">
-                                    {activity.user_name || activity.user || 'System'}
-                                  </span>
-                                  <span className="text-gray-600 mx-1.5">•</span>
-                                  <a
-                                    href={`/tickets/${(() => {
-                                      // Get the ticket ID for navigation
-                                      let ticketIdForNavigation = activity.ticket_id || activity.ticketId;
-                                      
-                                      // If it's a display ID (starts with TT), look up the actual document ID
-                                      if (ticketIdForNavigation && ticketIdForNavigation.startsWith('TT')) {
-                                        const actualDocId = ticketMappings.displayIdToDocIdMap[ticketIdForNavigation];
-                                        if (actualDocId) {
-                                          ticketIdForNavigation = actualDocId;
-                                        }
-                                      }
-                                      
-                                      return ticketIdForNavigation;
-                                    })()}`}
-                                    onClick={(e) => {
-                                      e.preventDefault();
-                                      // Get the ticket ID for navigation
-                                      let ticketIdForNavigation = activity.ticket_id || activity.ticketId;
-                                      
-                                      // If it's a display ID (starts with TT), look up the actual document ID
-                                      if (ticketIdForNavigation && ticketIdForNavigation.startsWith('TT')) {
-                                        const actualDocId = ticketMappings.displayIdToDocIdMap[ticketIdForNavigation];
-                                        if (actualDocId) {
-                                          ticketIdForNavigation = actualDocId;
-                                        }
-                                      }
-                                      
-                                      navigateTo(`/tickets/${ticketIdForNavigation}`);
-                                    }}
-                                    className="text-orange-600 hover:text-orange-700 cursor-pointer transition-all duration-200 underline hover:no-underline"
-                                    style={{ color: '#f44c23' }}
-                                  >
-                                    {activity.ticket_display_id || 
-                                     (activity.ticket_id && activity.ticket_id.startsWith('TT') ? activity.ticket_id : null) || 
-                                     (activity.ticketId && activity.ticketId.startsWith('TT') ? activity.ticketId : null) ||
-                                     (activity.ticket_id && ticketMappings.docIdToDisplayIdMap[activity.ticket_id]) ||
-                                     (activity.ticketId && ticketMappings.docIdToDisplayIdMap[activity.ticketId]) ||
-                                     'Unknown Ticket'}
-                                  </a>
-                                  <span className="text-gray-600 mx-1.5">•</span>
-                                  <span className="text-gray-600 truncate max-w-xs" title={activity.ticket_title || 'No title'}>
-                                    {activity.ticket_title || 'No title'}
-                                  </span>
-                                </div>
-                              </div>
-                              
-                              {/* Action description */}
-                              <div className="space-y-1">
-                                <p className="text-sm text-gray-600 line-clamp-2" title={cleanActivityDescription(activity)}>
-                                  {highlightEmails(cleanActivityDescription(activity))}
-                                </p>
-                                
-                                {/* Show comment text for comments */}
-                                {activity.type === 'comment' && activity.comment_text && (
-                                  <div>
-                                    <span className="text-sm italic text-gray-600 line-clamp-2" title={activity.comment_text}>
-                                      "{highlightEmails(activity.comment_text)}"
-                                    </span>
-                                  </div>
-                                )}
-                                
-                                {/* Show status change details */}
-                                {activity.type === 'status_change' && activity.old_status && activity.new_status && (
-                                  <div className="flex items-center gap-1.5 text-sm">
-                                    <span className="px-2 py-1 rounded-md bg-slate-100 text-gray-600 border border-slate-200">
-                                      {activity.old_status}
-                                    </span>
-                                    <span className="text-gray-600">→</span>
-                                    <span className="px-2 py-1 rounded-md bg-amber-100 text-gray-600 border border-amber-200">
-                                      {activity.new_status}
-                                    </span>
-                                  </div>
-                                )}
-                                
-                                {/* Show priority change details */}
-                                {activity.type === 'priority_change' && activity.old_priority && activity.new_priority && (
-                                  <div className="flex items-center gap-1.5 text-sm">
-                                    <span className="px-2 py-1 rounded-md bg-slate-100 text-gray-600 border border-slate-200">
-                                      {activity.old_priority}
-                                    </span>
-                                    <span className="text-gray-600">→</span>
-                                    <span className="px-2 py-1 rounded-md bg-orange-100 text-gray-600 border border-orange-200">
-                                      {activity.new_priority}
-                                    </span>
-                                  </div>
-                                )}
-                                
-                                
-                                {/* Show attachment details */}
-                                {activity.type === 'attachment' && (
-                                  <div className="flex items-center gap-1.5 text-sm">
-                                    <FileText className="w-4 h-4 text-violet-600" />
-                                    <span className="text-gray-600">
-                                      {activity.filename || 'Unknown file'}
-                                    </span>
-                                    {activity.file_size && (
-                                      <span className="text-gray-600 bg-slate-100 px-2 py-1 rounded-md border border-slate-200">
-                                        ({(activity.file_size / 1024).toFixed(1)} KB)
-                                      </span>
-                                    )}
-                                  </div>
-                                )}
-                                
-                                {/* Show resolution details */}
-                                {activity.type === 'resolved' && activity.resolution_time && (
-                                  <p className="text-sm text-gray-600 bg-green-50 px-3 py-1.5 rounded-md border border-green-200">
-                                    Resolution time: {Math.round(activity.resolution_time)} minutes
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                          <div className="text-right ml-2 flex-shrink-0">
-                            <p className="text-sm text-gray-600 font-medium">
-                              {formatTimestamp(activity.timestamp, 'relative')}
-                            </p>
-                            <p className="text-xs text-gray-600 mt-1 opacity-75">
-                              {formatTimestamp(activity.timestamp, 'absolute')}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <div className="text-center py-6 opacity-50">
-                    <p className="text-sm text-gray-600">
-                      {user?.role === 'site_admin' && companyUsers.length === 0 
-                        ? 'Loading company activities...' 
-                        : 'No activities found'
-                      }
-                    </p>
-                    {user?.role === 'site_admin' && (
-                      <p className="text-xs mt-1 text-gray-600">Company users loaded: {companyUsers.length}</p>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-            
-            {activeTab === 'tickets' && (
-              <div className="space-y-0 max-h-72 overflow-y-auto">
-                {processedDashboardData.recentTickets.length > 0 ? (
-                  processedDashboardData.recentTickets.map((ticket, index) => {
-                    const itemBg = darkMode 
-                      ? (index % 2 === 0 ? 'bg-gray-800/50' : 'bg-gray-700/50') 
-                      : (index % 2 === 0 ? 'bg-white' : 'bg-slate-25/40');
-                    
-                    const itemBorder = darkMode
-                      ? (index % 2 === 0 ? 'border-gray-300/50' : 'border-gray-300/50')
-                      : (index % 2 === 0 ? 'border-gray-300/50' : 'border-gray-300/50');
-                    
-                    const itemShadow = index % 2 === 0 
-                      ? 'theme-elevation-shadow' 
-                      : 'shadow-none';
-
-                    return (
-                      <div key={ticket.id} className={`py-2 px-3 border-b-2 ${itemBorder} last:border-b-0 dark:border-gray-300/50 ${itemBg} ${itemShadow} transition-all duration-200`}>
-                        <div className="flex justify-between items-start">
-                          <div className="flex-1">
-                            {/* Full Name • Ticket ID • Subject Line */}
-                            <div className="flex items-center mb-0.5 text-sm">
-                              <span className="font-medium text-gray-600">
+                  return (
+                    <div key={ticket.id} className="bg-white border border-gray-200 rounded-lg p-2 hover:shadow-md transition-all duration-200">
+                      <div className="flex justify-between items-start mb-1">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-0.5">
+                            <span className="font-normal text-gray-700 text-sm" style={{
+                              textShadow: '0.1px 0.1px 0.2px rgba(0,0,0,0.03)',
+                              fontWeight: '400',
+                              opacity: '0.8'
+                            }}>
                                 {(() => {
-                                  // Construct full name from firstName and lastName
                                   if (ticket.reporter_firstName || ticket.reporter_lastName) {
                                     return `${ticket.reporter_firstName || ''} ${ticket.reporter_lastName || ''}`.trim();
                                   }
-                                  // Fallback to existing fields if firstName/lastName not available
                                   return ticket.reporter_name || ticket.reporter || ticket.user_name || 'Unknown User';
                                 })()}
                               </span>
-                              <span className="text-black mx-1">•</span>
+                            <span className="text-gray-400">•</span>
                               <a
                                 href={`/tickets/${ticket.id}`}
                                 onClick={(e) => {
                                   e.preventDefault();
                                   navigateTo(`/tickets/${ticket.id}`);
                                 }}
-                                className="font-medium text-blue-600 hover:text-blue-800 underline cursor-pointer transition-colors"
+                              className="font-normal text-blue-600 hover:text-blue-800 hover:underline text-sm transition-colors" style={{
+                                textShadow: '0.1px 0.1px 0.2px rgba(0,0,0,0.03)',
+                                fontWeight: '400',
+                                opacity: '0.8'
+                              }}
                               >
                                 {ticket.display_id || ticket.ticket_id || ticket.id}
                               </a>
-                              <span className="text-black mx-1">•</span>
-                              <span className="font-medium text-black">
+                          </div>
+                          
+                          <p className="text-xs text-gray-700 mb-1 line-clamp-1">
                                 {ticket.short_description || ticket.subject || ticket.title || 'No description'}
-                              </span>
+                          </p>
+                        </div>
                             </div>
                             
-                            {/* Status and Priority Icons */}
-                            <div className="flex items-center gap-1 mb-0.5 text-xs">
-                              <span className={`px-1.5 py-0.5 rounded ${
-                                ticket.status === 'Open' ? 'bg-orange-100 text-black' :
-                                ticket.status === 'In Progress' ? 'bg-blue-100 text-black' :
-                                ticket.status === 'Resolved' ? 'bg-green-100 text-black' :
-                                ticket.status === 'Hold' ? 'bg-yellow-100 text-black' :
-                                'bg-gray-100 text-black'
-                              }`}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1">
+                          <span className={`px-1.5 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(ticket.status)}`}>
                                 {ticket.status}
                               </span>
-                              <span className={`px-1.5 py-0.5 rounded ${
-                                ticket.priority === 'High' ? 'bg-red-100 text-black' :
-                                ticket.priority === 'Medium' ? 'bg-yellow-100 text-black' :
-                                ticket.priority === 'Critical' ? 'bg-red-200 text-black' :
-                                'bg-blue-100 text-black'
-                              }`}>
+                          <span className={`px-1.5 py-0.5 rounded-full text-xs font-medium border ${getPriorityColor(ticket.priority)}`}>
                                 {ticket.priority}
                               </span>
                             </div>
                             
-                            {/* Created DateTime */}
-                            <p className="text-xs text-black">
-                              Created: {(() => {
-                                // Ensure created_at is a proper Date object
-                                let safeCreatedAt = ticket.created_at;
-                                
-                                if (!(safeCreatedAt instanceof Date)) {
-                                  if (safeCreatedAt && typeof safeCreatedAt === 'object' && safeCreatedAt.toDate) {
-                                    // Firebase Timestamp
-                                    safeCreatedAt = safeCreatedAt.toDate();
-                                  } else if (safeCreatedAt && typeof safeCreatedAt === 'string') {
-                                    // String date
-                                    safeCreatedAt = new Date(safeCreatedAt);
-                                  } else if (safeCreatedAt && typeof safeCreatedAt === 'number') {
-                                    // Unix timestamp
-                                    safeCreatedAt = new Date(safeCreatedAt);
-                                  } else {
-                                    return 'Invalid date';
-                                  }
-                                }
-                                
-                                // Validate the date
-                                if (isNaN(safeCreatedAt.getTime())) {
-                                  return 'Invalid date';
-                                }
-                                
-                                return `${safeCreatedAt.toLocaleDateString()} at ${safeCreatedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-                              })()}
-                            </p>
-                          </div>
+                        <div className="text-xs text-gray-500">
+                          {(() => {
+                            let safeCreatedAt = ticket.created_at;
+                            
+                            if (!(safeCreatedAt instanceof Date)) {
+                              if (safeCreatedAt && typeof safeCreatedAt === 'object' && safeCreatedAt.toDate) {
+                                safeCreatedAt = safeCreatedAt.toDate();
+                              } else if (safeCreatedAt && typeof safeCreatedAt === 'string') {
+                                safeCreatedAt = new Date(safeCreatedAt);
+                              } else if (safeCreatedAt && typeof safeCreatedAt === 'number') {
+                                safeCreatedAt = new Date(safeCreatedAt);
+                              } else {
+                                return 'Invalid date';
+                              }
+                            }
+                            
+                            if (isNaN(safeCreatedAt.getTime())) {
+                              return 'Invalid date';
+                            }
+                            
+                            return `${safeCreatedAt.getDate().toString().padStart(2, '0')}-${safeCreatedAt.toLocaleDateString('en-US', { month: 'short' })}-${safeCreatedAt.getFullYear()}`;
+                          })()}
+                        </div>
                         </div>
                       </div>
                     );
                   })
                 ) : (
-                  <div className="text-center py-6 opacity-50">
-                    <p className="text-sm text-black">No recent unassigned tickets found</p>
+                  <div className="text-center py-4">
+                    <div className="w-12 h-12 mx-auto mb-2 bg-gray-100 rounded-full flex items-center justify-center">
+                      <FileText className="w-6 h-6 text-gray-400" />
+                    </div>
+                    <p className="text-sm text-gray-500">No recent tickets found</p>
+                    <p className="text-xs text-gray-400 mt-0.5">New tickets will appear here</p>
                   </div>
                 )}
-              </div>
-            )}
+            </div>
           </div>
         </div>
 
@@ -1250,9 +1536,16 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
           {/* Ticket Volume Trend */}
           <div 
             className={`${cardClass} rounded-lg border theme-elevation-shadow`}
+            style={{
+              fontFamily: 'Arial, sans-serif'
+            }}
           >
             <div className="mb-3 px-3 pt-3">
-              <h2 className="font-medium text-gray-600 mb-3">
+              <h2 className="font-normal text-gray-500 mb-3" style={{
+                textShadow: '0.1px 0.1px 0.2px rgba(0,0,0,0.03)',
+                fontWeight: '400',
+                opacity: '0.7'
+              }}>
                 Ticket Volume Trend
                 {selectedCompany && selectedCompany !== 'All' && (
                   <span className="text-sm font-normal text-gray-600 ml-2">
@@ -1265,7 +1558,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                 {/* Time Period Filter */}
                 <div className="flex items-center gap-2">
                   <label className="text-xs font-medium text-gray-600">Period:</label>
-                  <CustomDropdown
+                  <CompactDropdown
                     value={selectedTimePeriod}
                     onChange={setSelectedTimePeriod}
                     options={[
@@ -1276,14 +1569,14 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                       { value: "180", label: "6 Months" },
                       { value: "custom", label: "Custom" }
                     ]}
-                    className="min-w-[120px]"
+                    className="min-w-[100px]"
                   />
                 </div>
                 {/* Client Filter - hide for site_admin */}
                 {(user?.role !== 'site_admin') && (
                 <div className="flex items-center gap-2">
                   <label className="text-xs font-medium text-gray-600">Client:</label>
-                  <CustomDropdown
+                  <CompactDropdown
                     value={selectedCompany}
                     onChange={setSelectedCompany}
                     options={[
@@ -1293,7 +1586,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                         label: company
                       }))
                     ]}
-                    className="min-w-[150px]"
+                    className="min-w-[120px]"
                   />
                   <span className="text-xs text-gray-400">({availableCompanies.length} companies)</span>
                 </div>
@@ -1361,6 +1654,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                   data={processedDashboardData.volumeTrend} 
                   animationDuration={0}
                   margin={{ top: 10, right: 30, left: -20, bottom: 0 }}
+                  isAnimationActive={false}
                 >
                   <CartesianGrid strokeDasharray="3 3" stroke={darkMode ? '#444' : '#eee'} />
                   <XAxis 
@@ -1412,6 +1706,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                     fill="#e85c3440"
                     strokeWidth={2}
                     isAnimationActive={false}
+                    animationDuration={0}
                   />
                 </AreaChart>
               </ResponsiveContainer>
@@ -1442,11 +1737,18 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
           {/* Enhanced Resolution Time Analytics */}
           <div 
             className={`${cardClass} rounded-lg p-3 border theme-elevation-shadow`}
+            style={{
+              fontFamily: 'Arial, sans-serif'
+            }}
           >
             <div className="mb-4">
               <div className="mb-3">
                 <div className="flex items-center justify-between mb-3">
-                  <h2 className="font-medium text-gray-600 mb-3">
+                  <h2 className="font-normal text-gray-500 mb-3" style={{
+                    textShadow: '0.1px 0.1px 0.2px rgba(0,0,0,0.03)',
+                    fontWeight: '400',
+                    opacity: '0.7'
+                  }}>
                     
                     Resolution Time Analytics
                     {resolutionTimeCompany && resolutionTimeCompany !== 'All' && (
@@ -1471,7 +1773,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                   {/* Time Period Filter */}
                   <div className="flex items-center gap-2">
                     <label className="text-xs font-medium text-gray-600">Period:</label>
-                    <CustomDropdown
+                    <CompactDropdown
                       value={resolutionTimePeriod}
                       onChange={setResolutionTimePeriod}
                       options={[
@@ -1482,14 +1784,14 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                         { value: "180", label: "6 Months" },
                         { value: "custom", label: "Custom" }
                       ]}
-                      className="min-w-[120px]"
+                      className="min-w-[100px]"
                     />
                   </div>
                   {/* Client Filter - hide for site_admin */}
                   {(user?.role !== 'site_admin') && (
                   <div className="flex items-center gap-2">
                     <label className="text-xs font-medium text-gray-600">Client:</label>
-                    <CustomDropdown
+                    <CompactDropdown
                       value={resolutionTimeCompany}
                       onChange={setResolutionTimeCompany}
                       options={[
@@ -1499,7 +1801,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                           label: company
                         }))
                       ]}
-                      className="min-w-[150px]"
+                      className="min-w-[120px]"
                     />
                     <span className="text-xs text-gray-400">({availableCompanies.length} companies)</span>
                   </div>

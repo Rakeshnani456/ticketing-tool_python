@@ -16,7 +16,7 @@ const getTicketsFallback = async (userId, options = {}) => {
         // Apply role-based filtering
         if (userRole === 'site_admin' && clientName) {
             ticketsQuery = query(ticketsRef, where('client_name', '==', clientName), orderBy('created_at', 'desc'), limit(100));
-        } else if (userRole === 'user') {
+        } else if (userRole === 'user' || userRole === 'engineer') {
             ticketsQuery = query(ticketsRef, where('reporter_id', '==', userId), orderBy('created_at', 'desc'), limit(100));
         } else {
             ticketsQuery = query(ticketsRef, orderBy('created_at', 'desc'), limit(100));
@@ -40,12 +40,30 @@ const getTicketsFallback = async (userId, options = {}) => {
  */
 const getTicketCountsFallback = async (userId, options = {}) => {
     try {
+        const { userRole } = options;
         const tickets = await getTicketsFallback(userId, options);
         if (!tickets) return null;
         
         const totalTickets = tickets.length;
         const activeTickets = tickets.filter(t => ['Open', 'In Progress', 'Hold'].includes(t.status)).length;
-        const assignedToMeTickets = tickets.filter(t => t.assigned_to_id === userId && !['Closed', 'Resolved'].includes(t.status)).length;
+        
+        let assignedToMeTickets = 0;
+        
+        if (userRole === 'user' || userRole === 'engineer') {
+            // For regular users, count tickets they created (not assigned to them)
+            // Query tickets created by the user with active status
+            const ticketsRef = collection(dbClient, 'tickets');
+            const createdByUserQuery = query(
+                ticketsRef, 
+                where('reporter_id', '==', userId),
+                where('status', 'in', ['Open', 'In Progress', 'Hold'])
+            );
+            const createdByUserSnapshot = await getDocs(createdByUserQuery);
+            assignedToMeTickets = createdByUserSnapshot.docs.length;
+        } else {
+            // For admin/support roles, count tickets they created
+            assignedToMeTickets = tickets.filter(t => t.reporter_id === userId && !['Closed', 'Resolved'].includes(t.status)).length;
+        }
 
         return {
             total_tickets: totalTickets,
@@ -64,7 +82,7 @@ const getTicketCountsFallback = async (userId, options = {}) => {
  */
 export const useDataManager = (dataType, userId, options = {}) => {
     const [data, setData] = useState(null);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(false); // Start with false to avoid spinner flash
     const [error, setError] = useState(null);
     const subscriptionIdRef = useRef(null);
     const isMountedRef = useRef(true);
@@ -109,6 +127,8 @@ export const useDataManager = (dataType, userId, options = {}) => {
                     setData(cachedData);
                     setLoading(false);
                 } else if (isMountedRef.current) {
+                    // Only show loading when we actually need to fetch data
+                    setLoading(true);
                     // If no cached data and websocket not available, try direct Firebase query as fallback
                     if (dataType === 'tickets') {
                         const fallbackData = await getTicketsFallback(userId, options);
@@ -187,10 +207,11 @@ export const useTickets = (userId, userRole, clientName) => {
 /**
  * Hook specifically for ticket counts
  */
-export const useTicketCounts = (userId, userRole) => {
+export const useTicketCounts = (userId, userRole, clientName) => {
     const options = useMemo(() => ({
-        userRole
-    }), [userRole]);
+        userRole,
+        clientName
+    }), [userRole, clientName]);
     
     return useDataManager('ticket_counts', userId, options);
 };
