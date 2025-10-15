@@ -88,10 +88,11 @@ const Timeline = ({ events = [] }) => {
             containerRect.right - 100
         );
         
+        // Position tooltip below the collapsed timeline item
         return {
             left: left,
-            top: eventRect.top - 8,
-            transform: 'translateX(-50%) translateY(-100%)',
+            top: eventRect.bottom + 8,
+            transform: 'translateX(-50%)',
             position: 'fixed',
             zIndex: 9999,
             pointerEvents: 'none',
@@ -99,13 +100,213 @@ const Timeline = ({ events = [] }) => {
         };
     };
 
+    const getExpandedTooltipStyle = (index) => {
+        if (!timelineBarRef.current) return { display: 'none' };
+        const eventEls = timelineBarRef.current.querySelectorAll('.timeline-event');
+        if (!eventEls[index]) return { display: 'none' };
+        
+        const eventRect = eventEls[index].getBoundingClientRect();
+        const containerRect = timelineBarRef.current.getBoundingClientRect();
+        const left = Math.min(
+            Math.max(eventRect.left + eventRect.width / 2, containerRect.left + 150),
+            containerRect.right - 150
+        );
+        
+        // Position tooltip below the timeline item
+        return {
+            left: left,
+            top: eventRect.bottom + 8,
+            transform: 'translateX(-50%)',
+            position: 'fixed',
+            zIndex: 9999,
+            pointerEvents: 'none',
+            maxWidth: 'min(400px, calc(100vw - 32px))',
+            maxHeight: 'min(300px, calc(100vh - 100px))',
+            overflowY: 'auto'
+        };
+    };
+
+    const getEventDetails = (event) => {
+        const details = [];
+        
+        // Common information
+        details.push(`📅 Time: ${new Date(event.timestamp).toLocaleString()}`);
+        
+        // Check for user information in different possible fields
+        const userName = event.user_name || event.user || event.assigned_by || event.changed_by || event.detail;
+        if (userName && userName !== 'System' && userName !== 'Anonymous') {
+            details.push(`👤 By: ${userName}`);
+        }
+        
+        // Event-specific details
+        switch (event.type) {
+            case 'comment':
+                details.push(`💬 Comment Added`);
+                // For comments, we need to get the actual comment text, not the user info
+                let commentText = '';
+                if (event.comment_text) {
+                    commentText = event.comment_text;
+                } else if (event.comment) {
+                    commentText = event.comment;
+                } else if (event.detail && event.detail !== 'Anonymous' && event.detail !== 'System') {
+                    commentText = event.detail;
+                } else {
+                    commentText = '[Comment text not available]';
+                }
+                
+                // Truncate comment if too long
+                const maxLength = 150;
+                if (commentText.length > maxLength) {
+                    commentText = commentText.substring(0, maxLength) + '...';
+                }
+                details.push(`📝 Comment: "${commentText}"`);
+                break;
+                
+            case 'status_change':
+                details.push(`🔄 Status Changed`);
+                if (event.old_status && event.new_status) {
+                    details.push(`📊 From: **${event.old_status}**`);
+                    details.push(`📊 To: **${event.new_status}**`);
+                } else if (event.previousStatus && event.currentStatus) {
+                    details.push(`📊 From: **${event.previousStatus}**`);
+                    details.push(`📊 To: **${event.currentStatus}**`);
+                } else {
+                    // Extract status from label if available
+                    const statusMatch = event.label?.match(/Status: (.+)/);
+                    if (statusMatch) {
+                        details.push(`📊 Status: **${statusMatch[1]}**`);
+                    }
+                }
+                break;
+                
+            case 'status_init':
+                details.push(`🆕 Status Set`);
+                if (event.new_status) {
+                    details.push(`📊 Status: **${event.new_status}**`);
+                } else if (event.currentStatus) {
+                    details.push(`📊 Status: **${event.currentStatus}**`);
+                }
+                break;
+                
+            case 'assignment':
+                details.push(`👥 Assignment Changed`);
+                if (event.assigned_to_email) {
+                    details.push(`👤 Assigned to: **${event.assigned_to_email}**`);
+                } else if (event.currentAssignee) {
+                    details.push(`👤 Assigned to: **${event.currentAssignee}**`);
+                } else if (event.detail) {
+                    details.push(`👤 Assigned to: **${event.detail}**`);
+                }
+                break;
+                
+            case 'assigned_change':
+                details.push(`👥 Assignment Changed`);
+                if (event.old_assigned_to && event.new_assigned_to) {
+                    details.push(`👤 From: **${event.old_assigned_to}**`);
+                    details.push(`👤 To: **${event.new_assigned_to}**`);
+                } else if (event.previousAssignee && event.currentAssignee) {
+                    details.push(`👤 From: **${event.previousAssignee}**`);
+                    details.push(`👤 To: **${event.currentAssignee}**`);
+                } else if (event.assigned_to_email) {
+                    details.push(`👤 Assigned to: **${event.assigned_to_email}**`);
+                } else if (event.detail) {
+                    details.push(`👤 Assigned to: **${event.detail}**`);
+                }
+                break;
+                
+            case 'assigned_init':
+                details.push(`👥 Initially Assigned`);
+                if (event.assigned_to_email) {
+                    details.push(`👤 To: **${event.assigned_to_email}**`);
+                } else if (event.currentAssignee) {
+                    details.push(`👤 To: **${event.currentAssignee}**`);
+                } else if (event.detail) {
+                    details.push(`👤 To: **${event.detail}**`);
+                }
+                break;
+                
+            case 'priority_init':
+                details.push(`⚡ Priority Set`);
+                if (event.new_priority) {
+                    details.push(`🔢 Priority: **${event.new_priority}**`);
+                } else if (event.priority) {
+                    details.push(`🔢 Priority: **${event.priority}**`);
+                }
+                break;
+                
+            case 'priority_change':
+                details.push(`⚡ Priority Changed`);
+                if (event.old_priority && event.new_priority) {
+                    details.push(`🔢 From: **${event.old_priority}**`);
+                    details.push(`🔢 To: **${event.new_priority}**`);
+                } else if (event.previousPriority && event.currentPriority) {
+                    details.push(`🔢 From: **${event.previousPriority}**`);
+                    details.push(`🔢 To: **${event.currentPriority}**`);
+                } else {
+                    // Extract priority from label if available
+                    const priorityMatch = event.label?.match(/Priority: (.+)/);
+                    if (priorityMatch) {
+                        details.push(`🔢 Priority: **${priorityMatch[1]}**`);
+                    }
+                }
+                break;
+                
+            case 'attachment':
+            case 'attachment_added':
+                details.push(`📎 Attachment Added`);
+                if (event.filename) {
+                    details.push(`📁 File: **${event.filename}**`);
+                } else if (event.attachmentName) {
+                    details.push(`📁 File: **${event.attachmentName}**`);
+                } else if (event.detail) {
+                    details.push(`📁 File: **${event.detail}**`);
+                }
+                break;
+                
+            case 'resolved':
+                details.push(`✅ Ticket Resolved`);
+                if (event.closure_notes) {
+                    details.push(`💡 Resolution: **${event.closure_notes}**`);
+                } else if (event.resolution) {
+                    details.push(`💡 Resolution: **${event.resolution}**`);
+                }
+                break;
+                
+            case 'created':
+                details.push(`🆕 Ticket Created`);
+                if (event.ticket_title) {
+                    details.push(`📝 Title: **"${event.ticket_title}"**`);
+                } else if (event.description) {
+                    details.push(`📝 Description: **"${event.description}"**`);
+                }
+                if (event.ticket_category) {
+                    details.push(`📂 Category: **${event.ticket_category}**`);
+                }
+                if (event.ticket_priority) {
+                    details.push(`🔢 Priority: **${event.ticket_priority}**`);
+                }
+                break;
+                
+            default:
+                if (event.description) {
+                    details.push(`ℹ️ Description: ${event.description}`);
+                } else if (event.detail) {
+                    details.push(`ℹ️ Details: ${event.detail}`);
+                }
+        }
+        
+        return details;
+    };
+
     if (!events.length) return null;
     
     return (
-        <div className="w-full min-w-0">
+        <div className="w-full min-w-0 relative" style={{ zIndex: 1 }}>
             <div
                 ref={timelineBarRef}
-                className={`bg-white border-t border-b border-gray-200 w-full relative overflow-hidden ${
+                className={`bg-white border-t border-b border-gray-200 w-full relative ${
+                    expanded ? 'overflow-visible' : 'overflow-hidden'
+                } ${
                     isAnimating ? 'transition-[height,padding] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]' : ''
                 } ${
                     expanded ? 'h-[180px] py-2' : 'h-[56px]'
@@ -139,18 +340,43 @@ const Timeline = ({ events = [] }) => {
                     </div>
                 )}
                 
-                {/* Tooltip */}
+                {/* Tooltip for collapsed state */}
                 {!expanded && hoveredIndex !== null && (
                     <div style={getTooltipStyle(hoveredIndex)}>
-                        <div className="bg-gray-900 text-white text-xs rounded py-2 px-3 shadow-lg">
-                            <div className="absolute left-1/2 -bottom-2 w-0 h-0 border-l-6 border-r-6 border-t-6 border-l-transparent border-r-transparent border-t-gray-900 -translate-x-1/2"></div>
-                            <div className="font-bold mb-1 truncate">{events[hoveredIndex].label}</div>
-                            <div>{new Date(events[hoveredIndex].timestamp).toLocaleString()}</div>
+                        <div className="bg-white text-gray-900 text-xs rounded py-2 px-3 shadow-lg max-w-xs border border-gray-200">
+                            <div className="absolute left-1/2 -top-2 w-0 h-0 border-l-6 border-r-6 border-b-6 border-l-transparent border-r-transparent border-b-white -translate-x-1/2"></div>
+                            <div className="font-bold mb-1 break-words text-gray-900">{events[hoveredIndex].label}</div>
+                            <div className="text-gray-600 text-xs mb-2">
+                                {new Date(events[hoveredIndex].timestamp).toLocaleString()}
+                            </div>
                             {events[hoveredIndex].detail && (
-                                <div className="text-gray-300 mt-1 line-clamp-2">
+                                <div className="text-gray-700 text-xs leading-relaxed break-words whitespace-pre-wrap">
                                     {events[hoveredIndex].detail}
                                 </div>
                             )}
+                        </div>
+                    </div>
+                )}
+
+                {/* Tooltip for expanded state */}
+                {expanded && hoveredIndex !== null && (
+                    <div style={getExpandedTooltipStyle(hoveredIndex)}>
+                        <div className="bg-white text-gray-900 text-xs rounded-lg py-3 px-4 shadow-2xl border border-gray-200 max-w-none">
+                            <div className="absolute left-1/2 -top-2 w-0 h-0 border-l-6 border-r-6 border-b-6 border-l-transparent border-r-transparent border-b-white -translate-x-1/2"></div>
+                            <div className="font-bold mb-3 text-sm break-words text-blue-600">{events[hoveredIndex].label}</div>
+                            <div className="space-y-1">
+                                {getEventDetails(events[hoveredIndex]).map((detail, idx) => (
+                                    <div key={idx} className="text-gray-700 text-xs leading-relaxed break-words max-w-full overflow-hidden">
+                                        {detail.split('**').map((part, partIdx) => 
+                                            partIdx % 2 === 1 ? (
+                                                <span key={partIdx} className="font-bold text-blue-600 bg-blue-50 px-1 rounded">
+                                                    {part}
+                                                </span>
+                                            ) : part
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     </div>
                 )}

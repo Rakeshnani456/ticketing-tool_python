@@ -1958,7 +1958,7 @@ const AppContent = () => {
                                 {isSidebarExpanded && (
                                     <button
                                         onClick={() => setIsSidebarExpanded(false)}
-                                        className="group flex items-center px-3 py-2.5 text-base font-semibold menu-item transition-all duration-200 hover:bg-gray-200 hover:text-black text-white justify-start w-full"
+                                        className="group flex items-center px-3 py-2.5 text-base font-semibold menu-item transition-all duration-200 hover:bg-gray-200 hover:text-black text-gray-400 justify-start w-full"
                                         title="Collapse sidebar"
                                     >
                                         <div className="flex items-center justify-center w-5 h-5 mr-3">

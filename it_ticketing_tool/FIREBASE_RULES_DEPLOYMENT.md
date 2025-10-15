@@ -73,3 +73,5 @@ firebase deploy --only firestore:rules
 - ✅ Users can read tickets based on their role
 - ✅ WebSocket authentication should work
 - ✅ API calls should return data instead of 401 errors
+
+

@@ -321,7 +321,9 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                         timestamp: comment.timestamp,
                         label: `Comment`,
                         icon: MessageSquare,
-                        detail: comment.commenter ? comment.commenter.split('@')[0] : 'Anonymous'
+                        detail: comment.commenter ? comment.commenter.split('@')[0] : 'Anonymous',
+                        comment_text: comment.comment || comment.text || '',
+                        comment: comment.comment || comment.text || ''
                     });
                 }
             });
@@ -1158,6 +1160,7 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                         popupHideTimeout={popupHideTimeout}
                     />
                 </div>
+
             </div>
         </div>
     );

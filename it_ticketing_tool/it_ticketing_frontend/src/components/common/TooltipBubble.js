@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { useThemeContext } from '../../contexts/ThemeContext';
 
 // TooltipBubble component for hover tooltips
 function TooltipBubble({ title, children, id }) {
     const [show, setShow] = useState(false);
     const [coords, setCoords] = useState({ top: 0, left: 0 });
     const iconRef = useRef(null);
+    const { theme } = useThemeContext();
 
     useEffect(() => {
         if (show && iconRef.current) {
@@ -68,17 +70,20 @@ function TooltipBubble({ title, children, id }) {
                         position: 'fixed',
                         top: coords.top,
                         left: coords.left,
-                        backgroundColor: '#1f2937',
-                        color: '#ffffff !important',
+                        backgroundColor: theme === 'dark' ? '#374151' : '#1f2937',
+                        color: theme === 'dark' ? '#f9fafb' : '#ffffff',
                         padding: '8px 12px',
                         borderRadius: '6px',
                         fontSize: '12px',
                         fontWeight: '500',
                         zIndex: 9999,
-                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+                        boxShadow: theme === 'dark' 
+                            ? '0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2)'
+                            : '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
                         whiteSpace: 'nowrap',
                         pointerEvents: 'none',
-                        animation: 'fadeIn 0.2s ease-out'
+                        animation: 'fadeIn 0.2s ease-out',
+                        border: theme === 'dark' ? '1px solid #4b5563' : 'none'
                     }}
                 >
                     {title}
@@ -94,6 +99,7 @@ function LeftMenuTooltipBubble({ title, children, id }) {
     const [show, setShow] = useState(false);
     const [coords, setCoords] = useState({ top: 0, left: 0 });
     const iconRef = useRef(null);
+    const { theme } = useThemeContext();
 
     useEffect(() => {
         if (show && iconRef.current) {
@@ -159,17 +165,20 @@ function LeftMenuTooltipBubble({ title, children, id }) {
                         position: 'fixed',
                         top: coords.top,
                         left: coords.left,
-                        backgroundColor: '#1f2937',
-                        color: '#ffffff !important',
+                        backgroundColor: theme === 'dark' ? '#374151' : '#1f2937',
+                        color: theme === 'dark' ? '#f9fafb' : '#ffffff',
                         padding: '6px 10px',
                         borderRadius: '6px',
                         fontSize: '12px',
                         fontWeight: '500',
                         zIndex: 99999,
-                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+                        boxShadow: theme === 'dark' 
+                            ? '0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2)'
+                            : '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
                         whiteSpace: 'nowrap',
                         pointerEvents: 'none',
-                        animation: 'fadeIn 0.2s ease-out'
+                        animation: 'fadeIn 0.2s ease-out',
+                        border: theme === 'dark' ? '1px solid #4b5563' : 'none'
                     }}
                 >
                     {title}

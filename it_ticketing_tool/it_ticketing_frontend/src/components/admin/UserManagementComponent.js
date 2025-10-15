@@ -228,6 +228,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
         }
     }, [location.search, clients, navigate]);
 
+
     const filteredUsers = useMemo(() => {
         let filtered = users.filter(u => {
             // Apply search filter
@@ -421,88 +422,32 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                     await fetchClients();
                 }
                 
-                // Use different approach for site_admin vs other roles
-                if (user.role === 'site_admin') {
-                    // For site_admin, use API endpoint instead of direct Firestore access
-                    console.log("Site admin detected, using API endpoint for user data...");
-                    
-                    const fetchUsersViaAPI = async () => {
-                        try {
-                            const idToken = await user.firebaseUser.getIdToken();
-                            const res = await fetch(`${API_BASE_URL}/api/users`, {
-                                headers: {
-                                    'Authorization': `Bearer ${idToken}`,
-                                    'Content-Type': 'application/json'
-                                }
-                            });
-                            
-                            if (!res.ok) throw new Error('Failed to fetch users');
-                            const data = await res.json();
-                            
-                            // Filter to only show users from the same company
-                            const filteredUsers = data.filter(u => 
-                                (u.role === 'user' || u.role === 'site_admin') && 
-                                u.client_name === user.companyName
-                            );
-                            
-                            const usersWithClientDetails = filteredUsers.map(u => {
-                                const clientMatch = previousClientsRef.current.find(c => c['Client name'] === u.client_name);
-                                return {
-                                    uid: u.uid,
-                                    ...u,
-                                    asset_id: u.asset_id || u.assetid || '',
-                                    domain: clientMatch ? clientMatch.Domain : (u.domain || ''),
-                                    clientname: clientMatch ? clientMatch['Client name'] : (u.client_name || 'Unknown Client'),
-                                    companyName: u.client_name || u.companyName || 'Unknown Company',
-                                    firstName: u.firstName || '',
-                                    lastName: u.lastName || '',
-                                    contactNumber: u.contactNumber || '',
-                                    managerEmail: u.managerEmail || '',
-                                    employmentType: u.employmentType || '',
-                                    designation: u.designation || '',
-                                    employeeId: u.employeeId || '',
-                                };
-                            });
-                            
-                            // Only update state if data actually changed
-                            if (!areUsersEqual(previousUsersRef.current, usersWithClientDetails)) {
-                                console.log("🔄 UPDATING users state with API data for site_admin");
-                                setUsers(usersWithClientDetails);
-                                previousUsersRef.current = usersWithClientDetails;
-                                
-                                // Update cache
-                                const currentTime = Date.now();
-                                const cacheKey = `userManagement_cache_${user.role}_${user.companyName}`;
-                                const cacheTimeKey = `${cacheKey}_time`;
-                                localStorage.setItem(cacheKey, JSON.stringify(usersWithClientDetails));
-                                localStorage.setItem(cacheTimeKey, currentTime.toString());
-                                setLastFetchTime(currentTime);
-                            }
-                            
-                            setLoading(false);
-                            setError(null);
-                        } catch (error) {
-                            console.error("Error fetching users via API:", error);
-                            setError(`API error: ${error.message}`);
-                            setLoading(false);
-                        }
-                    };
-                    
-                    // Initial fetch
-                    fetchUsersViaAPI();
-                    
-                    // Set up periodic refresh for site_admin (every 30 seconds)
-                    const refreshInterval = setInterval(fetchUsersViaAPI, 30000);
-                    
-                    unsubscribe = () => {
-                        clearInterval(refreshInterval);
-                    };
-                } else {
-                    // For admin and super_admin, use Firestore real-time listener
+                // Use Firestore real-time listener for all user roles
+                // READ OPTIMIZATION: Filtered queries reduce Firebase read consumption
+                // - site_admin: Only reads users from their company (very efficient)
+                // - admin/super_admin: Only reads relevant roles (excludes inactive/deleted users)
                 const usersRef = collection(db, 'users');
                 console.log("Setting up Firestore listener for real-time updates...");
                 
-                unsubscribe = onSnapshot(usersRef, 
+                // Create query based on user role with optimizations
+                let usersQuery;
+                if (user.role === 'site_admin') {
+                    // For site_admin, filter by company (most efficient)
+                    usersQuery = query(
+                        usersRef,
+                        where('client_name', '==', user.companyName),
+                        where('role', 'in', ['user', 'site_admin'])
+                    );
+                } else {
+                    // For admin and super_admin, filter by relevant roles only
+                    // This reduces reads significantly compared to getting ALL users
+                    usersQuery = query(
+                        usersRef,
+                        where('role', 'in', ['user', 'site_admin', 'support', 'admin', 'super_admin'])
+                    );
+                }
+                
+                unsubscribe = onSnapshot(usersQuery, 
                     async (snapshot) => {
                         try {
                             console.log("🔥 Firestore real-time update received, snapshot size:", snapshot.size, "users count:", users.length);
@@ -510,13 +455,11 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                             const fetchedUsers = [];
                             snapshot.forEach((doc) => {
                                 const userData = doc.data();
-                                // Only include users and site_admins
-                                if (userData.role === 'user' || userData.role === 'site_admin') {
-                                    fetchedUsers.push({
-                                        uid: doc.id,
-                                        ...userData
-                                    });
-                                }
+                                // Since we're using filtered queries, all users in snapshot are already filtered
+                                fetchedUsers.push({
+                                    uid: doc.id,
+                                    ...userData
+                                });
                             });
                             
                             const usersWithClientDetails = fetchedUsers.map(u => {
@@ -574,7 +517,6 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                         setLoading(false);
                     }
                 );
-                }
                 
                 // Set up WebSocket for additional real-time updates
                 try {

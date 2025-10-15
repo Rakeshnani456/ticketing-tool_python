@@ -121,6 +121,10 @@ app.options('*', cors(corsOptions));
 // Specific CORS handling for login endpoint
 app.options('/login', cors(corsOptions));
 
+// Specific CORS handling for users endpoint
+app.options('/api/users', cors(corsOptions));
+app.options('/api/users/*', cors(corsOptions));
+
 // Debug middleware to log CORS issues
 app.use((req, res, next) => {
     console.log(`CORS Debug: ${req.method} ${req.path} from origin: ${req.headers.origin}`);

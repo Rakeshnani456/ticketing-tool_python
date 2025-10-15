@@ -283,8 +283,61 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
                 console.error('Error creating user:', err);
                 return res.status(500).json({ error: err.message || 'Failed to create user.' });
             }
+        } else if (role === 'site_admin') {
+            // Handle site_admin role - similar to user but with site admin privileges
+            const { companyName, firstName, lastName, email, password, contactNumber, managerEmail, employmentType, designation, employeeId } = req.body;
+            if (!companyName || !firstName || !lastName || !email || !password || !contactNumber || !managerEmail || !employmentType || !designation || !employeeId) {
+                return res.status(400).json({ error: 'Missing required fields for site admin: companyName, firstName, lastName, email, password, contactNumber, managerEmail, employmentType, designation, employeeId' });
+            }
+            
+            // Uniqueness checks for site admin users
+            const queries = [
+                usersCollection.where('employeeId', '==', employeeId).limit(1).get(),
+                usersCollection.where('email', '==', email).limit(1).get(),
+                usersCollection.where('contactNumber', '==', contactNumber).limit(1).get(),
+            ];
+            const [empSnap, emailSnap, contactSnap] = await Promise.all(queries);
+            if (!empSnap.empty) {
+                return res.status(400).json({ error: 'Employee ID already exists.' });
+            }
+            if (!emailSnap.empty) {
+                return res.status(400).json({ error: 'Email already exists.' });
+            }
+            if (!contactSnap.empty) {
+                return res.status(400).json({ error: 'Contact number already exists.' });
+            }
+
+            try {
+                // Create user in Firebase Auth
+                const userRecord = await admin.auth().createUser({
+                    email: email,
+                    password: password,
+                    displayName: `${firstName} ${lastName}`,
+                });
+
+                // Save user data to Firestore with siteadmin role
+                await usersCollection.doc(userRecord.uid).set({
+                    companyName,
+                    firstName,
+                    lastName,
+                    email,
+                    contactNumber,
+                    managerEmail,
+                    employmentType,
+                    designation,
+                    employeeId,
+                    role: 'site_admin', // Set role as site_admin
+                    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                });
+                
+                return res.status(201).json({ message: 'Site admin created in Auth and Firestore.' });
+            } catch (err) {
+                console.error('Error creating site admin:', err);
+                return res.status(500).json({ error: err.message || 'Failed to create site admin.' });
+            }
         } else {
-            return res.status(400).json({ error: 'Invalid role. Only "support" and "user" are supported.' });
+            return res.status(400).json({ error: 'Invalid role. Only "support", "user", and "site_admin" are supported.' });
         }
     });
 

@@ -24,6 +24,8 @@ import {
 import { API_BASE_URL } from '../../config/constants';
 import { useNavigate } from 'react-router-dom';
 import SmartCacheManager from '../../utils/smartCacheManager';
+import { getFirestore, collection, query, where, onSnapshot } from 'firebase/firestore';
+import { app } from '../../config/firebase';
 
 // Custom Tooltip Component
 const CustomTooltip = ({ children, title, position = 'top' }) => {
@@ -194,36 +196,8 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
   const [actionNotifications, setActionNotifications] = useState({});
   const [changePwdError, setChangePwdError] = useState('');
   const [showActionsColumn, setShowActionsColumn] = useState(false);
-  const hasFetchedData = useRef(false);
-  const cacheKey = 'engineers_cache';
-  const cacheExpiry = 5 * 60 * 1000; // 5 minutes
+  const db = getFirestore(app);
 
-  // Cache management functions
-  const getCachedData = useCallback((key) => {
-    try {
-      const cached = localStorage.getItem(key);
-      if (cached) {
-        const { data, timestamp } = JSON.parse(cached);
-        if (Date.now() - timestamp < cacheExpiry) {
-          return data;
-        }
-      }
-    } catch (err) {
-      console.warn('Cache read error:', err);
-    }
-    return null;
-  }, [cacheExpiry]);
-
-  const setCachedData = useCallback((key, data) => {
-    try {
-      localStorage.setItem(key, JSON.stringify({
-        data,
-        timestamp: Date.now()
-      }));
-    } catch (err) {
-      console.warn('Cache write error:', err);
-    }
-  }, []);
 
   const fetchClients = useCallback(async () => {
     // Only fetch clients for super_admin, site_admin should not access clients
@@ -249,57 +223,80 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
   }, [user.role, user.firebaseUser]);
 
   useEffect(() => {
-    if (hasFetchedData.current) return;
+    if (!user || !user.firebaseUser) {
+      console.log("No user or firebaseUser available, skipping listener setup");
+      return;
+    }
     
+    console.log("Setting up engineers data fetching with real-time listeners...");
     setLoading(true);
     setError(null);
     
-    const fetchUsers = async () => {
+    let unsubscribe = null;
+    
+    const setupRealTimeListener = async () => {
       try {
-        // Check cache first
-        const cachedEngineers = getCachedData(cacheKey);
-        if (cachedEngineers) {
-          console.log('📦 Loading engineers from cache');
-          setUsers(cachedEngineers);
-          hasFetchedData.current = true;
-          setLoading(false);
-          return;
+        // Fetch clients first if not available
+        if (clients.length === 0) {
+          await fetchClients();
         }
-
-        console.log('🌐 Fetching engineers from API');
-            const idToken = await user.firebaseUser.getIdToken();
-            const res = await fetch(`${API_BASE_URL}/api/users`, {
-              headers: {
-                'Authorization': `Bearer ${idToken}`,
-                'Content-Type': 'application/json'
-              }
-            });
-            if (!res.ok) throw new Error('Failed to fetch users');
-            const data = await res.json();
         
-        // Filter for engineers only
-        const engineers = data.filter(user => 
-          user.role === 'engineer' || 
-          user.role === 'senior_engineer' || 
-          user.role === 'lead_engineer' || 
-          user.role === 'principal_engineer' ||
-          user.role === 'support'
+        // Use Firestore real-time listener for engineers
+        const usersRef = collection(db, 'users');
+        console.log("Setting up Firestore listener for real-time engineer updates...");
+        
+        // Create query for engineers only
+        const engineersQuery = query(
+          usersRef,
+          where('role', 'in', ['engineer', 'senior_engineer', 'lead_engineer', 'principal_engineer', 'support'])
         );
         
-        setUsers(engineers);
-        setCachedData(cacheKey, engineers);
-        hasFetchedData.current = true;
-      } catch (err) {
-        console.error("Error fetching engineers:", err);
-        setError(err.message);
-      } finally {
+        unsubscribe = onSnapshot(engineersQuery, 
+          async (snapshot) => {
+            try {
+              console.log("🔥 Firestore real-time update received for engineers, snapshot size:", snapshot.size);
+              
+              const fetchedEngineers = [];
+              snapshot.forEach((doc) => {
+                const userData = doc.data();
+                fetchedEngineers.push({
+                  uid: doc.id,
+                  ...userData
+                });
+              });
+              
+              setUsers(fetchedEngineers);
+              setLoading(false);
+              setError(null);
+            } catch (error) {
+              console.error("Error processing real-time engineers update:", error);
+              setError(`Real-time update error: ${error.message}`);
+              setLoading(false);
+            }
+          },
+          (error) => {
+            console.error("Error in real-time engineers listener:", error);
+            setError(`Listener error: ${error.message}`);
+            setLoading(false);
+          }
+        );
+        
+      } catch (error) {
+        console.error("Error setting up data fetching:", error);
+        setError(`Setup error: ${error.message}`);
         setLoading(false);
       }
     };
-
-    fetchUsers();
-    fetchClients();
-  }, [fetchClients, user.firebaseUser, getCachedData, setCachedData, cacheKey]);
+    
+    setupRealTimeListener();
+        
+    return () => {
+      console.log("Cleaning up engineers data fetching...");
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
+  }, [user, db, clients.length]);
 
   const handleAdd = () => {
     navigate('/engineer-management/create-engineer');

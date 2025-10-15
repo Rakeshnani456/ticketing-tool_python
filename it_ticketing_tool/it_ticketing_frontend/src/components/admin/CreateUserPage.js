@@ -7,19 +7,7 @@ import { API_BASE_URL } from '../../config/constants';
 import CustomDropdown from '../common/CustomDropdown';
 import { getCountryOptions, getDefaultCountry } from '../../services/countryService';
 
-// Designation options
-const designationOptions = [
-  { value: '', label: 'Select Designation' },
-  { value: 'CEO', label: 'CEO' },
-  { value: 'CTO', label: 'CTO' },
-  { value: 'Manager', label: 'Manager' },
-  { value: 'IT Admin', label: 'IT Admin' },
-  { value: 'Site Admin', label: 'Site Admin' },
-  { value: 'Director', label: 'Director' },
-  { value: 'Team Lead', label: 'Team Lead' },
-  { value: 'Developer', label: 'Developer' },
-  { value: 'Other', label: 'Other' },
-];
+// Designation is now a text input field, no dropdown options needed
 
 // Employment type options
 const employmentTypeOptions = [
@@ -31,11 +19,11 @@ const employmentTypeOptions = [
   { value: 'Other', label: 'Other' },
 ];
 
-// Role options
+// Role options - only user and site_admin
 const roleOptions = [
   { value: '', label: 'Select Role' },
   { value: 'user', label: 'User' },
-  { value: 'support', label: 'Support Engineer' },
+  { value: 'site_admin', label: 'Site Admin' },
 ];
 
 // Validation schema
@@ -48,7 +36,7 @@ const validationSchema = yup.object().shape({
   contactNumber: yup.string().required('Contact number is required').matches(/^[0-9\s\-\(\)]{7,15}$/, 'Invalid phone number'),
   managerEmail: yup.string().email('Invalid email').required('Manager email is required').max(100, 'Maximum 100 characters'),
   employmentType: yup.string().required('Employment type is required'),
-  designation: yup.string().required('Designation is required'),
+  designation: yup.string().required('Designation is required').min(2, 'Minimum 2 characters').max(50, 'Maximum 50 characters'),
   employeeId: yup.string().required('Employee ID is required').min(1, 'Minimum 1 character').max(20, 'Maximum 20 characters'),
   role: yup.string().required('Role is required'),
 });
@@ -98,7 +86,7 @@ const CreateUserPage = ({ user }) => {
     setError(null);
     try {
       const idToken = await user.firebaseUser.getIdToken();
-      const response = await fetch(`${API_BASE_URL}/api/users/create-users`, {
+      const response = await fetch(`${API_BASE_URL}/api/users`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -668,13 +656,11 @@ const CreateUserPage = ({ user }) => {
                     name="designation"
                     control={control}
                     render={({ field }) => (
-                      <CustomDropdown
-                        value={field.value}
-                        onChange={field.onChange}
-                        options={designationOptions}
-                        placeholder="Select designation"
-                        className={errors.designation ? 'error' : ''}
-                        size="sm"
+                      <input
+                        type="text"
+                        {...field}
+                        placeholder="Enter designation"
+                        className={`form-input ${errors.designation ? 'error' : ''}`}
                         disabled={showSuccess}
                       />
                     )}

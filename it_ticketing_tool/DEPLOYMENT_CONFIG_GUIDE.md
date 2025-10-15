@@ -109,3 +109,5 @@ firebase deploy --only firestore:rules
 - Ensure security rules are deployed
 - Verify the Firebase index is created
 - Check user authentication status
+
+

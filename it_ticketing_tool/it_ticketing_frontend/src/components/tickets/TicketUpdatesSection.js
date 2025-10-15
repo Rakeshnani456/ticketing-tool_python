@@ -3,6 +3,7 @@
 import React, { useRef, useState } from 'react';
 import { MessageSquare, CheckCircle2, Loader2, XCircle } from 'lucide-react';
 import UserProfilePopup from '../common/UserProfilePopup';
+import InlineCommentsInterface from './InlineCommentsInterface';
 import sendMailIcon from '../../assets/icons/send_mail.png';
 
 const EditableTextarea = ({ id, value, onChange, rows = 3, className = "", disabled, hasError = false, inputRef, maxLength }) => (
@@ -87,147 +88,18 @@ const TicketUpdatesSection = ({
                 </div>
 
                 {activeTab === 'comments' && (
-                    <>
-                        
-                        {/* Comments List with Smooth Scrolling */}
-                        <div className="relative mb-2 sm:mb-3 w-full min-w-0 max-w-full overflow-x-hidden border border-gray-200 rounded-lg p-3 bg-gradient-to-br from-gray-50 to-gray-100 shadow-sm">
-                            {/* Scrollable Comments Container */}
-                            <div 
-                                id="comments-container"
-                                className="w-full min-w-0 max-w-full overflow-x-hidden"
-                            >
-
-                                
-                                <div className="space-y-2 w-full min-w-0 max-w-full">
-                                    {/* Comments Display */}
-                                    {ticket.comments && ticket.comments.length > 0 ? (
-                                        (() => {
-                                            const sortedComments = [...ticket.comments].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-                                            const initialCommentCount = 6;
-                                            const displayedComments = showAllComments 
-                                                ? sortedComments 
-                                                : sortedComments.slice(-initialCommentCount);
-
-                                            return (
-                                                <>
-                                                    {displayedComments.map((comment, index) => {
-                                                        const isCurrentUser = comment.commenter === user?.email;
-                                                        return (
-                                                            <div key={index} className={`flex comment-item ${isCurrentUser ? 'justify-end' : 'justify-start'} w-full min-w-0 max-w-full`}>
-                                                                <div className={`flex gap-2 max-w-[80%] min-w-0 ${isCurrentUser ? 'flex-row-reverse' : ''}`}>
-                                                                    {/* Avatar */}
-                                                                    <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center ${
-                                                                        isCurrentUser 
-                                                                            ? 'bg-gradient-to-br from-green-500 to-green-600' 
-                                                                            : 'bg-gradient-to-br from-blue-500 to-blue-600'
-                                                                    }`}>
-                                                                        <span className="text-white text-xs font-semibold">
-                                                                            {(comment.commenter || 'A').charAt(0).toUpperCase()}
-                                                                        </span>
-                                                                    </div>
-                                                                    
-                                                                    {/* Comment Content */}
-                                                                    <div className={`flex items-end gap-1 min-w-0 flex-1 ${isCurrentUser ? 'flex-row-reverse' : ''}`}>
-                                                                                                                                        <div className={`relative inline-block px-3 py-2 rounded-lg min-w-0 flex-1 overflow-hidden bg-white border border-gray-200 shadow-md hover:shadow-lg transition-shadow duration-200 ${
-                                                                    isCurrentUser ? 'ml-2' : 'mr-2'
-                                                                }`}>
-                                                                    {/* Orange vertical bar - left for others, right for current user */}
-                                                                    <div className={`absolute top-0 bottom-0 w-1 bg-orange-600 ${
-                                                                        isCurrentUser ? 'right-0 rounded-r-lg' : 'left-0 rounded-l-lg'
-                                                                    }`}></div>
-                                                                    
-                                                                    {/* Comment content with padding to account for orange bar */}
-                                                                    <div className={`${isCurrentUser ? 'pr-3' : 'pl-3'}`}>
-                                                                        {/* Commenter email - orange underlined */}
-                                                                        <div className="mb-1 min-w-0">
-                                                                            <span className="text-xs text-orange-600 underline font-medium block">
-                                                                                {comment.commenter || 'Anonymous'}
-                                                                            </span>
-                                                                        </div>
-                                                                                {/* Comment text on next line */}
-                                                                                <p className="text-xs text-black whitespace-pre-wrap break-words min-w-0 overflow-hidden mb-2">
-                                                                                    {comment.text}
-                                                                                </p>
-                                                                                {/* Commented datetime */}
-                                                                                                                                                        <span className="text-[10px] text-gray-500">
-                                                                            {new Date(comment.timestamp).toLocaleString()}
-                                                                        </span>
-                                                                    </div>
-                                                                </div>
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                        );
-                                                    })}
-                                                    
-                                                    {/* Show More/Less button - positioned below the comments */}
-                                                    {ticket.comments.length > initialCommentCount && (
-                                                        <div className="mt-3 text-center">
-                                                            <button
-                                                                onClick={() => setShowAllComments(!showAllComments)}
-                                                                className="text-[10px] text-orange-600 hover:text-orange-800 hover:underline font-medium"
-                                                            >
-                                                                {showAllComments 
-                                                                    ? 'Show Less' 
-                                                                    : `Show More (${ticket.comments.length - initialCommentCount} older comments)`
-                                                                }
-                                                            </button>
-                                                        </div>
-                                                    )}
-                                                </>
-                                            );
-                                        })()
-                                    ) : (
-                                        <div className="text-center py-6 w-full min-w-0 max-w-full overflow-x-hidden">
-                                            <MessageSquare className="w-10 h-10 mx-auto mb-2 text-gray-300" />
-                                            <p className="text-xs text-gray-400">No comments yet</p>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-
-
-                        </div>
-
-                        {/* Add Comment Form */}
-                        {canAddComments && (
-                            <div className="w-full min-w-0 max-w-full overflow-x-hidden">
-                                <div className="relative w-full min-w-0 max-w-full overflow-x-hidden">
-                                    <textarea
-                                        value={commentText || ''}
-                                        onChange={(e) => setCommentText(e.target.value)}
-                                        rows={6}
-                                        className="w-full rounded-lg px-3 py-2 pr-12 focus:outline-none text-sm resize-none min-w-0 max-w-full cursor-text placeholder:text-gray-700 placeholder:text-sm bg-gradient-to-br from-gray-50 to-white border border-orange-300 shadow-sm focus:shadow-md transition-all duration-200"
-                                        placeholder="Add a comment..."
-                                        disabled={commentLoading || !canAddComments}
-                                        tabIndex={0}
-                                        onKeyDown={(e) => {
-                                            if (e.key === 'Enter' && !e.shiftKey) {
-                                                e.preventDefault();
-                                                handleAddComment(e);
-                                            }
-                                        }}
-                                    ></textarea>
-                                    <button
-                                        onClick={handleAddComment}
-                                        disabled={commentLoading || !commentText.trim() || !canAddComments}
-                                        className="absolute bottom-2 right-2 p-1.5 rounded-md transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-orange-300 focus:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center hover:bg-gray-100 hover:shadow-md shadow-sm"
-                                        title="Send comment"
-                                    >
-                                        {commentLoading ? (
-                                            <Loader2 className="animate-spin w-4 h-4 text-orange-600" />
-                                        ) : (
-                                            <img 
-                                                src={sendMailIcon} 
-                                                alt="Send" 
-                                                className="w-8 h-8"
-                                            />
-                                        )}
-                                    </button>
-                                </div>
-                            </div>
-                        )}
-                    </>
+                        <InlineCommentsInterface
+                            comments={ticket?.comments || []}
+                            onAddComment={handleAddComment}
+                            onAddReply={(commentId, replyText) => {
+                                // Handle reply functionality
+                                console.log('Reply to comment:', commentId, replyText);
+                            }}
+                            loading={commentLoading}
+                            user={user}
+                            commentText={commentText}
+                            setCommentText={setCommentText}
+                        />
                 )}
 
 

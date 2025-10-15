@@ -3031,6 +3031,15 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                     </div>
                     <div className="flex items-center gap-2 ml-auto">
                         {renderPagination()}
+                        {/* Ticket Count Display */}
+                        <div className="text-[12px] text-gray-500 ml-4">
+                            Showing <span className="text-blue-600 font-semibold">{((currentPage - 1) * ticketsPerPage) + 1}-{Math.min(currentPage * ticketsPerPage, displayedTickets.length)}</span> of <span className="text-blue-600 font-semibold">{displayedTickets.length}</span> Tickets
+                            {filterBy === 'company' && (
+                                <span className="ml-2 text-gray-600">
+                                       Companies: {companies.length}, Selected: {filterCompany || 'None'}
+                                </span>
+                            )}
+                        </div>
                         <div className="flex items-center gap-2 ml-3">
                             {/* Action Buttons: Assign, Select, Notes (copy logic from original) */}
                             {/* Copy from original code, lines 1291-1357 */}
@@ -3127,16 +3136,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                     )
                 ) : (
                     <>
-                        {/* Ticket Count Display */}
-                        <div className="text-[12px] text-gray-500 text-center mb-1 px-0 -mt-2">
-                            Showing <span className="text-blue-600 font-semibold">{((currentPage - 1) * ticketsPerPage) + 1}-{Math.min(currentPage * ticketsPerPage, displayedTickets.length)}</span> of <span className="text-blue-600 font-semibold">{displayedTickets.length}</span> Tickets
-                            {filterBy === 'company' && (
-                                <span className="ml-7 text-gray-600">
-                                       Companies: {companies.length}, Selected: {filterCompany || 'None'}
-                                </span>
-                            )}
-                        </div>
-                        <div className="w-full max-w-full overflow-x-auto border border-gray-200 bg-white -mt-1">
+                        <div className="w-full max-w-full overflow-x-auto border border-gray-200 bg-white">
                          <table className={`w-full min-w-0 bg-white text-xs ${(showCheckboxes || assignMode) ? 'border border-orange-400' : ''}`} style={{ fontFamily: 'Arial, sans-serif', fontWeight: 400, fontOpticalSizing: 'auto', fontStyle: 'normal' }}>
                              <thead className="hidden sm:table-header-group bg-gray-100 border-b border-gray-200">
                                 <tr className="h-10">
