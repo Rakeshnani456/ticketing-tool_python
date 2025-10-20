@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { API_BASE_URL } from '../config/constants';
 import { 
     ArrowLeft, 
     Edit3, 
@@ -50,7 +51,7 @@ const NoteDetailComponent = ({ user, showFlashMessage }) => {
 
         try {
             setLoading(true);
-            const response = await fetch(`${process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000'}/api/personal-notes/${noteId}`, {
+            const response = await fetch(`${API_BASE_URL}/api/personal-notes/${noteId}`, {
                 headers: {
                     'Authorization': `Bearer ${await user.firebaseUser.getIdToken()}`
                 }
@@ -85,7 +86,7 @@ const NoteDetailComponent = ({ user, showFlashMessage }) => {
     // Toggle pin status
     const handleTogglePin = async () => {
         try {
-            const response = await fetch(`${process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000'}/api/personal-notes/${noteId}/pin`, {
+            const response = await fetch(`${API_BASE_URL}/api/personal-notes/${noteId}/pin`, {
                 method: 'PATCH',
                 headers: {
                     'Authorization': `Bearer ${await user.firebaseUser.getIdToken()}`
@@ -114,7 +115,7 @@ const NoteDetailComponent = ({ user, showFlashMessage }) => {
 
         setDeleting(true);
         try {
-            const response = await fetch(`${process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000'}/api/personal-notes/${noteId}`, {
+            const response = await fetch(`${API_BASE_URL}/api/personal-notes/${noteId}`, {
                 method: 'DELETE',
                 headers: {
                     'Authorization': `Bearer ${await user.firebaseUser.getIdToken()}`

@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Search, X, Clock, User, Tag, FileText, ChevronRight, Filter } from 'lucide-react';
-
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000';
+import { API_BASE_URL } from '../../config/constants';
 
 /**
  * Advanced search component with integrated search window
@@ -238,12 +237,12 @@ const AdvancedSearchComponent = ({
         <div className={`relative ${className}`} ref={searchRef}>
             {/* Search Input Bar */}
             <div 
-                className={`bg-white border border-gray-300 transition-all duration-300 ${
+                className={`bg-gray-100 border border-gray-400 shadow-sm hover:shadow-md focus-within:shadow-lg focus-within:border-blue-300 focus-within:bg-white transition-all duration-300 ${
                     isSearchOpen 
                         ? openUpward 
-                            ? 'rounded-t-none' 
-                            : 'rounded-b-none'
-                        : ''
+                            ? 'rounded-t-none shadow-lg border-blue-300 bg-white' 
+                            : 'rounded-b-none shadow-lg border-blue-300 bg-white'
+                        : 'rounded-lg'
                 }`}
                 style={{ width: width }}
             >
@@ -257,16 +256,17 @@ const AdvancedSearchComponent = ({
                             onKeyDown={handleKeyDown}
                             onFocus={handleInputFocus}
                             placeholder={placeholder}
-                            className={`w-full pl-10 pr-8 py-2 text-sm border-0 focus:outline-none bg-transparent text-gray-800 placeholder-gray-500 font-medium transition-all duration-300 ${
+                            className={`w-full pl-10 pr-8 py-2 text-sm border-0 focus:outline-none bg-transparent text-gray-800 placeholder-gray-400 font-medium transition-all duration-300 ${
                                 isSearchOpen ? 'text-blue-600' : ''
                             }`}
+                            style={{ fontFamily: 'Manrope, sans-serif' }}
                         />
-                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-500" />
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 transition-colors duration-300" />
                         {searchTerm && (
                             <button
                                 type="button"
                                 onClick={clearSearch}
-                                className="absolute right-2 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 hover:text-gray-600 transition-colors"
+                                className="absolute right-2 top-1/2 transform -translate-y-1/2 w-6 h-6 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-all duration-200 flex items-center justify-center"
                             >
                                 <X className="w-3 h-3" />
                             </button>
@@ -279,10 +279,10 @@ const AdvancedSearchComponent = ({
             {isSearchOpen && (
                 <div
                     ref={searchWindowRef}
-                    className={`absolute left-0 right-0 bg-white border border-gray-300 animate-in slide-in-from-top-2 duration-300 overflow-hidden z-50 ${
+                    className={`absolute left-0 right-0 bg-white border border-gray-200 shadow-xl animate-in slide-in-from-top-2 duration-300 overflow-hidden z-50 ${
                         openUpward 
-                            ? 'bottom-full border-b-0' 
-                            : 'top-full border-t-0'
+                            ? 'bottom-full border-b-0 rounded-b-lg' 
+                            : 'top-full border-t-0 rounded-b-lg'
                     }`}
                     style={{ 
                         width: width,
@@ -291,12 +291,12 @@ const AdvancedSearchComponent = ({
                     }}
                 >
                     {/* Search Header with Filters */}
-                    <div className="p-4 border-b border-gray-100 bg-gray-50">
+                    <div className="p-4 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-gray-100">
                         <div className="flex items-center justify-between mb-3">
-                            <h3 className="text-sm font-semibold text-gray-700">Search Results</h3>
+                            <h3 className="text-sm font-semibold text-gray-700" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Search Results</h3>
                             <button
                                 onClick={closeSearch}
-                                className="p-1 hover:bg-gray-200 rounded-full transition-colors"
+                                className="p-1.5 hover:bg-gray-200 rounded-full transition-all duration-200 hover:scale-105"
                             >
                                 <X className="w-4 h-4 text-gray-500" />
                             </button>
@@ -313,11 +313,12 @@ const AdvancedSearchComponent = ({
                                 <button
                                     key={value}
                                     onClick={() => setSearchType(value)}
-                                    className={`flex items-center space-x-1 px-3 py-1.5 text-xs rounded-full transition-all duration-200 ${
+                                    className={`flex items-center space-x-1.5 px-3 py-2 text-xs rounded-full transition-all duration-200 font-medium ${
                                         searchType === value
-                                            ? 'bg-blue-500 text-white theme-elevation-shadow'
-                                            : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
+                                            ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-md hover:shadow-lg'
+                                            : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200 hover:border-gray-300 hover:shadow-sm'
                                     }`}
+                                    style={{ fontFamily: 'Manrope, sans-serif' }}
                                 >
                                     <Icon className="w-3 h-3" />
                                     <span>{label}</span>
@@ -331,7 +332,7 @@ const AdvancedSearchComponent = ({
                         <div className="p-6 text-center text-gray-500">
                             <div className="inline-flex items-center space-x-3">
                                 <div className="animate-spin rounded-full h-5 w-5 border-2 border-blue-500 border-t-transparent"></div>
-                                <span className="text-sm font-medium">Searching...</span>
+                                <span className="text-sm font-medium" style={{ fontFamily: 'Manrope, sans-serif' }}>Searching...</span>
                             </div>
                         </div>
                     )}
@@ -343,8 +344,8 @@ const AdvancedSearchComponent = ({
                                 <div
                                     key={`${result.type}-${result.id}`}
                                     onClick={() => handleResultClick(result)}
-                                    className={`flex items-center space-x-3 p-4 hover:bg-gray-50 cursor-pointer transition-all duration-200 group border-b border-gray-100 last:border-b-0 ${
-                                        selectedIndex === index ? 'bg-blue-50 border-r-4 border-blue-500' : ''
+                                    className={`flex items-center space-x-3 p-4 hover:bg-gradient-to-r hover:from-gray-50 hover:to-gray-100 cursor-pointer transition-all duration-200 group border-b border-gray-100 last:border-b-0 ${
+                                        selectedIndex === index ? 'bg-gradient-to-r from-blue-50 to-blue-100 border-r-4 border-blue-500' : ''
                                     }`}
                                 >
                                     <div className="flex-shrink-0">
@@ -425,7 +426,7 @@ const AdvancedSearchComponent = ({
                     {/* Search Suggestions */}
                     {!isLoading && !searchTerm && (
                         <div className="border-t border-gray-100">
-                            <div className="p-3 text-xs font-medium text-gray-500 bg-gray-50">
+                            <div className="p-3 text-xs font-medium text-gray-500 bg-gradient-to-r from-gray-50 to-gray-100" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
                                 Quick Search
                             </div>
                             <div className="p-3">
@@ -437,7 +438,8 @@ const AdvancedSearchComponent = ({
                                                 setSearchTerm(suggestion);
                                                 performSearch(suggestion);
                                             }}
-                                            className="px-3 py-1 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-full transition-colors"
+                                            className="px-3 py-1.5 text-xs bg-white hover:bg-blue-50 text-gray-700 hover:text-blue-700 rounded-full transition-all duration-200 border border-gray-200 hover:border-blue-300 hover:shadow-sm font-medium"
+                                            style={{ fontFamily: 'Manrope, sans-serif' }}
                                         >
                                             {suggestion}
                                         </button>

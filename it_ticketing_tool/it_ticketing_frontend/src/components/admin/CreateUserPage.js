@@ -6,6 +6,7 @@ import * as yup from 'yup';
 import { API_BASE_URL } from '../../config/constants';
 import CustomDropdown from '../common/CustomDropdown';
 import { getCountryOptions, getDefaultCountry } from '../../services/countryService';
+import { Eye, EyeOff } from 'lucide-react';
 
 // Designation is now a text input field, no dropdown options needed
 
@@ -62,6 +63,7 @@ const CreateUserPage = ({ user }) => {
   const [showSuccess, setShowSuccess] = useState(false);
   const [error, setError] = useState(null);
   const [isCompanyNameReadonly, setIsCompanyNameReadonly] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const { handleSubmit, control, reset, formState: { errors, isValid }, clearErrors, watch, setValue } = useForm({
     resolver: yupResolver(validationSchema),
@@ -574,13 +576,27 @@ const CreateUserPage = ({ user }) => {
                     name="password"
                     control={control}
                     render={({ field }) => (
-                      <input
-                        {...field}
-                        type="password"
-                        className={`form-input ${errors.password ? 'error' : ''}`}
-                        placeholder="Enter password"
-                        disabled={showSuccess}
-                      />
+                      <div className="relative">
+                        <input
+                          {...field}
+                          type={showPassword ? 'text' : 'password'}
+                          className={`form-input pr-10 ${errors.password ? 'error' : ''}`}
+                          placeholder="Enter password"
+                          disabled={showSuccess}
+                        />
+                        <button
+                          type="button"
+                          className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 focus:outline-none"
+                          onClick={() => setShowPassword(!showPassword)}
+                          disabled={showSuccess}
+                        >
+                          {showPassword ? (
+                            <EyeOff className="h-4 w-4" />
+                          ) : (
+                            <Eye className="h-4 w-4" />
+                          )}
+                        </button>
+                      </div>
                     )}
                   />
                   {errors.password && (

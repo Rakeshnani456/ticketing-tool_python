@@ -156,6 +156,7 @@ const UpdatesComponent = ({
         timestamp: activity.timestamp,
         user: activity.user_name || activity.user_email || 'System',
         ticketId: activity.ticket_id || activity.ticketId,
+        ticketDisplayId: activity.ticket_display_id || activity.display_id,
         ticketTitle: activity.ticket_title,
         status: activity.new_status || activity.status,
         isRead: readStates.activities.has(activity.id),
@@ -178,6 +179,7 @@ const UpdatesComponent = ({
         timestamp: ticket.created_at || ticket.updated_at,
         user: ticket.reporter_name || ticket.reporter || ticket.user_name || 'Unknown',
         ticketId: ticket.id,
+        ticketDisplayId: ticket.display_id,
         ticketTitle: ticket.title || ticket.subject,
         status: ticket.status,
         isRead: readStates.tickets.has(ticket.id),
@@ -254,7 +256,7 @@ const UpdatesComponent = ({
       case 'status_change':
         return 'Status Update';
       case 'assignment':
-        return `Assigned to ${activity.assigned_to || 'Unknown'}`;
+        return `Assigned to ${activity.assigned_to || activity.assigned_to_name || activity.engineer_name || 'Unknown'}`;
       case 'comment':
         return 'New comment added';
       case 'resolved':
@@ -498,7 +500,7 @@ const UpdatesComponent = ({
       </div>
 
       {/* Updates List */}
-      <div className="max-h-72 overflow-y-auto">
+      <div className="max-h-[32rem] overflow-y-auto">
         <AnimatePresence>
           {displayUpdates.length > 0 ? (
             displayUpdates.map((update, index) => {
@@ -516,127 +518,164 @@ const UpdatesComponent = ({
                     !update.isRead ? 'bg-blue-50/50' : ''
                   }`}
                 >
-                  <div className="px-4 py-3 hover:bg-gray-100 transition-colors group">
-                    <div className="flex items-start gap-3">
-                      {/* Icon */}
-                      <div className={`p-2 rounded-md ${update.color.replace('text-', 'bg-').replace('-600', '-100')} flex-shrink-0`}>
-                        <IconComponent className={`w-4 h-4 ${update.color}`} />
+                  <div className={`px-4 py-3 hover:bg-gray-50 transition-all duration-200 group border-l-4 ${
+                    !update.isRead ? 'border-l-blue-500 bg-blue-50/30' : 'border-l-transparent'
+                  }`}>
+                    <div className="grid grid-cols-12 gap-3 items-start">
+                      {/* Left Column - Icon and Main Info */}
+                      <div className="col-span-1 flex flex-col items-center">
+                        <div className={`p-2 rounded-lg ${update.color.replace('text-', 'bg-').replace('-600', '-100')} shadow-sm`}>
+                          <IconComponent className={`w-4 h-4 ${update.color}`} />
+                        </div>
+                        {!update.isRead && (
+                          <div className="mt-1 w-1.5 h-1.5 bg-blue-500 rounded-full"></div>
+                        )}
                       </div>
 
-                      {/* Main Content - Uses full width */}
-                      <div className="flex-1 min-w-0">
-                        {/* Top Row - Title, Priority, Status, Actions */}
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-3 flex-1 min-w-0">
-                            <h3 className="font-medium text-gray-600 text-sm truncate">
-                              {update.title}
-                            </h3>
-                            <span className={`px-2 py-0.5 rounded text-xs font-medium border ${getPriorityColor(update.priority)}`}>
-                              {update.priority}
-                            </span>
-                            <div className="flex items-center gap-2">
-                              {!update.isRead ? (
-                                <div className="flex items-center gap-1">
-                                  <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0"></div>
-                                  <span className="text-xs text-blue-600 font-medium">Unread</span>
-                                </div>
-                              ) : (
-                                <div className="flex items-center gap-1">
-                                  <div className="w-2 h-2 bg-gray-300 rounded-full flex-shrink-0"></div>
-                                  <span className="text-xs text-gray-500 font-medium">Read</span>
-                                </div>
+                      {/* Center Column - Content */}
+                      <div className="col-span-8 flex flex-col gap-2">
+                        {/* Header Row */}
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <h3 className="font-semibold text-gray-900 text-sm">
+                                {update.title}
+                              </h3>
+                              {update.ticketDisplayId && (
+                                <button
+                                  onClick={() => handleNavigateToTicket(update.ticketId)}
+                                  className="px-2 py-0.5 bg-blue-100 hover:bg-blue-200 text-blue-800 text-xs font-bold rounded transition-colors cursor-pointer"
+                                >
+                                  #{update.ticketDisplayId}
+                                </button>
                               )}
                             </div>
-                          </div>
-                          
-                          {/* Actions - Right side - Only show on hover for unread items */}
-                          <div className="flex items-center gap-1 ml-3">
-                            {!update.isRead ? (
-                              <button
-                                onClick={() => handleMarkAsRead(update)}
-                                className="opacity-0 group-hover:opacity-100 p-1 text-xs text-green-600 hover:text-green-700 transition-all duration-200 font-medium"
-                                title="Mark as read"
-                              >
-                                Mark as read
-                              </button>
-                            ) : (
-                              <button
-                                onClick={() => handleMarkAsUnread(update)}
-                                className="opacity-0 group-hover:opacity-100 p-1 text-gray-600 hover:bg-gray-100 rounded transition-all duration-200"
-                                title="Mark as unread"
-                              >
-                                <EyeOff className="w-3.5 h-3.5" />
-                              </button>
-                            )}
+                            <p className="text-gray-700 text-xs leading-relaxed line-clamp-3">
+                              {update.description}
+                            </p>
                           </div>
                         </div>
 
-                        {/* Description - Full width */}
-                        <p className="text-sm text-gray-600 mb-2 line-clamp-2">
-                          {update.description}
-                        </p>
-
-                        {/* Bottom Row - Metadata spread across full width */}
-                        <div className="flex items-center justify-between text-xs text-gray-600">
-                          <div className="flex items-center gap-4">
-                            <div className="flex items-center gap-1">
-                              <User className="w-3 h-3" />
-                              <span>{update.user}</span>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <Clock className="w-3 h-3" />
-                              <span>{formatTimestamp(update.timestamp)}</span>
-                            </div>
+                        {/* Metadata Row */}
+                        <div className="flex items-center gap-4 text-xs text-gray-600">
+                          <div className="flex items-center gap-1">
+                            <User className="w-3 h-3" />
+                            <span className="font-medium">{update.user}</span>
                           </div>
-                          
-                          {update.ticketId && (
-                            <button
-                              onClick={() => handleNavigateToTicket(update.ticketId)}
-                              className="flex items-center gap-1 text-blue-600 hover:underline"
-                            >
-                              <ExternalLink className="w-3 h-3" />
-                              <span>View Ticket</span>
-                            </button>
+                          <div className="flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            <span>{formatTimestamp(update.timestamp)}</span>
+                          </div>
+                          {update.ticketTitle && (
+                            <div className="flex items-center gap-1">
+                              <FileText className="w-3 h-3" />
+                              <span className="truncate max-w-32 font-medium" title={update.ticketTitle}>
+                                {update.ticketTitle}
+                              </span>
+                            </div>
                           )}
                         </div>
 
-                        {/* Status/Status Change Display - Full width */}
+                        {/* Status Changes */}
                         {update.metadata?.statusChange && (
-                          <div className="mt-2 flex items-center gap-2">
-                            <span className="text-xs text-gray-600">Status:</span>
-                            <span className={`px-2 py-0.5 rounded text-xs font-medium border ${getStatusColor(update.metadata.statusChange.from)}`}>
-                              {update.metadata.statusChange.from}
-                            </span>
-                            <span className="text-gray-600 text-xs">→</span>
-                            <span className={`px-2 py-0.5 rounded text-xs font-medium border ${getStatusColor(update.metadata.statusChange.to)}`}>
-                              {update.metadata.statusChange.to}
-                            </span>
+                          <div className="flex items-center gap-2 p-2 bg-gray-50 rounded text-xs">
+                            <span className="font-medium text-gray-700">Status:</span>
+                            <div className="flex items-center gap-1">
+                              <span className={`px-2 py-0.5 rounded text-xs font-medium border ${getStatusColor(update.metadata.statusChange.from)}`}>
+                                {update.metadata.statusChange.from}
+                              </span>
+                              <span className="text-gray-500">→</span>
+                              <span className={`px-2 py-0.5 rounded text-xs font-medium border ${getStatusColor(update.metadata.statusChange.to)}`}>
+                                {update.metadata.statusChange.to}
+                              </span>
+                            </div>
                           </div>
                         )}
 
-                        {/* Priority Change Display - Full width */}
+                        {/* Priority Changes */}
                         {update.metadata?.priorityChange && (
-                          <div className="mt-2 flex items-center gap-2">
-                            <span className="text-xs text-gray-600">Priority:</span>
-                            <span className={`px-2 py-0.5 rounded text-xs font-medium border ${getPriorityColor(update.metadata.priorityChange.from)}`}>
-                              {update.metadata.priorityChange.from}
-                            </span>
-                            <span className="text-gray-600 text-xs">→</span>
-                            <span className={`px-2 py-0.5 rounded text-xs font-medium border ${getPriorityColor(update.metadata.priorityChange.to)}`}>
-                              {update.metadata.priorityChange.to}
-                            </span>
+                          <div className="flex items-center gap-2 p-2 bg-gray-50 rounded text-xs">
+                            <span className="font-medium text-gray-700">Priority:</span>
+                            <div className="flex items-center gap-1">
+                              <span className={`px-2 py-0.5 rounded text-xs font-medium border ${getPriorityColor(update.metadata.priorityChange.from)}`}>
+                                {update.metadata.priorityChange.from}
+                              </span>
+                              <span className="text-gray-500">→</span>
+                              <span className={`px-2 py-0.5 rounded text-xs font-medium border ${getPriorityColor(update.metadata.priorityChange.to)}`}>
+                                {update.metadata.priorityChange.to}
+                              </span>
+                            </div>
                           </div>
                         )}
 
-                        {/* Resolution Time - Full width */}
+                        {/* Resolution Time */}
                         {update.metadata?.resolutionTime && (
-                          <div className="mt-2">
-                            <span className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded">
-                              Resolved in {update.metadata.resolutionTime} minutes
+                          <div className="p-2 bg-green-50 rounded text-xs">
+                            <span className="font-medium text-green-800">
+                              ⚡ Resolved in {update.metadata.resolutionTime} minutes
                             </span>
                           </div>
                         )}
                       </div>
+
+                      {/* Right Column - Status, Priority */}
+                      <div className="col-span-3 flex flex-col items-end gap-1">
+                        {/* Top Row - Status and Priority badges */}
+                        <div className="flex items-center gap-1">
+                          <span className={`px-2 py-1 rounded text-xs font-medium bg-gray-100 ${getPriorityColor(update.priority).split(' ')[1]}`}>
+                            {update.priority}
+                          </span>
+                          {update.status && (
+                            <span className={`px-2 py-1 rounded text-xs font-medium bg-gray-100 ${getStatusColor(update.status).split(' ')[1]}`}>
+                              {update.status}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Middle Row - Read Status */}
+                        <div className="flex items-center gap-1">
+                          {!update.isRead ? (
+                            <div className="flex items-center gap-1 px-1.5 py-0.5 bg-blue-100 rounded text-xs">
+                              <div className="w-1 h-1 bg-blue-600 rounded-full"></div>
+                              <span className="font-medium text-blue-800">Unread</span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1 px-1.5 py-0.5 bg-gray-100 rounded text-xs">
+                              <div className="w-1 h-1 bg-gray-400 rounded-full"></div>
+                              <span className="font-medium text-gray-600">Read</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Bottom Row - Actions at bottom right */}
+                    <div className="flex justify-end gap-2 -mt-2">
+                      {update.ticketId && (
+                        <button
+                          onClick={() => handleNavigateToTicket(update.ticketId)}
+                          className="opacity-0 group-hover:opacity-100 flex items-center gap-1 bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded text-xs font-medium transition-all duration-200"
+                        >
+                          <ExternalLink className="w-3 h-3" />
+                          <span>View Ticket</span>
+                        </button>
+                      )}
+                      
+                      {!update.isRead ? (
+                        <button
+                          onClick={() => handleMarkAsRead(update)}
+                          className="opacity-0 group-hover:opacity-100 bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded text-xs font-medium transition-all duration-200"
+                        >
+                          Mark Read
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleMarkAsUnread(update)}
+                          className="opacity-0 group-hover:opacity-100 bg-gray-600 hover:bg-gray-700 text-white px-2 py-1 rounded text-xs font-medium transition-all duration-200"
+                        >
+                          <EyeOff className="w-3 h-3" />
+                        </button>
+                      )}
                     </div>
                   </div>
                 </motion.div>

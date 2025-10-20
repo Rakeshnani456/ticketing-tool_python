@@ -56,14 +56,23 @@ import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 
 // Helper for deep comparison
 const areUsersEqual = (arr1, arr2) => {
-    if (!Array.isArray(arr1) || !Array.isArray(arr2)) return false;
-    if (arr1.length !== arr2.length) return false;
+    if (!Array.isArray(arr1) || !Array.isArray(arr2)) {
+        console.log("🔍 areUsersEqual: One or both arrays are not arrays", { arr1: Array.isArray(arr1), arr2: Array.isArray(arr2) });
+        return false;
+    }
+    if (arr1.length !== arr2.length) {
+        console.log("🔍 areUsersEqual: Array lengths differ", { arr1Length: arr1.length, arr2Length: arr2.length });
+        return false;
+    }
     
     for (let i = 0; i < arr1.length; i++) {
         const user1 = arr1[i];
         const user2 = arr2[i];
         
-        if (!user1 || !user2) return false;
+        if (!user1 || !user2) {
+            console.log("🔍 areUsersEqual: One user is null/undefined at index", i, { user1: !!user1, user2: !!user2 });
+            return false;
+        }
         
         if (user1.uid !== user2.uid ||
             user1.clientname !== user2.clientname ||
@@ -78,9 +87,16 @@ const areUsersEqual = (arr1, arr2) => {
             user1.employmentType !== user2.employmentType ||
             user1.designation !== user2.designation ||
             user1.employeeId !== user2.employeeId) {
+            console.log("🔍 areUsersEqual: Users differ at index", i, {
+                uid: { user1: user1.uid, user2: user2.uid },
+                name: { user1: user1.name, user2: user2.name },
+                email: { user1: user1.email, user2: user2.email },
+                designation: { user1: user1.designation, user2: user2.designation }
+            });
             return false;
         }
     }
+    console.log("🔍 areUsersEqual: All users are equal");
     return true;
 };
 
@@ -428,6 +444,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                 // - admin/super_admin: Only reads relevant roles (excludes inactive/deleted users)
                 const usersRef = collection(db, 'users');
                 console.log("Setting up Firestore listener for real-time updates...");
+                console.log("🔧 User context:", { uid: user?.uid, role: user?.role, companyName: user?.companyName });
                 
                 // Create query based on user role with optimizations
                 let usersQuery;
@@ -436,21 +453,34 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                     usersQuery = query(
                         usersRef,
                         where('client_name', '==', user.companyName),
-                        where('role', 'in', ['user', 'site_admin'])
+                        where('role', 'in', ['user', 'site_admin']),
+                        orderBy('firstName', 'asc')
                     );
+                    console.log("🔍 Site admin query created:", { companyName: user.companyName });
                 } else {
                     // For admin and super_admin, filter by relevant roles only
                     // This reduces reads significantly compared to getting ALL users
                     usersQuery = query(
                         usersRef,
-                        where('role', 'in', ['user', 'site_admin', 'support', 'admin', 'super_admin'])
+                        where('role', 'in', ['user', 'site_admin', 'support', 'admin', 'super_admin']),
+                        orderBy('firstName', 'asc')
                     );
+                    console.log("🔍 Admin/Super admin query created");
                 }
+                
+                console.log("🔍 Query setup complete, setting up onSnapshot listener...");
+                
+                console.log("🔍 About to call onSnapshot with query:", usersQuery);
                 
                 unsubscribe = onSnapshot(usersQuery, 
                     async (snapshot) => {
                         try {
                             console.log("🔥 Firestore real-time update received, snapshot size:", snapshot.size, "users count:", users.length);
+                            console.log("📊 Snapshot changes:", snapshot.docChanges().map(change => ({
+                                type: change.type,
+                                docId: change.doc.id,
+                                data: change.doc.data()
+                            })));
                             
                             const fetchedUsers = [];
                             snapshot.forEach((doc) => {
@@ -480,26 +510,17 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                                 };
                             });
                             
-                            // Only update state if data actually changed
-                                if (!areUsersEqual(previousUsersRef.current, usersWithClientDetails)) {
-                                console.log("🔄 UPDATING users state with real-time data - this will cause a re-render", {
-                                    previousCount: previousUsersRef.current.length,
-                                        newCount: usersWithClientDetails.length,
-                                    timestamp: new Date().toISOString()
-                                });
-                                    setUsers(usersWithClientDetails);
-                                    previousUsersRef.current = usersWithClientDetails;
-                                
-                                // Update cache with real-time data
-                                const currentTime = Date.now();
-                                    const cacheKey = `userManagement_cache_${user.role}`;
-                                const cacheTimeKey = `${cacheKey}_time`;
-                                    localStorage.setItem(cacheKey, JSON.stringify(usersWithClientDetails));
-                                localStorage.setItem(cacheTimeKey, currentTime.toString());
-                                setLastFetchTime(currentTime);
-                            } else {
-                                console.log("✅ Users data unchanged, no state update needed");
-                            }
+                            // Always update state when snapshot arrives to ensure real-time UI reflect changes
+                            setUsers(usersWithClientDetails);
+                            previousUsersRef.current = usersWithClientDetails;
+                            
+                            // Update cache with real-time data
+                            const currentTime = Date.now();
+                            const cacheKey = `userManagement_cache_${user.role}`;
+                            const cacheTimeKey = `${cacheKey}_time`;
+                            localStorage.setItem(cacheKey, JSON.stringify(usersWithClientDetails));
+                            localStorage.setItem(cacheTimeKey, currentTime.toString());
+                            setLastFetchTime(currentTime);
                             
                             // Set loading to false when we get data
                             console.log("✅ Firestore data received, setting loading to false");
@@ -512,11 +533,18 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                         }
                     },
                     (error) => {
-                        console.error("Error in real-time users listener:", error);
+                        console.error("❌ Error in real-time users listener:", error);
+                        console.error("❌ Error details:", { 
+                            code: error.code, 
+                            message: error.message, 
+                            stack: error.stack 
+                        });
                         setError(`Listener error: ${error.message}`);
                         setLoading(false);
                     }
                 );
+                
+                console.log("✅ onSnapshot listener set up successfully");
                 
                 // Set up WebSocket for additional real-time updates
                 try {
@@ -559,6 +587,21 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
         setAddMode(true);
         setAddRowData(initialUserState);
         setEditRowId(null);
+    };
+
+    // Debug function to test real-time updates
+    const handleDebugRefresh = () => {
+        console.log("🔧 Manual debug refresh triggered");
+        console.log("Current users state:", users.length, "users");
+        console.log("Previous users ref:", previousUsersRef.current.length, "users");
+        
+        // Force a re-render by updating a dummy state
+        setUsers([...users]);
+        
+        // Test if we can trigger a Firestore update
+        console.log("🔧 Testing Firestore connection...");
+        console.log("🔧 DB instance:", db);
+        console.log("🔧 Users collection exists:", !!db);
     };
 
     const handleAddClientChange = (event, value) => {
@@ -1826,7 +1869,6 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                         </Typography>
                     </Box>
                     
-                    {/* Action Buttons */}
                 </Box>
                 
                 {/* Stats Cards */}
@@ -2320,13 +2362,13 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                                                 />
       <div
           onClick={() => handleToggleActionsColumn(clientName)}
-          className={`inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded transition-all duration-200 ease-in-out cursor-pointer ${
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors duration-150 cursor-pointer border ${
               showActionsColumn[clientName]
-                  ? 'text-red-600 hover:text-red-700 hover:bg-red-50'
-                  : 'text-purple-600 hover:text-purple-700 hover:bg-purple-50'
+                  ? 'text-red-700 bg-white hover:bg-red-50 border-red-300'
+                  : 'text-gray-700 bg-white hover:bg-gray-50 border-gray-300'
           }`}
       >
-          <AdminIcon sx={{ fontSize: '16px' }} />
+          <AdminIcon sx={{ fontSize: '14px', color: 'inherit' }} />
           {showActionsColumn[clientName] ? 'Cancel' : 'Manage'}
       </div>
                                                 <div className="client-toggle" onClick={() => handleToggleClientCollapse(clientName)}>

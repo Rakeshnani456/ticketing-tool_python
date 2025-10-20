@@ -1,4 +1,5 @@
 import WebSocketConnectionManager from './websocketConnectionManager';
+import { WS_BASE_URL } from '../config/constants';
 
 class WebSocketClient {
     constructor() {
@@ -29,7 +30,7 @@ class WebSocketClient {
         this.setupTokenRefresh();
 
         // Use the configured WebSocket URL from constants
-        const wsUrl = process.env.REACT_APP_WS_URL || 'wss://ticketing-tool-python-1.onrender.com';
+        const wsUrl = process.env.REACT_APP_WS_URL || WS_BASE_URL;
         
         console.log('🌐 Connecting to WebSocket:', wsUrl);
         this.ws = new WebSocket(wsUrl);

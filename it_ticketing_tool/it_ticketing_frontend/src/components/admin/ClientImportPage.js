@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import CustomButton from '../common/CustomButton';
+import { API_BASE_URL } from '../../config/constants';
 import { 
     Box, 
     Typography, 
@@ -208,7 +209,7 @@ const ClientImportPage = () => {
             
             setImportProgress(prev => ({ ...prev, status: 'Sending data to server...' }));
             
-            const res = await fetch(`${process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000'}/api/users/bulk`, {
+            const res = await fetch(`${API_BASE_URL}/api/users/bulk`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 

@@ -197,31 +197,28 @@ module.exports = (db, clientsCollection, usersCollection, verifyFirebaseToken) =
                 siteContactNumber,
                 siteDesignation
             } = req.body;
-            const updateData = {
-                companyName,
-                website,
-                location,
-                clientContactCountryCode,
-                clientContactNumber,
-                authFirstName,
-                authLastName,
-                authContactCountryCode,
-                authContactNumber,
-                authOfficeEmail,
-                authPersonalEmail,
-                authDesignation,
-                siteFirstName,
-                siteLastName,
-                siteEmail,
-                siteContactCountryCode,
-                siteContactNumber,
-                siteDesignation
-            };
+            // Filter out undefined values to avoid Firestore issues
+            const updateData = {};
+            const fields = [
+                'companyName', 'website', 'location', 'clientContactCountryCode', 'clientContactNumber',
+                'authFirstName', 'authLastName', 'authContactCountryCode', 'authContactNumber', 
+                'authOfficeEmail', 'authPersonalEmail', 'authDesignation', 'siteFirstName', 
+                'siteLastName', 'siteEmail', 'siteContactCountryCode', 'siteContactNumber', 'siteDesignation'
+            ];
+            
+            fields.forEach(field => {
+                if (req.body[field] !== undefined) {
+                    updateData[field] = req.body[field];
+                }
+            });
             await clientsCollection.doc(id).update(updateData);
             res.status(200).json({ id, ...updateData });
         } catch (err) {
             console.error('Error updating client:', err);
-            res.status(500).json({ error: 'Failed to update client' });
+            console.error('Client ID:', id);
+            console.error('Update data:', updateData);
+            console.error('Request body:', req.body);
+            res.status(500).json({ error: 'Failed to update client', details: err.message });
         }
     });
 

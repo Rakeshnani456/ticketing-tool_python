@@ -4,18 +4,29 @@ const router = express.Router();
 
 module.exports = (db, admin, usersCollection, authenticateToken, checkRole, jsonSerializableNotification) => {
     
+    // Create a separate collection for personal notes for better performance
+    const personalNotesCollection = db.collection('personal_notes');
+    
     // --- Get Personal Notes for User ---
     router.get('/', authenticateToken, checkRole(['user', 'support', 'admin', 'super_admin', 'site_admin']), async (req, res) => {
         const userId = req.user.uid;
         
         try {
-            const userDoc = await usersCollection.doc(userId).get();
-            if (!userDoc.exists) {
-                return res.status(404).json({ error: 'User not found.' });
-            }
+            // Query personal notes collection directly with proper indexing
+            const notesQuery = personalNotesCollection
+                .where('user_id', '==', userId)
+                .orderBy('updated_at', 'desc')
+                .limit(100); // Add limit for performance
             
-            const userData = userDoc.data();
-            const personalNotes = userData.personal_notes || [];
+            const notesSnapshot = await notesQuery.get();
+            const personalNotes = [];
+            
+            notesSnapshot.forEach(doc => {
+                personalNotes.push({
+                    id: doc.id,
+                    ...doc.data()
+                });
+            });
             
             return res.status(200).json({ notes: personalNotes });
         } catch (error) {
@@ -30,20 +41,21 @@ module.exports = (db, admin, usersCollection, authenticateToken, checkRole, json
         const noteId = req.params.noteId;
         
         try {
-            const userDoc = await usersCollection.doc(userId).get();
-            if (!userDoc.exists) {
-                return res.status(404).json({ error: 'User not found.' });
-            }
+            // Query the specific note directly from the collection
+            const noteDoc = await personalNotesCollection.doc(noteId).get();
             
-            const userData = userDoc.data();
-            const personalNotes = userData.personal_notes || [];
-            
-            const note = personalNotes.find(note => note.id === noteId);
-            if (!note) {
+            if (!noteDoc.exists) {
                 return res.status(404).json({ error: 'Note not found!' });
             }
             
-            return res.status(200).json({ note: note });
+            const noteData = noteDoc.data();
+            
+            // Verify the note belongs to the user
+            if (noteData.user_id !== userId) {
+                return res.status(403).json({ error: 'Access denied!' });
+            }
+            
+            return res.status(200).json({ note: { id: noteDoc.id, ...noteData } });
         } catch (error) {
             console.error(`Error fetching note: ${error.message}`);
             return res.status(500).json({ error: `Failed to fetch note: ${error.message}` });
@@ -60,34 +72,30 @@ module.exports = (db, admin, usersCollection, authenticateToken, checkRole, json
         }
         
         try {
-            const userDoc = await usersCollection.doc(userId).get();
-            if (!userDoc.exists) {
-                return res.status(404).json({ error: 'User not found.' });
-            }
-            
-            const userData = userDoc.data();
-            const personalNotes = userData.personal_notes || [];
-            
+            // Create note directly in the personal_notes collection
             const newNote = {
-                id: admin.firestore().collection('temp').doc().id, // Generate a unique ID
+                user_id: userId,
                 title: title.trim(),
                 content: content.trim(),
                 category: category,
-                created_at: new Date(),
-                updated_at: new Date(),
+                created_at: admin.firestore.FieldValue.serverTimestamp(),
+                updated_at: admin.firestore.FieldValue.serverTimestamp(),
                 is_pinned: false
             };
             
-            personalNotes.push(newNote);
+            const noteRef = await personalNotesCollection.add(newNote);
             
-            await usersCollection.doc(userId).update({
-                personal_notes: personalNotes,
-                updated_at: admin.firestore.FieldValue.serverTimestamp()
-            });
+            // Return the note with the generated ID
+            const createdNote = {
+                id: noteRef.id,
+                ...newNote,
+                created_at: new Date(),
+                updated_at: new Date()
+            };
             
             return res.status(201).json({ 
                 message: 'Personal note added successfully!', 
-                note: newNote 
+                note: createdNote 
             });
         } catch (error) {
             console.error(`Error adding personal note: ${error.message}`);
@@ -106,34 +114,34 @@ module.exports = (db, admin, usersCollection, authenticateToken, checkRole, json
         }
         
         try {
-            const userDoc = await usersCollection.doc(userId).get();
-            if (!userDoc.exists) {
-                return res.status(404).json({ error: 'User not found.' });
-            }
-            
-            const userData = userDoc.data();
-            const personalNotes = userData.personal_notes || [];
-            
-            const noteIndex = personalNotes.findIndex(note => note.id === noteId);
-            if (noteIndex === -1) {
+            // Check if note exists and belongs to user
+            const noteDoc = await personalNotesCollection.doc(noteId).get();
+            if (!noteDoc.exists) {
                 return res.status(404).json({ error: 'Note not found!' });
             }
             
-            const updatedNote = {
-                ...personalNotes[noteIndex],
+            const noteData = noteDoc.data();
+            if (noteData.user_id !== userId) {
+                return res.status(403).json({ error: 'Access denied!' });
+            }
+            
+            // Update the note directly
+            const updateData = {
                 title: title.trim(),
                 content: content.trim(),
-                category: category || personalNotes[noteIndex].category,
-                is_pinned: is_pinned !== undefined ? is_pinned : personalNotes[noteIndex].is_pinned,
-                updated_at: new Date()
+                category: category || noteData.category,
+                is_pinned: is_pinned !== undefined ? is_pinned : noteData.is_pinned,
+                updated_at: admin.firestore.FieldValue.serverTimestamp()
             };
             
-            personalNotes[noteIndex] = updatedNote;
+            await personalNotesCollection.doc(noteId).update(updateData);
             
-            await usersCollection.doc(userId).update({
-                personal_notes: personalNotes,
-                updated_at: admin.firestore.FieldValue.serverTimestamp()
-            });
+            const updatedNote = {
+                id: noteId,
+                ...noteData,
+                ...updateData,
+                updated_at: new Date()
+            };
             
             return res.status(200).json({ 
                 message: 'Personal note updated successfully!', 
@@ -151,25 +159,19 @@ module.exports = (db, admin, usersCollection, authenticateToken, checkRole, json
         const noteId = req.params.noteId;
         
         try {
-            const userDoc = await usersCollection.doc(userId).get();
-            if (!userDoc.exists) {
-                return res.status(404).json({ error: 'User not found.' });
-            }
-            
-            const userData = userDoc.data();
-            const personalNotes = userData.personal_notes || [];
-            
-            const noteIndex = personalNotes.findIndex(note => note.id === noteId);
-            if (noteIndex === -1) {
+            // Check if note exists and belongs to user
+            const noteDoc = await personalNotesCollection.doc(noteId).get();
+            if (!noteDoc.exists) {
                 return res.status(404).json({ error: 'Note not found!' });
             }
             
-            personalNotes.splice(noteIndex, 1);
+            const noteData = noteDoc.data();
+            if (noteData.user_id !== userId) {
+                return res.status(403).json({ error: 'Access denied!' });
+            }
             
-            await usersCollection.doc(userId).update({
-                personal_notes: personalNotes,
-                updated_at: admin.firestore.FieldValue.serverTimestamp()
-            });
+            // Delete the note directly
+            await personalNotesCollection.doc(noteId).delete();
             
             return res.status(200).json({ message: 'Personal note deleted successfully!' });
         } catch (error) {
@@ -184,30 +186,34 @@ module.exports = (db, admin, usersCollection, authenticateToken, checkRole, json
         const noteId = req.params.noteId;
         
         try {
-            const userDoc = await usersCollection.doc(userId).get();
-            if (!userDoc.exists) {
-                return res.status(404).json({ error: 'User not found.' });
-            }
-            
-            const userData = userDoc.data();
-            const personalNotes = userData.personal_notes || [];
-            
-            const noteIndex = personalNotes.findIndex(note => note.id === noteId);
-            if (noteIndex === -1) {
+            // Check if note exists and belongs to user
+            const noteDoc = await personalNotesCollection.doc(noteId).get();
+            if (!noteDoc.exists) {
                 return res.status(404).json({ error: 'Note not found!' });
             }
             
-            personalNotes[noteIndex].is_pinned = !personalNotes[noteIndex].is_pinned;
-            personalNotes[noteIndex].updated_at = new Date();
+            const noteData = noteDoc.data();
+            if (noteData.user_id !== userId) {
+                return res.status(403).json({ error: 'Access denied!' });
+            }
             
-            await usersCollection.doc(userId).update({
-                personal_notes: personalNotes,
+            // Toggle pin status and update
+            const newPinStatus = !noteData.is_pinned;
+            await personalNotesCollection.doc(noteId).update({
+                is_pinned: newPinStatus,
                 updated_at: admin.firestore.FieldValue.serverTimestamp()
             });
             
+            const updatedNote = {
+                id: noteId,
+                ...noteData,
+                is_pinned: newPinStatus,
+                updated_at: new Date()
+            };
+            
             return res.status(200).json({ 
                 message: 'Pin status updated successfully!', 
-                note: personalNotes[noteIndex] 
+                note: updatedNote 
             });
         } catch (error) {
             console.error(`Error toggling pin status: ${error.message}`);

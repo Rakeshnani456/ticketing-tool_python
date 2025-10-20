@@ -155,20 +155,7 @@ const TooltipWithArrow = ({ title, children, id }) => {
   );
 };
 
-// Designation options for engineers
-const designationOptions = [
-  { value: 'Senior Engineer', label: 'Senior Engineer' },
-  { value: 'Lead Engineer', label: 'Lead Engineer' },
-  { value: 'Principal Engineer', label: 'Principal Engineer' },
-  { value: 'Staff Engineer', label: 'Staff Engineer' },
-  { value: 'Software Engineer', label: 'Software Engineer' },
-  { value: 'DevOps Engineer', label: 'DevOps Engineer' },
-  { value: 'QA Engineer', label: 'QA Engineer' },
-  { value: 'System Engineer', label: 'System Engineer' },
-  { value: 'Network Engineer', label: 'Network Engineer' },
-  { value: 'Security Engineer', label: 'Security Engineer' },
-  { value: 'Other', label: 'Other' },
-];
+// Designation is now a text input field, no dropdown options needed
 
 // Employment type options
 const employmentTypeOptions = [
@@ -1164,15 +1151,6 @@ const EngineerDetailView = ({ user }) => {
           {/* Action Buttons */}
           {['admin', 'site_admin', 'super_admin'].includes(user?.role) && (
             <Box sx={{ display: 'flex', gap: 1 }}>
-              {!isEditMode && (
-                <div
-                  className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-orange-600 hover:text-orange-700 hover:bg-orange-50 rounded transition-all duration-200 ease-in-out cursor-pointer"
-                  onClick={handleResetPassword}
-                >
-                  <LockResetIcon sx={{ fontSize: '16px' }} />
-                  Reset Password
-                </div>
-              )}
               {isEditMode && !showSuccess ? (
                 <>
                 <button
@@ -1193,20 +1171,29 @@ const EngineerDetailView = ({ user }) => {
               ) : !isEditMode ? (
                 <>
                 <div
-                    className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-purple-600 hover:text-purple-700 hover:bg-purple-50 rounded transition-all duration-200 ease-in-out cursor-pointer"
+                    className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-purple-700 bg-purple-100 hover:text-purple-800 hover:bg-purple-200 rounded transition-all duration-200 ease-in-out cursor-pointer"
                     onClick={handleEditEngineer}
+                    style={{ fontFamily: 'Source Sans 3', fontWeight: 400 }}
                   >
                     <EditIcon sx={{ fontSize: '16px' }} />
                     Edit
                 </div>
-                  <button
-                    className="btn btn-danger btn-small"
-                    onClick={handleDeleteClick}
-                    ref={setDeleteButtonRef}
+                <div
+                    className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-orange-700 bg-orange-100 hover:text-orange-800 hover:bg-orange-200 rounded transition-all duration-200 ease-in-out cursor-pointer"
+                    onClick={handleResetPassword}
+                    style={{ fontFamily: 'Source Sans 3', fontWeight: 400 }}
                   >
-                    <DeleteIcon fontSize="small" />
-                    Delete
-                  </button>
+                    <LockResetIcon sx={{ fontSize: '16px' }} />
+                    Reset Password
+                </div>
+                <button
+                  className="btn btn-danger btn-small"
+                  onClick={handleDeleteClick}
+                  ref={setDeleteButtonRef}
+                >
+                  <DeleteIcon fontSize="small" />
+                  Delete
+                </button>
                 </>
               ) : null}
             </Box>
@@ -1403,12 +1390,12 @@ const EngineerDetailView = ({ user }) => {
                   <div className="field-label">Designation</div>
                   <div className="field-value">
                     {isEditMode ? (
-                      <CustomDropdown
+                      <input
+                        type="text"
+                        className="edit-input"
                         value={formData.designation || ''}
-                        onChange={(value) => handleFieldChange('designation', value)}
-                        options={designationOptions}
-                        placeholder="Select designation"
-                        size="sm"
+                        onChange={(e) => handleFieldChange('designation', e.target.value)}
+                        placeholder="Enter designation"
                         disabled={showSuccess}
                       />
                     ) : (

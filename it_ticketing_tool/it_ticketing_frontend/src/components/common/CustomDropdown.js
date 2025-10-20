@@ -28,7 +28,8 @@ const CustomDropdown = ({
     variant = "default", // "default" or "minimal"
     customDisplay = null, // Custom display component for the selected value
     size = 'md', // 'sm' | 'md' - controls button height and font size
-    disableClickOutside = false // Disable click outside detection for modal contexts
+    disableClickOutside = false, // Disable click outside detection for modal contexts
+    focusStyle = 'blue' // 'blue' | 'gray' - controls focus/open border color
 }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [selectedOption, setSelectedOption] = useState(null);
@@ -162,8 +163,10 @@ const CustomDropdown = ({
 
     // Compute size classes
     const sizeTextClass = size === 'sm' ? 'text-xs' : 'text-sm';
-    const sizePadDefault = size === 'sm' ? 'px-3 py-2.5' : 'px-3 py-3';
-    const sizePadMinimal = size === 'sm' ? 'px-2 py-1.5' : 'px-2 py-2';
+    // Match FieldBox (h-8, px-3 py-1.5) for sm
+    const sizePadDefault = size === 'sm' ? 'px-3 py-1.5' : 'px-3 py-3';
+    const sizePadMinimal = size === 'sm' ? 'px-2 py-1' : 'px-2 py-2';
+    const buttonHeightClass = size === 'sm' ? 'h-8' : 'min-h-[40px]';
 
     return (
         <>
@@ -202,7 +205,6 @@ const CustomDropdown = ({
                 .dropdown-option:hover {
                     color: #1f2937 !important;
                     background-color: #e5e7eb !important;
-                    border-left: 3px solid #3b82f6 !important;
                 }
                 .dropdown-option:hover * {
                     color: #1f2937 !important;
@@ -210,7 +212,6 @@ const CustomDropdown = ({
                 .dropdown-option:focus {
                     color: #1f2937 !important;
                     background-color: #e5e7eb !important;
-                    border-left: 3px solid #3b82f6 !important;
                 }
                 .dropdown-option:focus * {
                     color: #1f2937 !important;
@@ -230,9 +231,8 @@ const CustomDropdown = ({
                 .dropdown-option * {
                     color: #1f2937 !important;
                 }
-                .custom-dropdown-button {
-                    min-height: 40px;
-                }
+                /* Button height handled by classes; keep css minimal */
+                .custom-dropdown-button { }
             `}</style>
             <div className={`relative ${className}`}>
             {label && (
@@ -246,7 +246,7 @@ const CustomDropdown = ({
                     type="button"
                     onClick={handleToggle}
                     disabled={disabled}
-                    className={`custom-dropdown-button w-full ${sizeTextClass} focus:outline-none transition-all duration-200 flex items-center ${
+                    className={`custom-dropdown-button w-full ${sizeTextClass} ${buttonHeightClass} focus:outline-none transition-all duration-200 flex items-center ${
                         variant === 'minimal' 
                             ? `${sizePadMinimal} border-0 bg-transparent hover:bg-gray-50 rounded ${
                                 disabled 
@@ -259,7 +259,7 @@ const CustomDropdown = ({
                                 disabled 
                                     ? 'bg-gray-100 cursor-not-allowed text-gray-500 border-gray-200' 
                                     : isOpen
-                                        ? 'border-blue-500 bg-white shadow-sm'
+                                        ? `${focusStyle === 'gray' ? 'border-gray-300 ring-2 ring-gray-200' : 'border-blue-500 ring-2 ring-blue-200'} bg-white shadow-sm`
                                         : 'border-gray-300 bg-white hover:border-gray-400'
                             }`
                     }`}

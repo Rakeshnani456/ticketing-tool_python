@@ -1,9 +1,10 @@
 // src/components/PersonalNotesComponent.js
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import CustomDropdown from './common/CustomDropdown';
+import { API_BASE_URL } from '../config/constants';
 import { 
     Plus, 
     Search, 
@@ -357,8 +358,8 @@ const PersonalNotesComponent = ({ user, showFlashMessage }) => {
         category: 'general'
     });
 
-    // Cache configuration
-    const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+    // Cache configuration - Extended cache duration for better performance
+    const CACHE_DURATION = 30 * 60 * 1000; // 30 minutes
     const CACHE_KEY = `personal_notes_${user?.uid}`;
     
     // Cache utility functions
@@ -397,7 +398,7 @@ const PersonalNotesComponent = ({ user, showFlashMessage }) => {
         { value: 'reference', label: 'Reference' }
     ];
 
-    // Fetch personal notes
+    // Fetch personal notes with optimized loading
     const fetchNotes = useCallback(async (forceRefresh = false) => {
         if (!user?.firebaseUser) return;
 
@@ -416,11 +417,18 @@ const PersonalNotesComponent = ({ user, showFlashMessage }) => {
             setLoading(true);
             console.log('🔄 Fetching fresh notes data');
             
-            const response = await fetch(`${process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000'}/api/personal-notes`, {
+            // Add request timeout and abort controller for better performance
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+            
+            const response = await fetch(`${API_BASE_URL}/api/personal-notes`, {
                 headers: {
                     'Authorization': `Bearer ${await user.firebaseUser.getIdToken()}`
-                }
+                },
+                signal: controller.signal
             });
+
+            clearTimeout(timeoutId);
 
             if (response.ok) {
                 const data = await response.json();
@@ -431,8 +439,13 @@ const PersonalNotesComponent = ({ user, showFlashMessage }) => {
                 showFlashMessage('Failed to fetch my notes', 'error');
             }
         } catch (error) {
-            console.error('Error fetching my notes:', error);
-            showFlashMessage('Failed to fetch my notes', 'error');
+            if (error.name === 'AbortError') {
+                console.log('Request was aborted due to timeout');
+                showFlashMessage('Request timed out. Please try again.', 'error');
+            } else {
+                console.error('Error fetching my notes:', error);
+                showFlashMessage('Failed to fetch my notes', 'error');
+            }
         } finally {
             setLoading(false);
         }
@@ -470,7 +483,7 @@ const PersonalNotesComponent = ({ user, showFlashMessage }) => {
 
         setAddingNote(true);
         try {
-            const response = await fetch(`${process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000'}/api/personal-notes`, {
+            const response = await fetch(`${API_BASE_URL}/api/personal-notes`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -509,7 +522,7 @@ const PersonalNotesComponent = ({ user, showFlashMessage }) => {
 
         setAddingNote(true);
         try {
-            const response = await fetch(`${process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000'}/api/personal-notes/${editingNote.id}`, {
+            const response = await fetch(`${API_BASE_URL}/api/personal-notes/${editingNote.id}`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
@@ -546,7 +559,7 @@ const PersonalNotesComponent = ({ user, showFlashMessage }) => {
         }
 
         try {
-            const response = await fetch(`${process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000'}/api/personal-notes/${noteId}`, {
+            const response = await fetch(`${API_BASE_URL}/api/personal-notes/${noteId}`, {
                 method: 'DELETE',
                 headers: {
                     'Authorization': `Bearer ${await user.firebaseUser.getIdToken()}`
@@ -571,7 +584,7 @@ const PersonalNotesComponent = ({ user, showFlashMessage }) => {
     // Toggle pin status
     const handleTogglePin = async (noteId) => {
         try {
-            const response = await fetch(`${process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000'}/api/personal-notes/${noteId}/pin`, {
+            const response = await fetch(`${API_BASE_URL}/api/personal-notes/${noteId}/pin`, {
                 method: 'PATCH',
                 headers: {
                     'Authorization': `Bearer ${await user.firebaseUser.getIdToken()}`
@@ -613,20 +626,24 @@ const PersonalNotesComponent = ({ user, showFlashMessage }) => {
     };
 
 
-    // Filter notes
-    const filteredNotes = notes.filter(note => {
-        const matchesSearch = note.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                            note.content.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesCategory = selectedCategory === 'all' || note.category === selectedCategory;
-        return matchesSearch && matchesCategory;
-    });
+    // Memoized filter and sort operations for better performance
+    const filteredNotes = useMemo(() => {
+        return notes.filter(note => {
+            const matchesSearch = note.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                note.content.toLowerCase().includes(searchTerm.toLowerCase());
+            const matchesCategory = selectedCategory === 'all' || note.category === selectedCategory;
+            return matchesSearch && matchesCategory;
+        });
+    }, [notes, searchTerm, selectedCategory]);
 
-    // Sort notes (pinned first, then by updated date)
-    const sortedNotes = filteredNotes.sort((a, b) => {
-        if (a.is_pinned && !b.is_pinned) return -1;
-        if (!a.is_pinned && b.is_pinned) return 1;
-        return new Date(b.updated_at) - new Date(a.updated_at);
-    });
+    // Memoized sorted notes
+    const sortedNotes = useMemo(() => {
+        return filteredNotes.sort((a, b) => {
+            if (a.is_pinned && !b.is_pinned) return -1;
+            if (!a.is_pinned && b.is_pinned) return 1;
+            return new Date(b.updated_at) - new Date(a.updated_at);
+        });
+    }, [filteredNotes]);
 
     const formatDate = (dateValue) => {
         if (!dateValue) return 'No date';
@@ -660,11 +677,54 @@ const PersonalNotesComponent = ({ user, showFlashMessage }) => {
         return colors[category] || colors.general;
     };
 
-    // Only show loading spinner if we're actually loading AND don't have any notes
+    // Loading skeleton component for better UX
+    const LoadingSkeleton = () => (
+        <div className="space-y-2 w-full">
+            {[...Array(3)].map((_, index) => (
+                <div key={index} className="bg-white border border-gray-200 rounded-md p-3 animate-pulse">
+                    <div className="flex items-start justify-between w-full">
+                        <div className="flex-1">
+                            <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
+                            <div className="h-3 bg-gray-200 rounded w-full mb-1"></div>
+                            <div className="h-3 bg-gray-200 rounded w-2/3 mb-3"></div>
+                            <div className="flex items-center gap-4">
+                                <div className="h-3 bg-gray-200 rounded w-24"></div>
+                                <div className="h-3 bg-gray-200 rounded w-20"></div>
+                            </div>
+                        </div>
+                        <div className="flex-shrink-0 w-24">
+                            <div className="h-4 bg-gray-200 rounded w-16 mb-2"></div>
+                            <div className="flex gap-1">
+                                <div className="h-6 w-6 bg-gray-200 rounded"></div>
+                                <div className="h-6 w-6 bg-gray-200 rounded"></div>
+                                <div className="h-6 w-6 bg-gray-200 rounded"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+
+    // Only show loading skeleton if we're actually loading AND don't have any notes
     if (loading && notes.length === 0) {
         return (
-            <div className="flex items-center justify-center h-64">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            <div className="personal-notes-container">
+                <div className="mb-4">
+                    <div className="flex items-center justify-between mb-3">
+                        <div>
+                            <div className="h-6 bg-gray-200 rounded w-32 mb-2 animate-pulse"></div>
+                            <div className="h-4 bg-gray-200 rounded w-48 animate-pulse"></div>
+                        </div>
+                        <div className="h-8 bg-gray-200 rounded w-24 animate-pulse"></div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <div className="flex-1 h-8 bg-gray-200 rounded animate-pulse"></div>
+                        <div className="w-48 h-8 bg-gray-200 rounded animate-pulse"></div>
+                        <div className="h-4 bg-gray-200 rounded w-16 animate-pulse"></div>
+                    </div>
+                </div>
+                <LoadingSkeleton />
             </div>
         );
     }
@@ -711,6 +771,7 @@ const PersonalNotesComponent = ({ user, showFlashMessage }) => {
                             options={categories}
                             placeholder="All Categories"
                             className="w-full"
+                            size="sm"
                         />
                     </div>
                     <div className="text-xs text-gray-500 whitespace-nowrap">
@@ -721,17 +782,15 @@ const PersonalNotesComponent = ({ user, showFlashMessage }) => {
 
             {/* Compact Add/Edit Form */}
             {showAddForm && (
-                <div className="mb-4 bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
-                    <div className="flex items-center justify-between mb-3">
-                        <h3 className="text-sm font-semibold text-gray-800">
+                <div className="mb-4 bg-white border border-orange-500 rounded-lg p-4 shadow-lg animate-in slide-in-from-top-2 duration-300" style={{
+                    boxShadow: '0 10px 25px -5px rgba(249, 115, 22, 0.1), 0 4px 6px -2px rgba(249, 115, 22, 0.05)',
+                    borderColor: '#f97316'
+                }}>
+                    <div className="mb-3">
+                        <h3 className="text-sm font-semibold text-orange-700 flex items-center gap-2">
+                            <div className="w-2 h-2 bg-orange-500 rounded-full animate-pulse"></div>
                             {editingNote ? 'Edit Note' : 'Add New Note'}
                         </h3>
-                        <button
-                            onClick={cancelEditing}
-                            className="text-gray-400 hover:text-gray-600 p-1"
-                        >
-                            <X className="w-4 h-4" />
-                        </button>
                     </div>
                     <form onSubmit={editingNote ? handleUpdateNote : handleAddNote}>
                         <div className="grid grid-cols-1 lg:grid-cols-4 gap-3 mb-3">
@@ -740,7 +799,7 @@ const PersonalNotesComponent = ({ user, showFlashMessage }) => {
                                     type="text"
                                     value={formData.title}
                                     onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
-                                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-60 disabled:cursor-not-allowed"
+                                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-orange-500 focus:border-orange-500 disabled:opacity-60 disabled:cursor-not-allowed"
                                     placeholder="Note title..."
                                     disabled={addingNote}
                                     required
@@ -750,7 +809,7 @@ const PersonalNotesComponent = ({ user, showFlashMessage }) => {
                                 <select
                                     value={formData.category}
                                     onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value }))}
-                                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-60 disabled:cursor-not-allowed"
+                                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-orange-500 focus:border-orange-500 disabled:opacity-60 disabled:cursor-not-allowed"
                                     disabled={addingNote}
                                 >
                                     {categories.slice(1).map(category => (
@@ -760,7 +819,7 @@ const PersonalNotesComponent = ({ user, showFlashMessage }) => {
                                     ))}
                                 </select>
                             </div>
-                            <div className="flex gap-1">
+                            <div className="flex gap-1 justify-end">
                                 <button
                                     type="button"
                                     onClick={cancelEditing}
@@ -793,7 +852,7 @@ const PersonalNotesComponent = ({ user, showFlashMessage }) => {
                                 value={formData.content}
                                 onChange={(e) => setFormData(prev => ({ ...prev, content: e.target.value }))}
                                 rows={3}
-                                className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-60 disabled:cursor-not-allowed"
+                                className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-orange-500 focus:border-orange-500 disabled:opacity-60 disabled:cursor-not-allowed"
                                 placeholder="Enter note content..."
                                 disabled={addingNote}
                                 required

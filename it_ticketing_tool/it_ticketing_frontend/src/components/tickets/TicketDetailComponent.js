@@ -494,8 +494,38 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
         };
     }, [ticketId, user, db, isSupportUser]);
 
+    // Derived permissions and helpers (placed before effects that depend on them)
+    const isTicketClosedOrResolved = ticket && ['Resolved', 'Cancelled'].includes(ticket.status);
+    const isTicketCreator = ticket && ticket.reporter_id === user?.uid;
+    // Only Engineers can edit tickets (not ticket creators or other support users)
+    const canEdit = !isTicketClosedOrResolved && isEngineer;
+    // Comments and attachments can be added by anyone if ticket is not closed/resolved
+    const canAddComments = !isTicketClosedOrResolved;
+    const canAddAttachments = !isTicketClosedOrResolved;
+    const hasChanges = useCallback(() => {
+        if (!ticket) return false;
+        const fieldsChanged = Object.keys(editableFields).some(key => editableFields[key] !== (ticket[key] || ''));
+        const closureNotesChanged = closureNotes !== (ticket.closure_notes || '');
+        const timeSpentChanged = timeSpent !== (ticket.time_spent || '');
+
+        return fieldsChanged || closureNotesChanged || timeSpentChanged;
+    }, [editableFields, ticket, closureNotes, timeSpent]);
+
+    // Listen for description blur autosave events and trigger save if changes present
     useEffect(() => {
-        if (isEditing && ticket) {
+        const handler = () => {
+            if (canEdit && hasChanges()) {
+                handleUpdateTicket('save');
+            }
+        };
+        window.addEventListener('ticket-autosave', handler);
+        return () => window.removeEventListener('ticket-autosave', handler);
+    }, [canEdit, hasChanges]);
+
+    const editableInitRef = useRef(false);
+
+    useEffect(() => {
+        if (isEditing && ticket && !editableInitRef.current) {
             setEditableFields({
                 short_description: ticket.short_description || '',
                 long_description: ticket.long_description || '',
@@ -507,6 +537,10 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
             });
             setClosureNotes(ticket.closure_notes || '');
             setTimeSpent(ticket.time_spent || '');
+            editableInitRef.current = true;
+        }
+        if (!isEditing) {
+            editableInitRef.current = false;
         }
     }, [isEditing, ticket]);
 
@@ -542,24 +576,15 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
         }
     }, [isEditing, isSupportUser, isEngineer, user]);
 
-    const isTicketClosedOrResolved = ticket && ['Resolved', 'Cancelled'].includes(ticket.status);
-    const isTicketCreator = ticket && ticket.reporter_id === user?.uid;
-    
-    // Only Engineers can edit tickets (not ticket creators or other support users)
-    const canEdit = !isTicketClosedOrResolved && isEngineer;
-    
-    // Comments and attachments can be added by anyone if ticket is not closed/resolved
-    const canAddComments = !isTicketClosedOrResolved;
-    const canAddAttachments = !isTicketClosedOrResolved;
-
-    const hasChanges = useCallback(() => {
-        if (!ticket) return false;
-        const fieldsChanged = Object.keys(editableFields).some(key => editableFields[key] !== (ticket[key] || ''));
-        const closureNotesChanged = closureNotes !== (ticket.closure_notes || '');
-        const timeSpentChanged = timeSpent !== (ticket.time_spent || '');
-
-        return fieldsChanged || closureNotesChanged || timeSpentChanged;
-    }, [editableFields, ticket, closureNotes, timeSpent]);
+    // Auto-enable editing for authorized roles when possible
+    useEffect(() => {
+        if (ticket && canEdit) {
+            setIsEditing(true);
+        }
+        if (isTicketClosedOrResolved) {
+            setIsEditing(false);
+        }
+    }, [ticket, canEdit, isTicketClosedOrResolved]);
 
     const handleEditChange = useCallback((e) => {
         const { id, value } = e.target;
@@ -761,8 +786,10 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                 }
                 setError(null);
 
+                // Optimistically update local ticket to reflect edits immediately
+                setTicket(prev => prev ? ({ ...prev, ...payload }) : prev);
+
                 setTimeout(() => {
-                    setIsEditing(false);
                     if (actionType === 'close') {
                         setCloseButtonState('default');
                     } else {
@@ -774,7 +801,7 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                     setAssignedToHasError(false);
                     setTimeSpentHasError(false);
                     setClosureNotesHasError(false);
-                }, 1500);
+                }, 500);
             } else {
                 if (actionType === 'close') {
                     setCloseButtonState('error');
@@ -836,9 +863,18 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
             showFlashMessage('Comment text cannot be empty.', 'error');
             return;
         }
+        
+        // Store original comment text for potential retry
+        const originalCommentText = commentText;
+        
         setCommentLoading(true);
         try {
             const idToken = await user.firebaseUser.getIdToken();
+            
+            // Add timeout to prevent hanging requests
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+            
             const response = await fetch(`${API_BASE_URL}/tickets/${ticketId}/add_comment`, {
                 method: 'POST',
                 headers: {
@@ -846,17 +882,26 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                     'Authorization': `Bearer ${idToken}`
                 },
                 body: JSON.stringify({ comment_text: commentText, commenter_name: user?.email }),
+                signal: controller.signal
             });
+            
+            clearTimeout(timeoutId);
             const data = await response.json();
+            
             if (response.ok) {
                 setCommentText('');
                 setVisibleCommentCount(6);
+                showFlashMessage('Comment added successfully!', 'success');
             } else {
                 showFlashMessage(data.error || 'Failed to add comment.', 'error');
             }
         } catch (error) {
             console.error('Add comment error:', error);
-            showFlashMessage('Network error or server unreachable during comment addition.', 'error');
+            if (error.name === 'AbortError') {
+                showFlashMessage('Comment submission timed out. Please try again.', 'error');
+            } else {
+                showFlashMessage('Network error or server unreachable during comment addition.', 'error');
+            }
         } finally {
             setCommentLoading(false);
         }
@@ -1050,9 +1095,7 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
             <div className="bg-white rounded-xl shadow-lg p-8 border border-gray-200 max-w-md mx-auto">
                 <Loader2 className="animate-spin text-blue-600 mx-auto mb-4" size={48} />
                 <p className="text-gray-700 text-center font-medium">Loading ticket details...</p>
-                <p className="text-gray-500 text-center text-sm mt-2">
-                    {ticketId ? `Loading ticket ${ticketId}...` : 'Preparing ticket view...'}
-                </p>
+                <p className="text-gray-500 text-center text-sm mt-2">Preparing ticket view...</p>
             </div>
         </div>
     );

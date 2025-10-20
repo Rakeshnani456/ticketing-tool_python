@@ -59,30 +59,37 @@ const TicketUpdatesSection = ({
     
 
     return (
-        <div className="max-w-full w-full mx-auto py-1 space-y-1 min-w-0 overflow-x-hidden">
-            <div ref={commentsSectionRef} id="comments-section" className="bg-white p-3 sm:p-4 w-full min-w-0 max-w-full overflow-x-hidden">
-                <div className="border-b border-gray-200 mb-2 sm:mb-3 w-full min-w-0 max-w-full overflow-x-hidden">
-                    
-                    <nav className="flex flex-col sm:flex-row space-y-1 sm:space-y-0 sm:space-x-4 w-full min-w-0 max-w-full overflow-x-hidden">
+        <div className="max-w-full w-full mx-auto py-2 space-y-2 min-w-0 overflow-x-hidden">
+            <div ref={commentsSectionRef} id="comments-section" className="bg-white rounded-lg shadow-sm border border-gray-200 w-full min-w-0 max-w-full overflow-x-hidden">
+                {/* Enhanced Tab Navigation */}
+                <div className="border-b border-gray-200 bg-gray-50 rounded-t-lg">
+                    <nav className="flex space-x-0 w-full min-w-0 max-w-full overflow-x-hidden">
                         <button
                             onClick={() => setActiveTab('comments')}
-                            className={`py-1 sm:py-1.5 px-1.5 sm:px-2 border-b-2 font-semibold text-xs transition-all duration-200 rounded-t-md ${activeTab === 'comments'
-                                    ? 'border-orange-600 text-orange-700 bg-orange-50'
-                                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 hover:bg-gray-50'
+                            className={`flex-1 py-3 px-2 sm:px-4 border-b-2 font-medium text-xs sm:text-sm transition-all duration-200 flex items-center justify-center gap-1 sm:gap-2 ${activeTab === 'comments'
+                                    ? 'border-blue-600 text-blue-700 bg-white'
+                                    : 'border-transparent text-gray-600 hover:text-gray-800 hover:border-gray-300 hover:bg-gray-100'
                                 }`}
                         >
-                            <MessageSquare className="w-3 h-3 inline mr-1" />
-                            Comments
+                            <MessageSquare className="w-3 h-3 sm:w-4 sm:h-4" />
+                            <span className="hidden sm:inline">Comments</span>
+                            <span className="sm:hidden">Comments</span>
+                            {ticket?.comments?.length > 0 && (
+                                <span className="bg-blue-100 text-blue-800 text-xs px-1.5 sm:px-2 py-0.5 rounded-full hidden sm:inline">
+                                    {ticket.comments.length}
+                                </span>
+                            )}
                         </button>
                         <button
                             onClick={() => setActiveTab('closure')}
-                            className={`py-1 sm:py-1.5 px-1.5 sm:px-2 border-b-2 font-semibold text-xs transition-all duration-200 rounded-t-md ${activeTab === 'closure'
-                                    ? 'border-orange-600 text-orange-700 bg-orange-50'
-                                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 hover:bg-gray-50'
+                            className={`flex-1 py-3 px-2 sm:px-4 border-b-2 font-medium text-xs sm:text-sm transition-all duration-200 flex items-center justify-center gap-1 sm:gap-2 ${activeTab === 'closure'
+                                    ? 'border-blue-600 text-blue-700 bg-white'
+                                    : 'border-transparent text-gray-600 hover:text-gray-800 hover:border-gray-300 hover:bg-gray-100'
                                 }`}
                         >
-                            <CheckCircle2 className="w-3 h-3 inline mr-1" />
-                            Closure
+                            <CheckCircle2 className="w-3 h-3 sm:w-4 sm:h-4" />
+                            <span className="hidden sm:inline">Closure</span>
+                            <span className="sm:hidden">Close</span>
                         </button>
                     </nav>
                 </div>
@@ -104,54 +111,67 @@ const TicketUpdatesSection = ({
 
 
                 {activeTab === 'closure' && (
-                    <div className="bg-white border border-gray-300 rounded-lg p-2 sm:p-3 w-full min-w-0 max-w-full overflow-x-hidden">
-                        <label className="block text-xs font-bold text-gray-800 mb-1 sm:mb-1.5">
-                            Closure notes:
-                        </label>
-                        <EditableTextarea
-                            id="closure_notes"
-                            value={closureNotes}
-                            onChange={handleClosureNotesChange}
-                            rows={10}
-                            disabled={!canEdit || isTicketClosedOrResolved}
-                            hasError={closureNotesHasError}
-                            className="FieldBox border border-gray-400 px-1.5 py-0.5 bg-white rounded w-full min-w-0 max-w-full text-xs focus:outline-none focus:ring-2 focus:ring-gray-400 focus:border-transparent"
-                            placeholder="Enter closure notes here..."
-                        />
-                        {closureNotesErrorMessage && (
-                            <p className="text-xs text-red-600 mt-0.5">
-                                {closureNotesErrorMessage}
-                            </p>
-                        )}
-                        {canEdit && !isTicketClosedOrResolved && (
-                            <div className="flex justify-end mt-2 sm:mt-3 w-full min-w-0 max-w-full overflow-x-hidden">
-                                <button
-                                    onClick={() => handleUpdateTicket('close')}
-                                    disabled={
-                                        !canEdit ||
-                                        isTicketClosedOrResolved ||
-                                        closeButtonState === 'closing' ||
-                                        (closureNotes.trim() === '' && closeButtonState === 'default') ||
-                                        assignedToHasError || timeSpentHasError || closureNotesError
-                                    }
-                                    className={`px-3 py-1.5 text-xs font-medium text-white rounded-md transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1 ${
-                                        closeButtonState === 'success' 
-                                            ? 'bg-green-600 hover:bg-green-700 focus:ring-green-300' 
-                                            : closeButtonState === 'error' 
-                                            ? 'bg-red-600 hover:bg-red-700 focus:ring-red-300'
-                                            : 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-300'
-                                    }`}
-                                >
-                                    {closeButtonState === 'closing' && <Loader2 className="animate-spin w-3 h-3" />}
-                                    {closeButtonState === 'success' && <CheckCircle2 className="w-3 h-3" />}
-                                    {closeButtonState === 'error' && <XCircle className="w-3 h-3" />}
-                                    {closeButtonState === 'closing' && 'Closing...'}
-                                    {closeButtonState === 'success' && 'Closed!'}
-                                    {closeButtonState === 'error' && 'Error!'}
-                                    {closeButtonState === 'default' && 'Close Ticket'}
-                                </button>
+                    <div className="p-4 sm:p-6 w-full min-w-0 max-w-full overflow-x-hidden">
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                    Closure Notes
+                                </label>
+                                <p className="text-xs text-gray-500 mb-3">
+                                    Provide detailed notes about how this ticket was resolved or closed.
+                                </p>
+                                <EditableTextarea
+                                    id="closure_notes"
+                                    value={closureNotes}
+                                    onChange={handleClosureNotesChange}
+                                    rows={6}
+                                    disabled={!canEdit || isTicketClosedOrResolved}
+                                    hasError={closureNotesHasError}
+                                    className={`w-full min-w-0 max-w-full text-sm border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 ${
+                                        closureNotesHasError 
+                                            ? 'border-red-300 bg-red-50' 
+                                            : 'border-gray-300 bg-white hover:border-gray-400'
+                                    } ${!canEdit || isTicketClosedOrResolved ? 'bg-gray-50 cursor-not-allowed' : ''}`}
+                                    placeholder="Describe the resolution steps, final status, and any important details..."
+                                />
+                                {closureNotesErrorMessage && (
+                                    <p className="text-sm text-red-600 mt-2 flex items-center gap-1">
+                                        <XCircle className="w-4 h-4" />
+                                        {closureNotesErrorMessage}
+                                    </p>
+                                )}
                             </div>
-                        )}
+                            
+                            {canEdit && !isTicketClosedOrResolved && (
+                                <div className="flex flex-col sm:flex-row justify-end gap-2 sm:gap-0 pt-4 border-t border-gray-200">
+                                    <button
+                                        onClick={() => handleUpdateTicket('close')}
+                                        disabled={
+                                            !canEdit ||
+                                            isTicketClosedOrResolved ||
+                                            closeButtonState === 'closing' ||
+                                            (closureNotes.trim() === '' && closeButtonState === 'default') ||
+                                            assignedToHasError || timeSpentHasError || closureNotesError
+                                        }
+                                        className={`w-full sm:w-auto px-4 sm:px-6 py-2.5 text-sm font-medium text-white rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 ${
+                                            closeButtonState === 'success' 
+                                                ? 'bg-green-600 hover:bg-green-700 focus:ring-green-300' 
+                                                : closeButtonState === 'error' 
+                                                ? 'bg-red-600 hover:bg-red-700 focus:ring-red-300'
+                                                : 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-300'
+                                        }`}
+                                    >
+                                        {closeButtonState === 'closing' && <Loader2 className="animate-spin w-4 h-4" />}
+                                        {closeButtonState === 'success' && <CheckCircle2 className="w-4 h-4" />}
+                                        {closeButtonState === 'error' && <XCircle className="w-4 h-4" />}
+                                        {closeButtonState === 'closing' && 'Closing...'}
+                                        {closeButtonState === 'success' && 'Closed!'}
+                                        {closeButtonState === 'error' && 'Error!'}
+                                        {closeButtonState === 'default' && 'Close Ticket'}
+                                    </button>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 )}
             </div>

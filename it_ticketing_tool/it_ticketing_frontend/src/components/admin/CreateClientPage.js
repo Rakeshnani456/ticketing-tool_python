@@ -7,19 +7,7 @@ import { API_BASE_URL } from '../../config/constants';
 import CustomDropdown from '../common/CustomDropdown';
 import { getCountryOptions, getDefaultCountry } from '../../services/countryService';
 
-// Designation options
-const designationOptions = [
-  { value: '', label: 'Select Designation' },
-  { value: 'CEO', label: 'CEO' },
-  { value: 'CTO', label: 'CTO' },
-  { value: 'Manager', label: 'Manager' },
-  { value: 'IT Admin', label: 'IT Admin' },
-  { value: 'Site Admin', label: 'Site Admin' },
-  { value: 'Director', label: 'Director' },
-  { value: 'Team Lead', label: 'Team Lead' },
-  { value: 'Developer', label: 'Developer' },
-  { value: 'Other', label: 'Other' },
-];
+// Designation is now a text input field, no dropdown options needed
 
 // Validation schema
 const validationSchema = yup.object().shape({
@@ -712,13 +700,11 @@ const CreateClientPage = () => {
                     name="authDesignation"
                     control={control}
                     render={({ field }) => (
-                      <CustomDropdown
-                        value={field.value}
-                        onChange={field.onChange}
-                        options={designationOptions}
-                        placeholder="Select designation"
-                        className={errors.authDesignation ? 'error' : ''}
-                        size="sm"
+                      <input
+                        type="text"
+                        {...field}
+                        placeholder="Enter designation"
+                        className={`form-input ${errors.authDesignation ? 'error' : ''}`}
                         disabled={showSuccess}
                       />
                     )}
@@ -903,13 +889,11 @@ const CreateClientPage = () => {
                     name="siteDesignation"
                     control={control}
                     render={({ field }) => (
-                      <CustomDropdown
-                        value={field.value}
-                        onChange={field.onChange}
-                        options={designationOptions}
-                        placeholder="Select designation"
-                        className={errors.siteDesignation ? 'error' : ''}
-                        size="sm"
+                      <input
+                        type="text"
+                        {...field}
+                        placeholder="Enter designation"
+                        className={`form-input ${errors.siteDesignation ? 'error' : ''}`}
                         disabled={sameAsAuth || showSuccess}
                       />
                     )}

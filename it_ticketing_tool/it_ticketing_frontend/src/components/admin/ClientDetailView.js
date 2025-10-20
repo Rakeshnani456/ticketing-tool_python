@@ -96,19 +96,7 @@ const ClientDetailView = ({ user }) => {
   const [editError, setEditError] = useState(null);
   const [formData, setFormData] = useState({});
 
-  // Designation options
-  const designationOptions = [
-    { value: '', label: 'Select Designation' },
-    { value: 'CEO', label: 'CEO' },
-    { value: 'CTO', label: 'CTO' },
-    { value: 'Manager', label: 'Manager' },
-    { value: 'IT Admin', label: 'IT Admin' },
-    { value: 'Site Admin', label: 'Site Admin' },
-    { value: 'Director', label: 'Director' },
-    { value: 'Team Lead', label: 'Team Lead' },
-    { value: 'Developer', label: 'Developer' },
-    { value: 'Other', label: 'Other' },
-  ];
+  // Designation is now a text input field, no dropdown options needed
 
   // Inject styles to completely disable animations
   useEffect(() => {
@@ -357,20 +345,19 @@ const ClientDetailView = ({ user }) => {
             Users ({clientUsers.length})
           </Typography>
           <Box sx={{ display: 'flex', gap: 1 }}>
-          <button
-              className="btn btn-secondary btn-small"
+            <button
+              className="btn btn-soft btn-small"
+              onClick={handleManageUsers}
+            >
+              Manage Users
+            </button>
+            <button
+              className="btn btn-primary btn-small"
               onClick={handleAddUser}
             >
               <PersonAddIcon fontSize="small" />
               Add User
-          </button>
-                <button
-              className="btn btn-primary btn-small"
-              onClick={handleManageUsers}
-            >
-              <GroupIcon fontSize="small" />
-              Manage All
-                </button>
+            </button>
           </Box>
         </Box>
         
@@ -380,13 +367,13 @@ const ClientDetailView = ({ user }) => {
             <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
               No users found for this client
             </Typography>
-                <button
+            <button
               className="btn btn-primary"
               onClick={handleAddUser}
             >
               <PersonAddIcon fontSize="small" />
               Add First User
-                </button>
+            </button>
           </Box>
         ) : (
           <TableContainer>
@@ -543,7 +530,7 @@ const ClientDetailView = ({ user }) => {
         }
       }}
     >
-      <style jsx>{`
+      <style>{`
         .btn {
           padding: 0.625rem 1.25rem;
           border-radius: 0.375rem;
@@ -562,6 +549,17 @@ const ClientDetailView = ({ user }) => {
           background: white;
           color: #374151;
           border: 1px solid #d1d5db;
+        }
+        
+        .btn-soft {
+          background: #f3f4f6;
+          color: #1f2937;
+          border: 1px solid #e5e7eb;
+        }
+        
+        .btn-soft:hover {
+          background: #e5e7eb;
+          border-color: #d1d5db;
         }
         
         .btn-secondary:hover {
@@ -1252,14 +1250,14 @@ const ClientDetailView = ({ user }) => {
                    <div className="form-group">
                      <label className="form-label">Designation</label>
                      {isEditMode ? (
-                       <CustomDropdown
+                       <input
+                         type="text"
+                         className="form-input"
                          value={formData.authDesignation || ''}
-                         onChange={(value) => handleFieldChange('authDesignation', value)}
-                         options={designationOptions}
-                         placeholder="Select designation"
-                         size="sm"
+                         onChange={(e) => handleFieldChange('authDesignation', e.target.value)}
+                         placeholder="Enter designation"
                          disabled={showSuccess}
-                    />
+                       />
                   ) : (
                        <div className="form-input display-only">{client.authDesignation || 'N/A'}</div>
                   )}
@@ -1388,14 +1386,14 @@ const ClientDetailView = ({ user }) => {
                    <div className="form-group">
                      <label className="form-label">Designation</label>
                      {isEditMode ? (
-                       <CustomDropdown
+                       <input
+                         type="text"
+                         className="form-input"
                          value={formData.siteDesignation || ''}
-                         onChange={(value) => handleFieldChange('siteDesignation', value)}
-                         options={designationOptions}
-                         placeholder="Select designation"
-                         size="sm"
+                         onChange={(e) => handleFieldChange('siteDesignation', e.target.value)}
+                         placeholder="Enter designation"
                          disabled={showSuccess}
-                  />
+                       />
                 ) : (
                        <div className="form-input display-only">{client.siteDesignation || 'N/A'}</div>
                 )}

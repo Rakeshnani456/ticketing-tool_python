@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Loader2, XCircle, ListFilter, User, ChevronLeft, ChevronRight, ChevronDown, Plus, Search, Pin, PinOff, Edit3, Trash2, Save, X, FileText, Calendar, ExternalLink, Copy, Link, Eye, ArrowRight, RefreshCw } from 'lucide-react';
+import { Loader2, XCircle, ListFilter, User, ChevronLeft, ChevronRight, ChevronDown, Plus, Search, Pin, PinOff, Edit3, Trash2, Save, X, FileText, Calendar, ExternalLink, Copy, Link, Eye, ArrowRight, RefreshCw, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import selectionIcon from '../../assets/icons/selection.png';
 import stickyNoteIcon from '../../assets/icons/sticky-note.png';
 import { collection, query, where, orderBy, getFirestore, limit, getDocs, doc, updateDoc } from 'firebase/firestore';
@@ -12,7 +12,10 @@ import { app, dbClient } from '../../config/firebase';
 import CustomDropdown from '../common/CustomDropdown';
 import CompactDropdown from '../common/CompactDropdown';
 import SelectButton from '../common/SelectButton';
+import ModernTicketGrid from '../common/ModernTicketGrid';
+import SmartFilterDropdown from '../common/SmartFilterDropdown';
 import { useTickets } from '../../hooks/useDataManager';
+import { useSmartFilters } from '../../hooks/useSmartFilters';
 
 // NotesTooltipBubble component for notes button - positions tooltip to the left
 function NotesTooltipBubble({ title, children }) {
@@ -549,6 +552,16 @@ const TicketIdPopup = ({ visible, position, ticketId, documentId, copyStatus, on
  * @returns {JSX.Element} The list of all tickets or a loading/error message.
  */
 const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword, initialFilterAssignment = '', showFilters = true }) => {
+    // Local search state
+    const [localSearchKeyword, setLocalSearchKeyword] = useState(searchKeyword || '');
+    
+    // Sync local search keyword with prop changes
+    useEffect(() => {
+        if (searchKeyword !== localSearchKeyword) {
+            setLocalSearchKeyword(searchKeyword || '');
+        }
+    }, [searchKeyword]);
+    
     // Cache configuration
     const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
     const CACHE_KEY = `all_tickets_${user?.uid}_${user?.role}`;
@@ -667,6 +680,71 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
     // State to track loading for individual ticket status changes
     const [changingStatusTickets, setChangingStatusTickets] = useState(new Set());
     
+    // Sorting state
+    const [sortField, setSortField] = useState('created_at'); // Default sort by created date
+    const [sortDirection, setSortDirection] = useState('desc'); // Default descending
+    
+    // Sorting function
+    const sortTickets = (tickets, field, direction) => {
+        return [...tickets].sort((a, b) => {
+            let aValue = a[field];
+            let bValue = b[field];
+            
+            // Handle different data types
+            if (field === 'created_at' || field === 'updated_at') {
+                aValue = new Date(aValue);
+                bValue = new Date(bValue);
+            } else if (field === 'priority') {
+                // Custom priority order
+                const priorityOrder = { 'Critical': 4, 'High': 3, 'Medium': 2, 'Low': 1 };
+                aValue = priorityOrder[aValue] || 0;
+                bValue = priorityOrder[bValue] || 0;
+            } else if (field === 'status') {
+                // Custom status order
+                const statusOrder = { 'Open': 1, 'In Progress': 2, 'Hold': 3, 'Resolved': 4, 'Cancelled': 5, 'Closed': 6 };
+                aValue = statusOrder[aValue] || 0;
+                bValue = statusOrder[bValue] || 0;
+            } else if (field === 'client_name') {
+                // Handle client_name with fallback to companyName
+                aValue = (aValue || a.companyName || '').toString().toLowerCase();
+                bValue = (bValue || b.companyName || '').toString().toLowerCase();
+            } else {
+                // String comparison
+                aValue = (aValue || '').toString().toLowerCase();
+                bValue = (bValue || '').toString().toLowerCase();
+            }
+            
+            if (aValue < bValue) return direction === 'asc' ? -1 : 1;
+            if (aValue > bValue) return direction === 'asc' ? 1 : -1;
+            return 0;
+        });
+    };
+    
+    // Handle sort click
+    const handleSort = (field) => {
+        if (sortField === field) {
+            setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+        } else {
+            setSortField(field);
+            setSortDirection('asc');
+        }
+    };
+    
+    // Render sort indicator
+    const renderSortIndicator = (field) => {
+        return (
+            <div className="w-3 h-3 flex items-center justify-center">
+                {sortField !== field ? (
+                    <ArrowUpDown className="w-3 h-3 text-gray-400" />
+                ) : sortDirection === 'asc' ? (
+                    <ArrowUp className="w-3 h-3 text-blue-600" />
+                ) : (
+                    <ArrowDown className="w-3 h-3 text-blue-600" />
+                )}
+            </div>
+        );
+    };
+    
     // Add state for profile popup functionality
     const [profilePopup, setProfilePopup] = useState({ visible: false, user: null, position: { x: 0, y: 0 }, copyStatus: null });
     const [popupHovered, setPopupHovered] = useState(false);
@@ -742,12 +820,22 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
     });
     
 
-    // Add at the top of the component (after useState declarations)
+    // Legacy filter state (kept for backward compatibility but not used in UI)
     const [filterBy, setFilterBy] = useState('status'); // 'status', 'priority', 'company', or 'history'
     const [filterPriority, setFilterPriority] = useState('');
     const [filterCompany, setFilterCompany] = useState(''); // New state for company filter
     const [companies, setCompanies] = useState([]); // New state for companies list
     const [loadingCompanies, setLoadingCompanies] = useState(false); // New state for companies loading
+    
+    // Smart Filter Integration
+    const {
+        filters: smartFilters,
+        handleFiltersChange: handleSmartFiltersChange,
+        clearAllFilters: clearSmartFilters,
+        applyFilters: applySmartFilters,
+        hasActiveFilters: hasSmartFilters,
+        isInitialized: smartFiltersInitialized
+    } = useSmartFilters();
     
     // Ref to track if companies have been fetched to prevent duplicate API calls
     const companiesFetchedRef = useRef(false);
@@ -812,13 +900,10 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                 return 'Invalid Date';
             }
             
-            return date.toLocaleString('en-US', {
+            return date.toLocaleDateString('en-US', {
                 month: 'short',
-                day: '2-digit',
-                year: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
-                hour12: true
+                day: 'numeric',
+                year: 'numeric'
             });
         } catch (error) {
             console.error('Error formatting date:', error, dateString);
@@ -1503,6 +1588,9 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
 
     // Function to clear all filters
     const clearAllFilters = () => {
+        // Clear smart filters
+        clearSmartFilters();
+        // Also clear legacy filters for backward compatibility
         setFilterBy('status');
         setFilterStatus('');
         setFilterPriority('');
@@ -1995,6 +2083,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
      * whenever `allTickets` (the raw data from Firestore) or filter states change.
      */
     useEffect(() => {
+        const activeSearchKeyword = localSearchKeyword || searchKeyword;
         let currentFilteredTickets = [...allTickets]; // Start with all tickets fetched by Firestore
 
         // If user is a site_admin, filter tickets by their company/client
@@ -2015,9 +2104,16 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
         } else {
         }
 
+        // Apply smart filters if they are active and initialized
+        if (smartFiltersInitialized && hasSmartFilters) {
+            currentFilteredTickets = applySmartFilters(currentFilteredTickets, user);
+        }
+
+        // Legacy filtering logic (only apply if smart filters are not active)
+        if (!hasSmartFilters) {
         // Always filter out 'Closed', 'Resolved', and 'Cancelled' tickets from being displayed in the grid
         // UNLESS there's a search keyword or history filter is active, in which case include all tickets
-        if (!searchKeyword && filterBy !== 'history') {
+        if (!activeSearchKeyword && filterBy !== 'history') {
             currentFilteredTickets = currentFilteredTickets.filter(ticket => !['Closed', 'Resolved', 'Cancelled'].includes(ticket.status));
         }
         // Apply status filter based on filterStatus state
@@ -2039,8 +2135,8 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
         }
 
         // Apply client-side search keyword filter (only if it wasn't handled fully by Firestore query)
-        if (searchKeyword && !searchKeyword.toUpperCase().startsWith('TICKET-')) {
-            const lowercasedKeyword = searchKeyword.toLowerCase();
+        if (activeSearchKeyword && !activeSearchKeyword.toUpperCase().startsWith('TICKET-')) {
+            const lowercasedKeyword = activeSearchKeyword.toLowerCase();
             currentFilteredTickets = currentFilteredTickets.filter(ticket => {
                 const displayId = (ticket.display_id || '').toLowerCase();
                 const shortDescription = (ticket.short_description || '').toLowerCase();
@@ -2078,12 +2174,16 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                 const ticketCompany = ticket.client_name || ticket.companyName;
                 return ticketCompany === filterCompany;
             });
+            }
         }
         
+        // Apply sorting
+        currentFilteredTickets = sortTickets(currentFilteredTickets, sortField, sortDirection);
+
         // Final filtered tickets count
 
         setDisplayedTickets(currentFilteredTickets); // Update displayed tickets
-    }, [allTickets, filterStatus, filterPriority, filterBy, filterAssignment, filterCompany, searchKeyword, user?.uid, user?.role, user?.client_name]); // Removed companies.length to prevent unnecessary re-renders
+    }, [allTickets, filterStatus, filterPriority, filterBy, filterAssignment, filterCompany, searchKeyword, localSearchKeyword, user?.uid, user?.role, user?.client_name, sortField, sortDirection, smartFiltersInitialized, hasSmartFilters, applySmartFilters]); // Added smart filter dependencies
 
 
     // Effect hook to measure message box height and set up auto-hide timer - only run once on mount
@@ -2490,26 +2590,27 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
             return matches;
         });
     }
+    const activeSearchKeyword = localSearchKeyword || searchKeyword;
     const counts = {
-        total_tickets: searchKeyword 
+        total_tickets: activeSearchKeyword 
             ? ticketsForCounts.length 
             : ticketsForCounts.filter(t => ['Open', 'In Progress', 'Hold'].includes(t.status)).length,
         open_tickets: ticketsForCounts.filter(t => t.status === 'Open').length,
         in_progress_tickets: ticketsForCounts.filter(t => t.status === 'In Progress').length,
         hold_tickets: ticketsForCounts.filter(t => t.status === 'Hold').length,
         closed_resolved_tickets: ticketsForCounts.filter(t => ['Closed', 'Resolved'].includes(t.status)).length,
-        unassigned: searchKeyword 
+        unassigned: activeSearchKeyword 
             ? ticketsForCounts.filter(t => !t.assigned_to_email).length
             : ticketsForCounts.filter(t => !t.assigned_to_email && !['Closed', 'Resolved', 'Cancelled'].includes(t.status)).length,
         assigned_to_me: allTickets.filter(t => t.assigned_to_email === user?.email).length,
     };
     // Function to determine the page heading based on active filters
     const getPageHeading = useCallback(() => {
-        if (searchKeyword) {
-            return `Search Results for "${searchKeyword}" (including resolved and cancelled tickets)`;
+        if (activeSearchKeyword) {
+            return `Search Results for "${activeSearchKeyword}" (including resolved and cancelled tickets)`;
         }
         return 'Workflow'; // Always show Workflow as the main title
-    }, [searchKeyword]);
+    }, [activeSearchKeyword]);
 
     // Function to handle closing the message with a fade-out effect and upward movement
     const handleCloseMessage = useCallback(() => {
@@ -2749,90 +2850,12 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                 showNotesPanel && showPeekPanel ? 'mr-160' : 
                 showNotesPanel || showPeekPanel ? 'mr-80' : ''
             }`}>
-                {/* Top Bar: Title (left) | Filter Options (center) | Export Tickets (right) */}
-                <div className="flex flex-wrap items-center justify-between mb-2">
+                {/* Top Bar: Title and Export Button */}
+                <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
                         <h2 className="text-lg font-extrabold text-gray-800">
                             {getPageHeading()}
                         </h2>
-                        <button
-                            onClick={refreshTickets}
-                            disabled={loading}
-                            className="inline-flex items-center justify-center px-2 py-1 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 hover:border-gray-400 transition-all duration-200 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed"
-                            title="Refresh tickets data"
-                        >
-                            <RefreshCw className={`w-3 h-3 mr-1 ${loading ? 'animate-spin' : ''}`} />
-                            Refresh
-                        </button>
-                    </div>
-                    
-                    {/* Centered Filter Options */}
-                    <div className="flex items-center gap-3 flex-wrap justify-center flex-1">
-                        {/* Companies dropdown - super_admin only */}
-                        {user?.role === 'super_admin' && (
-                        <div className="flex items-center gap-2">
-                            <span className="text-xs font-semibold text-gray-700">Client:</span>
-                            <CompactDropdown
-                                value={filterCompany}
-                                onChange={value => {
-                                    setFilterCompany(value);
-                                }}
-                                options={[
-                                    { value: '', label: 'All Companies' },
-                                    ...(loadingCompanies ? 
-                                        [{ value: '', label: 'Loading companies...', disabled: true }] :
-                                        companies.length === 0 ? 
-                                        [{ value: '', label: 'No companies found', disabled: true }] :
-                                        companies.map(company => ({
-                                            value: company.companyName,
-                                            label: company.companyName
-                                        }))
-                                    )
-                                ]}
-                                className="w-32"
-                            />
-                        </div>
-                        )}
-                        <span className="text-sm font-semibold text-gray-700">Filter By:</span>
-                        <div>
-                            <CompactDropdown
-                                value={filterBy}
-                                onChange={value => { 
-                                    const newFilterBy = value;
-                                    console.log('Filter By changed to:', newFilterBy, 'Current company filter:', filterCompany);
-                                    setFilterBy(newFilterBy); 
-                                    // Only reset filters that are not compatible with the new filter type
-                                    if (newFilterBy === 'status') {
-                                        setFilterPriority(''); 
-                                        console.log('Keeping company filter:', filterCompany);
-                                    } else if (newFilterBy === 'priority') {
-                                        setFilterStatus(''); 
-                                        console.log('Keeping company filter:', filterCompany);
-                                    }
-                                    // Don't reset filterCompany - preserve the selection
-                                }}
-                                options={[
-                                    { value: 'status', label: 'Status' },
-                                    { value: 'priority', label: 'Priority' },
-                                    { value: 'history', label: 'History' }
-                                ]}
-                                className="w-24"
-                            />
-                        </div>
-                        {/* Clear Filters Button - Always reserve space to prevent layout shift */}
-                        <div className="min-w-[120px] flex justify-center">
-                            {(filterBy !== 'status' || filterStatus !== '' || filterPriority !== '' || filterAssignment !== '' || filterCompany !== '' || filterBy === 'history') && (
-                                <button
-                                    onClick={clearAllFilters}
-                                    className="px-2 py-1 text-xs font-medium text-red-500 bg-transparent rounded-md border border-red-300 hover:bg-red-50 hover:border-red-400 transition-all duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-red-200 focus:ring-offset-1"
-                                >
-                                    <svg className="w-2.5 h-2.5 mr-1 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                    </svg>
-                                    Clear Filters
-                                </button>
-                            )}
-                        </div>
                     </div>
                     
                     <div className="flex items-center gap-2">
@@ -2860,185 +2883,60 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                         </button>
                     </div>
                 </div>
-                {/* Divider line between workflow/filter bar and filters/action buttons line */}
+                {/* Divider line */}
                 <div className="w-full h-px bg-gray-200 mb-4" />
 
-                {/* Second Line: Filters (left) | Pagination, Assign, Select, Notes (right) */}
+                {/* Bottom Bar: Filters, Pagination, and Action Buttons */}
                 <div className="flex flex-wrap items-center justify-between mb-2">
                     <div className="flex items-center gap-2 flex-wrap">
-                        {/* Filters Section */}
-                        {filterBy === 'company' && user?.role === 'super_admin' && (
-                            <div>
-                                <CompactDropdown
-                                    value={filterCompany}
-                                    onChange={value => setFilterCompany(value)}
-                                    options={[
-                                        { value: '', label: 'All' },
-                                        ...(loadingCompanies ? 
-                                            [{ value: '', label: 'Loading companies...', disabled: true }] :
-                                            companies.length === 0 ? 
-                                            [{ value: '', label: 'No companies found', disabled: true }] :
-                                            companies.map(company => ({
-                                                value: company.companyName,
-                                                label: company.companyName
-                                            }))
-                                        )
-                                    ]}
-                                    className="w-28"
+                        {/* Search Bar */}
+                        <div className="relative flex-shrink-0">
+                            <div className="relative">
+                                <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 w-3.5 h-3.5" />
+                                <input
+                                    type="text"
+                                    placeholder="Search tickets, ID, reporter, assignee..."
+                                    value={localSearchKeyword}
+                                    onChange={(e) => setLocalSearchKeyword(e.target.value)}
+                                    className="pl-8 pr-3 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 w-64 bg-white h-8"
                                 />
-                            </div>
-                        )}
-                        {filterBy === 'status' && (
-                            <div className="inline-flex bg-white shadow-sm overflow-visible">
-                                <button 
-                                    onClick={() => { setFilterStatus(''); setFilterAssignment(''); }} 
-                                    className={`relative px-3 py-1.5 text-xs font-medium transition-all duration-200 ${filterStatus === '' && filterAssignment === '' ? 'text-gray-700 border-b-2 border-orange-600' : 'text-gray-700 border-b border-transparent'}`}
-                                >
-                                    All Tickets
-                                    {counts.total_tickets > 0 && (
-                                        <span className="absolute -top-2 -right-1 bg-blue-500 text-white font-bold text-[9px] rounded-full min-h-2 min-w-4 px-1 flex items-center justify-center">
-                                            {counts.total_tickets}
-                                        </span>
-                                    )}
-                                </button>
-                                <button 
-                                    onClick={() => { setFilterStatus('Open'); setFilterAssignment(''); }} 
-                                    className={`relative px-3 py-1.5 text-xs font-medium transition-all duration-200 ${filterStatus === 'Open' && filterAssignment === '' ? 'text-gray-700 border-b-2 border-orange-600' : 'text-gray-700 border-b border-transparent'}`}
-                                >
-                                    Open
-                                    {counts.open_tickets > 0 && (
-                                        <span className="absolute -top-2 -right-1 bg-green-500 text-white font-bold text-[9px] rounded-full min-h-2 min-w-4 px-1 flex items-center justify-center">
-                                            {counts.open_tickets}
-                                        </span>
-                                    )}
-                                </button>
-                                <button 
-                                    onClick={() => { setFilterStatus('In Progress'); setFilterAssignment(''); }} 
-                                    className={`relative px-3 py-1.5 text-xs font-medium transition-all duration-200 ${filterStatus === 'In Progress' && filterAssignment === '' ? 'text-gray-700 border-b-2 border-orange-600' : 'text-gray-700 border-b border-transparent'}`}
-                                >
-                                    In Progress
-                                    {counts.in_progress_tickets > 0 && (
-                                        <span className="absolute -top-2 -right-1 bg-orange-500 text-white font-bold text-[9px] rounded-full min-h-2 min-w-4 px-1 flex items-center justify-center">
-                                            {counts.in_progress_tickets}
-                                        </span>
-                                    )}
-                                </button>
-                                <button 
-                                    onClick={() => { setFilterStatus('Hold'); setFilterAssignment(''); }} 
-                                    className={`relative px-3 py-1.5 text-xs font-medium transition-all duration-200 ${filterStatus === 'Hold' && filterAssignment === '' ? 'text-gray-700 border-b-2 border-orange-600' : 'text-gray-700 border-b border-transparent'}`}
-                                >
-                                    On Hold
-                                    {counts.hold_tickets > 0 && (
-                                        <span className="absolute -top-2 -right-1 bg-red-500 text-white font-bold text-[9px] rounded-full min-h-2 min-w-4 px-1 flex items-center justify-center">
-                                            {counts.hold_tickets}
-                                        </span>
-                                    )}
-                                </button>
-                                <button 
-                                    onClick={() => { setFilterAssignment('unassigned'); setFilterStatus(''); }} 
-                                    className={`relative px-3 py-1.5 text-xs font-medium transition-all duration-200 ${filterAssignment === 'unassigned' && filterStatus === '' ? 'text-gray-700 border-b-2 border-orange-600' : 'text-gray-700 border-b border-transparent'}`}
-                                >
-                                    Unassigned
-                                    {counts.unassigned > 0 && (
-                                        <span className="absolute -top-2 -right-1 bg-gray-500 text-white font-bold text-[9px] rounded-full min-h-2 min-w-4 px-1 flex items-center justify-center">
-                                            {counts.unassigned}
-                                        </span>
-                                    )}
-                                </button>
-                                {/* Assigned to Me filter - Only for engineers and super admin */}
-                                {(() => {
-                                    console.log('Debug - User role:', user?.role);
-                                    const shouldShow = (user?.role === 'engineer' || user?.role === 'senior_engineer' || user?.role === 'lead_engineer' || user?.role === 'principal_engineer' || user?.role === 'super_admin' || user?.role === 'support');
-                                    console.log('Debug - Should show assigned to me:', shouldShow);
-                                    return shouldShow;
-                                })() && (
-                                    <button 
-                                        onClick={() => { setFilterAssignment('assigned_to_me'); setFilterStatus(''); }} 
-                                        className={`relative px-3 py-1.5 text-xs font-medium transition-all duration-200 ${filterAssignment === 'assigned_to_me' && filterStatus === '' ? 'text-gray-700 border-b-2 border-blue-600' : 'text-gray-700 border-b border-transparent'}`}
+                                {localSearchKeyword && (
+                                    <button
+                                        onClick={() => setLocalSearchKeyword('')}
+                                        className="absolute right-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
                                     >
-                                        Assigned to Me
-                                        {counts.assigned_to_me > 0 && (
-                                            <span className="absolute -top-2 -right-1 bg-blue-500 text-white font-bold text-[9px] rounded-full min-h-2 min-w-4 px-1 flex items-center justify-center">
-                                                {counts.assigned_to_me}
-                                            </span>
-                                        )}
-                                    </button>
-                                )}
-                                {!assignMode && !showCheckboxes && selectedTickets.length === 0 && (
-                                    <TooltipBubble title="Select tickets for export or assignment">
-                                        <img 
-                                            src={selectionIcon} 
-                                            alt="Select" 
-                                            onClick={enterExportSelectionMode}
-                                            className="w-6 h-6 ml-4 cursor-pointer hover:opacity-80 transition-opacity duration-200"
-                                        />
-                                    </TooltipBubble>
-                                )}
-                                {(assignMode || showCheckboxes || (selectedTickets.length > 0 && !assignMode)) && (
-                                    <button 
-                                        onClick={exitExportSelectionMode}
-                                        className="group relative inline-flex items-center justify-center px-2 py-1 text-xs font-medium text-white bg-gradient-to-r from-red-400 to-red-500 rounded-md shadow-sm hover:from-red-500 hover:to-red-600 hover:shadow-md transition-all duration-200 ease-in-out border-0 focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-1 ml-6"
-                                    >
-                                        <X className="w-3 h-3 mr-1 group-hover:scale-110 transition-transform duration-200" />
-                                        Cancel
+                                        <X className="w-3 h-3" />
                                     </button>
                                 )}
                             </div>
-                        )}
-                        {filterBy === 'priority' && (
-                            <div className="inline-flex bg-white shadow-sm overflow-visible">
-                                <button 
-                                    onClick={() => setFilterPriority('')} 
-                                    className={`px-3 py-1.5 text-sm font-medium transition-all duration-200 ${filterPriority === '' ? 'bg-blue-600 text-white' : 'text-gray-700 hover:bg-gray-100'}`}
-                                >
-                                    All
-                                </button>
-                                <button 
-                                    onClick={() => setFilterPriority('Low')} 
-                                    className={`px-3 py-1.5 text-sm font-medium transition-all duration-200 ${filterPriority === 'Low' ? 'bg-blue-600 text-white' : 'text-gray-700 hover:bg-gray-100'}`}
-                                >
-                                    Low
-                                </button>
-                                <button 
-                                    onClick={() => setFilterPriority('Medium')} 
-                                    className={`px-3 py-1.5 text-sm font-medium transition-all duration-200 ${filterPriority === 'Medium' ? 'bg-orange-600 text-white' : 'text-gray-700 hover:bg-gray-100'}`}
-                                >
-                                    Medium
-                                </button>
-                                <button 
-                                    onClick={() => setFilterPriority('High')} 
-                                    className={`px-3 py-1.5 text-sm font-medium transition-all duration-200 ${filterPriority === 'High' ? 'bg-red-600 text-white' : 'text-gray-700 hover:bg-gray-100'}`}
-                                >
-                                    High
-                                </button>
-                                <button 
-                                    onClick={() => setFilterPriority('Critical')} 
-                                    className={`px-3 py-1.5 text-sm font-medium transition-all duration-200 ${filterPriority === 'Critical' ? 'bg-red-900 text-white' : 'text-gray-700 hover:bg-gray-100'}`}
-                                >
-                                    Critical
-                                </button>
-                            </div>
-                        )}
-                        {filterBy === 'history' && (
-                            <div className="inline-flex bg-white shadow-sm overflow-visible">
-                                <button 
-                                    className="px-3 py-1.5 text-sm font-medium text-blue"
-                                >
-                                    Resolved & Cancelled Tickets
-                                </button>
-                            </div>
-                        )}
+                        </div>
+                        
+                        {/* Smart Filter Dropdown */}
+                        <SmartFilterDropdown
+                            filters={smartFilters}
+                            onFiltersChange={handleSmartFiltersChange}
+                            availableEngineers={availableEngineers}
+                            availableClients={companies}
+                            className="flex-shrink-0"
+                        />
                     </div>
+                    
                     <div className="flex items-center gap-2 ml-auto">
+                        {/* Refresh Button */}
+                                <button 
+                            onClick={refreshTickets}
+                            disabled={loading}
+                            className="inline-flex items-center justify-center px-2 py-1 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 hover:border-gray-400 transition-all duration-200 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="Refresh tickets data"
+                                >
+                            <RefreshCw className={`w-3 h-3 mr-1 ${loading ? 'animate-spin' : ''}`} />
+                            Refresh
+                                </button>
+                        
                         {renderPagination()}
                         {/* Ticket Count Display */}
                         <div className="text-[12px] text-gray-500 ml-4">
                             Showing <span className="text-blue-600 font-semibold">{((currentPage - 1) * ticketsPerPage) + 1}-{Math.min(currentPage * ticketsPerPage, displayedTickets.length)}</span> of <span className="text-blue-600 font-semibold">{displayedTickets.length}</span> Tickets
-                            {filterBy === 'company' && (
-                                <span className="ml-2 text-gray-600">
-                                       Companies: {companies.length}, Selected: {filterCompany || 'None'}
-                                </span>
-                            )}
                         </div>
                         <div className="flex items-center gap-2 ml-3">
                             {/* Action Buttons: Assign, Select, Notes (copy logic from original) */}
@@ -3131,315 +3029,37 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                         </div>
                     ) : (
                         <p className="text-gray-600 text-sm text-center p-6 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50">
-                            {searchKeyword ? `No tickets found matching "${searchKeyword}".` : "No tickets found matching the criteria."}
+                            {activeSearchKeyword ? `No tickets found matching "${activeSearchKeyword}".` : "No tickets found matching the criteria."}
                         </p>
                     )
                 ) : (
-                    <>
-                        <div className="w-full max-w-full overflow-x-auto border border-gray-200 bg-white">
-                         <table className={`w-full min-w-0 bg-white text-xs ${(showCheckboxes || assignMode) ? 'border border-orange-400' : ''}`} style={{ fontFamily: 'Arial, sans-serif', fontWeight: 400, fontOpticalSizing: 'auto', fontStyle: 'normal' }}>
-                             <thead className="hidden sm:table-header-group bg-gray-100 border-b border-gray-200">
-                                <tr className="h-10">
-                                    {(showCheckboxes || assignMode) && (
-                                        <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words min-w-[60px]">
-                                            <div className="flex flex-col items-start space-y-1">
-                                                {assignMode && (
-                                                    <span className="text-sm text-gray-500 font-normal">
-                                                        
-                                                    </span>
-                                                )}
-                                            <input 
-                                                type="checkbox" 
-                                                onChange={(e) => {
-                                                    if (e.target.checked) {
-                                                            if (assignMode) {
-                                                                // In assign mode, select only unassigned tickets
-                                                        const unassignedTicketIds = paginatedTickets
-                                                            .filter(ticket => !ticket.assigned_to_email)
-                                                            .map(ticket => ticket.id);
-                                                        setSelectedTickets(unassignedTicketIds);
-                                                            } else if (showCheckboxes) {
-                                                                // In export mode, select all tickets
-                                                                const allTicketIds = paginatedTickets.map(ticket => ticket.id);
-                                                                setSelectedTickets(allTicketIds);
-                                                            }
-                                                    } else {
-                                                        setSelectedTickets([]);
-                                                    }
-                                                }}
-                                                    checked={
-                                                        assignMode 
-                                                            ? selectedTickets.length > 0 && selectedTickets.length === paginatedTickets.filter(ticket => !ticket.assigned_to_email).length
-                                                            : selectedTickets.length > 0 && selectedTickets.length === paginatedTickets.length
-                                                    }
-                                                    disabled={!assignMode && !showCheckboxes}
-                                                    className={`w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 ${
-                                                        !assignMode && !showCheckboxes ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
-                                                    }`}
-                                                />
-                                            </div>
-                                        </th>
-                                    )}
-                                    <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words min-w-[50px]">#</th>
-                                    <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words min-w-[120px]">Ticket ID</th>
-                                    <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words min-w-[200px]">Short Description</th>
-                                    <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words min-w-[140px]">Created Date</th>
-                                    <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words min-w-[100px]">Priority</th>
-                                    <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words min-w-[120px]">Status</th>
-                                    <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words min-w-[180px]">Requested by</th>
-                                    <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words min-w-[180px]">Assigned To</th>
-                                    <th className="px-2 py-2 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words min-w-[80px]">Peek</th>
-                                </tr>
-                            </thead>
-                             <tbody className="divide-y divide-gray-200" style={{ fontFamily: 'Arial, sans-serif', fontWeight: 400, fontOpticalSizing: 'auto', fontStyle: 'normal' }}>
-                                {paginatedTickets.map((ticket, index) => (
-                                    <tr key={ticket.id} 
-                                        className={`block sm:table-row bg-white border-b border-gray-200 hover:bg-gray-100 transition-colors duration-150 text-xs cursor-pointer group ${
-                                            showPeekPanel && peekedTicket && peekedTicket.id === ticket.id 
-                                                ? 'bg-orange-50 border-orange-200' 
-                                                : 'bg-white'
-                                        }`}
-                                        onClick={(e) => {
-                                            // Check if the click was on a dropdown or interactive element
-                                            const target = e.target;
-                                            const isDropdown = target.closest('.custom-dropdown') || 
-                                                             target.closest('[role="button"]') || 
-                                                             target.closest('input') || 
-                                                             target.closest('button') ||
-                                                             target.closest('a');
-                                            
-                                            // Check if click was in checkbox column (either regular or hover checkbox)
-                                            const isCheckboxColumn = target.closest('.checkbox-column');
-                                            
-                                            if (!isDropdown && !isCheckboxColumn) {
-                                                navigateTo('/tickets', ticket.id);
-                                            }
-                                        }}
-                                    >
-                                        {(showCheckboxes || assignMode) && (
-                                            <td className="checkbox-column block sm:table-cell px-2 py-4 text-xs text-gray-800 whitespace-normal break-words min-w-[60px] border-r border-gray-200 cursor-default">
-                                                <span className="block sm:hidden font-semibold text-gray-600">Select:</span>
-                                                <input 
-                                                    type="checkbox" 
-                                                    checked={selectedTickets.includes(ticket.id)}
-                                                    onChange={(e) => {
-                                                        e.stopPropagation();
-                                                        handleTicketSelection(ticket.id);
-                                                    }}
-                                                    disabled={(!assignMode && !showCheckboxes) || (assignMode && ticket.assigned_to_email)}
-                                                    className={`w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 ${
-                                                        (!assignMode && !showCheckboxes) || (assignMode && ticket.assigned_to_email) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
-                                                    }`}
-                                                />
-                                            </td>
-                                        )}
-                                        <td className="checkbox-column block sm:table-cell px-2 py-4 text-xs text-gray-800 whitespace-normal break-words min-w-[50px] border-r border-gray-200 group-hover:bg-blue-50 cursor-default">
-                                            <span className="block sm:hidden font-semibold text-gray-600">#:</span>
-                                            <div className="relative">
-                                                <span className={`${selectedTickets.includes(ticket.id) ? 'hidden' : 'group-hover:hidden'} inline-block`}>{index + 1}</span>
-                                                {/* Only show hover checkbox when regular selection checkboxes are not visible */}
-                                                {!(showCheckboxes || assignMode) && (
-                                                    <div className={`${selectedTickets.includes(ticket.id) ? 'inline-block' : 'hidden group-hover:inline-block'}`}>
-                                                        <input 
-                                                            type="checkbox" 
-                                                            checked={selectedTickets.includes(ticket.id)}
-                                                            onChange={(e) => {
-                                                                e.stopPropagation();
-                                                                console.log('Hover checkbox clicked for ticket:', ticket.id);
-                                                                handleTicketSelection(ticket.id);
-                                                                // Don't automatically show all checkboxes - let user manually enter selection mode
-                                                            }}
-                                                            disabled={false}
-                                                            className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
-                                                        />
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </td>
-                                        <td className="block sm:table-cell px-2 py-4 text-xs text-blue-700 hover:underline font-medium cursor-pointer whitespace-normal break-words min-w-[120px] border-r border-gray-200" 
-                                            onMouseEnter={(e) => showTicketIdPopup(ticket.display_id, ticket.id, e)}
-                                            onMouseLeave={hideTicketIdPopup}
-                                        >
-                                            <span className="block sm:hidden font-semibold text-gray-600">Ticket ID:</span>
-                                            <a
-                                                href={`/tickets/${ticket.id}`}
-                                                onClick={(e) => {
-                                                    e.preventDefault();
-                                                    e.stopPropagation();
-                                                    navigateTo('/tickets', ticket.id);
-                                                }}
-                                            >
-                                                {ticket.display_id}
-                                            </a>
-                                        </td>
-                                        <td className="block sm:table-cell px-2 py-4 text-xs text-gray-800 max-w-xs truncate whitespace-normal break-words min-w-[200px] border-r border-gray-200" title={ticket.short_description}>
-                                            <span className="block sm:hidden font-semibold text-gray-600">Short Description:</span>
-                                            <div 
-                                                className="line-clamp-2 text-ellipsis overflow-hidden text-gray-800"
-                                            >
-                                                {ticket.short_description}
-                                            </div>
-                                        </td>
-                                        <td className="block sm:table-cell px-2 py-4 text-xs text-gray-800 whitespace-normal break-words min-w-[140px] border-r border-gray-200">
-                                            <span className="block sm:hidden font-semibold text-gray-600">Created Date:</span>
-                                            <div className="truncate">
-                                                {ticket.created_at ? (
-                                                    <TooltipBubble title={`Created on ${new Date(ticket.created_at).toLocaleDateString('en-US', { 
-                                                        weekday: 'short', 
-                                                        month: 'short', 
-                                                        day: '2-digit', 
-                                                        year: 'numeric'
-                                                    })} at ${new Date(ticket.created_at).toLocaleTimeString('en-US', { 
-                                                        hour: '2-digit', 
-                                                        minute: '2-digit', 
-                                                        hour12: true 
-                                                    })}`}>
-                                                        <span className="cursor-pointer">
-                                                            {new Date(ticket.created_at).toLocaleDateString('en-US', { 
-                                                                weekday: 'short', 
-                                                                month: 'short', 
-                                                                day: '2-digit', 
-                                                                year: 'numeric'
-                                                            }).replace(',', '-')}
-                                                        </span>
-                                                    </TooltipBubble>
-                                                ) : 'N/A'}
-                                            </div>
-                                        </td>
-                                        <td className="block sm:table-cell px-2 py-4 text-xs text-gray-800 whitespace-normal break-words min-w-[100px] border-r border-gray-200">
-                                            <span className="block sm:hidden font-semibold text-gray-600">Priority:</span>
-                                            <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getPriorityClasses(ticket.priority)}`}>{ticket.priority}</span>
-                                        </td>
-                                        <td className="block sm:table-cell px-2 py-4 whitespace-normal break-words text-xs text-gray-800 text-left min-w-[120px] border-r border-gray-200">
-                                            <span className="block sm:hidden font-semibold text-gray-600">Status:</span>
-                                            {/* Show status dropdown for engineers and super admins */}
-                                            {(user?.role === 'support' || user?.role === 'admin' || user?.role === 'super_admin' || user?.role === 'engineer') ? (
-                                                <div className="w-full">
-                                                    {changingStatusTickets.has(ticket.id) ? (
-                                                        <div className="flex items-center gap-1 text-sm text-blue-600">
-                                                            <Loader2 className="w-4 h-4 animate-spin" />
-                                                            <span>Updating...</span>
-                                                        </div>
-                                                    ) : (
-                                                        <div 
-                                                            className="custom-dropdown"
-                                                            onClick={(e) => e.stopPropagation()}
-                                                        >
-                                                            <CustomDropdown
-                                                                value={ticket.status}
-                                                                onChange={(value) => handleTicketStatusChange(ticket.id, value)}
-                                                                options={memoizedStatusOptions}
-                                                                placeholder={ticket.status}
-                                                                className="text-sm w-full"
-                                                                disabled={['Resolved', 'Cancelled', 'Closed'].includes(ticket.status)}
-                                                                variant="minimal"
-                                                                customDisplay={(
-                                                                    <span className={`px-2 py-0.5 text-xs font-semibold rounded-full truncate ${getStatusClasses(ticket.status)}`}>
-                                                                        {ticket.status}
-                                                                    </span>
-                                                                )}
-                                                            />
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            ) : (
-                                                <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getStatusClasses(ticket.status)}`}>{ticket.status}</span>
-                                            )}
-                                        </td>
-                                        <td className="block sm:table-cell px-2 py-4 text-xs text-gray-800 whitespace-normal break-words min-w-[180px] border-r border-gray-200">
-                                            <span className="block sm:hidden font-semibold text-gray-600">Requested by:</span>
-                                            <div className="truncate">
-                                            <span 
-                                                className="text-black hover:text-gray-800 hover:underline cursor-pointer"
-                                                onMouseEnter={(e) => {
-                                                    if (ticket.reporter_email) {
-                                                        showProfilePopup(
-                                                            { 
-                                                                email: ticket.reporter_email, 
-                                                                fullName: ticket.reporter_name,
-                                                                clientName: ticket.client_name || ticket.companyName,
-                                                                contactNumber: ticket.contact_number
-                                                            },
-                                                            e
-                                                        );
-                                                    }
-                                                }}
-                                                onMouseLeave={() => {
-                                                    cancelShowProfilePopup();
-                                                    hideProfilePopup();
-                                                }}
-                                            >
-                                                {ticket.reporter_email || 'N/A'}
-                                            </span>
-                                            </div>
-                                        </td>
-                                        <td className="block sm:table-cell px-2 py-4 text-xs text-gray-800 whitespace-normal break-words min-w-[180px] border-r border-gray-200" style={{ fontFamily: 'Arial, sans-serif', fontWeight: 400, fontOpticalSizing: 'auto', fontStyle: 'normal' }}>
-                                            <span className="block sm:hidden font-semibold text-gray-600">Assigned To:</span>
-                                            {/* Show assignment dropdown for engineers and super admins */}
-                                            {(user?.role === 'support' || user?.role === 'admin' || user?.role === 'super_admin' || user?.role === 'engineer') ? (
-                                                <div className="min-w-[180px] max-w-[280px] w-full">
-                                                    {engineersLoading && availableEngineers.length === 0 ? (
-                                                        <span className="text-sm text-gray-500">Loading...</span>
-                                                    ) : assigningTickets.has(ticket.id) ? (
-                                                        <div className="flex items-center gap-1 text-sm text-blue-600">
-                                                            <Loader2 className="w-4 h-4 animate-spin" />
-                                                            <span>Assigning...</span>
-                                                        </div>
-                                                    ) : (
-                                                        <div 
-                                                            className="custom-dropdown"
-                                                            onClick={(e) => e.stopPropagation()}
-                                                        >
-                                                            <CustomDropdown
-                                                                value={ticket.assigned_to_email || 'unassigned'}
-                                                                onChange={(value) => handleTicketAssignment(ticket.id, value)}
-                                                                options={assignmentOptions}
-                                                                placeholder={ticket.assigned_to_email || 'Unassigned'}
-                                                                className="text-sm w-full"
-                                                                disabled={['Resolved', 'Cancelled', 'Closed'].includes(ticket.status)}
-                                                                variant="minimal"
-                                                            />
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            ) : (
-                                                <div className="truncate" style={{ fontFamily: 'Arial, sans-serif', fontWeight: 400, fontOpticalSizing: 'auto', fontStyle: 'normal' }}>
-                                                <span className="text-sm">{ticket.assigned_to_email || 'Unassigned'}</span>
-                                                </div>
-                                            )}
-                                        </td>
-                                        <td className="block sm:table-cell px-2 py-4 text-center whitespace-normal break-words text-xs text-gray-800 min-w-[80px]">
-                                            <span className="block sm:hidden font-semibold text-gray-600">Peek:</span>
-                                            {showPeekPanel && peekedTicket && peekedTicket.id === ticket.id ? (
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        handleClosePeek();
-                                                    }}
-                                                    className="inline-flex items-center justify-center w-8 h-8 text-orange-600 hover:text-orange-700 hover:bg-orange-50 rounded-full transition-colors duration-200"
-                                                    title="Close preview"
-                                                >
-                                                    <X className="w-4 h-4" />
-                                                </button>
-                                            ) : (
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        handlePeekTicket(ticket);
-                                                    }}
-                                                    className="inline-flex items-center justify-center w-8 h-8 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors duration-200"
-                                                    title="Peek at ticket details"
-                                                >
-                                                    <Eye className="w-4 h-4" />
-                                                </button>
-                                            )}
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                    </>
+                    <ModernTicketGrid
+                        tickets={paginatedTickets}
+                        onTicketClick={(ticket) => navigateTo('/tickets', ticket.id)}
+                        onStatusChange={handleTicketStatusChange}
+                        onAssignmentChange={handleTicketAssignment}
+                        onPeek={handlePeekTicket}
+                        user={user}
+                        loading={loading}
+                        showCheckboxes={showCheckboxes || assignMode}
+                        selectedTickets={selectedTickets}
+                        onTicketSelect={(ticketIds) => {
+                                                                    if (assignMode) {
+                                // In assign mode, only allow selecting unassigned tickets
+                                                                const unassignedTicketIds = paginatedTickets
+                                                                    .filter(ticket => !ticket.assigned_to_email)
+                                                                    .map(ticket => ticket.id);
+                                                                setSelectedTickets(unassignedTicketIds);
+                                                            } else {
+                                setSelectedTickets(ticketIds);
+                            }
+                        }}
+                        assignMode={assignMode}
+                        changingStatusTickets={changingStatusTickets}
+                        assigningTickets={assigningTickets}
+                        availableEngineers={availableEngineers}
+                        engineersLoading={engineersLoading}
+                    />
                 )}
                 
                 {/* Bottom Pagination */}
@@ -3465,7 +3085,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                 className="flex items-center justify-center w-8 h-8 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-all duration-200 group"
                                 title="Close Notes Panel"
                             >
-                                <X className="w-5 h-5 group-hover:scale-110 transition-transform duration-200" strokeWidth={2.5} />
+                                <X className="w-4 h-4 group-hover:scale-110 transition-transform duration-200" strokeWidth={2.5} />
                             </button>
                         </div>
                         
@@ -3506,7 +3126,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                         onClick={cancelEditing}
                                         className="text-gray-400 hover:text-gray-600 p-1"
                                     >
-                                        <X className="w-4 h-4" />
+                                        <X className="w-3 h-3" />
                                     </button>
                                 </div>
                                 <form onSubmit={editingNote ? handleUpdateNote : handleAddNote}>
@@ -3986,12 +3606,16 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                         <div className="flex items-center gap-2 text-sm text-gray-600">
                             <span className="font-medium">#{peekedTicket.display_id}</span>
                             <span className="text-gray-400">•</span>
-                            <span>{peekedTicket.created_at ? new Date(peekedTicket.created_at).toLocaleDateString('en-US', { 
-                                weekday: 'short', 
+                            <div className="flex items-center gap-2">
+                                <Calendar className="h-4 w-4 text-gray-400" />
+                                <span className="text-sm font-medium">
+                                    {peekedTicket.created_at ? new Date(peekedTicket.created_at).toLocaleDateString('en-US', { 
                                 month: 'short', 
-                                day: '2-digit', 
+                                        day: 'numeric', 
                                 year: 'numeric'
-                            }).replace(',', '-') : 'N/A'}</span>
+                                    }) : 'N/A'}
+                                </span>
+                            </div>
                         </div>
                     )}
                 </div>
@@ -4058,16 +3682,16 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                         <div className="w-2 h-2 bg-green-500 rounded-full mt-2 flex-shrink-0"></div>
                                         <div className="flex-1 min-w-0">
                                             <p className="text-sm font-medium text-gray-500">Created</p>
-                                            <p className="text-sm text-gray-900">
+                                            <div className="flex items-center gap-2">
+                                                <Calendar className="h-4 w-4 text-gray-400" />
+                                                <span className="text-sm font-medium text-gray-900">
                                                 {peekedTicket.created_at ? new Date(peekedTicket.created_at).toLocaleDateString('en-US', { 
                                                     month: 'short', 
-                                                    day: '2-digit', 
-                                                    year: 'numeric',
-                                                    hour: '2-digit',
-                                                    minute: '2-digit',
-                                                    hour12: true 
+                                                        day: 'numeric', 
+                                                        year: 'numeric'
                                                 }) : 'N/A'}
-                                            </p>
+                                                </span>
+                                            </div>
                                         </div>
                                     </div>
 
@@ -4075,16 +3699,16 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                         <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 flex-shrink-0"></div>
                                         <div className="flex-1 min-w-0">
                                             <p className="text-sm font-medium text-gray-500">Last Updated</p>
-                                            <p className="text-sm text-gray-900">
+                                            <div className="flex items-center gap-2">
+                                                <Calendar className="h-4 w-4 text-gray-400" />
+                                                <span className="text-sm font-medium text-gray-900">
                                                 {peekedTicket.updated_at ? new Date(peekedTicket.updated_at).toLocaleDateString('en-US', { 
                                                     month: 'short', 
-                                                    day: '2-digit', 
-                                                    year: 'numeric',
-                                                    hour: '2-digit',
-                                                    minute: '2-digit',
-                                                    hour12: true 
+                                                        day: 'numeric', 
+                                                        year: 'numeric'
                                                 }) : 'N/A'}
-                                            </p>
+                                                </span>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -4110,43 +3734,6 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                 </div>
             </div>
             
-            {/* Profile Popup */}
-            <ProfilePopup
-                visible={profilePopup.visible}
-                position={profilePopup.position}
-                user={profilePopup.user}
-                copyStatus={profilePopup.copyStatus}
-                currentUser={user}
-                onMouseEnter={() => setPopupHovered(true)}
-                onMouseLeave={() => {
-                    setPopupHovered(false);
-                    // Clear any pending timeouts
-                    if (popupHideTimeout.current) {
-                        clearTimeout(popupHideTimeout.current);
-                    }
-                    if (popupShowTimeout.current) {
-                        clearTimeout(popupShowTimeout.current);
-                    }
-                    // Immediately hide the popup
-                    setProfilePopup(prev => ({ ...prev, visible: false }));
-                }}
-                onCopyEmail={copyUserEmail}
-                onCopyName={copyUserName}
-            />
-            
-            {/* Ticket ID Popup */}
-            <TicketIdPopup
-                visible={ticketIdPopup.visible}
-                position={ticketIdPopup.position}
-                ticketId={ticketIdPopup.ticketId}
-                documentId={ticketIdPopup.documentId}
-                copyStatus={ticketIdPopup.copyStatus}
-                onOpen={openTicket}
-                onCopyId={copyTicketId}
-                onCopyUrl={copyTicketUrl}
-                onMouseEnter={handleTicketIdPopupHover}
-                onMouseLeave={handleTicketIdPopupLeave}
-            />
             
         </>
     );

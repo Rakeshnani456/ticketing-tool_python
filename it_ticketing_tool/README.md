@@ -398,7 +398,7 @@ ticketing-tool_python/
    ```bash
    cd it_ticketing_tool/ticketing_tool_backend
    npm install
-   npm start
+   node server.js
    ```
 
 4. **Docker Deployment (Optional)**

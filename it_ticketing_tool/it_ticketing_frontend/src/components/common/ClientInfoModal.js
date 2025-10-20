@@ -7,19 +7,7 @@ import * as yup from 'yup';
 import CheckIcon from '@mui/icons-material/Check';
 import ClearIcon from '@mui/icons-material/Clear';
 
-// Designation options are unchanged
-const designationOptions = [
-  { value: '', label: 'Select Designation' },
-  { value: 'CEO', label: 'CEO' },
-  { value: 'CTO', label: 'CTO' },
-  { value: 'Manager', label: 'Manager' },
-  { value: 'IT Admin', label: 'IT Admin' },
-  { value: 'Site Admin', label: 'Site Admin' },
-  { value: 'Director', label: 'Director' },
-  { value: 'Team Lead', label: 'Team Lead' },
-  { value: 'Developer', label: 'Developer' },
-  { value: 'Other', label: 'Other' },
-];
+// Designation is now a text input field, no dropdown options needed
 
 // Validation schema with better handling for empty values
 const validationSchema = yup.object().shape({

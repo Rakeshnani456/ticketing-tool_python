@@ -17,6 +17,7 @@ import ContactPhoneIcon from '@mui/icons-material/ContactPhone';
 import ContactMailIcon from '@mui/icons-material/ContactMail';
 import GroupIcon from '@mui/icons-material/Group';
 import { useNavigate } from 'react-router-dom';
+import FaviconIcon from '../common/FaviconIcon';
 
 const InfoRow = ({ icon, label, value, link, itemSx }) => (
   <Box
@@ -256,7 +257,11 @@ const ClientCard = ({ client, index, onEdit, onRemove, showEdit, showRemove, use
         </Box>
         
         <Box display="flex" alignItems="center" gap={1} sx={{ pl: 1 }}>
-          <BusinessIcon sx={{ color: 'primary.main', fontSize: '1.1rem' }} />
+          <FaviconIcon 
+            websiteUrl={client.website} 
+            size="26px"
+            alt={`${client.companyName} favicon`}
+          />
           <Typography variant="h6" sx={{ fontWeight: 700, fontSize: '0.85rem', minWidth: 100, color: '#1e293b' }}>
             {client.companyName || '-'}
           </Typography>
@@ -408,7 +413,7 @@ const ClientCard = ({ client, index, onEdit, onRemove, showEdit, showRemove, use
                   value={client.domain || 'N/A'}
                 />
                 <ContactInfoItem 
-                  icon={<BusinessIcon fontSize="small" />}
+                  icon={<FaviconIcon websiteUrl={client.website} size="24px" alt={`${client.companyName} favicon`} />}
                   label="Company"
                   value={client.companyName || 'N/A'}
                 />

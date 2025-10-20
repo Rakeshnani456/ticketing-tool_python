@@ -1,10 +1,65 @@
+/* --- Modern Ticket Grid Typography Enhancements --- */
+.modern-table-cell {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-feature-settings: 'kern' 1, 'liga' 1, 'calt' 1;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.modern-grid-hover {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.modern-grid-hover:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+/* Enhanced typography for ticket grid */
+.ticket-id {
+  font-weight: 600;
+  letter-spacing: 0.025em;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.ticket-summary {
+  font-weight: 500;
+  line-height: 1.5;
+  letter-spacing: 0.01em;
+}
+
+.ticket-meta {
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
 /* --- Global Scrollbar Styles (apply to all scrollable elements) --- */
-@import url('https://fonts.googleapis.com/css2?family=Source+Sans+3:ital,wght@0,200..900;1,200..900&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;500;600;700&display=swap');
 
 /* --- Theme Color Variables --- */
 :root {
   --theme-color-elevation-shadow-rgb: 0, 0, 0;
+}
+
+/* --- Global Font Definitions --- */
+* {
+  font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+}
+
+/* Headings use Space Grotesk */
+h1, h2, h3, h4, h5, h6,
+.heading,
+.title,
+.logo {
+  font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+}
+
+/* Code elements use monospace */
+code, pre, .code, .mono {
+  font-family: 'Source Code Pro', Menlo, Monaco, Consolas, "Courier New", monospace;
 }
 
 /* --- Custom Shadow Classes --- */
@@ -74,6 +129,30 @@
     line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
+}
+
+/* Modern Grid Enhancements */
+.modern-grid-hover {
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.modern-grid-hover:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.modern-badge {
+    font-weight: 500;
+    letter-spacing: 0.025em;
+    transition: all 0.15s ease;
+}
+
+.modern-table-cell {
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.modern-table-cell:hover {
+    background-color: rgba(59, 130, 246, 0.02);
 }
 
 /* Search highlight styles */
@@ -407,66 +486,102 @@ textarea.max-w-none.w-full::-webkit-scrollbar-corner {
   animation: scale-up-center-normal 0.1s cubic-bezier(0.390, 0.575, 0.565, 1.000) 0s 1 normal both; 
 }
 
-/* --- Glassmorphism Sidebar Styles --- */
+/* --- Modern Sidebar Styles --- */
 .sidebar-glass {
-  background: #175873; /* Dark blue-green background */
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
+  background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%); /* Modern dark gradient */
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   border-radius: 0;
-  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.08);
-  transition: background 0.3s, box-shadow 0.3s;
-  font-family: 'Poppins', sans-serif;
+  box-shadow: 0 10px 25px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  transition: none; /* Instant navigation */
+  font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
   height: calc(100vh - 56px);
   overflow-y: auto;
   overflow-x: hidden;
   box-sizing: border-box;
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  position: relative;
+}
+
+/* Add subtle top border accent */
+.sidebar-glass::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%);
+  opacity: 0.8;
 }
 
 .sidebar-glass .menu-item {
-  color: #ffffff; /* White text for dark background */
+  color: #e2e8f0; /* Light gray text for better contrast */
   background: transparent;
-  border-radius: 8px;
-  transition: background 0.2s, color 0.2s, box-shadow 0.2s;
-  font-weight: 400;
-  font-family: 'Poppins', sans-serif;
-  padding: 0.75rem 1rem; /* Increased padding for bigger menu items */
-  margin: 0.25rem 0; /* Increased margin for better spacing */
-  font-size: 1rem; /* Larger font size for better readability */
+  border-radius: 12px;
+  transition: none; /* Instant menu interactions */
+  font-weight: 500;
+  font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+  padding: 0.875rem 1.25rem; /* Increased padding for better touch targets */
+  margin: 0.125rem 0.5rem; /* Better spacing with side margins */
+  font-size: 0.95rem; /* Slightly smaller for modern look */
   box-sizing: border-box;
   max-width: 100%;
-  overflow: hidden;
+  overflow: visible; /* Allow count badges to extend beyond menu item */
+  position: relative;
+  min-height: 2.75rem; /* Ensure minimum height for count badges */
+}
+
+/* Add subtle glow effect on hover */
+.sidebar-glass .menu-item::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, rgba(249, 115, 22, 0.1) 0%, rgba(251, 146, 60, 0.05) 100%);
+  border-radius: 12px;
+  opacity: 0;
+  transition: none; /* Instant glow effect */
+  z-index: -1;
 }
 
 .sidebar-glass .menu-item:hover {
-  background: rgba(156, 163, 175, 0.15); /* Gray tint */
-  color: #e5e7eb;
-  box-shadow: 0 2px 8px 0 rgba(156, 163, 175, 0.10);
-  border-radius: 0;
+  background: rgba(249, 115, 22, 0.2); /* Orange hover background */
+  color: #ffffff;
+  box-shadow: none;
+  transform: none; /* Remove slide animation for instant response */
+}
+
+.sidebar-glass .menu-item:hover::before {
+  opacity: 1;
 }
 
 .sidebar-glass .menu-item.active, .sidebar-glass .menu-item[aria-current="page"] {
-  background: rgba(156, 163, 175, 0.25) !important; /* Brighter light grey background when selected */
-  color: #e5e7eb !important; /* Light text for contrast */
-  border-radius: 0 !important; /* No rounded corners */
-  box-shadow: 0 2px 8px 0 rgba(156, 163, 175, 0.10) !important; /* Same shadow as hover */
-  border: none !important; /* Remove border */
-  filter: none;
+  background: linear-gradient(135deg, rgba(249, 115, 22, 0.2) 0%, rgba(251, 146, 60, 0.15) 100%) !important; /* Orange gradient for active state */
+  color: #ffffff !important; /* Pure white for active items */
+  border-radius: 12px !important; /* Keep rounded corners */
+  box-shadow: none !important; /* No shadow for active state */
+  border: 1px solid rgba(249, 115, 22, 0.3) !important; /* Orange border */
   position: relative;
   z-index: 1;
+  transform: none; /* Remove slide animation for instant response */
 }
 
 .sidebar-glass .menu-item.active svg,
 .sidebar-glass .menu-item[aria-current="page"] svg {
-  /* Light grey icons for contrast on light background */
-  color: #e5e7eb !important;
+  color: #ffffff !important; /* Pure white for active icons */
 }
 
-/* Exclude notes icon from active menu styling */
-.sidebar-glass .menu-item.active img[alt="My Notes"],
-.sidebar-glass .menu-item[aria-current="page"] img[alt="My Notes"] {
-  /* Keep original notes icon color - don't apply active menu styling */
-  filter: none !important;
-  opacity: 0.7 !important;
+/* All menu icons should have consistent active styling */
+
+/* Ensure text color is applied with high specificity */
+.sidebar-glass .menu-item.active span,
+.sidebar-glass .menu-item[aria-current="page"] span,
+.sidebar-glass .menu-item.active .motion.span,
+.sidebar-glass .menu-item[aria-current="page"] .motion.span {
+  color: #f3f4f6 !important;
 }
 
 /* Focus state for menu items */
@@ -476,7 +591,22 @@ textarea.max-w-none.w-full::-webkit-scrollbar-corner {
   border-radius: 0;
   box-shadow: none;
   border: none;
-  background: rgba(156, 163, 175, 0.25); /* Brighter light grey background for focus */
+  background: rgba(249, 115, 22, 0.25); /* Orange focus background */
+  color: #f3f4f6 !important; /* More neutral white text for focus */
+}
+
+/* Focus state for icons */
+.sidebar-glass .menu-item:focus svg,
+.sidebar-glass .menu-item:focus-visible svg {
+  color: #f3f4f6 !important; /* More neutral white icons for focus */
+}
+
+/* Focus state for text */
+.sidebar-glass .menu-item:focus span,
+.sidebar-glass .menu-item:focus-visible span,
+.sidebar-glass .menu-item:focus .motion.span,
+.sidebar-glass .menu-item:focus-visible .motion.span {
+  color: #f3f4f6 !important; /* More neutral white text for focus */
 }
 
 /* Persistent focus for active menu items */
@@ -486,79 +616,95 @@ textarea.max-w-none.w-full::-webkit-scrollbar-corner {
   border-radius: 0;
   box-shadow: none;
   border: none;
-  background: rgba(156, 163, 175, 0.25); /* Brighter light grey background for focus */
+  background: rgba(249, 115, 22, 0.25); /* Orange focus background */
+  color: #f3f4f6 !important; /* More neutral white text for focus */
 }
 
 .sidebar-glass .menu-item.active .sidebar-count-badge {
-  background: #000000; /* Black background */
-  color: #f97316;     /* Orange count font */
-  box-shadow: 0 1px 4px 0 rgba(249, 115, 22, 0.12);
+  background: transparent; /* Remove background */
+  color: #f97316; /* Orange text */
+  box-shadow: none;
+  border: none;
 }
 
 .sidebar-glass .sidebar-count-badge {
-  background: #000000 !important; /* Black background */
-  color: #ea580c !important;     /* Darker, less bright orange count font */
-  font-size: 0.65rem !important;
-  font-weight: 600 !important;   /* Thicker text (increased from 500 to 600) */
-  min-width: 1rem;
-  min-height: 1rem;
-  padding: 0 0.25rem;
+  background: transparent !important; /* Remove background */
+  color: #f97316 !important; /* Orange text */
+  font-size: 0.7rem !important;
+  font-weight: 600 !important;
+  min-width: auto;
+  min-height: auto;
+  padding: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 9999px;
-  box-shadow: 0 1px 4px 0 rgba(234, 88, 12, 0.08);
+  border-radius: 0;
+  box-shadow: none;
+  border: none;
+  z-index: 10; /* Ensure count badges appear above other elements */
+  position: absolute;
+  top: -0.5rem; /* Keep position for visibility */
+  right: -0.25rem; /* Adjust right position */
+  pointer-events: none; /* Prevent interference with clicks */
 }
 
 .sidebar-glass .sidebar-section-header {
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   font-weight: 600;
-  letter-spacing: 0.05em;
-  margin-top: 0.75rem;
-  margin-bottom: 0.25rem;
-  padding-left: 0.5rem;
-  padding-top: 0.375rem;
-  padding-bottom: 0.1875rem;
-  color: #f05118;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+  padding-left: 1.25rem;
+  padding-top: 0.5rem;
+  padding-bottom: 0.25rem;
+  color: #64748b;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  margin-left: 0.5rem;
+  margin-right: 0.5rem;
 }
 
 .sidebar-glass .profile-section {
-  background: rgba(40,40,40,0.5);
-  border-radius: 12px;
-  margin-top: 1.5rem;
-  padding: 0.75rem 1rem;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  margin: 1.5rem 0.5rem 0 0.5rem;
+  padding: 1rem;
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  box-shadow: 0 2px 8px 0 rgba(96, 165, 250, 0.08);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(10px);
 }
 
 .sidebar-glass .collapse-btn {
-  background: rgba(37,99,235,0.08);
-  color: #9ca3af;
-  border: none;
-  border-radius: 8px;
-  padding: 0.5rem 0.75rem;
-  margin: 1rem auto 0 auto;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.05) 100%);
+  color: #94a3b8;
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  border-radius: 12px;
+  padding: 0.75rem 1rem;
+  margin: 1.5rem 0.5rem 0 0.5rem;
   display: block;
   cursor: pointer;
-  transition: background 0.2s, color 0.2s;
+  transition: none; /* Instant collapse button response */
+  font-weight: 500;
 }
 
 .sidebar-glass .collapse-btn:hover {
-  background: #2563eb;
-  color: #fff;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.2) 0%, rgba(139, 92, 246, 0.1) 100%);
+  color: #ffffff;
+  transform: none; /* Remove transform animation for instant response */
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
 }
 
 .sidebar-glass .menu-item svg {
-  color: #9CA3AF; /* Thicker grey color for icons */
-  transition: color 0.2s, fill 0.2s, stroke 0.2s;
-  stroke-width: 2; /* Make icons thicker */
-  font-weight: 600; /* Make icons bolder */
+  color: #94a3b8; /* Modern gray color for icons */
+  transition: none; /* Instant icon changes */
+  stroke-width: 1.5; /* Balanced stroke width */
 }
 
-/* Collapse button text should be grey to match the icon - but not count badges */
-.sidebar-glass .menu-item span:not(.sidebar-count-badge) {
+/* Collapse button text should be grey to match the icon - but not count badges or active items */
+.sidebar-glass .menu-item:not(.active):not([aria-current="page"]):not(:focus):not(:focus-visible) span:not(.sidebar-count-badge) {
   color: #9CA3AF !important; /* Grey text for collapse button to match icon */
 }
 
@@ -569,6 +715,10 @@ textarea.max-w-none.w-full::-webkit-scrollbar-corner {
   justify-content: center;
   width: 28px;
   height: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  position: relative;
+  overflow: visible; /* Allow count badges to extend beyond container */
 }
 
 /* Ensure consistent spacing for collapsed sidebar menu items */
@@ -576,6 +726,8 @@ textarea.max-w-none.w-full::-webkit-scrollbar-corner {
   display: flex;
   align-items: center;
   min-height: 40px;
+  overflow: visible; /* Allow count badges to extend beyond container */
+  position: relative;
 }
 
 /* When collapsed, center the content */
@@ -603,45 +755,51 @@ textarea.max-w-none.w-full::-webkit-scrollbar-corner {
   justify-content: flex-start !important;
 }
 
-/* Force icon size for collapsed state */
+/* Force icon size for collapsed state - maintain consistent sizing on all screen sizes */
 .sidebar-glass .flex.items-center.justify-center.w-7.h-7 svg {
   width: 23px !important;
   height: 23px !important;
   min-width: 23px !important;
   min-height: 23px !important;
+  flex-shrink: 0 !important;
 }
 
 /* Ensure proper icon sizing for all collapsed navigation items */
 .sidebar-glass .TooltipBubble .flex.items-center.justify-center.w-7.h-7 svg {
   width: 23px !important;
   height: 23px !important;
+  min-width: 23px !important;
+  min-height: 23px !important;
+  flex-shrink: 0 !important;
 }
 
-/* Poppins font for sidebar navigation links */
+/* Space Grotesk font for sidebar navigation links */
 .sidebar-glass .group.flex.items-center {
-  font-family: 'Poppins', sans-serif;
+  font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
   font-weight: 400;
   color: #ffffff;
 }
 
-/* Poppins font for sidebar section headers */
+/* Space Grotesk font for sidebar section headers */
 .sidebar-glass .sidebar-section-header {
-  font-family: 'Poppins', sans-serif;
+  font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
   font-weight: 400;
   color: #e5e7eb;
 }
 
-/* Poppins font for sidebar count badges */
+/* Space Grotesk font for sidebar count badges */
 .sidebar-glass .sidebar-count-badge {
-  font-family: 'Poppins', sans-serif;
+  font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
   font-weight: 400;
 }
 
 /* Main app header - fixed top header */
 header.fixed.top-0 {
-  background: #f8f9fa !important; /* Main app header color */
-  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1) !important;
-  border-bottom: 1px solid #d1d5db !important;
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%) !important; /* Modern gradient header */
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+  backdrop-filter: blur(10px) !important;
+  -webkit-backdrop-filter: blur(10px) !important;
 }
 
 /* Responsive sidebar adjustments - Maintain good sizing while fitting content */
@@ -650,6 +808,7 @@ header.fixed.top-0 {
     padding: 0.625rem 0.75rem;
     font-size: 0.95rem;
     margin: 0.1875rem 0;
+    min-height: 2.5rem; /* Ensure minimum height for count bubbles */
   }
   
   .sidebar-glass .sidebar-section-header {
@@ -658,6 +817,12 @@ header.fixed.top-0 {
     margin-bottom: 0.1875rem;
     padding: 0.3125rem 0.4375rem;
   }
+  
+  /* Ensure count bubbles have space on smaller screens */
+  .sidebar-glass .flex.items-center.justify-center.w-7.h-7 {
+    min-height: 2rem;
+    position: relative;
+  }
 }
 
 @media (max-height: 800px) {
@@ -665,6 +830,7 @@ header.fixed.top-0 {
     padding: 0.5rem 0.625rem;
     font-size: 0.9rem;
     margin: 0.125rem 0;
+    min-height: 2.25rem; /* Ensure minimum height for count bubbles */
   }
   
   .sidebar-glass .sidebar-section-header {
@@ -673,6 +839,12 @@ header.fixed.top-0 {
     margin-bottom: 0.125rem;
     padding: 0.25rem 0.375rem;
   }
+  
+  /* Ensure count bubbles have space on smaller screens */
+  .sidebar-glass .flex.items-center.justify-center.w-7.h-7 {
+    min-height: 1.75rem;
+    position: relative;
+  }
 }
 
 @media (max-height: 700px) {
@@ -680,6 +852,7 @@ header.fixed.top-0 {
     padding: 0.375rem 0.5rem;
     font-size: 0.85rem;
     margin: 0.0625rem 0;
+    min-height: 2rem; /* Ensure minimum height for count bubbles */
   }
   
   .sidebar-glass .sidebar-section-header {
@@ -688,6 +861,12 @@ header.fixed.top-0 {
     margin-bottom: 0.0625rem;
     padding: 0.1875rem 0.3125rem;
   }
+  
+  /* Ensure count bubbles have space on smaller screens */
+  .sidebar-glass .flex.items-center.justify-center.w-7.h-7 {
+    min-height: 1.5rem;
+    position: relative;
+  }
 }
 
 @media (max-height: 600px) {
@@ -695,6 +874,7 @@ header.fixed.top-0 {
     padding: 0.25rem 0.375rem;
     font-size: 0.8rem;
     margin: 0.03125rem 0;
+    min-height: 1.75rem; /* Ensure minimum height for count bubbles */
   }
   
   .sidebar-glass .sidebar-section-header {
@@ -702,6 +882,12 @@ header.fixed.top-0 {
     margin-top: 0.25rem;
     margin-bottom: 0.03125rem;
     padding: 0.125rem 0.25rem;
+  }
+  
+  /* Ensure count bubbles have space on smaller screens */
+  .sidebar-glass .flex.items-center.justify-center.w-7.h-7 {
+    min-height: 1.25rem;
+    position: relative;
   }
 }
 
@@ -1081,17 +1267,28 @@ body {
     font-weight: 500 !important; /* Medium weight for emphasis */
 }
 
-.ticket-detail-container .priority-high {
-    color: #dc2626 !important; /* Red for high priority */
-}
+.ticket-detail-container .status-open { color: #16a34a !important; }
+.ticket-detail-container .status-inprogress { color: #ca8a04 !important; }
+.ticket-detail-container .status-hold { color: #7c3aed !important; }
+.ticket-detail-container .status-resolved { color: #16a34a !important; }
+.ticket-detail-container .status-cancelled { color: #dc2626 !important; }
 
-.ticket-detail-container .priority-medium {
-    color: #f59e0b !important; /* Orange for medium priority */
-}
+.ticket-detail-container .priority-critical { color: #dc2626 !important; }
+.ticket-detail-container .priority-high { color: #ea580c !important; }
+.ticket-detail-container .priority-medium { color: #ca8a04 !important; }
+.ticket-detail-container .priority-low { color: #16a34a !important; }
 
-.ticket-detail-container .priority-low {
-    color: #10b981 !important; /* Green for low priority */
-}
+/* Increase specificity to override FieldBox text color */
+.ticket-detail-container .FieldBox .status-open { color: #16a34a !important; }
+.ticket-detail-container .FieldBox .status-inprogress { color: #ca8a04 !important; }
+.ticket-detail-container .FieldBox .status-hold { color: #7c3aed !important; }
+.ticket-detail-container .FieldBox .status-resolved { color: #16a34a !important; }
+.ticket-detail-container .FieldBox .status-cancelled { color: #dc2626 !important; }
+
+.ticket-detail-container .FieldBox .priority-critical { color: #dc2626 !important; }
+.ticket-detail-container .FieldBox .priority-high { color: #ea580c !important; }
+.ticket-detail-container .FieldBox .priority-medium { color: #ca8a04 !important; }
+.ticket-detail-container .FieldBox .priority-low { color: #16a34a !important; }
 
 /* Timeline and activity color variations */
 .ticket-detail-container .timeline-item {
@@ -1244,7 +1441,10 @@ body {
     max-height: 24rem; /* 384px */
     overflow-y: auto;
     padding: 1rem;
-    space-y: 1rem;
+}
+
+.comments-list > * + * {
+    margin-top: 1rem;
 }
 
 .comment-item {
@@ -1279,15 +1479,18 @@ body {
 }
 
 .comment-author {
-    font-size: 0.875rem;
-    font-weight: 500;
+    font-size: 0.9rem;
+    font-weight: 700;
     color: #111827;
+    line-height: 1.2;
 }
 
 .comment-timestamp {
     font-size: 0.75rem;
     color: #6b7280;
-    margin-left: 0.5rem;
+    margin-left: 0;
+    margin-top: 2px;
+    line-height: 1.2;
 }
 
 .comment-options {
@@ -1302,8 +1505,9 @@ body {
 .comment-text {
     font-size: 0.875rem;
     color: #374151;
+    margin-top: 6px;
     margin-bottom: 0.5rem;
-    line-height: 1.4;
+    line-height: 1.5;
 }
 
 .comment-actions {
@@ -1502,8 +1706,7 @@ body {
     background: #94a3b8;
 }
 
-/* Modern Comments Interface - Matching the exact design with Roboto font */
-@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;600;700&display=swap');
+/* Modern Comments Interface - Using Space Grotesk for headings and Manrope for body text */
 
 .modern-comments-container {
     background: #f8f9fa;
@@ -1511,7 +1714,7 @@ body {
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
     border: 1px solid #e5e7eb;
     overflow: hidden;
-    font-family: 'Roboto', sans-serif;
+    font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
 }
 
 /* Comment Input Section */
@@ -1571,7 +1774,7 @@ body {
     resize: vertical;
     outline: none;
     transition: all 0.2s;
-    font-family: 'Roboto', sans-serif;
+    font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
     overflow-y: auto;
 }
 
@@ -1584,7 +1787,7 @@ body {
 .comment-textarea::placeholder {
     color: #9ca3af;
     font-weight: 400;
-    font-family: 'Roboto', sans-serif;
+    font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
     font-size: 13px !important;
 }
 
@@ -1610,7 +1813,7 @@ body {
     border-radius: 4px;
     cursor: pointer;
     transition: all 0.2s;
-    font-family: 'Roboto', sans-serif;
+    font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
 }
 
 .format-btn:hover {
@@ -1656,7 +1859,7 @@ body {
     line-height: 1.2 !important;
     min-height: auto !important;
     height: auto !important;
-    font-family: 'Roboto', sans-serif !important;
+    font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif !important;
 }
 
 .submit-btn.active {
@@ -1674,6 +1877,29 @@ body {
     background: #e5e7eb;
     color: #9ca3af;
     cursor: not-allowed;
+}
+
+.submit-btn.loading {
+    background: #3b82f6;
+    color: white;
+    cursor: not-allowed;
+    opacity: 0.8;
+}
+
+.loading-spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid #ffffff;
+    border-top: 2px solid transparent;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    display: inline-block;
+    margin-right: 8px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
 }
 
 /* Comments Header */
@@ -1697,7 +1923,7 @@ body {
     font-weight: 700 !important;
     color: #111827 !important;
     margin: 0 !important;
-    font-family: 'Roboto', sans-serif !important;
+    font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif !important;
 }
 
 /* More specific selectors to override global styles */
@@ -1720,7 +1946,7 @@ body {
     border-radius: 0;
     min-width: auto;
     text-align: left;
-    font-family: 'Roboto', sans-serif;
+    font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
 }
 
 .sort-option {
@@ -1731,7 +1957,7 @@ body {
     color: #6b7280;
     cursor: pointer;
     transition: color 0.2s;
-    font-family: 'Roboto', sans-serif;
+    font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
 }
 
 .sort-option:hover {
@@ -1772,7 +1998,7 @@ body {
     font-size: 14px;
     font-weight: 600;
     color: #6b7280;
-    font-family: 'Roboto', sans-serif;
+    font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
     border: 1px solid #e5e7eb;
 }
 
@@ -1793,7 +2019,7 @@ body {
     font-size: 13px !important;
     font-weight: 700 !important;
     color: #111827 !important;
-    font-family: 'Roboto', sans-serif !important;
+    font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif !important;
 }
 
 /* More specific selector to override global styles */
@@ -1813,7 +2039,7 @@ body {
     font-size: 11px !important;
     color: #9ca3af !important;
     font-weight: 400 !important;
-    font-family: 'Roboto', sans-serif !important;
+    font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif !important;
 }
 
 .comment-text {
@@ -1821,7 +2047,7 @@ body {
     color: #374151 !important;
     line-height: 1.5 !important;
     margin: 0 0 10px 0 !important;
-    font-family: 'Roboto', sans-serif !important;
+    font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif !important;
 }
 
 .comment-engagement {

@@ -1160,133 +1160,146 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                 timestamp: new Date()
             };
 
+            // Primary database operation - update ticket with comment
             await ticketsCollection.doc(ticketId).update({
                 comments: admin.firestore.FieldValue.arrayUnion(newComment),
                 updated_at: admin.firestore.FieldValue.serverTimestamp()
             });
             
-            // Trigger analytics update for real-time reports
-            await triggerAnalyticsUpdate('updated', { ...ticketData, id: ticketId });
+            // Return success immediately to user
+            res.status(200).json({ message: 'Comment added successfully!' });
             
-            // Log comment addition activity with enhanced context
-            const userDoc = await usersCollection.doc(req.user.uid).get();
-            const userData = userDoc.exists ? userDoc.data() : {};
-            let userName = req.user.email;
-            if (userData.firstName || userData.lastName) {
-                userName = `${userData.firstName || ''} ${userData.lastName || ''}`.trim();
-            } else if (userData.name) {
-                userName = userData.name;
-            } else if (userData.client_name) {
-                userName = userData.client_name;
-            }
-            await logCommentAdded(db, ticketId, userName, req.user.email, comment_text, { ...ticketData, ticket_display_id: ticketData.display_id });
-
-            if (req.user.uid !== ticketData.reporter_id) {
-                await notificationsCollection.add({
-                    userId: ticketData.reporter_id,
-                    message: `New comment on your ticket ${ticketData.display_id} by ${commenter_name}.`,
-                    type: 'new_comment_on_my_ticket',
-                    read: false,
-                    timestamp: admin.firestore.FieldValue.serverTimestamp(),
-                    ticketId: ticketId
-                });
-            }
-
-            if (ticketData.assigned_to_id && req.user.uid !== ticketData.assigned_to_id) {
-                await notificationsCollection.add({
-                    userId: ticketData.assigned_to_id,
-                    message: `New comment on assigned ticket ${ticketData.display_id} by ${commenter_name}.`,
-                    type: 'new_comment_on_assigned_ticket',
-                    read: false,
-                    timestamp: admin.firestore.FieldValue.serverTimestamp(),
-                    ticketId: ticketId
-                });
-            }
-
-            const reporterEmail = ticketData.reporter_email;
-            const requestForEmail = ticketData.request_for_email;
-            const assignedToEmail = ticketData.assigned_to_email;
-            const commenterEmail = commenter_name;
-            const emailSubject = `New Comment on Ticket ${ticketData.display_id}`;
-            const emailText = `A new comment has been added to your ticket (${ticketData.display_id} - ${ticketData.short_description}):\n\n${comment_text}\n\nAccess the Ticketing Tool for more details.`;
-            const baseUrl = getBaseUrl(req);
-            const ticketLink = `${baseUrl}/tickets/${ticketId}`;
-            const emailHtml = `<div style=\"font-family: Arial, sans-serif; color: #222;\"><p>A new comment has been added to your ticket (<a href=\"${ticketLink}\" style=\"color: #2563eb; text-decoration: underline;\" target=\"_blank\"><strong>${ticketData.display_id}</strong></a> - ${ticketData.short_description}):</p><blockquote style=\"margin: 8px 0; padding-left: 12px; border-left: 2px solid #ccc;\">${comment_text}</blockquote><p>Access the Ticketing Tool for more details.</p></div>`;
-            
-            // Check if action is performed by engineer
-            const isEngineerAction = ['support', 'admin', 'super_admin', 'site_admin'].includes(req.user.role);
-            
-            if (isEngineerAction) {
-                // Engineer action: To = request_for_email/reporter_email, CC = process.env.DISTRIBUTION_EMAIL + assigned engineer
-                let toList = [];
-                if (requestForEmail && reporterEmail) {
-                    if (requestForEmail === reporterEmail) {
-                        toList.push(requestForEmail);
-                    } else {
-                        toList.push(requestForEmail, reporterEmail);
-                    }
-                } else if (requestForEmail) {
-                    toList.push(requestForEmail);
-                } else if (reporterEmail) {
-                    toList.push(reporterEmail);
-                }
-                
-                let ccList = ['process.env.DISTRIBUTION_EMAIL'];
-                if (assignedToEmail) {
-                    ccList.push(assignedToEmail);
-                }
-                
-                setImmediate(() => {
-                    emailService.sendTicketCommentEmail({
-                        toEmail: toList.join(','),
-                        ccEmail: ccList.join(','),
-                        display_id: ticketData.display_id,
-                        short_description: ticketData.short_description,
-                        comment_text: comment_text,
-                        commenterEmail: commenterEmail,
-                        ticketUrl: ticketLink
-                    });
-                });
-            } else {
-                // Non-engineer action: To = process.env.DISTRIBUTION_EMAIL + assigned engineer, CC = request_for_email/reporter_email
-                setImmediate(() => {
-                    let toList = ['process.env.DISTRIBUTION_EMAIL'];
+            // Handle all background operations asynchronously
+            setImmediate(async () => {
+                try {
+                    // Trigger analytics update for real-time reports
+                    await triggerAnalyticsUpdate('updated', { ...ticketData, id: ticketId });
                     
-                    // Add assigned engineer to "To" field if ticket is assigned
-                    if (assignedToEmail) {
-                        toList.push(assignedToEmail);
+                    // Log comment addition activity with enhanced context
+                    const userDoc = await usersCollection.doc(req.user.uid).get();
+                    const userData = userDoc.exists ? userDoc.data() : {};
+                    let userName = req.user.email;
+                    if (userData.firstName || userData.lastName) {
+                        userName = `${userData.firstName || ''} ${userData.lastName || ''}`.trim();
+                    } else if (userData.name) {
+                        userName = userData.name;
+                    } else if (userData.client_name) {
+                        userName = userData.client_name;
+                    }
+                    await logCommentAdded(db, ticketId, userName, req.user.email, comment_text, { ...ticketData, ticket_display_id: ticketData.display_id });
+
+                    // Add notifications asynchronously
+                    const notificationPromises = [];
+                    
+                    if (req.user.uid !== ticketData.reporter_id) {
+                        notificationPromises.push(
+                            notificationsCollection.add({
+                                userId: ticketData.reporter_id,
+                                message: `New comment on your ticket ${ticketData.display_id} by ${commenter_name}.`,
+                                type: 'new_comment_on_my_ticket',
+                                read: false,
+                                timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                                ticketId: ticketId
+                            })
+                        );
+                    }
+
+                    if (ticketData.assigned_to_id && req.user.uid !== ticketData.assigned_to_id) {
+                        notificationPromises.push(
+                            notificationsCollection.add({
+                                userId: ticketData.assigned_to_id,
+                                message: `New comment on assigned ticket ${ticketData.display_id} by ${commenter_name}.`,
+                                type: 'new_comment_on_assigned_ticket',
+                                read: false,
+                                timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                                ticketId: ticketId
+                            })
+                        );
                     }
                     
-                    let ccList = [];
+                    // Execute all notifications in parallel
+                    await Promise.allSettled(notificationPromises);
+
+                    // Handle email sending in background
+                    const reporterEmail = ticketData.reporter_email;
+                    const requestForEmail = ticketData.request_for_email;
+                    const assignedToEmail = ticketData.assigned_to_email;
+                    const commenterEmail = commenter_name;
+                    const baseUrl = getBaseUrl(req);
+                    const ticketLink = `${baseUrl}/tickets/${ticketId}`;
                     
-                    // Add requested by email and requested for email to CC (if they're different)
-                    if (requestForEmail && reporterEmail) {
-                        if (requestForEmail === reporterEmail) {
-                            ccList.push(requestForEmail);
-                        } else {
-                            ccList.push(requestForEmail, reporterEmail);
+                    // Check if action is performed by engineer
+                    const isEngineerAction = ['support', 'admin', 'super_admin', 'site_admin'].includes(req.user.role);
+                    
+                    if (isEngineerAction) {
+                        // Engineer action: To = request_for_email/reporter_email, CC = process.env.DISTRIBUTION_EMAIL + assigned engineer
+                        let toList = [];
+                        if (requestForEmail && reporterEmail) {
+                            if (requestForEmail === reporterEmail) {
+                                toList.push(requestForEmail);
+                            } else {
+                                toList.push(requestForEmail, reporterEmail);
+                            }
+                        } else if (requestForEmail) {
+                            toList.push(requestForEmail);
+                        } else if (reporterEmail) {
+                            toList.push(reporterEmail);
                         }
-                    } else if (requestForEmail) {
-                        ccList.push(requestForEmail);
-                    } else if (reporterEmail) {
-                        ccList.push(reporterEmail);
+                        
+                        let ccList = ['process.env.DISTRIBUTION_EMAIL'];
+                        if (assignedToEmail) {
+                            ccList.push(assignedToEmail);
+                        }
+                        
+                        emailService.sendTicketCommentEmail({
+                            toEmail: toList.join(','),
+                            ccEmail: ccList.join(','),
+                            display_id: ticketData.display_id,
+                            short_description: ticketData.short_description,
+                            comment_text: comment_text,
+                            commenterEmail: commenterEmail,
+                            ticketUrl: ticketLink
+                        });
+                    } else {
+                        // Non-engineer action: To = process.env.DISTRIBUTION_EMAIL + assigned engineer, CC = request_for_email/reporter_email
+                        let toList = ['process.env.DISTRIBUTION_EMAIL'];
+                        
+                        // Add assigned engineer to "To" field if ticket is assigned
+                        if (assignedToEmail) {
+                            toList.push(assignedToEmail);
+                        }
+                        
+                        let ccList = [];
+                        
+                        // Add requested by email and requested for email to CC (if they're different)
+                        if (requestForEmail && reporterEmail) {
+                            if (requestForEmail === reporterEmail) {
+                                ccList.push(requestForEmail);
+                            } else {
+                                ccList.push(requestForEmail, reporterEmail);
+                            }
+                        } else if (requestForEmail) {
+                            ccList.push(requestForEmail);
+                        } else if (reporterEmail) {
+                            ccList.push(reporterEmail);
+                        }
+                        
+                        const toEmail = toList.join(',');
+                        const ccEmail = ccList.length > 0 ? ccList.join(',') : null;
+                        emailService.sendTicketCommentEmail({
+                            toEmail: toEmail,
+                            ccEmail: ccEmail,
+                            display_id: ticketData.display_id,
+                            short_description: ticketData.short_description,
+                            comment_text: comment_text,
+                            commenterEmail: commenterEmail,
+                            ticketUrl: ticketLink
+                        });
                     }
-                    
-                    const toEmail = toList.join(',');
-                    const ccEmail = ccList.length > 0 ? ccList.join(',') : null;
-                    emailService.sendTicketCommentEmail({
-                        toEmail: toEmail,
-                        ccEmail: ccEmail,
-                        display_id: ticketData.display_id,
-                        short_description: ticketData.short_description,
-                        comment_text: comment_text,
-                        commenterEmail: commenterEmail,
-                        ticketUrl: ticketLink
-                    });
-                });
-            }
-
-            return res.status(200).json({ message: 'Comment added successfully!' });
+                } catch (error) {
+                    console.error('Background comment processing error:', error);
+                }
+            });
         } catch (error) {
             console.error(`Error adding comment: ${error.message}`);
             return res.status(500).json({ error: `Error adding comment: ${error.message}` });

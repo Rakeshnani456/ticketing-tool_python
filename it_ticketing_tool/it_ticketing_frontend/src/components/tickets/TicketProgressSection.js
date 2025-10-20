@@ -59,24 +59,56 @@ const TicketProgressSection = ({
 
     const getStatusClasses = (status) => {
         switch (status) {
-            case 'Open': return 'bg-gradient-to-r from-blue-50 to-blue-100 text-blue-800 border-blue-300 shadow-sm';
-            case 'In Progress': return 'bg-gradient-to-r from-amber-50 to-amber-100 text-amber-800 border-amber-300 shadow-sm';
-            case 'Hold': return 'bg-gradient-to-r from-purple-50 to-purple-100 text-purple-800 border-purple-300 shadow-sm';
-            case 'Cancelled': return 'bg-gradient-to-r from-red-50 to-red-100 text-red-800 border-red-300 shadow-sm';
-            case 'Resolved': return 'bg-gradient-to-r from-emerald-50 to-emerald-100 text-emerald-800 border-emerald-300 shadow-sm';
+            case 'Open': return 'bg-gradient-to-r from-emerald-50 to-emerald-100 border-emerald-300 shadow-sm status-open';
+            case 'In Progress': return 'bg-gradient-to-r from-yellow-50 to-yellow-100 border-yellow-300 shadow-sm status-inprogress';
+            case 'Hold': return 'bg-gradient-to-r from-purple-50 to-purple-100 border-purple-300 shadow-sm status-hold';
+            case 'Cancelled': return 'bg-gradient-to-r from-red-50 to-red-100 border-red-300 shadow-sm status-cancelled';
+            case 'Resolved': return 'bg-gradient-to-r from-green-50 to-green-100 border-green-300 shadow-sm status-resolved';
             default: return 'bg-gradient-to-r from-gray-50 to-gray-100 text-gray-800 border-gray-300 shadow-sm';
+        }
+    };
+
+    // Text-only classes for use inside dropdown button (no background)
+    const getStatusTextClass = (status) => {
+        switch (status) {
+            case 'Open': return 'status-open';
+            case 'In Progress': return 'status-inprogress';
+            case 'Hold': return 'status-hold';
+            case 'Cancelled': return 'status-cancelled';
+            case 'Resolved': return 'status-resolved';
+            default: return '';
         }
     };
 
     const getPriorityClasses = (priority) => {
         switch (priority) {
-            case 'Low': return 'bg-gradient-to-r from-emerald-50 to-emerald-100 text-emerald-800 border-emerald-300 shadow-sm';
-            case 'Medium': return 'bg-gradient-to-r from-amber-50 to-amber-100 text-amber-800 border-amber-300 shadow-sm';
-            case 'High': return 'bg-gradient-to-r from-orange-50 to-orange-100 text-orange-800 border-orange-300 shadow-sm';
-            case 'Critical': return 'bg-gradient-to-r from-red-50 to-red-100 text-red-800 border-red-300 shadow-sm';
+            case 'Low': return 'bg-gradient-to-r from-emerald-50 to-emerald-100 border-emerald-300 shadow-sm priority-low';
+            case 'Medium': return 'bg-gradient-to-r from-amber-50 to-amber-100 border-amber-300 shadow-sm priority-medium';
+            case 'High': return 'bg-gradient-to-r from-orange-50 to-orange-100 border-orange-300 shadow-sm priority-high';
+            case 'Critical': return 'bg-gradient-to-r from-red-50 to-red-100 border-red-300 shadow-sm priority-critical';
             default: return 'bg-gradient-to-r from-gray-50 to-gray-100 text-gray-800 border-gray-300 shadow-sm';
         }
     };
+
+    // Text-only classes for dropdown selected display (no background)
+    const getPriorityTextClass = (priority) => {
+        switch (priority) {
+            case 'Low': return 'priority-low';
+            case 'Medium': return 'priority-medium';
+            case 'High': return 'priority-high';
+            case 'Critical': return 'priority-critical';
+            default: return '';
+        }
+    };
+
+    // Debounced autosave
+    const autosaveTimerRef = React.useRef(null);
+    const triggerAutosave = React.useCallback(() => {
+        if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+        autosaveTimerRef.current = setTimeout(() => {
+            handleUpdateTicket('save');
+        }, 250);
+    }, [handleUpdateTicket]);
 
     return (
         <div className="bg-white p-3 sm:p-4 h-fit w-full min-w-0 max-w-full overflow-x-hidden overflow-y-auto ticket-progress-section">
@@ -88,47 +120,7 @@ const TicketProgressSection = ({
                     </h3>
                     <Activity width={16} height={16} className="" />
                 </div>
-
-                {/* Custom Edit/Save/Cancel buttons */}
-                {canEdit && !isEditing && (
-                    <button
-                        onClick={() => setIsEditing(true)}
-                        className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        Edit
-                    </button>
-                )}
-                {isEditing && canEdit && (
-                    <div className="flex items-center space-x-1.5">
-                        {/* Only show Cancel button if not saving */}
-                        {saveButtonState === 'save' && (
-                            <button
-                                onClick={handleCancelEdit}
-                                disabled={updateLoading}
-                                className="px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-300 hover:border-gray-400 hover:bg-gray-50 rounded-md transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-gray-300 focus:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                Cancel
-                            </button>
-                        )}
-                        {/* Save button always shown */}
-                        <button
-                            onClick={() => handleUpdateTicket('save')}
-                            disabled={updateLoading || !hasChanges()}
-                            className={`px-3 py-1.5 text-xs font-medium text-white rounded-md transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed ${
-                                saveButtonState === 'success' 
-                                    ? 'bg-green-600 hover:bg-green-700 focus:ring-green-300' 
-                                    : saveButtonState === 'error' 
-                                    ? 'bg-red-600 hover:bg-red-700 focus:ring-red-300'
-                                    : 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-300'
-                            }`}
-                        >
-                            {saveButtonState === 'saving' && 'Saving...'}
-                            {saveButtonState === 'success' && 'Saved!'}
-                            {saveButtonState === 'error' && 'Error!'}
-                            {saveButtonState === 'save' && 'Save'}
-                        </button>
-                    </div>
-                )}
+                {/* Controls removed – autosave on change */}
             </div>
 
             <div className="space-y-2 sm:space-y-2.5 w-full min-w-0 max-w-full overflow-x-hidden">
@@ -140,18 +132,24 @@ const TicketProgressSection = ({
                     {isEditing && canEdit && !isTicketClosedOrResolved ? (
                         <CustomDropdown
                             value={editableFields.status}
-                            onChange={(value) => handleButtonSelection('status', value)}
+                            onChange={(value) => { handleButtonSelection('status', value); setTimeout(triggerAutosave, 0); }}
                             options={statuses}
                             placeholder="Select status..."
                             className="w-full"
                             size="sm"
-                            disabled={updateLoading}
+                            disabled={false}
+                            focusStyle="gray"
+                            customDisplay={editableFields.status ? (
+                                <span className={`text-[10px] font-semibold ${getStatusTextClass(editableFields.status)}`}>
+                                    {editableFields.status}
+                                </span>
+                            ) : null}
                         />
                     ) : (
                         <FieldBox isDisplayOnly={true} className="w-full min-w-0 max-w-full overflow-x-hidden">
-                            <span className={`px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-lg text-[10px] font-semibold border ${getStatusClasses(ticket.status)}`}>
+                            <div className={`px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-lg text-[10px] font-semibold border ${getStatusClasses(ticket.status)}`}>
                                 {ticket.status}
-                            </span>
+                            </div>
                         </FieldBox>
                     )}
                 </div>
@@ -164,18 +162,24 @@ const TicketProgressSection = ({
                     {isEditing && canEdit ? (
                         <CustomDropdown
                             value={editableFields.priority}
-                            onChange={(value) => handleButtonSelection('priority', value)}
+                            onChange={(value) => { handleButtonSelection('priority', value); setTimeout(triggerAutosave, 0); }}
                             options={priorities}
                             placeholder="Select priority..."
                             className="w-full"
                             size="sm"
-                            disabled={updateLoading}
+                            disabled={false}
+                            focusStyle="gray"
+                            customDisplay={editableFields.priority ? (
+                                <span className={`text-[10px] font-semibold ${getPriorityTextClass(editableFields.priority)}`}>
+                                    {editableFields.priority}
+                                </span>
+                            ) : null}
                         />
                     ) : (
                         <FieldBox isDisplayOnly={true} className="w-full min-w-0 max-w-full overflow-x-hidden">
-                            <span className={`px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-lg text-[10px] font-semibold border ${getPriorityClasses(ticket.priority)}`}>
+                            <div className={`px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-lg text-[10px] font-semibold border ${getPriorityClasses(ticket.priority)}`}>
                                 {ticket.priority}
-                            </span>
+                            </div>
                         </FieldBox>
                     )}
                 </div>
@@ -188,16 +192,17 @@ const TicketProgressSection = ({
                     {isEditing && canEdit ? (
                         <CustomDropdown
                             value={editableFields.category || ''}
-                            onChange={(value) => handleEditChange({ target: { id: 'category', value } })}
+                            onChange={(value) => { handleEditChange({ target: { id: 'category', value } }); setTimeout(triggerAutosave, 0); }}
                             options={[
                                 { value: 'software', label: 'Software' },
                                 { value: 'hardware', label: 'Hardware' },
                                 { value: 'troubleshoot', label: 'Troubleshoot' }
                             ]}
                             placeholder="Select Category"
-                            className="text-xs w-full border border-gray-300 rounded-md"
+                            className="w-full"
                             disabled={!canEdit}
                             size="sm"
+                            focusStyle="gray"
                         />
                     ) : (
                         <FieldBox isDisplayOnly={true} className="w-full min-w-0 max-w-full overflow-x-hidden">
@@ -217,7 +222,7 @@ const TicketProgressSection = ({
                         <div className="w-full">
                             <CustomDropdown
                                 value={editableFields.assigned_to_email || ''}
-                                onChange={(value) => handleEditChange({ target: { id: 'assigned_to_email', value } })}
+                                onChange={(value) => { handleEditChange({ target: { id: 'assigned_to_email', value } }); setTimeout(triggerAutosave, 0); }}
                                 options={[
                                     { value: '', label: 'Unassigned' },
                                     ...supportUsers.map(u => ({
@@ -226,9 +231,10 @@ const TicketProgressSection = ({
                                     }))
                                 ]}
                                 placeholder="Select Assignee"
-                                className="text-xs w-full border border-gray-300 rounded-md"
+                                className="w-full"
                                 disabled={!canEdit || isTicketClosedOrResolved || supportUsersLoading}
                                 size="sm"
+                                focusStyle="gray"
                             />
                             {assignedToErrorMessage && (
                                 <p className="text-xs mt-1 text-red-600">{assignedToErrorMessage}</p>

@@ -21,11 +21,12 @@ const FieldBox = ({ children, className = "", isDisplayOnly = false, hasError = 
     </div>
 );
 
-const EditableTextarea = ({ id, value, onChange, rows = 3, className = "", disabled, hasError = false, inputRef, maxLength }) => (
+const EditableTextarea = ({ id, value, onChange, onBlur, rows = 3, className = "", disabled, hasError = false, inputRef, maxLength }) => (
     <textarea
         id={id}
         value={value}
         onChange={onChange}
+        onBlur={onBlur}
         rows={rows}
         ref={inputRef}
         className={`rounded-md px-2 py-1.5 focus:outline-none resize-none flex-shrink-0 w-full transition-all duration-200 text-xs border border-gray-300
@@ -416,12 +417,17 @@ const TicketDetailsSection = ({
                     Description:
                 </label>
                 <div className="border border-gray-200 px-3 py-2 bg-gradient-to-r from-gray-50 to-gray-100 rounded-md w-full min-w-0 max-w-full overflow-y-auto" style={{ height: '200px' }}>
-                    {isEditing && canEdit && (!ticket.long_description || ticket.long_description.trim() === '') ? (
+                    {isEditing && canEdit ? (
                         <>
                             <EditableTextarea
                                 id="long_description"
                                 value={editableFields.long_description}
                                 onChange={handleEditChange}
+                                onBlur={() => {
+                                    // trigger autosave via custom event the parent listens to (debounced save lives in progress section)
+                                    const evt = new CustomEvent('ticket-autosave');
+                                    window.dispatchEvent(evt);
+                                }}
                                 rows={10}
                                 disabled={!canEdit}
                                 className="w-full min-w-0 max-w-full text-xs bg-transparent border-none focus:outline-none resize-none"

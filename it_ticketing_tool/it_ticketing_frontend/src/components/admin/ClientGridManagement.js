@@ -4,6 +4,7 @@ import { API_BASE_URL } from '../../config/constants';
 import { getFirestore, collection, onSnapshot } from 'firebase/firestore';
 import { app } from '../../config/firebase';
 import { CSVLink } from 'react-csv';
+import FaviconIcon from '../common/FaviconIcon';
 
 const ClientGridManagement = ({ user }) => {
   // State management
@@ -585,13 +586,9 @@ const ClientGridManagement = ({ user }) => {
         .client-avatar {
           width: 2rem;
           height: 2rem;
-          background-color: #3b82f6;
-          border-radius: 50%;
           display: flex;
           align-items: center;
           justify-content: center;
-          color: white;
-          font-size: 0.875rem;
         }
         
         .client-details h4 {
@@ -859,6 +856,11 @@ const ClientGridManagement = ({ user }) => {
           100% { transform: translateX(400%); }
         }
         
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+        
         .error-container {
           padding: 2rem;
         }
@@ -1031,38 +1033,6 @@ const ClientGridManagement = ({ user }) => {
       {/* Search and Filters */}
       <div className="search-filters-card">
         <div className="search-filters-grid">
-          <div style={{ position: 'relative' }}>
-            <button
-              className="btn btn-outline"
-              onClick={() => setShowFilterMenu(!showFilterMenu)}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <polygon points="22,3 2,3 10,12.46 10,19 14,21 14,12.46 22,3"/>
-              </svg>
-                Filter
-            </button>
-            {showFilterMenu && (
-              <div className="filter-menu">
-                <div className="filter-menu-item">
-                  <input
-                    type="text"
-                    placeholder="Filter by location"
-                    value={filters.location}
-                    onChange={(e) => setFilters(prev => ({ ...prev, location: e.target.value }))}
-                  />
-                </div>
-                <div className="filter-menu-item" onClick={() => setFilters(prev => ({ ...prev, userCount: 'all' }))}>
-                  All Clients
-                </div>
-                <div className="filter-menu-item" onClick={() => setFilters(prev => ({ ...prev, userCount: 'hasUsers' }))}>
-                  Clients with Users
-                </div>
-                <div className="filter-menu-item" onClick={() => setFilters(prev => ({ ...prev, userCount: 'noUsers' }))}>
-                  Clients without Users
-                </div>
-              </div>
-            )}
-          </div>
           <div className="search-input">
             <svg className="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <circle cx="11" cy="11" r="8"/>
@@ -1187,11 +1157,11 @@ const ClientGridManagement = ({ user }) => {
                     <td>
                       <div className="client-info">
                         <div className="client-avatar">
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M3 21h18"/>
-                            <path d="M5 21V7l8-4v18"/>
-                            <path d="M19 21V11l-6-4"/>
-                          </svg>
+                          <FaviconIcon 
+                            websiteUrl={client.website} 
+                            size="28px"
+                            alt={`${client.companyName} favicon`}
+                          />
                         </div>
                         <div className="client-details">
                           <h4>{client.companyName}</h4>

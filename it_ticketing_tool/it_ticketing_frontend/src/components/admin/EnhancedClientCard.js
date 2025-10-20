@@ -46,6 +46,7 @@ import {
   VerifiedUser as VerifiedIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
+import FaviconIcon from '../common/FaviconIcon';
 
 const InfoChip = ({ icon, label, value, color = 'default', clickable = false, onClick }) => (
   <Chip
@@ -339,7 +340,11 @@ const EnhancedClientCard = ({
           {/* Company Info */}
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.25 }}>
-              <BusinessIcon sx={{ color: 'primary.main', fontSize: dense ? '1rem' : '1.2rem' }} />
+              <FaviconIcon 
+                websiteUrl={client.website} 
+                size={dense ? '24px' : '28px'}
+                alt={`${client.companyName} favicon`}
+              />
               <Typography
                 variant="h6"
                 sx={{

@@ -55,6 +55,8 @@ const CreateTicketPage = ({ user, showFlashMessage, navigateTo }) => {
 
     // File input ref
     const fileInputRef = useRef(null);
+    // Success message ref for scrolling
+    const successRef = useRef(null);
 
     // Handle form input changes
     const handleInputChange = (e) => {
@@ -71,6 +73,19 @@ const CreateTicketPage = ({ user, showFlashMessage, navigateTo }) => {
                 ...prev,
                 [fieldName]: ''
             }));
+        }
+    };
+
+    // Restrict contact number to digits only
+    const handleContactNumberChange = (e) => {
+        const rawValue = e.target.value || '';
+        const numericOnly = rawValue.replace(/\D/g, '').slice(0, 15);
+        setFormData(prev => ({
+            ...prev,
+            contact_number: numericOnly
+        }));
+        if (errors.contact_number) {
+            setErrors(prev => ({ ...prev, contact_number: '' }));
         }
     };
 
@@ -159,6 +174,13 @@ const CreateTicketPage = ({ user, showFlashMessage, navigateTo }) => {
             setUploadingAttachments(false);
         }
     };
+
+    // Scroll to success message when created
+    useEffect(() => {
+        if (submissionStatus === 'success' && successRef.current) {
+            successRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    }, [submissionStatus]);
 
     // Form validation
     const validateForm = () => {
@@ -310,6 +332,30 @@ const CreateTicketPage = ({ user, showFlashMessage, navigateTo }) => {
                     </div>
                 )}
 
+                {/* Success Message - moved up and centered */}
+                {successMessage && (
+                    <div ref={successRef} className="border-2 border-orange-300 rounded-lg p-4 mb-4 bg-orange-50">
+                        <div className="flex items-center justify-center gap-2 mb-3 text-center">
+                            <img src={markIcon} alt="Success" className="w-4 h-4" />
+                            <span className="text-gray-800 font-medium">Ticket {createdTicketId} created successfully!</span>
+                        </div>
+                        <div className="flex gap-2 justify-center">
+                            <button
+                                onClick={() => navigate(`/tickets/${createdTicketDocId}`)}
+                                className="px-3 py-1.5 bg-orange-600 hover:bg-orange-700 text-white text-sm rounded transition-colors"
+                            >
+                                View Ticket
+                            </button>
+                            <button
+                                onClick={() => navigate('/dashboard')}
+                                className="px-3 py-1.5 bg-gray-600 hover:bg-gray-700 text-white text-sm rounded transition-colors"
+                            >
+                                Dashboard
+                            </button>
+                        </div>
+                    </div>
+                )}
+
                 {/* Main Form */}
                 <div className="bg-white rounded-lg shadow-lg border border-orange-200">
                     <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 sm:space-y-5">
@@ -392,7 +438,7 @@ const CreateTicketPage = ({ user, showFlashMessage, navigateTo }) => {
                                     label="Contact *"
                                     type="text"
                                     value={formData.contact_number}
-                                    onChange={handleInputChange}
+                                    onChange={handleContactNumberChange}
                                     placeholder="Your contact number"
                                     maxLength={15}
                                     error={errors.contact_number}
@@ -470,29 +516,7 @@ const CreateTicketPage = ({ user, showFlashMessage, navigateTo }) => {
                             )}
                         </div>
 
-                        {/* Success Message */}
-                        {successMessage && (
-                            <div className="border-2 border-orange-300 rounded-lg p-4 mb-4">
-                                <div className="flex items-center gap-2 mb-3">
-                                    <img src={markIcon} alt="Success" className="w-4 h-4" />
-                                    <span className="text-gray-800 font-medium">Ticket {createdTicketId} created successfully!</span>
-                                </div>
-                                <div className="flex gap-2">
-                                    <button
-                                        onClick={() => navigate(`/tickets/${createdTicketDocId}`)}
-                                        className="px-3 py-1.5 bg-orange-600 hover:bg-orange-700 text-white text-sm rounded transition-colors"
-                                    >
-                                        View Ticket
-                                    </button>
-                                    <button
-                                        onClick={() => navigate('/dashboard')}
-                                        className="px-3 py-1.5 bg-gray-600 hover:bg-gray-700 text-white text-sm rounded transition-colors"
-                                    >
-                                        Dashboard
-                                    </button>
-                                </div>
-                            </div>
-                        )}
+                        {/* Success Message moved above form */}
 
                         {/* Action Buttons - Only show if not successful */}
                         {submissionStatus !== 'success' && (

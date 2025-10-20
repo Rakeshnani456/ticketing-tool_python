@@ -150,18 +150,7 @@ const TooltipWithArrow = ({ title, children, id }) => {
   );
 };
 
-// Designation options
-const designationOptions = [
-  { value: 'CEO', label: 'CEO' },
-  { value: 'CTO', label: 'CTO' },
-  { value: 'Manager', label: 'Manager' },
-  { value: 'IT Admin', label: 'IT Admin' },
-  { value: 'Site Admin', label: 'Site Admin' },
-  { value: 'Director', label: 'Director' },
-  { value: 'Team Lead', label: 'Team Lead' },
-  { value: 'Developer', label: 'Developer' },
-  { value: 'Other', label: 'Other' },
-];
+// Designation is now a text input field, no dropdown options needed
 
 // Employment type options
 const employmentTypeOptions = [
@@ -672,329 +661,147 @@ const UserDetailView = ({ user }) => {
           font-size: 0.7rem;
         }
         
-        .form-actions {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          gap: 0.75rem;
-          padding: 0.75rem;
-          background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
-          border-top: 1px solid #0ea5e9;
+        /* Professional Profile Styles */
+        .profile-container {
+          max-width: 1200px;
+          margin: 0 auto;
         }
         
-        .form-actions-left {
-          flex: 1;
-        }
-        
-        .form-actions-right {
-          display: flex;
-          gap: 0.5rem;
-        }
-        
-        .form-section {
-          background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-          border-radius: 0;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        .profile-header {
+          background: #ffffff;
+          border: 1px solid #e5e7eb;
+          border-radius: 6px;
+          padding: 1rem;
           margin-bottom: 0.75rem;
-          overflow: hidden;
+          box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+        }
+        
+        .profile-header-content {
+          display: flex;
+          align-items: center;
+          gap: 1rem;
+        }
+        
+        .profile-avatar {
+          width: 48px;
+          height: 48px;
+          border-radius: 6px;
+          background: #f8fafc;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 1.25rem;
+          font-weight: 500;
+          color: #64748b;
           border: 1px solid #e2e8f0;
         }
         
-        .section-header {
-          background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
-          padding: 0.5rem 0.75rem;
-          border-bottom: 1px solid #9ca3af;
+        .profile-info { flex: 1; }
+        
+        .profile-name {
+          font-size: 1.25rem;
+          font-weight: 500;
+          margin: 0 0 0.125rem 0;
+          color: #475569;
+        }
+        
+        .profile-title {
+          font-size: 0.875rem;
+          font-weight: 400;
+          margin: 0 0 0.25rem 0;
+          color: #64748b;
+        }
+        
+        .profile-email {
+          font-size: 0.8rem;
+          color: #64748b;
           display: flex;
           align-items: center;
-          gap: 0.5rem;
+          gap: 0.375rem;
         }
+        .profile-email a { color: #3b82f6; text-decoration: none; font-weight: 400; }
+        .profile-email a:hover { text-decoration: underline; }
         
-        .section-icon {
-          width: 1.25rem;
-          height: 1.25rem;
-          color: #ffffff;
-        }
-        
-        .section-header h3 {
-          font-size: 0.8rem;
-          font-weight: 500;
-          color: #ffffff;
-          margin: 0;
-        }
-        
-        .section-content {
-          padding: 0.75rem;
-        }
-        
-        .form-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-          gap: 0.75rem;
-          position: relative;
-          z-index: 1;
-        }
-        
-        .form-group {
+        .profile-stats {
           display: flex;
-          flex-direction: column;
+          gap: 1.25rem;
+          margin-top: 0.75rem;
+          padding-top: 0.5rem;
+          border-top: 1px solid #e2e8f0;
         }
+        .stat-item { text-align: left; }
+        .stat-value { font-size: 0.875rem; font-weight: 500; color: #475569; display: block; }
+        .stat-label { font-size: 0.7rem; color: #64748b; margin-top: 0.125rem; text-transform: uppercase; letter-spacing: 0.025em; font-weight: 400; }
         
-        .form-label {
-          font-size: 0.75rem;
-          font-weight: 500;
-          color: #374151;
-          margin-bottom: 0.375rem;
-        }
+        .sections-container { display: flex; flex-direction: column; gap: 1rem; }
+        .section { background: white; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border: 1px solid #e5e7eb; overflow: hidden; }
+        .section-header { background: #f8fafc; padding: 0.625rem 0.875rem; border-bottom: 1px solid #e2e8f0; display: flex; align-items: center; gap: 0.5rem; }
+        .section-icon { width: 0.875rem; height: 0.875rem; color: #64748b; }
+        .section-title { font-size: 0.8rem; font-weight: 500; color: #475569; margin: 0; text-transform: uppercase; letter-spacing: 0.025em; }
+        .section-content { padding: 0.875rem; }
+        .fields-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 0.875rem; }
+        .field-item { display: flex; flex-direction: column; gap: 0.25rem; }
+        .field-label { font-size: 0.7rem; font-weight: 400; color: #64748b; text-transform: uppercase; letter-spacing: 0.025em; }
+        .field-value { font-size: 0.8rem; color: #475569; font-weight: 400; word-break: break-word; }
+        .field-value a { color: #3b82f6; text-decoration: none; font-weight: 400; }
+        .field-value a:hover { text-decoration: underline; }
+        .field-value .empty { color: #94a3b8; font-style: italic; font-weight: 400; }
         
-        .form-input {
-          padding: 0.625rem;
-          border: 1px solid #d1d5db;
-          border-radius: 0.375rem;
-          font-size: 0.875rem;
-          background: #ffffff;
-          transition: all 0.2s ease;
+        /* Edit mode styles */
+        .edit-input {
           width: 100%;
-          height: 2.5rem;
-          box-sizing: border-box;
-          min-height: 2.5rem;
-        }
-        
-        .form-input:focus {
-          outline: none;
-          border-color: #6b7280;
-          box-shadow: 0 0 0 3px rgba(107, 114, 128, 0.1);
-          background: #ffffff;
-        }
-        
-        .form-input:hover {
-          border-color: #9ca3af;
-        }
-        
-        .form-input.display-only {
-          background-color: #f9fafb;
-          color: #374151;
-          border-color: #e5e7eb;
-          cursor: default;
-          display: flex;
-          align-items: center;
-          height: 2.5rem;
-          min-height: 2.5rem;
-        }
-        
-        .form-input.display-only a {
-          color: #3b82f6;
-          text-decoration: none;
-          font-weight: 500;
-        }
-        
-        .form-input.display-only a:hover {
-          text-decoration: underline;
-        }
-        
-        .form-input.disabled-field {
-          background-color: #f3f4f6;
-          color: #6b7280;
-          border-color: #d1d5db;
-          cursor: not-allowed;
-          opacity: 0.7;
-        }
-        
-        .form-input.disabled-field a {
-          color: #6b7280;
-          cursor: not-allowed;
-          pointer-events: none;
-        }
-        
-        /* Simple form grid styling */
-        .form-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-          gap: 0.75rem;
-        }
-        
-        .form-group {
-          display: flex;
-          flex-direction: column;
-        }
-        
-        @keyframes fadeIn {
-          from {
-            opacity: 0;
-            transform: translateY(-4px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-        
-        .delete-bubble {
-          position: fixed;
-          background: white;
-          border: 1px solid #e5e7eb;
-          border-radius: 0.5rem;
-          box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
-          padding: 1rem;
-          z-index: 10000;
-          min-width: 280px;
-          max-width: 320px;
-        }
-        
-        .delete-bubble::before {
-          content: '';
-          position: absolute;
-          top: -8px;
-          right: 20px;
-          width: 0;
-          height: 0;
-          border-left: 8px solid transparent;
-          border-right: 8px solid transparent;
-          border-bottom: 8px solid #e5e7eb;
-        }
-        
-        .delete-bubble::after {
-          content: '';
-          position: absolute;
-          top: -7px;
-          right: 21px;
-          width: 0;
-          height: 0;
-          border-left: 7px solid transparent;
-          border-right: 7px solid transparent;
-          border-bottom: 7px solid white;
-        }
-        
-        .delete-bubble h4 {
-          margin: 0 0 0.5rem 0;
-          font-size: 0.875rem;
-          font-weight: 600;
-          color: #1f2937;
-        }
-        
-        .delete-bubble p {
-          margin: 0 0 1rem 0;
-          font-size: 0.8rem;
-          color: #6b7280;
-          line-height: 1.4;
-        }
-        
-        .delete-bubble-actions {
-          display: flex;
-          gap: 0.5rem;
-          justify-content: flex-end;
-        }
-        
-        .btn-bubble-cancel {
-          padding: 0.375rem 0.75rem;
+          padding: 0.5rem 0.75rem;
           border: 1px solid #d1d5db;
-          background: white;
-          border-radius: 0.375rem;
-          cursor: pointer;
-          font-size: 0.75rem;
-          color: #374151;
+          border-radius: 4px;
+          font-size: 0.875rem;
+          background: #ffffff;
+          transition: border-color 0.2s ease;
+          font-family: inherit;
         }
+        .edit-input:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59,130,246,0.1); }
+        .edit-input:hover { border-color: #9ca3af; }
+        .edit-input.disabled { background-color: #f9fafb; color: #6b7280; border-color: #e5e7eb; cursor: not-allowed; }
         
-        .btn-bubble-cancel:hover {
-          background-color: #f9fafb;
+        .edit-dropdown {
+          width: 100%; padding: 0.5rem 0.75rem; border: 1px solid #d1d5db; border-radius: 4px; font-size: 0.875rem; background: #ffffff; transition: border-color 0.2s ease; font-family: inherit;
         }
+        .edit-dropdown:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59,130,246,0.1); }
+        .edit-dropdown:hover { border-color: #9ca3af; }
+        .edit-dropdown.disabled { background-color: #f9fafb; color: #6b7280; border-color: #e5e7eb; cursor: not-allowed; }
         
-        .btn-bubble-delete {
-          padding: 0.375rem 0.75rem;
-          border: 1px solid #dc2626;
-          background: #dc2626;
-          border-radius: 0.375rem;
-          cursor: pointer;
-          font-size: 0.75rem;
-          color: white;
-        }
-        
-        .btn-bubble-delete:hover {
-          background: #b91c1c;
-          border-color: #b91c1c;
-        }
-        
-        .btn-bubble-delete:disabled {
-          opacity: 0.5;
-          cursor: not-allowed;
-        }
+        .delete-bubble { position: fixed; background: white; border: 1px solid #e5e7eb; border-radius: 0.5rem; box-shadow: 0 10px 25px rgba(0,0,0,0.15); padding: 1rem; z-index: 10000; min-width: 280px; max-width: 320px; }
+        .delete-bubble::before { content: ''; position: absolute; top: -8px; right: 20px; width: 0; height: 0; border-left: 8px solid transparent; border-right: 8px solid transparent; border-bottom: 8px solid #e5e7eb; }
+        .delete-bubble::after { content: ''; position: absolute; top: -7px; right: 21px; width: 0; height: 0; border-left: 7px solid transparent; border-right: 7px solid transparent; border-bottom: 7px solid white; }
+        .delete-bubble h4 { margin: 0 0 0.5rem 0; font-size: 0.875rem; font-weight: 600; color: #1f2937; }
+        .delete-bubble p { margin: 0 0 1rem 0; font-size: 0.8rem; color: #6b7280; line-height: 1.4; }
+        .delete-bubble-actions { display: flex; gap: 0.5rem; justify-content: flex-end; }
+        .btn-bubble-cancel { padding: 0.375rem 0.75rem; border: 1px solid #d1d5db; background: white; border-radius: 0.375rem; cursor: pointer; font-size: 0.75rem; color: #374151; }
+        .btn-bubble-cancel:hover { background-color: #f9fafb; }
+        .btn-bubble-delete { padding: 0.375rem 0.75rem; border: 1px solid #dc2626; background: #dc2626; border-radius: 0.375rem; cursor: pointer; font-size: 0.75rem; color: white; }
+        .btn-bubble-delete:hover { background: #b91c1c; border-color: #b91c1c; }
+        .btn-bubble-delete:disabled { opacity: 0.5; cursor: not-allowed; }
         
         /* Custom role dropdown styling */
-        .custom-role-dropdown {
-          position: relative;
-          display: block;
-        }
-        
-        .custom-dropdown-trigger {
-          position: relative;
-          z-index: 10;
-        }
-        
-        .custom-dropdown-menu {
-          background: white;
-          border: 1px solid #d1d5db;
-          box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-          max-height: 150px;
-          overflow-y: auto;
-          min-width: 200px;
-        }
-        
-        .dropdown-downward {
-          border-radius: 0 0 0.375rem 0.375rem;
-          border-top: none;
-        }
-        
-        .dropdown-upward {
-          border-radius: 0.375rem 0.375rem 0 0;
-          border-bottom: none;
-        }
-        
-        .custom-dropdown-option {
-          width: 100%;
-          padding: 0.75rem;
-          text-align: left;
-          border: none;
-          background: white;
-          color: #374151;
-          font-size: 0.875rem;
-          cursor: pointer;
-          transition: all 0.2s;
-          border-bottom: 1px solid #f3f4f6;
-        }
-        
-        .custom-dropdown-option:last-child {
-          border-bottom: none;
-        }
-        
-        .custom-dropdown-option:hover {
-          background-color: #f3f4f6;
-          color: #1f2937;
-        }
-        
-        .custom-dropdown-option.selected {
-          background-color: #dbeafe;
-          color: #1e40af;
-          font-weight: 500;
-        }
-        
-        .custom-dropdown-option:focus {
-          outline: none;
-          background-color: #e5e7eb;
-        }
+        .custom-role-dropdown { position: relative; display: block; }
+        .custom-dropdown-trigger { position: relative; z-index: 10; }
+        .custom-dropdown-menu { background: white; border: 1px solid #d1d5db; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05); max-height: 150px; overflow-y: auto; min-width: 200px; }
+        .dropdown-downward { border-radius: 0 0 0.375rem 0.375rem; border-top: none; }
+        .dropdown-upward { border-radius: 0.375rem 0.375rem 0 0; border-bottom: none; }
+        .custom-dropdown-option { width: 100%; padding: 0.75rem; text-align: left; border: none; background: white; color: #374151; font-size: 0.875rem; cursor: pointer; transition: all 0.2s; border-bottom: 1px solid #f3f4f6; }
+        .custom-dropdown-option:last-child { border-bottom: none; }
+        .custom-dropdown-option:hover { background-color: #f3f4f6; color: #1f2937; }
+        .custom-dropdown-option.selected { background-color: #dbeafe; color: #1e40af; font-weight: 500; }
+        .custom-dropdown-option:focus { outline: none; background-color: #e5e7eb; }
         
         @media (max-width: 768px) {
-          .form-grid {
-            grid-template-columns: 1fr;
-            gap: 0.75rem;
-          }
-          
-          .section-content {
-            padding: 0.75rem;
-          }
-          
-          .delete-bubble {
-            right: -50px;
-            min-width: 250px;
-          }
+          .sections-container { gap: 0.625rem; }
+          .fields-grid { grid-template-columns: 1fr; gap: 0.625rem; }
+          .profile-header { padding: 0.75rem; }
+          .profile-header-content { flex-direction: column; text-align: center; gap: 0.625rem; }
+          .profile-stats { justify-content: center; flex-wrap: wrap; gap: 0.625rem; }
+          .section-content { padding: 0.625rem; }
+          .section-header { padding: 0.5rem 0.75rem; }
+          .delete-bubble { right: -50px; min-width: 250px; }
         }
       `}</style>
 
@@ -1051,14 +858,14 @@ const UserDetailView = ({ user }) => {
               ) : !isEditMode ? (
                 <>
                 <div
-                    className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-purple-700 bg-purple-50 hover:text-purple-800 hover:bg-purple-100 rounded transition-all duration-200 ease-in-out cursor-pointer"
+                    className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-purple-700 bg-purple-100 hover:text-purple-800 hover:bg-purple-200 rounded transition-all duration-200 ease-in-out cursor-pointer"
                     onClick={handleEditUser}
                     style={{ fontFamily: 'Source Sans 3', fontWeight: 400 }}
                   >
                     Edit
                 </div>
                 <div
-                    className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-orange-700 bg-orange-50 hover:text-orange-800 hover:bg-orange-100 rounded transition-all duration-200 ease-in-out cursor-pointer"
+                    className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-orange-700 bg-orange-100 hover:text-orange-800 hover:bg-orange-200 rounded transition-all duration-200 ease-in-out cursor-pointer"
                     onClick={() => setShowPasswordResetModal(true)}
                     style={{ fontFamily: 'Source Sans 3', fontWeight: 400 }}
                   >
@@ -1080,294 +887,305 @@ const UserDetailView = ({ user }) => {
       </Box>
 
       {/* Main Content */}
-      <Box sx={{ mb: 2 }}>
-         {/* Success Message */}
-         {isEditMode && showSuccess && (
-        <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-             justifyContent: 'space-between',
-             gap: '0.5rem', 
-             padding: '0.5rem 0.75rem', 
-             backgroundColor: 'white', 
-             border: '1px solid #10b981', 
-             borderRadius: '0.375rem', 
-             marginBottom: '1rem',
-             color: '#065f46',
-             fontSize: '0.8rem',
-             fontWeight: '500',
-             height: '2.5rem'
-           }}>
-             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-               <svg style={{ width: '1rem', height: '1rem', color: '#10b981' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                 <path d="M9 12l2 2 4-4"/>
-                 <circle cx="12" cy="12" r="10"/>
-               </svg>
-               <span>User updated successfully!</span>
-                </div>
-              <button
-               type="button"
-               onClick={() => {
-                 setShowSuccess(false);
-                 setIsEditMode(false);
-                 setFormData({});
-                 setHasChanges(false);
-               }}
-                style={{
-                 backgroundColor: 'transparent', 
-                 color: '#065f46', 
-                  border: '1px solid #10b981',
-                 padding: '0.25rem 0.5rem',
-                 borderRadius: '0.25rem',
-                 fontSize: '0.7rem',
-                  fontWeight: '500',
-                 cursor: 'pointer',
-                 height: '1.75rem',
-                 display: 'flex',
-                 alignItems: 'center',
-                 gap: '0.25rem'
-                }}
-              >
-                <svg style={{ width: '0.75rem', height: '0.75rem' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="18" y1="6" x2="6" y2="18"/>
-                  <line x1="6" y1="6" x2="18" y2="18"/>
-                </svg>
-                Close
-              </button>
+      <div className="profile-container">
+        {/* Success Message */}
+        {isEditMode && showSuccess && (
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '0.5rem', 
+            padding: '0.75rem 1rem', 
+            backgroundColor: 'white', 
+            border: '1px solid #10b981', 
+            borderRadius: '0.5rem', 
+            marginBottom: '1.5rem',
+            color: '#065f46',
+            fontSize: '0.875rem',
+            fontWeight: '500',
+            boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <svg style={{ width: '1.25rem', height: '1.25rem', color: '#10b981' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M9 12l2 2 4-4"/>
+                <circle cx="12" cy="12" r="10"/>
+              </svg>
+              <span>User updated successfully!</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setShowSuccess(false);
+                setIsEditMode(false);
+                setFormData({});
+                setHasChanges(false);
+              }}
+              style={{
+                backgroundColor: 'transparent', 
+                color: '#065f46', 
+                border: '1px solid #10b981',
+                padding: '0.375rem 0.75rem',
+                borderRadius: '0.375rem',
+                fontSize: '0.75rem',
+                fontWeight: '500',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.25rem'
+              }}
+            >
+              <svg style={{ width: '0.875rem', height: '0.875rem' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="18" y1="6" x2="6" y2="18"/>
+                <line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+              Close
+            </button>
           </div>
-         )}
+        )}
 
-        {/* User Information Section */}
-        <div className="form-section">
-          <div className="section-header">
-            <PersonIcon className="section-icon" />
-            <h3>User Information</h3>
-          </div>
-          <div className="section-content">
-            <div className="form-grid">
-              <div className="form-group">
-                <label className="form-label">First Name</label>
-                {isEditMode ? (
-                  <TooltipWithArrow title="This field cannot be edited">
-                    <div className="form-input display-only disabled-field">{userData.firstName || 'N/A'}</div>
-                  </TooltipWithArrow>
+        {/* Professional Profile Header */}
+        <div className="profile-header">
+          <div className="profile-header-content">
+            <div className="profile-avatar">
+              {userData.firstName?.[0]?.toUpperCase() || 'U'}
+            </div>
+            <div className="profile-info">
+              <h1 className="profile-name">
+                {userData.firstName} {userData.lastName}
+              </h1>
+              <div className="profile-title">
+                {userData.designation || 'User'}
+              </div>
+              <div className="profile-email">
+                <EmailIcon fontSize="small" />
+                {userData.email ? (
+                  <a href={`mailto:${userData.email}`}>
+                    {userData.email}
+                  </a>
                 ) : (
-                  <div className="form-input display-only">{userData.firstName || 'N/A'}</div>
+                  'No email provided'
                 )}
               </div>
+            </div>
+          </div>
+          <div className="profile-stats">
+            <div className="stat-item">
+              <span className="stat-value">{userData.employeeId || 'N/A'}</span>
+              <span className="stat-label">Employee ID</span>
+            </div>
+            <div className="stat-item">
+              <span className="stat-value">{userData.employmentType || 'N/A'}</span>
+              <span className="stat-label">Employment Type</span>
+            </div>
+            <div className="stat-item">
+              <span className="stat-value">{userData.contactNumber || 'N/A'}</span>
+              <span className="stat-label">Contact</span>
+            </div>
+          </div>
+        </div>
 
-              <div className="form-group">
-                <label className="form-label">Last Name</label>
-                {isEditMode ? (
-                  <TooltipWithArrow title="This field cannot be edited">
-                    <div className="form-input display-only disabled-field">{userData.lastName || 'N/A'}</div>
-                  </TooltipWithArrow>
-                ) : (
-                  <div className="form-input display-only">{userData.lastName || 'N/A'}</div>
-                )}
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Email</label>
-                {isEditMode ? (
-                  <TooltipWithArrow title="This field cannot be edited">
-                    <div className="form-input display-only disabled-field">
-                      {userData.email ? (
-                        <a href={`mailto:${userData.email}`}>
-                          {userData.email}
+        {/* Full Width Sections */}
+        <div className="sections-container">
+          {/* Contact Information Section */}
+          <div className="section">
+            <div className="section-header">
+              <PhoneIcon className="section-icon" />
+              <h3 className="section-title">Contact Information</h3>
+            </div>
+            <div className="section-content">
+              <div className="fields-grid">
+                <div className="field-item">
+                  <div className="field-label">Contact Number</div>
+                  <div className="field-value">
+                    {isEditMode ? (
+                      <input
+                        type="tel"
+                        className="edit-input"
+                        value={formData.contactNumber || ''}
+                        onChange={(e) => handleFieldChange('contactNumber', e.target.value)}
+                        disabled={showSuccess}
+                        placeholder="Enter contact number"
+                      />
+                    ) : (
+                      userData.contactNumber ? (
+                        <a href={`tel:${userData.contactNumber}`}>
+                          {userData.contactNumber}
                         </a>
                       ) : (
-                        'N/A'
-                      )}
-                    </div>
-                  </TooltipWithArrow>
-                ) : (
-                  <div className="form-input display-only">
-                    {userData.email ? (
-                      <a href={`mailto:${userData.email}`}>
-                        {userData.email}
-                      </a>
-                    ) : (
-                      'N/A'
+                        <span className="empty">No contact number provided</span>
+                      )
                     )}
                   </div>
-                )}
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Employee ID</label>
-                {isEditMode ? (
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={formData.employeeId || ''}
-                    onChange={(e) => handleFieldChange('employeeId', e.target.value)}
-                    disabled={showSuccess}
-                  />
-                ) : (
-                  <div className="form-input display-only">{userData.employeeId || 'N/A'}</div>
-                )}
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Contact Number</label>
-                {isEditMode ? (
-                  <input
-                    type="tel"
-                    className="form-input"
-                    value={formData.contactNumber || ''}
-                    onChange={(e) => handleFieldChange('contactNumber', e.target.value)}
-                    disabled={showSuccess}
-                  />
-                ) : (
-                  <div className="form-input display-only">
-                    {userData.contactNumber ? (
-                      <a href={`tel:${userData.contactNumber}`}>
-                        {userData.contactNumber}
-                      </a>
+                </div>
+                
+                <div className="field-item">
+                  <div className="field-label">Manager Email</div>
+                  <div className="field-value">
+                    {isEditMode ? (
+                      <input
+                        type="email"
+                        className="edit-input"
+                        value={formData.managerEmail || ''}
+                        onChange={(e) => handleFieldChange('managerEmail', e.target.value)}
+                        disabled={showSuccess}
+                        placeholder="Enter manager email"
+                      />
                     ) : (
-                      'N/A'
+                      userData.managerEmail ? (
+                        <a href={`mailto:${userData.managerEmail}`}>
+                          {userData.managerEmail}
+                        </a>
+                      ) : (
+                        <span className="empty">No manager email</span>
+                      )
                     )}
                   </div>
-                )}
+                </div>
+                
+                <div className="field-item">
+                  <div className="field-label">Company</div>
+                  <div className="field-value">
+                    {userData.client_name || userData.companyName || <span className="empty">N/A</span>}
+                  </div>
+                </div>
               </div>
+            </div>
+          </div>
 
-              <div className="form-group">
-                <label className="form-label">Manager Email</label>
-                {isEditMode ? (
-                  <input
-                    type="email"
-                    className="form-input"
-                    value={formData.managerEmail || ''}
-                    onChange={(e) => handleFieldChange('managerEmail', e.target.value)}
-                    disabled={showSuccess}
-                  />
-                ) : (
-                  <div className="form-input display-only">
-                    {userData.managerEmail ? (
-                      <a href={`mailto:${userData.managerEmail}`}>
-                        {userData.managerEmail}
-                      </a>
+          {/* Professional Information Section */}
+          <div className="section">
+            <div className="section-header">
+              <WorkIcon className="section-icon" />
+              <h3 className="section-title">Professional Information</h3>
+            </div>
+            <div className="section-content">
+              <div className="fields-grid">
+                <div className="field-item">
+                  <div className="field-label">Employee ID</div>
+                  <div className="field-value">
+                    {isEditMode ? (
+                      <input
+                        type="text"
+                        className="edit-input"
+                        value={formData.employeeId || ''}
+                        onChange={(e) => handleFieldChange('employeeId', e.target.value)}
+                        disabled={showSuccess}
+                        placeholder="Enter employee ID"
+                      />
                     ) : (
-                      'N/A'
+                      userData.employeeId || <span className="empty">No employee ID</span>
                     )}
                   </div>
-                )}
-              </div>
+                </div>
 
-              <div className="form-group">
-                <label className="form-label">Employment Type</label>
-                {isEditMode ? (
-                  <CustomDropdown
-                    value={formData.employmentType || ''}
-                    onChange={(value) => handleFieldChange('employmentType', value)}
-                    options={employmentTypeOptions}
-                    placeholder="Select employment type"
-                    size="sm"
-                    disabled={showSuccess}
-                  />
-                ) : (
-                  <div className="form-input display-only">{userData.employmentType || 'N/A'}</div>
-                )}
-              </div>
+                <div className="field-item">
+                  <div className="field-label">Designation</div>
+                  <div className="field-value">
+                    {isEditMode ? (
+                      <input
+                        type="text"
+                        className="edit-input"
+                        value={formData.designation || ''}
+                        onChange={(e) => handleFieldChange('designation', e.target.value)}
+                        placeholder="Enter designation"
+                        disabled={showSuccess}
+                      />
+                    ) : (
+                      userData.designation || <span className="empty">No designation</span>
+                    )}
+                  </div>
+                </div>
 
-              <div className="form-group">
-                <label className="form-label">Designation</label>
-                {isEditMode ? (
-                  <CustomDropdown
-                    value={formData.designation || ''}
-                    onChange={(value) => handleFieldChange('designation', value)}
-                    options={designationOptions}
-                    placeholder="Select designation"
-                    size="sm"
-                    disabled={showSuccess}
-                  />
-                ) : (
-                  <div className="form-input display-only">{userData.designation || 'N/A'}</div>
-                )}
-              </div>
+                <div className="field-item">
+                  <div className="field-label">Employment Type</div>
+                  <div className="field-value">
+                    {isEditMode ? (
+                      <CustomDropdown
+                        value={formData.employmentType || ''}
+                        onChange={(value) => handleFieldChange('employmentType', value)}
+                        options={employmentTypeOptions}
+                        placeholder="Select employment type"
+                        size="sm"
+                        disabled={showSuccess}
+                      />
+                    ) : (
+                      userData.employmentType || <span className="empty">No employment type</span>
+                    )}
+                  </div>
+                </div>
 
-              <div className="form-group">
-                <label className="form-label">Role</label>
-                {isEditMode ? (
-                  <div className="custom-role-dropdown">
-                    <button
-                      type="button"
-                      className="form-input custom-dropdown-trigger"
-                      onClick={() => {
-                        if (!roleDropdownOpen) {
-                          calculateRoleDropdownPosition();
-                        }
-                        setRoleDropdownOpen(!roleDropdownOpen);
-                      }}
-                      disabled={showSuccess}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        cursor: 'pointer',
-                        textAlign: 'left'
-                      }}
-                    >
-                      <span>
-                        {roleOptions.find(opt => opt.value === formData.role)?.label || 'Select Role'}
-                      </span>
-                      <svg 
-                        className={`w-4 h-4 transition-transform ${roleDropdownOpen ? 'rotate-180' : ''}`}
-                        viewBox="0 0 20 20" 
-                        fill="currentColor"
-                      >
-                        <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
-                      </svg>
-                    </button>
-                    {roleDropdownOpen && (
-                      <div 
-                        className={`custom-dropdown-menu ${roleDropdownPosition.openUpward ? 'dropdown-upward' : 'dropdown-downward'}`}
-                        style={{
-                          position: 'fixed',
-                          zIndex: 9999,
-                          top: roleDropdownPosition.top,
-                          left: roleDropdownPosition.left,
-                          width: roleDropdownPosition.width
-                        }}
-                      >
-                        {roleOptions.map((option) => (
-                          <button
-                            key={option.value}
-                            type="button"
-                            className={`custom-dropdown-option ${formData.role === option.value ? 'selected' : ''}`}
-                            onClick={() => {
-                              handleFieldChange('role', option.value);
-                              setRoleDropdownOpen(false);
+                <div className="field-item">
+                  <div className="field-label">Role</div>
+                  <div className="field-value">
+                    {isEditMode ? (
+                      <div className="custom-role-dropdown">
+                        <button
+                          type="button"
+                          className="edit-input custom-dropdown-trigger"
+                          onClick={() => {
+                            if (!roleDropdownOpen) {
+                              calculateRoleDropdownPosition();
+                            }
+                            setRoleDropdownOpen(!roleDropdownOpen);
+                          }}
+                          disabled={showSuccess}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            cursor: 'pointer',
+                            textAlign: 'left'
+                          }}
+                        >
+                          <span>
+                            {roleOptions.find(opt => opt.value === formData.role)?.label || 'Select Role'}
+                          </span>
+                          <svg 
+                            className={`${roleDropdownOpen ? 'rotate-180' : ''}`}
+                            viewBox="0 0 20 20" 
+                            fill="currentColor"
+                            width="16" height="16"
+                          >
+                            <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                          </svg>
+                        </button>
+                        {roleDropdownOpen && (
+                          <div 
+                            className={`custom-dropdown-menu ${roleDropdownPosition.openUpward ? 'dropdown-upward' : 'dropdown-downward'}`}
+                            style={{
+                              position: 'fixed',
+                              zIndex: 9999,
+                              top: roleDropdownPosition.top,
+                              left: roleDropdownPosition.left,
+                              width: roleDropdownPosition.width
                             }}
                           >
-                            {option.label}
-                          </button>
-                        ))}
+                            {roleOptions.map((option) => (
+                              <button
+                                key={option.value}
+                                type="button"
+                                className={`custom-dropdown-option ${formData.role === option.value ? 'selected' : ''}`}
+                                onClick={() => {
+                                  handleFieldChange('role', option.value);
+                                  setRoleDropdownOpen(false);
+                                }}
+                              >
+                                {option.label}
+                              </button>
+                            ))}
+                          </div>
+                        )}
                       </div>
+                    ) : (
+                      <Chip
+                        label={userData.role === 'site_admin' ? 'Site Admin' : 'User'}
+                        size="small"
+                        color={userData.role === 'site_admin' ? 'primary' : 'default'}
+                        variant={userData.role === 'site_admin' ? 'filled' : 'outlined'}
+                      />
                     )}
                   </div>
-                ) : (
-                  <div className="form-input display-only">
-                    <Chip
-                      label={userData.role === 'site_admin' ? 'Site Admin' : 'User'}
-                      size="small"
-                      color={userData.role === 'site_admin' ? 'primary' : 'default'}
-                      variant={userData.role === 'site_admin' ? 'filled' : 'outlined'}
-                    />
-                  </div>
-                )}
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Company</label>
-                {isEditMode ? (
-                  <TooltipWithArrow title="This field cannot be edited">
-                    <div className="form-input display-only disabled-field">{userData.client_name || userData.companyName || 'N/A'}</div>
-                  </TooltipWithArrow>
-                ) : (
-                  <div className="form-input display-only">{userData.client_name || userData.companyName || 'N/A'}</div>
-                )}
+                </div>
               </div>
             </div>
           </div>
@@ -1375,20 +1193,29 @@ const UserDetailView = ({ user }) => {
 
         {/* Error Messages */}
         {isEditMode && editError && (
-          <div className="form-section">
+          <div className="section" style={{ marginTop: '1.5rem', borderColor: '#dc2626' }}>
             <div className="section-content">
-              <div className="inline-error-message">
-                <svg className="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.75rem',
+                padding: '0.75rem',
+                backgroundColor: '#fef2f2',
+                border: '1px solid #fecaca',
+                borderRadius: '0.5rem',
+                color: '#dc2626'
+              }}>
+                <svg style={{ width: '1.25rem', height: '1.25rem' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <circle cx="12" cy="12" r="10"/>
                   <line x1="15" y1="9" x2="9" y2="15"/>
                   <line x1="9" y1="9" x2="15" y2="15"/>
                 </svg>
-                {editError}
+                <span style={{ fontWeight: '500' }}>{editError}</span>
               </div>
             </div>
           </div>
         )}
-      </Box>
+      </div>
 
       {/* Delete Confirmation Bubble - Smart Positioning */}
       {showDeleteDialog && (
@@ -1464,7 +1291,7 @@ const UserDetailView = ({ user }) => {
                 margin: 0,
                 fontSize: '16px',
                 fontWeight: 600,
-                color: '#333'
+                color: '#444'
               }}>
           Reset Password
               </h3>

@@ -7,21 +7,7 @@ import { API_BASE_URL } from '../../config/constants';
 import CustomDropdown from '../common/CustomDropdown';
 import { getCountryOptions, getDefaultCountry } from '../../services/countryService';
 
-// Designation options for engineers
-const designationOptions = [
-  { value: '', label: 'Select Designation' },
-  { value: 'Senior Engineer', label: 'Senior Engineer' },
-  { value: 'Lead Engineer', label: 'Lead Engineer' },
-  { value: 'Principal Engineer', label: 'Principal Engineer' },
-  { value: 'Staff Engineer', label: 'Staff Engineer' },
-  { value: 'Software Engineer', label: 'Software Engineer' },
-  { value: 'DevOps Engineer', label: 'DevOps Engineer' },
-  { value: 'QA Engineer', label: 'QA Engineer' },
-  { value: 'System Engineer', label: 'System Engineer' },
-  { value: 'Network Engineer', label: 'Network Engineer' },
-  { value: 'Security Engineer', label: 'Security Engineer' },
-  { value: 'Other', label: 'Other' },
-];
+// Designation is now a text input field, no dropdown options needed
 
 // Employment type options
 const employmentTypeOptions = [
@@ -52,7 +38,7 @@ const validationSchema = yup.object().shape({
   contactNumber: yup.string().required('Contact number is required').matches(/^[0-9\s\-\(\)]{7,15}$/, 'Invalid phone number'),
   managerEmail: yup.string().email('Invalid email').required('Manager email is required').max(100, 'Maximum 100 characters'),
   employmentType: yup.string().required('Employment type is required'),
-  designation: yup.string().required('Designation is required'),
+  designation: yup.string().required('Designation is required').min(2, 'Minimum 2 characters').max(50, 'Maximum 50 characters'),
   role: yup.string().required('Role is required'),
 });
 
@@ -786,13 +772,11 @@ const CreateEngineerPage = ({ user }) => {
                     name="designation"
                     control={control}
                     render={({ field }) => (
-                      <CustomDropdown
-                        value={field.value}
-                        onChange={field.onChange}
-                        options={designationOptions}
-                        placeholder="Select designation"
-                        className={errors.designation ? 'error' : ''}
-                        size="sm"
+                      <input
+                        type="text"
+                        {...field}
+                        placeholder="Enter designation"
+                        className={`form-input ${errors.designation ? 'error' : ''}`}
                         disabled={showSuccess}
                       />
                     )}
