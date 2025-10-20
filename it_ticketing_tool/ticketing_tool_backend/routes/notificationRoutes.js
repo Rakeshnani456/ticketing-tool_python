@@ -2,13 +2,13 @@
 const express = require('express');
 const router = express.Router();
 
-module.exports = (db, notificationsCollection, verifyFirebaseToken, jsonSerializableNotification) => {
+module.exports = (db, notificationsCollection, authenticateToken, jsonSerializableNotification) => {
 
     // NEW: Get notifications for the authenticated user
     // @route   GET /notifications/my
     // @desc    Get notifications for the authenticated user.
     // @access  Private (requires token)
-    router.get('/my', verifyFirebaseToken, async (req, res) => {
+    router.get('/my', authenticateToken, async (req, res) => {
         const authenticatedUid = req.user.uid;
         try {
             const snapshot = await notificationsCollection
@@ -29,7 +29,7 @@ module.exports = (db, notificationsCollection, verifyFirebaseToken, jsonSerializ
     // @route   PATCH /notifications/:notificationId/read
     // @desc    Mark a specific notification as read.
     // @access  Private (requires token and ownership of notification)
-    router.patch('/:notificationId/read', verifyFirebaseToken, async (req, res) => {
+    router.patch('/:notificationId/read', authenticateToken, async (req, res) => {
         const notificationId = req.params.notificationId;
         const authenticatedUid = req.user.uid;
 
@@ -54,7 +54,7 @@ module.exports = (db, notificationsCollection, verifyFirebaseToken, jsonSerializ
         }
     });
 
-    router.delete('/:id', verifyFirebaseToken, async (req, res) => {
+    router.delete('/:id', authenticateToken, async (req, res) => {
         const { id } = req.params;
         const userId = req.user.uid;
 
@@ -81,7 +81,7 @@ module.exports = (db, notificationsCollection, verifyFirebaseToken, jsonSerializ
     // @route   DELETE /notifications/clear-all
     // @desc    Clear all notifications for the authenticated user.
     // @access  Private (requires authentication)
-    router.delete('/clear-all', verifyFirebaseToken, async (req, res) => {
+    router.delete('/clear-all', authenticateToken, async (req, res) => {
         const userId = req.user.uid;
 
         try {

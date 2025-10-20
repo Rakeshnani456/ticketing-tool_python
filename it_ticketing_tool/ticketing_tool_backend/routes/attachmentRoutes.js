@@ -5,10 +5,10 @@ const os = require('os');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 
-module.exports = (admin, verifyFirebaseToken) => {
+module.exports = (admin, authenticateToken) => {
     const router = express.Router();
 
-    router.post('/', verifyFirebaseToken, async (req, res) => {
+    router.post('/', authenticateToken, async (req, res) => {
         if (!admin.storage()) {
             console.error("Firebase Storage not initialized.");
             if (!res.headersSent) {
@@ -17,7 +17,15 @@ module.exports = (admin, verifyFirebaseToken) => {
             return;
         }
 
-        const busboy = Busboy({ headers: req.headers, limits: { fileSize: 10 * 1024 * 1024 } }); // Max 10MB per file
+        // OPTIMIZATION: Increase file size limit and add timeout for faster processing
+        const busboy = Busboy({ 
+            headers: req.headers, 
+            limits: { 
+                fileSize: 10 * 1024 * 1024, // Max 10MB per file
+                files: 10 // Max 10 files per request
+            },
+            timeout: 30000 // 30 second timeout
+        });
         const bucket = admin.storage().bucket();
 
         const uploads = [];
@@ -42,17 +50,21 @@ module.exports = (admin, verifyFirebaseToken) => {
                 'image/jpeg',
                 'image/png',
                 'application/msword',
-                'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                'application/vnd.ms-excel',
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                'application/zip',
+                'application/x-zip-compressed'
             ];
             const allowedExtensions = [
-                '.pdf', '.jpg', '.jpeg', '.png', '.doc', '.docx'
+                '.pdf', '.jpg', '.jpeg', '.png', '.doc', '.docx', '.xls', '.xlsx', '.zip'
             ];
             const fileUploadPromise = new Promise((resolve, reject) => {
                 const isMimeTypeAllowed = mimetype && allowedMimeTypes.includes(mimetype);
                 const isExtensionAllowed = fileExtension && allowedExtensions.includes(fileExtension);
                 if (!isMimeTypeAllowed && !isExtensionAllowed) {
                     file.resume();
-                    const errorMsg = `File type for ${originalFilename} not allowed. Detected MIME: "${mimetype}", Extension: "${fileExtension}". Allowed types: PDF, JPG, PNG, Word.`;
+                    const errorMsg = `File type for ${originalFilename} not allowed. Detected MIME: "${mimetype}", Extension: "${fileExtension}". Allowed types: PNG, JPG, PDF, Word, Excel, ZIP.`;
                     return reject(new Error(errorMsg));
                 }
                 const uniqueFilename = `${uuidv4()}${fileExtension}`;
@@ -61,6 +73,8 @@ module.exports = (admin, verifyFirebaseToken) => {
                 file.pipe(writeStream);
                 writeStream.on('finish', () => {
                     const destination = `attachments/${Date.now()}_${uniqueFilename}`;
+                    
+                    // OPTIMIZATION: Use faster upload options
                     bucket.upload(filepath, {
                         destination: destination,
                         metadata: {
@@ -70,7 +84,11 @@ module.exports = (admin, verifyFirebaseToken) => {
                                 uploadedBy: req.user.email,
                                 originalFileName: originalFilename
                             }
-                        }
+                        },
+                        // OPTIMIZATION: Use faster upload settings
+                        resumable: false, // Disable resumable uploads for smaller files
+                        validation: false, // Skip validation for speed
+                        gzip: true // Enable compression
                     })
                     .then(() => {
                         const fileRef = bucket.file(destination);
@@ -84,12 +102,14 @@ module.exports = (admin, verifyFirebaseToken) => {
                             mimetype: mimetype,
                             added_at: new Date().toISOString()
                         });
-                        fs.unlink(filepath, () => {});
+                        // OPTIMIZATION: Clean up file asynchronously
+                        setImmediate(() => fs.unlink(filepath, () => {}));
                         resolve();
                     })
                     .catch(err => {
                         console.error("Error uploading file to Firebase Storage:", err);
-                        fs.unlink(filepath, () => {});
+                        // OPTIMIZATION: Clean up file asynchronously
+                        setImmediate(() => fs.unlink(filepath, () => {}));
                         reject(new Error(`Failed to upload file ${originalFilename}: ${err.message}`));
                     });
                 });

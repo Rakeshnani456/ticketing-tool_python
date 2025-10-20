@@ -23,8 +23,8 @@ const FormTextarea = ({ id, label, value, onChange, required, rows = 3, placehol
         {label && <label htmlFor={id} className="block text-gray-700 text-sm font-semibold mb-1">{label}:</label>}
         <textarea
             id={id}
-            className={`w-full px-3 py-1.5 border rounded-md text-sm focus:outline-none focus:ring-2 transition duration-200
-            ${disabled ? 'bg-gray-100 cursor-not-allowed' : 'border-gray-300 focus:ring-blue-200 bg-white'} ${className}`}
+            className={`w-full px-3 py-1.5 rounded-md text-sm focus:outline-none transition duration-200 border border-gray-300
+            ${disabled ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'} ${className}`}
             rows={rows}
             value={value}
             onChange={onChange}

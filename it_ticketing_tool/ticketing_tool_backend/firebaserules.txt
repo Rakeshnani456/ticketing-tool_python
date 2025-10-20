@@ -34,18 +34,23 @@ service cloud.firestore {
         get(/databases/$(database)/documents/users/$(getUserId())).data.client_name == resource.data.client_name;
     }
 
-    // Helper: site_admin can read activities for their own company/client
-    function isSiteAdminForActivity() {
-      return exists(/databases/$(database)/documents/users/$(getUserId())) &&
-        get(/databases/$(database)/documents/users/$(getUserId())).data.role == 'site_admin' &&
-        get(/databases/$(database)/documents/users/$(getUserId())).data.client_name == resource.data.client_name;
-    }
-
     match /tickets/{ticketId} {
       allow read: if isAuthenticated() && (
         resource.data.reporter_id == getUserId() ||
         hasSupportAdminOrSuperAdminRole() ||
         isSiteAdminForTicket()
+      );
+
+      // Allow collection-level queries for tickets based on user role
+      allow list: if isAuthenticated() && (
+        // Users can list tickets they created
+        resource.data.reporter_id == getUserId() ||
+        // Support/Admin/Super Admin can list all tickets
+        hasSupportAdminOrSuperAdminRole() ||
+        // Site admin can list tickets for their client
+        (exists(/databases/$(database)/documents/users/$(getUserId())) &&
+         get(/databases/$(database)/documents/users/$(getUserId())).data.role == 'site_admin' &&
+         get(/databases/$(database)/documents/users/$(getUserId())).data.client_name == resource.data.client_name)
       );
 
       // Allow authenticated users to create tickets
@@ -62,11 +67,20 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Helper: site_admin can read users from their own company/client
+    function isSiteAdminForUser() {
+      return exists(/databases/$(database)/documents/users/$(getUserId())) &&
+        get(/databases/$(database)/documents/users/$(getUserId())).data.role == 'site_admin' &&
+        get(/databases/$(database)/documents/users/$(getUserId())).data.client_name == resource.data.client_name;
+    }
+
     // Rules for the 'users' collection
     match /users/{userId} {
       // Allow users to read their own profile data (e.g., roles)
       allow read: if isAuthenticated() && (
-        getUserId() == userId || hasSupportAdminOrSuperAdminRole()
+        getUserId() == userId || 
+        hasSupportAdminOrSuperAdminRole() ||
+        isSiteAdminForUser()
       );
       // Allow users to update their own profile (e.g., mustChangePassword)
       allow update: if isAuthenticated() && getUserId() == userId;
@@ -76,8 +90,8 @@ service cloud.firestore {
 
     // --- NEW RULES FOR 'clients' COLLECTION ---
     match /clients/{clientId} {
-      // Allow authenticated users to read client data.
-      allow read: if isAuthenticated();
+      // Allow only Super Admins to read client data (site_admin should not access clients collection)
+      allow read: if hasSuperAdminRole();
       // Allow only Super Admins to create, update, or delete client documents.
       allow create, update, delete: if hasSuperAdminRole();
     }
@@ -96,15 +110,30 @@ service cloud.firestore {
 
     // Rules for the 'activities' collection
     match /activities/{activityId} {
-      // Allow authenticated users to read activities with company filtering for site admins
-      allow read: if isAuthenticated() && (
-        hasSupportAdminOrSuperAdminRole() ||
-        isSiteAdminForActivity()
-      );
+      // Allow all authenticated users to read activities (for dashboard display)
+      allow read: if isAuthenticated();
       // Allow authenticated users to create activities (for testing and frontend operations)
       allow create: if isAuthenticated();
       // Allow only the backend to update/delete activities (for security)
       allow update, delete: if false;
+    }
+
+    // Rules for the 'read_states' collection
+    match /read_states/{userId} {
+      // Allow users to read and write their own read states
+      allow read, write: if isAuthenticated() && getUserId() == userId;
+    }
+
+    // Rules for the 'notifications' collection
+    match /notifications/{notificationId} {
+      // Allow users to read their own notifications
+      allow read: if isAuthenticated() && resource.data.userId == getUserId();
+      // Allow creation of notifications (typically by backend)
+      allow create: if isAuthenticated();
+      // Allow users to update their own notifications (mark as read, etc.)
+      allow update: if isAuthenticated() && resource.data.userId == getUserId();
+      // Prevent deletion of notifications
+      allow delete: if false;
     }
   }
 }

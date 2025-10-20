@@ -6,6 +6,9 @@ const cors = require('cors');
 const admin = require('firebase-admin');
 const nodemailer = require('nodemailer');
 
+// Import email service and templates
+const EmailService = require('./utils/emailService');
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 
@@ -54,7 +57,7 @@ try {
     dbConnected = false;
 }
 
-// Office365 SMTP transporter for sending as TT.Support@kriasol.com via testing@kriasol.com
+// Office365 SMTP transporter for sending as process.env.DISTRIBUTION_EMAIL via testing@kriasol.com
 const transporter = nodemailer.createTransport({
     host: 'smtp.office365.com',
     port: 587,
@@ -65,7 +68,73 @@ const transporter = nodemailer.createTransport({
     }
 });
 
-app.use(cors());
+// Initialize email service
+const emailService = new EmailService(transporter);
+
+// CORS configuration
+const corsOptions = {
+    origin: function (origin, callback) {
+        // Allow requests with no origin (like mobile apps or curl requests)
+        if (!origin) return callback(null, true);
+        
+        const allowedOrigins = [
+            'https://ticketingtoolv2.web.app',
+            'https://ticketingtoolv2.firebaseapp.com',
+            'http://localhost:3000',
+            'http://localhost:3001'
+        ];
+        
+        if (allowedOrigins.indexOf(origin) !== -1) {
+            callback(null, true);
+        } else {
+            console.log('CORS blocked origin:', origin);
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'Cache-Control', 'Pragma', 'cache-control', 'pragma'],
+    exposedHeaders: ['Content-Length', 'X-Foo', 'X-Bar'],
+    optionsSuccessStatus: 200,
+    preflightContinue: false
+};
+
+app.use(cors(corsOptions));
+
+// Fallback CORS for development/testing
+app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, Cache-Control, Pragma');
+    res.header('Access-Control-Allow-Credentials', 'true');
+    
+    if (req.method === 'OPTIONS') {
+        res.sendStatus(200);
+    } else {
+        next();
+    }
+});
+
+// Handle preflight requests
+app.options('*', cors(corsOptions));
+
+// Specific CORS handling for login endpoint
+app.options('/login', cors(corsOptions));
+
+// Specific CORS handling for users endpoint
+app.options('/api/users', cors(corsOptions));
+app.options('/api/users/*', cors(corsOptions));
+
+// Specific CORS handling for personal-notes endpoint
+app.options('/api/personal-notes', cors(corsOptions));
+app.options('/api/personal-notes/*', cors(corsOptions));
+
+// Debug middleware to log CORS issues
+app.use((req, res, next) => {
+    console.log(`CORS Debug: ${req.method} ${req.path} from origin: ${req.headers.origin}`);
+    next();
+});
+
 app.use(express.json());
 
 // Health check endpoint for Docker
@@ -112,6 +181,17 @@ function jsonSerializableTicket(docId, ticketData) {
             return history;
         });
     }
+    if (data.notes && Array.isArray(data.notes)) {
+        data.notes = data.notes.map(note => {
+            if (note.timestamp && note.timestamp.toDate) {
+                return { ...note, timestamp: note.timestamp.toDate().toISOString() };
+            }
+            if (note.created_at && note.created_at.toDate) {
+                return { ...note, created_at: note.created_at.toDate().toISOString() };
+            }
+            return note;
+        });
+    }
     return data;
 }
 
@@ -146,26 +226,66 @@ const checkDbConnection = (req, res, next) => {
 };
 app.use(checkDbConnection);
 
-// --- Middleware to verify Firebase ID token for protected routes ---
-const verifyFirebaseToken = async (req, res, next) => {
+// User cache for authentication optimization
+const userCache = new Map();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+// Middleware to authenticate Firebase ID token
+const authenticateToken = async (req, res, next) => {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return res.status(401).json({ error: 'Unauthorized: No token provided or token format is invalid.' });
+        return res.status(401).json({ error: 'Unauthorized: No token provided.' });
     }
     const idToken = authHeader.split(' ')[1];
     try {
         const decodedToken = await admin.auth().verifyIdToken(idToken);
         req.user = decodedToken;
-        const userDoc = await db.collection('users').doc(decodedToken.uid).get();
-        if (!userDoc.exists) {
-            return res.status(403).json({ error: 'Forbidden: User profile not found.' });
+        
+        // Check cache first
+        const cachedUser = userCache.get(decodedToken.uid);
+        const now = Date.now();
+        
+        if (cachedUser && (now - cachedUser.timestamp) < CACHE_TTL) {
+            // Use cached user data
+            req.user.role = cachedUser.data.role;
+            req.user.client_name = cachedUser.data.client_name;
+            // Only log on cache miss or for debugging
+            if (process.env.NODE_ENV === 'development') {
+                console.log(`User ${decodedToken.uid} (${cachedUser.data.role}) - using cached data`);
+            }
+        } else {
+            // Fetch from database and cache
+            const userDoc = await db.collection('users').doc(decodedToken.uid).get();
+            if (!userDoc.exists) {
+                return res.status(403).json({ error: 'Forbidden: User profile not found.' });
+            }
+            const userData = userDoc.data();
+            if (!userData || !userData.role) {
+                return res.status(403).json({ error: 'Forbidden: User role not found.' });
+            }
+            req.user.role = userData.role;
+            req.user.client_name = userData.client_name || userData.companyName;
+            
+            // Cache the user data
+            userCache.set(decodedToken.uid, {
+                data: {
+                    role: userData.role,
+                    client_name: req.user.client_name
+                },
+                timestamp: now
+            });
+            
+            // Only log on cache miss or for debugging
+            if (process.env.NODE_ENV === 'development') {
+                console.log(`User ${decodedToken.uid} (${userData.role}) client_name set to: ${req.user.client_name} (from client_name: ${userData.client_name}, companyName: ${userData.companyName})`);
+            }
+            
+            // Add additional validation for site_admin
+            if (userData.role === 'site_admin' && !req.user.client_name) {
+                console.error(`Site admin ${decodedToken.uid} has no client_name or companyName set`);
+            }
         }
-        const userData = userDoc.data();
-        if (!userData || !userData.role) {
-            return res.status(403).json({ error: 'Forbidden: User role not found.' });
-        }
-        req.user.role = userData.role;
-        req.user.client_name = userData.client_name || userData.companyName;
+        
         next();
     } catch (error) {
         console.error('Error verifying Firebase ID token or fetching user role:', error);
@@ -202,7 +322,7 @@ const requireSuperAdmin = (req, res, next) => {
 async function sendEmailAlert(toEmail, subject, text, html, cc = null) {
     try {
         const mailOptions = {
-            from: 'TT.Support@kriasol.com',
+            from: process.env.DISTRIBUTION_EMAIL,
             to: toEmail,
             subject: subject,
             text: text,
@@ -251,17 +371,37 @@ const userManagementRoutes = require('./routes/userManagementRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
 const attachmentRoutes = require('./routes/attachmentRoutes');
 const adminManagementRouter = require('./routes/adminManagement');
+const analyticsRoutes = require('./routes/analyticsRoutes');
+const knowledgeBaseRoutes = require('./routes/knowledgeBaseRoutes');
+const personalNotesRoutes = require('./routes/personalNotesRoutes');
+const searchRoutes = require('./routes/searchRoutes');
+const readStatesRoutes = require('./routes/readStatesRoutes');
 
 
-app.use('/', authRoutes(db, admin, usersCollection, verifyFirebaseToken));
-app.use('/tickets', ticketRoutes(db, admin, ticketsCollection, usersCollection, notificationsCollection, transporter, verifyFirebaseToken, checkRole, jsonSerializableTicket, jsonSerializableNotification, generateDisplayId, sendEmailAlert));
-app.use('/admin', adminRoutes(db, admin, usersCollection, verifyFirebaseToken, checkRole));
-app.use('/notifications', notificationRoutes(db, notificationsCollection, verifyFirebaseToken, jsonSerializableNotification));
-app.use('/api/clients', clientRoutes(db, clientsCollection, usersCollection));
-app.use('/api/users', userManagementRoutes(db, admin, usersCollection, clientsCollection, verifyFirebaseToken));
+app.use('/', authRoutes(db, admin, usersCollection, authenticateToken));
+app.use('/tickets', ticketRoutes(db, admin, ticketsCollection, usersCollection, notificationsCollection, transporter, authenticateToken, checkRole, jsonSerializableTicket, jsonSerializableNotification, generateDisplayId, emailService));
+app.use('/admin', adminRoutes(db, admin, usersCollection, authenticateToken, checkRole));
+app.use('/notifications', notificationRoutes(db, notificationsCollection, authenticateToken, jsonSerializableNotification));
+app.use('/api/clients', clientRoutes(db, clientsCollection, usersCollection, authenticateToken));
+app.use('/api/users', userManagementRoutes(db, admin, usersCollection, clientsCollection, authenticateToken, emailService));
 app.use('/dashboard', dashboardRoutes(db, ticketsCollection, clientsCollection, usersCollection, requireSuperAdmin));
-app.use('/upload-attachment', attachmentRoutes(admin, verifyFirebaseToken));
-app.use('/admin-management', adminManagementRouter(db, usersCollection, verifyFirebaseToken, requireSuperAdmin));
+app.use('/upload-attachment', attachmentRoutes(admin, authenticateToken));
+app.use('/admin-management', adminManagementRouter(db, usersCollection, authenticateToken, requireSuperAdmin));
+app.use('/analytics', analyticsRoutes(db, admin, authenticateToken, checkRole));
+app.use('/api/knowledge-base', knowledgeBaseRoutes(db, admin, authenticateToken, checkRole));
+app.use('/api/personal-notes', personalNotesRoutes(db, admin, usersCollection, authenticateToken, checkRole, jsonSerializableNotification));
+app.use('/api/search', searchRoutes);
+app.use('/api/read-states', readStatesRoutes(db, admin, usersCollection, authenticateToken));
+
+// Add cache statistics endpoint
+app.get('/api/cache/stats', (req, res) => {
+    res.json({
+        userCache: {
+            size: userCache.size,
+            ttl: CACHE_TTL
+        }
+    });
+});
 
 
 // Add a dummy client if none exist (for testing) - keep this in server.js or a separate setup file
@@ -284,6 +424,11 @@ app.use('/admin-management', adminManagementRouter(db, usersCollection, verifyFi
     }
 })();
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
+
+// Initialize WebSocket server
+const WebSocketServer = require('./websocketServer');
+const wsServer = new WebSocketServer(server);
+console.log('WebSocket server initialized');

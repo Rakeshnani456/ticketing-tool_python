@@ -1,9 +1,12 @@
-// src/components/admin/UserManagementComponent.js
-import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useRef, useMemo, memo } from 'react';
+import CustomDropdown from '../common/CustomDropdown';
+import CustomButton from '../common/CustomButton';
+import ClientActionDropdown from '../common/ClientActionDropdown';
+import TooltipBubble from '../common/TooltipBubble';
 import {
-    Button, Chip, TextField, Box, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
+    Button, Chip, TextField, Box, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
     IconButton, Snackbar, Alert, Typography, Popover, Collapse, Dialog, DialogTitle, DialogContent, DialogActions, MenuItem, Select, useMediaQuery, Card, CardContent, CardActions, Grid, CircularProgress,
-    FormControl, InputLabel, OutlinedInput, FormHelperText, Tooltip, TablePagination
+    FormControl, InputLabel, OutlinedInput, FormHelperText, Tooltip, TablePagination, Badge, Divider, Tabs, Tab, Autocomplete, InputAdornment, Switch, FormControlLabel, Avatar, Stack
 } from '@mui/material';
 import { 
     Edit as EditIcon, 
@@ -23,30 +26,42 @@ import {
     SupervisorAccount as SupervisorAccountIcon,
     Work as WorkIcon,
     Badge as BadgeIcon,
-    Refresh as RefreshIcon,
     Close as CloseIcon,
-    AdminPanelSettings as AdminIcon
+    AdminPanelSettings as AdminIcon,
+    Download as DownloadIcon,
+    Upload as UploadIcon,
+    FilterList as FilterIcon,
+    ViewModule as ViewModuleIcon,
+    ViewList as ViewListIcon,
+    Search as SearchIcon,
+    CheckCircle as CheckCircleIcon,
+    Error as ErrorIcon,
+    Warning as WarningIcon,
+    MoreVert as MoreVertIcon,
+    Settings as SettingsIcon,
+    ContentCopy as ContentCopyIcon
 } from '@mui/icons-material';
-import SearchIcon from '@mui/icons-material/Search';
-import { API_BASE_URL } from '../../config/constants';
+import { API_BASE_URL, FRONTEND_URL } from '../../config/constants';
 import './UserManagementComponent.css';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { getFirestore, collection, onSnapshot } from 'firebase/firestore';
+import { getFirestore, collection, onSnapshot, query, where, orderBy } from 'firebase/firestore';
 import { app } from '../../config/firebase';
-import Autocomplete from '@mui/material/Autocomplete';
-import InputAdornment from '@mui/material/InputAdornment';
-import { useTheme } from '@mui/material/styles';
 import * as XLSX from 'xlsx';
+import { useTheme } from '@mui/material/styles';
+import SmartCacheManager from '../../utils/smartCacheManager';
+// For Material-UI v5 and above
+import Checkbox from '@mui/material/Checkbox';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 
 // Helper for deep comparison
 const areUsersEqual = (arr1, arr2) => {
     if (!Array.isArray(arr1) || !Array.isArray(arr2)) {
-        console.warn("areUsersEqual: One or both arguments are not arrays:", { arr1, arr2 });
+        console.log("🔍 areUsersEqual: One or both arrays are not arrays", { arr1: Array.isArray(arr1), arr2: Array.isArray(arr2) });
         return false;
     }
-    
     if (arr1.length !== arr2.length) {
-        console.log("areUsersEqual: Array lengths differ:", { arr1Length: arr1.length, arr2Length: arr2.length });
+        console.log("🔍 areUsersEqual: Array lengths differ", { arr1Length: arr1.length, arr2Length: arr2.length });
         return false;
     }
     
@@ -55,7 +70,7 @@ const areUsersEqual = (arr1, arr2) => {
         const user2 = arr2[i];
         
         if (!user1 || !user2) {
-            console.warn("areUsersEqual: One or both users are null/undefined at index", i);
+            console.log("🔍 areUsersEqual: One user is null/undefined at index", i, { user1: !!user1, user2: !!user2 });
             return false;
         }
         
@@ -72,10 +87,16 @@ const areUsersEqual = (arr1, arr2) => {
             user1.employmentType !== user2.employmentType ||
             user1.designation !== user2.designation ||
             user1.employeeId !== user2.employeeId) {
-            console.log("areUsersEqual: Users differ at index", i, { user1, user2 });
+            console.log("🔍 areUsersEqual: Users differ at index", i, {
+                uid: { user1: user1.uid, user2: user2.uid },
+                name: { user1: user1.name, user2: user2.name },
+                email: { user1: user1.email, user2: user2.email },
+                designation: { user1: user1.designation, user2: user2.designation }
+            });
             return false;
         }
     }
+    console.log("🔍 areUsersEqual: All users are equal");
     return true;
 };
 
@@ -103,8 +124,8 @@ const EMPLOYMENT_TYPES = [
   { value: 'freelance', label: 'Freelance' },
 ];
 
-function generatePassword(length = 10) {
-  const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*';
+function generatePassword(length = 12) {
+  const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   let password = '';
   for (let i = 0; i < length; i++) {
     password += chars.charAt(Math.floor(Math.random() * chars.length));
@@ -123,10 +144,11 @@ const USER_TEMPLATE_HEADERS = [
   'employmentType',
 ];
 
+
 const UserManagementComponent = ({ user, showFlashMessage }) => {
     const [users, setUsers] = useState([]);
     const [clients, setClients] = useState([]);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [search, setSearch] = useState('');
     const [addMode, setAddMode] = useState(false);
@@ -136,7 +158,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
     const navigate = useNavigate();
     const location = useLocation();
-    const db = getFirestore(app);
+    const db = useMemo(() => getFirestore(app), []);
     const [addUserModalOpen, setAddUserModalOpen] = useState(false);
     const [addUserData, setAddUserData] = useState(initialUserState);
     const theme = useTheme();
@@ -150,9 +172,12 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
     const [changePwdModalOpen, setChangePwdModalOpen] = useState(false);
     const [pwdUserId, setPwdUserId] = useState(null);
     const [newPassword, setNewPassword] = useState('');
+    const [passwordCopied, setPasswordCopied] = useState(false);
+    const [emailSent, setEmailSent] = useState(false);
     const [importModalOpen, setImportModalOpen] = useState(false);
     const [importedUsers, setImportedUsers] = useState([]);
     const [importError, setImportError] = useState('');
+    
     const [importResults, setImportResults] = useState(null);
     const [importedPasswords, setImportedPasswords] = useState([]);
     const [credentialsDownloaded, setCredentialsDownloaded] = useState(false);
@@ -161,6 +186,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
     const [uploadedRows, setUploadedRows] = useState(new Set());
     const fileInputRef = useRef();
     const [collapsedClients, setCollapsedClients] = useState({});
+    const [showActionsColumn, setShowActionsColumn] = useState({});
     const previousUsersRef = useRef([]);
     const previousClientsRef = useRef([]);
     const [clientFilter, setClientFilter] = useState('');
@@ -169,9 +195,39 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const [lastFetchTime, setLastFetchTime] = useState(null);
     const [passwordChangeNotifications, setPasswordChangeNotifications] = useState({});
+    const [addUserError, setAddUserError] = useState('');
+    const [changePwdError, setChangePwdError] = useState('');
+    const [passwordResetStatus, setPasswordResetStatus] = useState('');
+    const [isPasswordResetting, setIsPasswordResetting] = useState(false);
+    const [filterRole, setFilterRole] = useState('all');
+    const [filtersChanged, setFiltersChanged] = useState(false);
+ 
+    const [selectedUsers, setSelectedUsers] = useState([]);
+    
+    // Debug logging to identify re-render causes
+    console.log('🔄 UserManagementComponent RENDER', { 
+        userId: user?.uid, 
+        userRole: user?.role, 
+        userCompany: user?.companyName,
+        usersCount: users?.length || 0,
+        loading,
+        timestamp: new Date().toISOString(),
+        showFlashMessageType: typeof showFlashMessage
+    });
+    const [bulkAction, setBulkAction] = useState('');
+    const [bulkActionModalOpen, setBulkActionModalOpen] = useState(false);
+    const [showCheckboxes, setShowCheckboxes] = useState(false);
+    const [selectedClientForAction, setSelectedClientForAction] = useState(null);
 
     const handleToggleClientCollapse = (client) => {
       setCollapsedClients(prev => ({ ...prev, [client]: !prev[client] }));
+    };
+
+    const handleToggleActionsColumn = (clientName) => {
+        setShowActionsColumn(prev => ({
+            ...prev,
+            [clientName]: !prev[clientName]
+        }));
     };
 
     useEffect(() => {
@@ -188,41 +244,81 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
         }
     }, [location.search, clients, navigate]);
 
+
     const filteredUsers = useMemo(() => {
-        console.log("filteredUsers useMemo triggered with:", { usersLength: users.length, search, clientFilter, userRole: user?.role });
+        let filtered = users.filter(u => {
+            // Apply search filter
+            const matchesSearch = search === '' || 
+                u.email.toLowerCase().includes(search.toLowerCase()) ||
+                u.clientname.toLowerCase().includes(search.toLowerCase()) ||
+                (u.asset_id && u.asset_id.toLowerCase().includes(search.toLowerCase())) ||
+                (u.firstName && u.firstName.toLowerCase().includes(search.toLowerCase())) ||
+                (u.lastName && u.lastName.toLowerCase().includes(search.toLowerCase())) ||
+                (u.employeeId && u.employeeId.toLowerCase().includes(search.toLowerCase()));
+            
+            // Apply client filter
+            const matchesClient = clientFilter === '' || 
+                u.client_name === clientFilter || 
+                u.companyName === clientFilter ||
+                u.clientname === clientFilter;
+            
+            // Apply role filter
+            const matchesRole = filterRole === 'all' || u.role === filterRole;
+            
+            return matchesSearch && matchesClient && matchesRole;
+        });
         
-        let filtered = users.filter(u =>
-            (u.role === 'user' || u.role === 'site_admin') &&
-            (u.email.toLowerCase().includes(search.toLowerCase()) ||
-             u.clientname.toLowerCase().includes(search.toLowerCase()) ||
-             (u.asset_id && u.asset_id.toLowerCase().includes(search.toLowerCase())) ||
-             (u.firstName && u.firstName.toLowerCase().includes(search.toLowerCase())) ||
-             (u.lastName && u.lastName.toLowerCase().includes(search.toLowerCase())) ||
-             (u.employeeId && u.employeeId.toLowerCase().includes(search.toLowerCase()))
-            )
-        );
+        // Sort users: site admins first, then by client name, then by email
+        return filtered.sort((a, b) => {
+            // Site admins always come first
+            if (a.role === 'site_admin' && b.role !== 'site_admin') return -1;
+            if (a.role !== 'site_admin' && b.role === 'site_admin') return 1;
+            
+            // For non-site admins, group by client name
+            const clientA = a.clientname || a.client_name || a.companyName || 'Unknown Client';
+            const clientB = b.clientname || b.client_name || b.companyName || 'Unknown Client';
+            
+            if (clientA !== clientB) {
+                return clientA.localeCompare(clientB);
+            }
+            
+            // Within same client, sort by email
+            return a.email.localeCompare(b.email);
+        });
+    }, [users, search, clientFilter, filterRole]);
+
+
+    // Group users by client for display
+    const groupedUsersByClient = useMemo(() => {
+        const grouped = {};
         
-        console.log("After initial filtering:", filtered.length);
+        filteredUsers.forEach(user => {
+            const clientName = user.clientname || user.client_name || user.companyName || 'Unknown Client';
+            if (!grouped[clientName]) {
+                grouped[clientName] = [];
+            }
+            grouped[clientName].push(user);
+        });
         
-        if (clientFilter) {
-            const beforeClientFilter = filtered.length;
-            filtered = filtered.filter(user => 
-                user.client_name === clientFilter || 
-                user.companyName === clientFilter ||
-                user.clientname === clientFilter
-            );
-            console.log("After client filtering:", { before: beforeClientFilter, after: filtered.length, clientFilter });
-        }
+        // Convert to array and sort by client name, with site admins first within each group
+        const clientGroups = Object.entries(grouped)
+            .map(([clientName, users]) => {
+                // Sort users within each client: site admins first, then by email
+                const sortedUsers = users.sort((a, b) => {
+                    if (a.role === 'site_admin' && b.role !== 'site_admin') return -1;
+                    if (a.role !== 'site_admin' && b.role === 'site_admin') return 1;
+                    return a.email.localeCompare(b.email);
+                });
+                
+                return {
+                    clientName,
+                    users: sortedUsers
+                };
+            })
+            .sort((a, b) => a.clientName.localeCompare(b.clientName));
         
-        if (user && user.role === 'site_admin' && user.companyName) {
-            const beforeSiteAdminFilter = filtered.length;
-            filtered = filtered.filter(u => u.clientname === user.companyName || u.companyName === user.companyName);
-            console.log("After site admin filtering:", { before: beforeSiteAdminFilter, after: filtered.length, userCompanyName: user.companyName });
-        }
-        
-        console.log("Final filtered users:", filtered.length);
-        return filtered;
-    }, [users, search, clientFilter, user]);
+        return clientGroups;
+    }, [filteredUsers]);
 
     const clearClientFilter = () => {
         setClientFilter('');
@@ -231,7 +327,18 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
 
     const fetchClients = useCallback(async () => {
         try {
-            const res = await fetch(`${API_BASE_URL}/api/clients`);
+            if (!user || !user.firebaseUser) {
+                console.error("User not authenticated");
+                return;
+            }
+            
+            const idToken = await user.firebaseUser.getIdToken();
+            const res = await fetch(`${API_BASE_URL}/api/clients`, {
+                headers: {
+                    'Authorization': `Bearer ${idToken}`,
+                    'Content-Type': 'application/json'
+                }
+            });
             if (!res.ok) throw new Error('Failed to fetch clients');
             const data = await res.json();
             if (JSON.stringify(previousClientsRef.current) !== JSON.stringify(data)) {
@@ -241,11 +348,66 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
         } catch (err) {
             console.error("Error fetching clients:", err);
         }
-    }, []);
+    }, [user]);
 
+    // Remove this useEffect as fetchClients is called in the main useEffect
+
+    // Load initial data from cache if available - optimized for performance
     useEffect(() => {
-        fetchClients();
-    }, []);
+        if (!user || !user.firebaseUser) return;
+        
+        const cacheKey = user.role === 'site_admin' ? 
+            `userManagement_cache_${user.role}_${user.companyName}` : 
+            `userManagement_cache_${user.role}`;
+        const cacheTimeKey = `${cacheKey}_time`;
+        
+        const cachedData = localStorage.getItem(cacheKey);
+        const cacheTime = localStorage.getItem(cacheTimeKey);
+        
+        if (cachedData && cacheTime) {
+            const cacheAge = Date.now() - parseInt(cacheTime);
+            const cacheValidDuration = 10 * 60 * 1000; // 10 minutes - longer cache for better performance
+            
+            if (cacheAge < cacheValidDuration) {
+                console.log("Loading initial users from cache...");
+                try {
+                    const cachedUsers = JSON.parse(cachedData);
+                    // Only update if data is different to prevent unnecessary re-renders
+                    if (!areUsersEqual(previousUsersRef.current, cachedUsers)) {
+                        setUsers(cachedUsers);
+                        previousUsersRef.current = cachedUsers;
+                        setLastFetchTime(parseInt(cacheTime));
+                    }
+                    // If we have cached data, we're not loading anymore
+                    console.log("✅ Cache loaded, setting loading to false");
+                    setLoading(false);
+                } catch (error) {
+                    console.error("Error parsing cached users:", error);
+                    // Clear invalid cache
+                    localStorage.removeItem(cacheKey);
+                    localStorage.removeItem(cacheTimeKey);
+                }
+            }
+        }
+    }, [user?.uid, user?.role, user?.companyName]);
+
+    // Calculate user statistics - memoized for performance
+    const userStats = useMemo(() => {
+        if (users.length > 0) {
+            return {
+                total: users.length,
+                siteAdmins: users.filter(u => u.role === 'site_admin').length,
+                regularUsers: users.filter(u => u.role === 'user').length,
+                totalClients: clients.length
+            };
+        }
+        return {
+            total: 0,
+            siteAdmins: 0,
+            regularUsers: 0,
+            totalClients: 0
+        };
+    }, [users, clients]);
 
     useEffect(() => {
         if (!user || !user.firebaseUser) {
@@ -254,96 +416,192 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
         }
         
         console.log("Setting up users data fetching...");
-        setLoading(true);
+        // Only set loading if we have absolutely no data
+        if (users.length === 0 && !previousUsersRef.current.length) {
+            console.log("🔄 Setting loading to true - no data available");
+            setLoading(true);
+        } else {
+            console.log("✅ Not setting loading - data available", { 
+                usersLength: users.length, 
+                previousUsersLength: previousUsersRef.current.length 
+            });
+        }
         setError(null);
         
-                let isInitialLoad = true;
-        
-        // Use API method for initial load to avoid double loading (with cache support)
-        fetchUsersFromAPI(false);
-        
-        // Set up Firestore listener for real-time updates only
         let unsubscribe = null;
-        try {
-            const usersRef = collection(db, 'users');
-            console.log("Setting up Firestore listener for real-time updates...");
-            
-            unsubscribe = onSnapshot(usersRef, 
-                async (snapshot) => {
-                    if (isInitialLoad) {
-                        isInitialLoad = false;
-                        return; // Skip the first Firestore update since we already have API data
-                    }
-                    
-                    try {
-                        console.log("Real-time update received, snapshot size:", snapshot.size);
-                        
-                        if (previousClientsRef.current.length === 0) {
-                            await fetchClients();
-                        }
-                        
-                        const fetchedUsers = [];
-                        snapshot.forEach((doc) => {
-                            const userData = doc.data();
-                            fetchedUsers.push({
-                                uid: doc.id,
-                                ...userData
+        let websocketCleanup = null;
+        
+        const setupRealTimeListener = async () => {
+            try {
+                // Fetch clients first if not available
+                if (previousClientsRef.current.length === 0) {
+                    await fetchClients();
+                }
+                
+                // Use Firestore real-time listener for all user roles
+                // READ OPTIMIZATION: Filtered queries reduce Firebase read consumption
+                // - site_admin: Only reads users from their company (very efficient)
+                // - admin/super_admin: Only reads relevant roles (excludes inactive/deleted users)
+                const usersRef = collection(db, 'users');
+                console.log("Setting up Firestore listener for real-time updates...");
+                console.log("🔧 User context:", { uid: user?.uid, role: user?.role, companyName: user?.companyName });
+                
+                // Create query based on user role with optimizations
+                let usersQuery;
+                if (user.role === 'site_admin') {
+                    // For site_admin, filter by company (most efficient)
+                    usersQuery = query(
+                        usersRef,
+                        where('client_name', '==', user.companyName),
+                        where('role', 'in', ['user', 'site_admin']),
+                        orderBy('firstName', 'asc')
+                    );
+                    console.log("🔍 Site admin query created:", { companyName: user.companyName });
+                } else {
+                    // For admin and super_admin, filter by relevant roles only
+                    // This reduces reads significantly compared to getting ALL users
+                    usersQuery = query(
+                        usersRef,
+                        where('role', 'in', ['user', 'site_admin', 'support', 'admin', 'super_admin']),
+                        orderBy('firstName', 'asc')
+                    );
+                    console.log("🔍 Admin/Super admin query created");
+                }
+                
+                console.log("🔍 Query setup complete, setting up onSnapshot listener...");
+                
+                console.log("🔍 About to call onSnapshot with query:", usersQuery);
+                
+                unsubscribe = onSnapshot(usersQuery, 
+                    async (snapshot) => {
+                        try {
+                            console.log("🔥 Firestore real-time update received, snapshot size:", snapshot.size, "users count:", users.length);
+                            console.log("📊 Snapshot changes:", snapshot.docChanges().map(change => ({
+                                type: change.type,
+                                docId: change.doc.id,
+                                data: change.doc.data()
+                            })));
+                            
+                            const fetchedUsers = [];
+                            snapshot.forEach((doc) => {
+                                const userData = doc.data();
+                                // Since we're using filtered queries, all users in snapshot are already filtered
+                                fetchedUsers.push({
+                                    uid: doc.id,
+                                    ...userData
+                                });
                             });
-                        });
-                        
-                        const usersWithClientDetails = fetchedUsers.map(u => {
-                            const clientMatch = previousClientsRef.current.find(c => c['Client name'] === u.client_name);
-                            return {
-                                ...u,
-                                asset_id: u.asset_id || u.assetid || '',
-                                domain: clientMatch ? clientMatch.Domain : (u.domain || ''),
-                                clientname: clientMatch ? clientMatch['Client name'] : (u.client_name || 'Unknown Client'),
-                                companyName: u.client_name || u.companyName || 'Unknown Company',
-                                firstName: u.firstName || '',
-                                lastName: u.lastName || '',
-                                contactNumber: u.contactNumber || '',
-                                managerEmail: u.managerEmail || '',
-                                employmentType: u.employmentType || '',
-                                designation: u.designation || '',
-                                employeeId: u.employeeId || '',
-                            };
-                        });
-                        
-                            if (!areUsersEqual(previousUsersRef.current, usersWithClientDetails)) {
-                            console.log("Updating users state with real-time data");
-                                setUsers(usersWithClientDetails);
-                                previousUsersRef.current = usersWithClientDetails;
+                            
+                            const usersWithClientDetails = fetchedUsers.map(u => {
+                                const clientMatch = previousClientsRef.current.find(c => c['Client name'] === u.client_name);
+                                return {
+                                    ...u,
+                                    asset_id: u.asset_id || u.assetid || '',
+                                    domain: clientMatch ? clientMatch.Domain : (u.domain || ''),
+                                    clientname: clientMatch ? clientMatch['Client name'] : (u.client_name || 'Unknown Client'),
+                                    companyName: u.client_name || u.companyName || 'Unknown Company',
+                                    firstName: u.firstName || '',
+                                    lastName: u.lastName || '',
+                                    contactNumber: u.contactNumber || '',
+                                    managerEmail: u.managerEmail || '',
+                                    employmentType: u.employmentType || '',
+                                    designation: u.designation || '',
+                                    employeeId: u.employeeId || '',
+                                };
+                            });
+                            
+                            // Always update state when snapshot arrives to ensure real-time UI reflect changes
+                            setUsers(usersWithClientDetails);
+                            previousUsersRef.current = usersWithClientDetails;
                             
                             // Update cache with real-time data
                             const currentTime = Date.now();
-                            localStorage.setItem('userManagement_cache', JSON.stringify(usersWithClientDetails));
-                            localStorage.setItem('userManagement_cacheTime', currentTime.toString());
+                            const cacheKey = `userManagement_cache_${user.role}`;
+                            const cacheTimeKey = `${cacheKey}_time`;
+                            localStorage.setItem(cacheKey, JSON.stringify(usersWithClientDetails));
+                            localStorage.setItem(cacheTimeKey, currentTime.toString());
                             setLastFetchTime(currentTime);
+                            
+                            // Set loading to false when we get data
+                            console.log("✅ Firestore data received, setting loading to false");
+                            setLoading(false);
+                            setError(null);
+                        } catch (error) {
+                            console.error("Error processing real-time users update:", error);
+                            setError(`Real-time update error: ${error.message}`);
+                            setLoading(false);
                         }
-                    } catch (error) {
-                        console.error("Error processing real-time users update:", error);
+                    },
+                    (error) => {
+                        console.error("❌ Error in real-time users listener:", error);
+                        console.error("❌ Error details:", { 
+                            code: error.code, 
+                            message: error.message, 
+                            stack: error.stack 
+                        });
+                        setError(`Listener error: ${error.message}`);
+                        setLoading(false);
                     }
-                },
-                (error) => {
-                    console.error("Error in real-time users listener:", error);
+                );
+                
+                console.log("✅ onSnapshot listener set up successfully");
+                
+                // Set up WebSocket for additional real-time updates
+                try {
+                    const { default: websocketClient } = await import('../../utils/websocketClient');
+                    
+                    const handleUserUpdate = (data) => {
+                        console.log('👤 WebSocket user update received:', data);
+                        // WebSocket updates are handled by Firestore listener, no need for additional processing
+                    };
+                    
+                    websocketClient.addListener('user_update', handleUserUpdate);
+                    websocketCleanup = () => {
+                        websocketClient.removeListener('user_update', handleUserUpdate);
+                    };
+                } catch (wsError) {
+                    console.log("WebSocket not available, using Firestore only:", wsError.message);
                 }
-            );
-        } catch (error) {
-            console.error("Error setting up Firestore listener:", error);
-        }
+                
+            } catch (error) {
+                console.error("Error setting up data fetching:", error);
+                setError(`Setup error: ${error.message}`);
+                setLoading(false);
+            }
+        };
+        
+        setupRealTimeListener();
             
-            return () => {
+        return () => {
             console.log("Cleaning up users data fetching...");
             if (unsubscribe) {
                 unsubscribe();
-        }
+            }
+            if (websocketCleanup) {
+                websocketCleanup();
+            }
         };
-    }, [user, db]);
+    }, [user?.uid, user?.role, user?.companyName]); // Removed db dependency as it's stable
 
     const handleAdd = () => {
         setAddMode(true);
         setAddRowData(initialUserState);
         setEditRowId(null);
+    };
+
+    // Debug function to test real-time updates
+    const handleDebugRefresh = () => {
+        console.log("🔧 Manual debug refresh triggered");
+        console.log("Current users state:", users.length, "users");
+        console.log("Previous users ref:", previousUsersRef.current.length, "users");
+        
+        // Force a re-render by updating a dummy state
+        setUsers([...users]);
+        
+        // Test if we can trigger a Firestore update
+        console.log("🔧 Testing Firestore connection...");
+        console.log("🔧 DB instance:", db);
+        console.log("🔧 Users collection exists:", !!db);
     };
 
     const handleAddClientChange = (event, value) => {
@@ -369,53 +627,28 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
 
     const handleAddSave = async (e) => {
         e.preventDefault();
-        if (!addRowData.password) {
-            setSnackbar({ open: true, message: 'Password is required.', severity: 'error' });
-            return;
-        }
-        if (!addRowData.emailPrefix) {
-            setSnackbar({ open: true, message: 'Email prefix is required.', severity: 'error' });
-            return;
-        }
-        if (!addRowData.domain) {
-            setSnackbar({ open: true, message: 'Domain name is required.', severity: 'error' });
-            return;
-        }
-        if (!addRowData.asset_id) {
-             setSnackbar({ open: true, message: 'Asset ID is required.', severity: 'error' });
-            return;
-        }
-        if (!addRowData.clientname) {
-             setSnackbar({ open: true, message: 'Client Name is required.', severity: 'error' });
-            return;
-        }
-        if (!addRowData.employeeId) {
-             setSnackbar({ open: true, message: 'Employee ID is required.', severity: 'error' });
-            return;
-        }
-        if (!addRowData.firstName) {
-             setSnackbar({ open: true, message: 'First Name is required.', severity: 'error' });
-            return;
-        }
-        if (!addRowData.lastName) {
-             setSnackbar({ open: true, message: 'Last Name is required.', severity: 'error' });
-            return;
-        }
-        if (!addRowData.contactNumber) {
-             setSnackbar({ open: true, message: 'Contact Number is required.', severity: 'error' });
-            return;
-        }
-        if (!addRowData.managerEmail) {
-             setSnackbar({ open: true, message: 'Manager Email is required.', severity: 'error' });
-            return;
-        }
-        if (!addRowData.employmentType) {
-             setSnackbar({ open: true, message: 'Employment Type is required.', severity: 'error' });
-            return;
-        }
-        if (!addRowData.designation) {
-             setSnackbar({ open: true, message: 'Designation is required.', severity: 'error' });
-            return;
+        
+        // Validation
+        const requiredFields = [
+            { field: 'password', message: 'Password is required.' },
+            { field: 'emailPrefix', message: 'Email prefix is required.' },
+            { field: 'domain', message: 'Domain name is required.' },
+            { field: 'asset_id', message: 'Asset ID is required.' },
+            { field: 'clientname', message: 'Client Name is required.' },
+            { field: 'employeeId', message: 'Employee ID is required.' },
+            { field: 'firstName', message: 'First Name is required.' },
+            { field: 'lastName', message: 'Last Name is required.' },
+            { field: 'contactNumber', message: 'Contact Number is required.' },
+            { field: 'managerEmail', message: 'Manager Email is required.' },
+            { field: 'employmentType', message: 'Employment Type is required.' },
+            { field: 'designation', message: 'Designation is required.' },
+        ];
+        
+        for (const { field, message } of requiredFields) {
+            if (!addRowData[field]) {
+                setSnackbar({ open: true, message, severity: 'error' });
+                return;
+            }
         }
         
         if (checkDuplicateEmployeeId(addRowData.employeeId)) {
@@ -445,9 +678,13 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
               isSiteAdmin: false,
             };
             
+            const idToken = await user.firebaseUser.getIdToken();
             const res = await fetch(`${API_BASE_URL}/api/users`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Authorization': `Bearer ${idToken}`,
+                    'Content-Type': 'application/json' 
+                },
                 body: JSON.stringify(payload),
             });
             
@@ -469,20 +706,13 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
     };
 
     const handleEditClick = (user) => {
-        setEditRowId(user.uid);
-        setEditRowData({
-            ...user,
-            emailPrefix: user.email ? user.email.split('@')[0] : '',
-            domain: user.email ? user.email.split('@')[1] : (user.domain || ''),
-        });
+        navigate(`/user-management/user-detail/${user.uid}?edit=true`);
     };
 
     const handleEditChange = (e) => {
         const { name, value } = e.target;
         setEditRowData(prev => ({ ...prev, [name]: value }));
     };
-
-
 
     const handleEditSave = async (uid) => {
         try {
@@ -528,6 +758,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
             
             setEditRowId(null);
             setEditRowData({ ...initialUserState, showPasswordField: false });
+            
             // Show inline notification for this specific user
             setPasswordChangeNotifications(prev => ({
               ...prev,
@@ -545,6 +776,9 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                 return newState;
               });
             }, 5000);
+            
+            // Real-time updates will be handled by Firestore listener
+            console.log("User updated, real-time listener will handle refresh");
         } catch (err) {
             setSnackbar({ open: true, message: err.message, severity: 'error' });
         }
@@ -553,6 +787,10 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
     const handleEditCancel = () => {
         setEditRowId(null);
         setEditRowData({ ...initialUserState });
+    };
+
+    const handleViewUser = (user) => {
+        navigate(`/user-management/user-detail/${user.uid}`);
     };
 
     const handleDeleteClick = (event, uid, email) => {
@@ -599,6 +837,10 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                 return newState;
               });
             }, 5000);
+            
+            // Real-time updates will be handled by Firestore listener
+            console.log("User deleted, real-time listener will handle refresh");
+            
             userToDeleteUidRef.current = null;
             setCurrentUserEmailToDelete('');
         } catch (err) {
@@ -612,42 +854,24 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
         setCurrentUserEmailToDelete('');
     };
 
-    const handleGoToClientPage = (type, value) => {
-        if (type === 'domain') {
-            navigate(`/admin/clients?domain=${encodeURIComponent(value)}`);
-        } else if (type === 'client') {
-            navigate(`/admin/clients?client=${encodeURIComponent(value)}`);
-        }
-    };
-
-    const groupedUsers = useMemo(() => {
-        console.log("groupedUsers useMemo triggered with filteredUsers:", filteredUsers.length);
-        
-        const result = filteredUsers.reduce((acc, user) => {
-            const client = user.companyName || user.clientname || 'Unknown Client';
-            if (!acc[client]) acc[client] = [];
-            acc[client].push(user);
-            return acc;
-        }, {});
-        
-        console.log("groupedUsers result:", Object.keys(result).length, "clients");
-        return result;
-    }, [filteredUsers]);
-
-    const clientOrder = useMemo(() => Object.keys(groupedUsers).sort(), [groupedUsers]);
-
     const openAddUserModal = () => {
-      const initialData = { ...initialUserState, password: generatePassword() };
-      if (user && user.role === 'site_admin' && user.companyName) {
-        initialData.companyName = user.companyName;
-      }
-      setAddUserData(initialData);
-      setAddUserModalOpen(true);
+      navigate('/user-management/create-user');
     };
+
+    // Update addUserData when selectedClientForAction changes
+    useEffect(() => {
+        if (selectedClientForAction && addUserModalOpen) {
+            setAddUserData(prev => ({
+                ...prev,
+                companyName: selectedClientForAction
+            }));
+        }
+    }, [selectedClientForAction, addUserModalOpen]);
 
     const closeAddUserModal = () => {
       setAddUserModalOpen(false);
       setAddUserData(initialUserState);
+      setSelectedClientForAction(null);
     };
 
     const handleAddUserChange = (e) => {
@@ -657,13 +881,30 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
 
     const handleAddUserSave = async (e) => {
       e.preventDefault();
-      if (!addUserData.companyName || !addUserData.firstName || !addUserData.lastName || !addUserData.email || !addUserData.contactNumber || !addUserData.managerEmail || !addUserData.employmentType || !addUserData.designation || !addUserData.employeeId) {
-        setSnackbar({ open: true, message: 'All fields are required.', severity: 'error' });
-        return;
+      setAddUserError('');
+      
+      // Validation
+      const requiredFields = [
+        { field: 'companyName', message: 'Company Name is required.' },
+        { field: 'firstName', message: 'First Name is required.' },
+        { field: 'lastName', message: 'Last Name is required.' },
+        { field: 'email', message: 'Email is required.' },
+        { field: 'contactNumber', message: 'Contact Number is required.' },
+        { field: 'managerEmail', message: 'Manager Email is required.' },
+        { field: 'employmentType', message: 'Employment Type is required.' },
+        { field: 'designation', message: 'Designation is required.' },
+        { field: 'employeeId', message: 'Employee ID is required.' },
+      ];
+      
+      for (const { field, message } of requiredFields) {
+        if (!addUserData[field]) {
+          setAddUserError(message);
+          return;
+        }
       }
       
       if (checkDuplicateEmployeeId(addUserData.employeeId)) {
-        setSnackbar({ open: true, message: 'Employee ID already exists. Please use a unique Employee ID.', severity: 'error' });
+        setAddUserError('Employee ID already exists. Please use a unique Employee ID.');
         return;
       }
       
@@ -700,13 +941,17 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
         
         if (!res.ok) {
           const errData = await res.json();
-          throw new Error(errData.error || 'Failed to create user');
+          setAddUserError(errData.error || 'Failed to create user');
+          return;
         }
         
         setAddUserModalOpen(false);
         setSnackbar({ open: true, message: 'User created successfully.', severity: 'success' });
+        
+        // Real-time updates will be handled by Firestore listener
+        console.log("User created, real-time listener will handle refresh");
       } catch (err) {
-        setSnackbar({ open: true, message: err.message, severity: 'error' });
+        setAddUserError(err.message || 'Failed to create user');
       }
     };
 
@@ -721,16 +966,36 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
       setChangePwdModalOpen(false);
       setPwdUserId(null);
       setNewPassword('');
+      setPasswordCopied(false);
+      setEmailSent(false);
+      setChangePwdError('');
+      setPasswordResetStatus('');
+      setIsPasswordResetting(false);
     };
 
+    const isAlphanumeric = (str) => /^[a-zA-Z0-9]+$/.test(str);
     const handleChangePassword = async (e) => {
       e.preventDefault();
-      if (!newPassword || newPassword.length < 6) {
-        setSnackbar({ open: true, message: 'Password must be at least 6 characters.', severity: 'error' });
+      setChangePwdError('');
+      setPasswordResetStatus('');
+      setIsPasswordResetting(true);
+      setPasswordResetStatus('Password reset in progress...');
+      
+      if (!newPassword || newPassword.length < 8) {
+        setChangePwdError('Password must be at least 8 characters.');
+        setIsPasswordResetting(false);
+        setPasswordResetStatus('');
+        return;
+      }
+      if (!isAlphanumeric(newPassword)) {
+        setChangePwdError('Password must contain only alphabets and numbers (no special characters).');
+        setIsPasswordResetting(false);
+        setPasswordResetStatus('');
         return;
       }
       
       try {
+        // First, update the password
         const idToken = await user.firebaseUser.getIdToken();
         const res = await fetch(`${API_BASE_URL}/api/users/${pwdUserId}/password`, {
           method: 'PUT',
@@ -744,6 +1009,40 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
         if (!res.ok) {
           const errData = await res.json();
           throw new Error(errData.error || 'Failed to change password');
+        }
+        
+        // If email checkbox is checked, send the password email
+        if (emailSent) {
+          try {
+            const userData = users.find(u => u.uid === pwdUserId);
+            if (userData) {
+              const emailRes = await fetch(`${API_BASE_URL}/api/users/${pwdUserId}/send-password-email`, {
+                method: 'POST',
+                headers: { 
+                  'Authorization': `Bearer ${idToken}`,
+                  'Content-Type': 'application/json' 
+                },
+                body: JSON.stringify({ 
+                  password: newPassword,
+                  userEmail: userData.email,
+                  userName: `${userData.firstName || ''} ${userData.lastName || ''}`.trim() || userData.name || 'User',
+                  companyName: userData.clientname || userData.companyName || 'Company',
+                  loginUrl: FRONTEND_URL
+                }),
+              });
+              
+              if (emailRes.ok) {
+                setPasswordResetStatus('Password reset and email sent successfully!');
+              } else {
+                setPasswordResetStatus('Password reset successful, but email failed to send.');
+              }
+            }
+          } catch (emailErr) {
+            console.error('Email sending failed:', emailErr);
+            setPasswordResetStatus('Password reset successful, but email failed to send.');
+          }
+        } else {
+          setPasswordResetStatus('Password reset successfully!');
         }
         
         // Show inline notification for this specific user
@@ -764,11 +1063,28 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
           });
         }, 5000);
          
+        // Close modal after 2 seconds to show success message
+        setTimeout(() => {
         closeChangePwdModal();
+          setIsPasswordResetting(false);
+          setPasswordResetStatus('');
+        }, 2000);
+        
+        // Real-time updates will be handled by Firestore listener
+        console.log("Password changed, real-time listener will handle refresh");
       } catch (err) {
-        setSnackbar({ open: true, message: err.message, severity: 'error' });
+        setPasswordResetStatus('Password reset failed!');
+        setChangePwdError(err.message || 'Failed to change password');
+        setIsPasswordResetting(false);
+        
+        // Clear error status after 3 seconds
+        setTimeout(() => {
+          setPasswordResetStatus('');
+        }, 3000);
       }
     };
+
+
 
     const hasUnsavedChanges = (editRowData, originalUser) => {
         return (
@@ -817,13 +1133,37 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
     };
 
     const handleDownloadTemplate = () => {
-      const csvContent = USER_TEMPLATE_HEADERS.join(',');
+      // Create dynamic headers based on user role
+      let templateHeaders = [...USER_TEMPLATE_HEADERS];
+      
+      console.log('User role:', user?.role);
+      console.log('Original headers:', templateHeaders);
+      
+      // Add company column for super_admin only
+      if (user && user.role === 'super_admin') {
+        templateHeaders.splice(2, 0, 'companyName'); // Insert after employeeId
+        console.log('Added companyName for super_admin');
+      }
+      
+      console.log('Final headers:', templateHeaders);
+      
+      // Create CSV content with headers and sample row
+      const csvContent = [
+        templateHeaders.join(','),
+        // Add sample row with empty values, but pre-fill companyName if client is selected
+        templateHeaders.map(header => {
+          if (header === 'companyName' && selectedClientForAction) {
+            return selectedClientForAction;
+          }
+          return '';
+        }).join(',')
+      ].join('\n');
       
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const link = document.createElement('a');
       const url = URL.createObjectURL(blob);
       link.setAttribute('href', url);
-      link.setAttribute('download', 'user_import_template.csv');
+      link.setAttribute('download', selectedClientForAction ? `${selectedClientForAction}_user_template.csv` : 'user_import_template.csv');
       link.style.visibility = 'hidden';
       document.body.appendChild(link);
       link.click();
@@ -845,7 +1185,13 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
             const lines = csvText.split('\n');
             const headers = lines[0].split(',').map(h => h.trim());
             
-            const missingCols = USER_TEMPLATE_HEADERS.filter(h => !headers.includes(h));
+            // Create expected headers based on user role
+            let expectedHeaders = [...USER_TEMPLATE_HEADERS];
+            if (user && user.role === 'super_admin') {
+              expectedHeaders.splice(2, 0, 'companyName'); // Insert after employeeId
+            }
+            
+            const missingCols = expectedHeaders.filter(h => !headers.includes(h));
             if (missingCols.length > 0) {
               setImportError('Missing columns: ' + missingCols.join(', '));
               setImportedUsers([]);
@@ -870,7 +1216,14 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
             const workbook = XLSX.read(data, { type: 'array' });
             const sheetName = workbook.SheetNames[0];
             const worksheet = workbook.Sheets[sheetName];
-            json = XLSX.utils.sheet_to_json(worksheet, { header: USER_TEMPLATE_HEADERS, defval: '' });
+            
+            // Create expected headers based on user role
+            let expectedHeaders = [...USER_TEMPLATE_HEADERS];
+            if (user && user.role === 'super_admin') {
+              expectedHeaders.splice(2, 0, 'companyName'); // Insert after employeeId
+            }
+            
+            json = XLSX.utils.sheet_to_json(worksheet, { header: expectedHeaders, defval: '' });
             json = json.filter(row => row.email && row.email !== 'email');
           }
           
@@ -920,6 +1273,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
       setShowCloseConfirmation(false);
       setImportProgress({ show: false, current: 0, total: 0, status: '' });
       setUploadedRows(new Set());
+      setSelectedClientForAction(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
     };
 
@@ -957,9 +1311,13 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
         
         setImportProgress(prev => ({ ...prev, status: 'Sending data to server...' }));
         
+        const idToken = await user.firebaseUser.getIdToken();
         const res = await fetch(`${API_BASE_URL}/api/users/bulk`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Authorization': `Bearer ${idToken}`,
+            'Content-Type': 'application/json' 
+          },
           body: JSON.stringify({ 
             users: usersWithCompany,
             siteAdminCompany: user && user.role === 'site_admin' ? user.companyName : null
@@ -1023,104 +1381,159 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
       setCredentialsDownloaded(true);
     };
 
+
     const handleChangePage = (event, newPage) => {
       setPage(newPage);
     };
 
-        const handleChangeRowsPerPage = (event) => {
-        setRowsPerPage(parseInt(event.target.value, 10));
-        setPage(0);
+    const handleChangeRowsPerPage = (event) => {
+      setRowsPerPage(parseInt(event.target.value, 10));
+      setPage(0);
     };
 
-    const fetchUsersFromAPI = async (forceRefresh = false) => {
-        try {
-            // Check cache first (unless force refresh is requested)
-            if (!forceRefresh) {
-                const cachedData = localStorage.getItem('userManagement_cache');
-                const cacheTime = localStorage.getItem('userManagement_cacheTime');
-                
-                if (cachedData && cacheTime) {
-                    const cacheAge = Date.now() - parseInt(cacheTime);
-                    const cacheValidDuration = 5 * 60 * 1000; // 5 minutes
-                    
-                    if (cacheAge < cacheValidDuration) {
-                        console.log("Loading users from cache...");
-                        const cachedUsers = JSON.parse(cachedData);
-                        setUsers(cachedUsers);
-                        previousUsersRef.current = cachedUsers;
-                        setLastFetchTime(parseInt(cacheTime));
-                        setLoading(false);
-                        setError(null);
-                        return;
-                    } else {
-                        console.log("Cache expired, fetching fresh data...");
-                    }
-                }
+
+
+
+    const handleSelectUser = (userId) => {
+        setSelectedUsers(prev => {
+            if (prev.includes(userId)) {
+                return prev.filter(id => id !== userId);
+            } else {
+                return [...prev, userId];
             }
-            
-            console.log("Fetching users from API...");
-            
-            if (previousClientsRef.current.length === 0) {
-                await fetchClients();
-            }
-            
-            const idToken = await user.firebaseUser.getIdToken();
-            const response = await fetch(`${API_BASE_URL}/api/users`, {
-                headers: {
-                    'Authorization': `Bearer ${idToken}`,
-                    'Content-Type': 'application/json'
-                }
-            });
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-            const fetchedUsers = await response.json();
-            console.log("Fetched users from API:", fetchedUsers.length);
-            
-            const usersWithClientDetails = fetchedUsers.map(u => {
-                const clientMatch = previousClientsRef.current.find(c => c['Client name'] === u.client_name);
-                return {
-                    ...u,
-                    asset_id: u.asset_id || u.assetid || '',
-                    domain: clientMatch ? clientMatch.Domain : (u.domain || ''),
-                    clientname: clientMatch ? clientMatch['Client name'] : (u.client_name || 'Unknown Client'),
-                    companyName: u.client_name || u.companyName || 'Unknown Company',
-                    firstName: u.firstName || '',
-                    lastName: u.lastName || '',
-                    contactNumber: u.contactNumber || '',
-                    managerEmail: u.managerEmail || '',
-                    employmentType: u.employmentType || '',
-                    designation: u.designation || '',
-                    employeeId: u.employeeId || '',
-                };
-            });
-            
-            if (!areUsersEqual(previousUsersRef.current, usersWithClientDetails)) {
-                console.log("Updating users state with API data");
-                setUsers(usersWithClientDetails);
-                previousUsersRef.current = usersWithClientDetails;
-                
-                // Cache the data
-                const currentTime = Date.now();
-                localStorage.setItem('userManagement_cache', JSON.stringify(usersWithClientDetails));
-                localStorage.setItem('userManagement_cacheTime', currentTime.toString());
-                setLastFetchTime(currentTime);
-            }
-            
-            setLoading(false);
-            setError(null);
-        } catch (error) {
-            console.error("Error fetching users from API:", error);
-            setError(`API error: ${error.message}`);
-            setUsers([]);
-            setLoading(false);
+        });
+    };
+
+    const handleSelectAllUsers = () => {
+        if (selectedUsers.length === filteredUsers.length) {
+            setSelectedUsers([]);
+        } else {
+            setSelectedUsers(filteredUsers.map(user => user.uid));
         }
     };
 
-    const handleRefresh = async () => {
-        console.log("Manual refresh requested...");
-        setLoading(true);
-        await fetchUsersFromAPI(true); // Force refresh
+    const openBulkActionModal = (action) => {
+        setBulkAction(action);
+        setBulkActionModalOpen(true);
+    };
+
+    const closeBulkActionModal = () => {
+        setBulkActionModalOpen(false);
+        setBulkAction('');
+    };
+
+    const handleBulkAction = async () => {
+        if (selectedUsers.length === 0) return;
+        
+        try {
+            const idToken = await user.firebaseUser.getIdToken();
+            
+            if (bulkAction === 'delete') {
+                // Bulk delete
+                const deletePromises = selectedUsers.map(uid => 
+                    fetch(`${API_BASE_URL}/api/users/${uid}`, {
+                        method: 'DELETE',
+                        headers: {
+                            'Authorization': `Bearer ${idToken}`,
+                            'Content-Type': 'application/json'
+                        }
+                    })
+                );
+                
+                await Promise.all(deletePromises);
+                setSnackbar({ open: true, message: `${selectedUsers.length} users deleted successfully.`, severity: 'success' });
+            } else if (bulkAction === 'resetPassword') {
+                // Bulk password reset
+                const resetPromises = selectedUsers.map(uid => {
+                    const newPassword = generatePassword();
+                    return fetch(`${API_BASE_URL}/api/users/${uid}/password`, {
+                        method: 'PUT',
+                        headers: { 
+                            'Authorization': `Bearer ${idToken}`,
+                            'Content-Type': 'application/json' 
+                        },
+                        body: JSON.stringify({ password: newPassword, mustChangePassword: true }),
+                    });
+                });
+                
+                await Promise.all(resetPromises);
+                setSnackbar({ open: true, message: `Passwords reset for ${selectedUsers.length} users.`, severity: 'success' });
+            }
+            
+            setSelectedUsers([]);
+            closeBulkActionModal();
+            
+            // Real-time updates will be handled by Firestore listener
+            console.log("Bulk action completed, real-time listener will handle refresh");
+        } catch (err) {
+            setSnackbar({ open: true, message: `Bulk action failed: ${err.message}`, severity: 'error' });
+        }
+    };
+
+
+
+    const clearAllFilters = () => {
+        setSearch('');
+        setClientFilter('');
+        setFilterRole('all');
+    };
+
+    // Client-specific action handlers
+    const handleClientAddUser = (clientName) => {
+        // Navigate to create-user page with client name as URL parameter
+        navigate(`/user-management/create-user?client=${encodeURIComponent(clientName)}`);
+    };
+
+
+    const handleClientImportUsers = (clientName) => {
+        navigate(`/user-management/import?client=${encodeURIComponent(clientName)}`);
+    };
+
+    const handleClientExportUsers = async (clientName) => {
+        try {
+            // Filter users for the specific client
+            const clientUsers = users.filter(user => 
+                user.clientname === clientName || 
+                user.client_name === clientName || 
+                user.companyName === clientName
+            );
+
+            if (clientUsers.length === 0) {
+                showFlashMessage('No users found for this client.', 'warning');
+                return;
+            }
+
+            // Create CSV content
+            const headers = ['Email', 'First Name', 'Last Name', 'Employee ID', 'Contact Number', 'Role', 'Active'];
+            const csvContent = [
+                headers.join(','),
+                ...clientUsers.map(user => [
+                    user.email || '',
+                    user.firstName || '',
+                    user.lastName || '',
+                    user.employeeId || '',
+                    user.contactNumber || '',
+                    user.role || '',
+                    user.active !== false ? 'Yes' : 'No'
+                ].join(','))
+            ].join('\n');
+
+            // Download CSV
+            const blob = new Blob([csvContent], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `${clientName}_users_${new Date().toISOString().split('T')[0]}.csv`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+
+            showFlashMessage(`Exported ${clientUsers.length} users for ${clientName}`, 'success');
+        } catch (error) {
+            console.error('Export failed:', error);
+            showFlashMessage('Export failed. Please try again.', 'error');
+        }
     };
 
     return (
@@ -1144,6 +1557,276 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                     @keyframes pulse {
                         0%, 100% { opacity: 1; }
                         50% { opacity: 0.7; }
+                    }
+                    @keyframes fadeIn {
+                        from { opacity: 0; }
+                        to { opacity: 1; }
+                    }
+                    .user-card {
+                        transition: all 0.3s ease;
+                        border-left: 4px solid transparent;
+                    }
+                    .user-card:hover {
+                        transform: translateY(-3px);
+                        box-shadow: 0 6px 12px rgba(0,0,0,0.1);
+                        border-left-color: #1976d2;
+                    }
+                    .status-active {
+                        color: #4caf50;
+                    }
+                    .status-inactive {
+                        color: #f44336;
+                    }
+                    .role-badge {
+                        font-size: 0.7rem;
+                        padding: 2px 8px;
+                        border-radius: 12px;
+                        font-weight: 600;
+                    }
+                    .role-user {
+                        background-color: #e3f2fd;
+                        color: #1976d2;
+                    }
+                    .role-admin {
+                        background-color: #e8f5e9;
+                        color: #388e3c;
+                    }
+                    .role-site_admin {
+                        background-color: #fff3e0;
+                        color: #f57c00;
+                    }
+                    
+                    /* Table Styles */
+                    .table-container {
+                        width: 100%;
+                        border-radius: 8px;
+                        background: white;
+                    }
+                    
+                    .table-wrapper {
+                        width: 100%;
+                        overflow-x: auto;
+                        border-radius: 8px;
+                        border: 1px solid #e0e0e0;
+                        background: white;
+                    }
+                    
+                    .user-table {
+                        width: 100%;
+                        min-width: 750px;
+                        border-collapse: collapse;
+                        font-size: 0.8rem;
+                        table-layout: fixed;
+                    }
+                    
+                    .user-table th {
+                        background-color: #f8f9fa;
+                        padding: 8px 12px;
+                        text-align: left;
+                        font-weight: 600;
+                        color: #455a64;
+                        border-bottom: 2px solid #e0e0e0;
+                        border-right: 1px solid #e0e0e0;
+                        white-space: nowrap;
+                    }
+                    
+                    .user-table th:first-child { width: 30px; } /* Checkbox */
+                    .user-table th:nth-child(2) { width: 40px; } /* # */
+                    .user-table th:nth-child(3) { width: 200px; } /* Name - wider for full names */
+                    .user-table th:nth-child(4) { width: 180px; } /* Email - compact but readable */
+                    .user-table th:nth-child(5) { width: 100px; } /* Contact - compact for phone numbers */
+                    .user-table th:nth-child(6) { width: 80px; } /* Role - compact for role badges */
+                    .user-table th:last-child { width: 140px; border-right: none; } /* Actions - wider for buttons */
+                    
+                    .user-table td {
+                        padding: 8px 12px;
+                        border-bottom: 1px solid #e0e0e0;
+                        border-right: 1px solid #e0e0e0;
+                        vertical-align: middle;
+                        max-width: 0;
+                        overflow: hidden;
+                        text-overflow: ellipsis;
+                        white-space: nowrap;
+                    }
+                    
+                    .user-table td:last-child {
+                        border-right: none;
+                        overflow: visible;
+                        white-space: normal;
+                    }
+                    
+                    /* Name column - allow wrapping for long names */
+                    .user-table td:nth-child(3) {
+                        white-space: normal;
+                        overflow: visible;
+                        max-width: none;
+                    }
+                    
+                    /* Email column - allow wrapping for long emails */
+                    .user-table td:nth-child(4) {
+                        white-space: normal;
+                        overflow: visible;
+                        max-width: none;
+                    }
+                    
+                    .user-row:hover {
+                        background-color: #f5f5f5;
+                    }
+                    
+                    .user-row:nth-child(even) {
+                        background-color: #fafafa;
+                    }
+                    
+                    .user-name {
+                        display: flex;
+                        flex-direction: column;
+                    }
+                    
+                    .user-name-primary {
+                        font-weight: 500;
+                        color: #1e293b;
+                    }
+                    
+                    .user-name-secondary {
+                        font-size: 0.75rem;
+                        color: #64748b;
+                    }
+                    
+                    .clickable-name {
+                        transition: all 0.2s ease;
+                    }
+                    
+                    .clickable-name:hover {
+                        color: #1976d2;
+                        text-decoration: underline;
+                    }
+                    
+                    .action-buttons {
+                        display: flex;
+                        gap: 4px;
+                        justify-content: center;
+                    }
+                    
+                    .action-btn {
+                        background: none;
+                        border: none;
+                        padding: 6px;
+                        border-radius: 4px;
+                        cursor: pointer;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        transition: all 0.2s;
+                    }
+                    
+                    .action-btn:hover {
+                        background-color: rgba(0, 0, 0, 0.1);
+                    }
+                    
+                    .action-btn.reset-password {
+                        color: #607d8b;
+                    }
+                    
+                    .action-btn.reset-password:hover {
+                        color: #455a64;
+                        background-color: rgba(96, 125, 139, 0.1);
+                    }
+                    
+                    .action-btn.view {
+                        color: #4caf50;
+                    }
+                    
+                    .action-btn.view:hover {
+                        color: #388e3c;
+                        background-color: rgba(76, 175, 80, 0.1);
+                    }
+                    
+                    .action-btn.edit {
+                        color: #607d8b;
+                    }
+                    
+                    .action-btn.edit:hover {
+                        color: #455a64;
+                        background-color: rgba(96, 125, 139, 0.1);
+                    }
+                    
+                    .action-btn.delete {
+                        color: #e57373;
+                    }
+                    
+                    .action-btn.delete:hover {
+                        color: #f44336;
+                        background-color: rgba(244, 67, 54, 0.1);
+                    }
+                    
+                    .password-notification {
+                        font-size: 0.7rem;
+                        font-weight: 500;
+                        color: #2e7d32;
+                    }
+                    
+                    .checkbox {
+                        width: 16px;
+                        height: 16px;
+                        cursor: pointer;
+                    }
+                    
+                    /* Client Group Styles */
+                    .client-group {
+                        margin-bottom: 16px;
+                        border: 1px solid #e0e0e0;
+                        border-radius: 8px;
+                        overflow: hidden;
+                        background: white;
+                    }
+                    
+                    .client-header {
+                        display: flex;
+                        align-items: center;
+                        justify-content: space-between;
+                        padding: 12px 16px;
+                        background-color: #f8f9fa;
+                        border-bottom: 1px solid #e0e0e0;
+                        transition: background-color 0.2s;
+                    }
+                    
+                    .client-header:hover {
+                        background-color: #eeeeee;
+                    }
+                    
+                    .client-actions {
+                        display: flex;
+                        align-items: center;
+                        gap: 8px;
+                    }
+                    
+                    .client-info {
+                        display: flex;
+                        align-items: center;
+                        gap: 8px;
+                    }
+                    
+                    .client-icon {
+                        color: #1976d2;
+                        font-size: 1rem;
+                    }
+                    
+                    .client-name {
+                        font-weight: 600;
+                        font-size: 1.1rem;
+                        color: #1976d2;
+                    }
+                    
+                    .user-count {
+                        font-size: 0.8rem;
+                        color: #64748b;
+                        margin-left: 8px;
+                    }
+                    
+                    .client-toggle {
+                        display: flex;
+                        align-items: center;
+                        color: #64748b;
                     }
                 `}
             </style>
@@ -1178,144 +1861,241 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                         </Typography>
                         <Typography variant="body2" color="textSecondary" sx={{ fontSize: '0.75rem' }}>
                             Manage user accounts and permissions
+                            {user.role === 'site_admin' && lastFetchTime && (
+                                <span style={{ marginLeft: '8px', color: '#666' }}>
+                                    • Last updated: {new Date(lastFetchTime).toLocaleTimeString()}
+                                </span>
+                            )}
                         </Typography>
                     </Box>
                     
-                    {/* Action Buttons */}
+                </Box>
+                
+                {/* Stats Cards */}
+                <Box sx={{ 
+                    display: 'grid', 
+                    gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(4, 1fr)' }, 
+                        gap: 1.5, 
+                        mb: 2 
+                }}>
+                    <Card sx={{ borderRadius: 1, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+                            <CardContent sx={{ p: 1.5, display: 'flex', alignItems: 'center' }}>
+                                <Avatar sx={{ bgcolor: '#1976d2', mr: 1.5, width: 32, height: 32 }}>
+                                    <GroupIcon sx={{ fontSize: '1rem' }} />
+                            </Avatar>
+                            <Box>
+                                    <Typography variant="caption" color="textSecondary" sx={{ fontSize: '0.7rem' }}>Total Users</Typography>
+                                    <Typography variant="h6" sx={{ fontWeight: 600, fontSize: '1.1rem' }}>{userStats.total}</Typography>
+                            </Box>
+                        </CardContent>
+                    </Card>
+                    {/* Hide Total Clients card for site_admin - they shouldn't see client-based information */}
+                    {user.role !== 'site_admin' && (
+                    <Card sx={{ borderRadius: 1, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+                            <CardContent sx={{ p: 1.5, display: 'flex', alignItems: 'center' }}>
+                                <Avatar sx={{ bgcolor: '#9c27b0', mr: 1.5, width: 32, height: 32 }}>
+                                    <GroupIcon sx={{ fontSize: '1rem' }} />
+                            </Avatar>
+                            <Box>
+                                    <Typography variant="caption" color="textSecondary" sx={{ fontSize: '0.7rem' }}>Total Clients</Typography>
+                                    <Typography variant="h6" sx={{ fontWeight: 600, fontSize: '1.1rem' }}>{userStats.totalClients}</Typography>
+                            </Box>
+                        </CardContent>
+                    </Card>
+                    )}
+                    <Card sx={{ borderRadius: 1, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+                            <CardContent sx={{ p: 1.5, display: 'flex', alignItems: 'center' }}>
+                                <Avatar sx={{ bgcolor: '#ff9800', mr: 1.5, width: 32, height: 32 }}>
+                                    <AdminIcon sx={{ fontSize: '1rem' }} />
+                            </Avatar>
+                            <Box>
+                                    <Typography variant="caption" color="textSecondary" sx={{ fontSize: '0.7rem' }}>Site Admins</Typography>
+                                    <Typography variant="h6" sx={{ fontWeight: 600, fontSize: '1.1rem' }}>{userStats.siteAdmins}</Typography>
+                            </Box>
+                        </CardContent>
+                    </Card>
+                </Box>
+                
+                {/* Filters */}
+                <Box sx={{ mb: 2 }}>
                     <Box sx={{ 
                         display: 'flex', 
                         flexDirection: { xs: 'column', sm: 'row' }, 
-                        gap: 1, 
-                        mt: { xs: 2, sm: 0 }
+                        justifyContent: 'space-between', 
+                        alignItems: { xs: 'flex-start', sm: 'center' },
+                        mt: 1,
+                        gap: 1
                     }}>
-                        <Button
-                            variant="contained"
-                            color="primary"
-                            startIcon={<AddIcon sx={{ fontSize: '0.75rem' }} />}
-                            onClick={openAddUserModal}
-                            size="small"
-                            sx={{
-                                borderRadius: 0.5,
-                                textTransform: 'none',
-                                fontWeight: 500,
-                                fontSize: '0.75rem',
-                                px: 1.25,
-                                py: 0.2,
-                                minHeight: '24px',
-                                boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-                                '&:hover': {
-                                    boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
-                                }
-                            }}
-                        >
-                            Add User
-                        </Button>
-                        <Button
-                            variant="outlined"
-                            color="primary"
-                            onClick={openImportModal}
-                            size="small"
-                            sx={{
-                                borderRadius: 0.5,
-                                textTransform: 'none',
-                                fontWeight: 500,
-                                fontSize: '0.75rem',
-                                px: 1.25,
-                                py: 0.2,
-                                minHeight: '24px',
-                                borderWidth: 1,
-                                '&:hover': {
-                                    borderWidth: 1.5,
-                                }
-                            }}
-                        >
-                            Import Users
-                        </Button>
-                        <Button
-                            variant="outlined"
-                            color="primary"
-                            onClick={handleRefresh}
-                            disabled={loading}
-                            startIcon={<RefreshIcon sx={{ fontSize: '0.75rem' }} />}
-                            size="small"
-                            sx={{
-                                borderRadius: 0.5,
-                                textTransform: 'none',
-                                fontWeight: 500,
-                                fontSize: '0.75rem',
-                                px: 1.25,
-                                py: 0.2,
-                                minHeight: '24px',
-                                borderWidth: 1,
-                                '&:hover': {
-                                    borderWidth: 1.5,
-                                }
-                            }}
-                        >
-                            Refresh
-                        </Button>
+                        {/* Search and Filters */}
+                        <Box sx={{ 
+                            display: 'flex', 
+                            alignItems: 'center',
+                            gap: 1, 
+                            width: '100%',
+                            flexGrow: 1,
+                            height: '35px'
+                        }}>
+                            <TextField
+                                value={search}
+                                onChange={e => {
+                                    setSearch(e.target.value);
+                                    setFiltersChanged(true);
+                                }}
+                                placeholder="Search by email, name, employee ID..."
+                                size="small"
+                                sx={{ 
+                                    flexGrow: 1,
+                                    minWidth: 200,
+                                    '& .MuiOutlinedInput-root': {
+                                        height: '35px',
+                                        fontSize: '0.75rem',
+                                        borderRadius: 1
+                                    }
+                                }}
+                                InputProps={{
+                                    startAdornment: (
+                                        <InputAdornment position="start">
+                                            <SearchIcon color="disabled" sx={{ fontSize: '1rem' }} />
+                                        </InputAdornment>
+                                    ),
+                                    endAdornment: search && (
+                                        <InputAdornment position="end">
+                                            <IconButton size="small" onClick={() => setSearch('')}>
+                                                <ClearIcon fontSize="small" sx={{ fontSize: '1rem' }} />
+                                            </IconButton>
+                                        </InputAdornment>
+                                    )
+                                }}
+                            />
+                            
+                            {user?.role !== 'site_admin' && (
+                                <Box sx={{ minWidth: 150, maxWidth: 200 }}>
+                                    <CustomDropdown
+                                        value={clientFilter}
+                                        onChange={(value) => {
+                                            setClientFilter(value);
+                                            setFiltersChanged(true);
+                                        }}
+                                        options={[
+                                            { value: '', label: 'All Clients' },
+                                            ...clients.map(client => ({
+                                                value: client['Client name'] || client.companyName,
+                                                label: client['Client name'] || client.companyName
+                                            }))
+                                        ]}
+                                        placeholder="Select Client"
+                                        size="sm"
+                                    />
+                                </Box>
+                            )}
+                            
+                            
+                            <Box sx={{ minWidth: 120, maxWidth: 150 }}>
+                                <CustomDropdown
+                                    value={filterRole}
+                                    onChange={(value) => {
+                                        setFilterRole(value);
+                                        setFiltersChanged(true);
+                                    }}
+                                    options={[
+                                        { value: 'all', label: 'All Roles' },
+                                        { value: 'user', label: 'User' },
+                                        { value: 'site_admin', label: 'Site Admin' }
+                                    ]}
+                                    placeholder="Select Role"
+                                    size="sm"
+                                />
+                            </Box>
+                            
+                            {filtersChanged && (
+                                <CustomButton
+                                    variant="outline-danger"
+                                    size="sm"
+                                    onClick={() => {
+                                        clearAllFilters();
+                                        setFiltersChanged(false);
+                                    }}
+                                >
+                                    Clear Filters
+                                </CustomButton>
+                            )}
+                            <CustomButton
+                                variant={showCheckboxes ? "danger" : "outline"}
+                                size="sm"
+                                onClick={() => {
+                                    setShowCheckboxes(!showCheckboxes);
+                                    if (!showCheckboxes) {
+                                        setSelectedUsers([]); // Clear selections when hiding
+                                    }
+                                }}
+                            >
+                                {showCheckboxes ? 'Cancel Select' : 'Select'}
+                            </CustomButton>
+                        </Box>
+                        
+                        {/* View Toggle and Bulk Actions */}
+                        <Box sx={{ 
+                            display: 'flex', 
+                            gap: 1,
+                            alignItems: 'center'
+                        }}>
+                            {showCheckboxes && selectedUsers.length > 0 && (
+                                <Box sx={{ display: 'flex', gap: 1 }}>
+                                    <CustomButton
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => openBulkActionModal('resetPassword')}
+                                    >
+                                        Reset Passwords ({selectedUsers.length})
+                                    </CustomButton>
+                                    <CustomButton
+                                        variant="outline-danger"
+                                        size="sm"
+                                        onClick={() => openBulkActionModal('delete')}
+                                    >
+                                        Delete ({selectedUsers.length})
+                                    </CustomButton>
+                                </Box>
+                            )}
+                            
+                        </Box>
+                    </Box>
+                    
+
+                    
+                    {/* Active Filters */}
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
+                        {search && (
+                            <Chip
+                                label={`Search: ${search}`}
+                                onDelete={() => setSearch('')}
+                                size="small"
+                                color="primary"
+                                variant="outlined"
+                            />
+                        )}
+                        {clientFilter && (
+                            <Chip
+                                icon={<GroupIcon />}
+                                label={`Client: ${clientFilter}`}
+                                onDelete={clearClientFilter}
+                                size="small"
+                                color="primary"
+                                variant="outlined"
+                            />
+                        )}
+                        {filterRole !== 'all' && (
+                            <Chip
+                                label={`Role: ${filterRole}`}
+                                onDelete={() => setFilterRole('all')}
+                                size="small"
+                                color="primary"
+                                variant="outlined"
+                            />
+                        )}
                     </Box>
                 </Box>
-
-                {/* Search and Filter Section */}
-                <Box 
-                    sx={{ 
-                        mb: 2, 
-                        display: 'flex',
-                        flexDirection: { xs: 'column', sm: 'row' },
-                        gap: 2,
-                        alignItems: 'center'
-                    }}
-                >
-                    <TextField
-                        value={search}
-                        onChange={e => setSearch(e.target.value)}
-                        placeholder="Search by email, client, asset ID, or employee ID..."
-                        size="small"
-                        fullWidth
-                        sx={{ 
-                            maxWidth: { sm: 400 },
-                            '& .MuiOutlinedInput-root': {
-                                borderRadius: 1,
-                                fontSize: '0.75rem'
-                            }
-                        }}
-                        InputProps={{
-                            startAdornment: (
-                                <InputAdornment position="start">
-                                    <SearchIcon color="disabled" sx={{ fontSize: '1rem' }} />
-                                </InputAdornment>
-                            ),
-                            endAdornment: search && (
-                                <InputAdornment position="end">
-                                    <IconButton size="small" onClick={() => setSearch('')}>
-                                        <ClearIcon fontSize="small" sx={{ fontSize: '1rem' }} />
-                                    </IconButton>
-                                </InputAdornment>
-                            )
-                        }}
-                    />
-                    
-                    {clientFilter && (
-                        <Chip
-                            icon={<GroupIcon sx={{ fontSize: '1rem' }} />}
-                            label={`Filtered by: ${clientFilter}`}
-                            onDelete={clearClientFilter}
-                            color="primary"
-                            variant="outlined"
-                            size="small"
-                            sx={{
-                                borderRadius: 1,
-                                fontWeight: 500,
-                                fontSize: '0.75rem',
-                                '& .MuiChip-deleteIcon': {
-                                    color: '#1976d2',
-                                }
-                            }}
-                        />
-                    )}
-                </Box>
-
+                
                 {/* Add User Form */}
                 <Collapse in={addMode} timeout="auto" unmountOnExit>
                     <Paper 
@@ -1331,6 +2111,11 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                         <Typography variant="h6" sx={{ mb: 1, fontWeight: 500, fontSize: '1rem' }}>
                             Add New User
                         </Typography>
+                        {addUserError && (
+                          <Alert severity="error" sx={{ mb: 2 }}>
+                            {addUserError}
+                          </Alert>
+                        )}
                         <Box display="flex" flexWrap="wrap" gap={2}>
                             {!(user && user.role === 'site_admin') && (
                             <Autocomplete
@@ -1386,7 +2171,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                                 inputProps={{ style: { fontSize: '0.8rem' } }}
                                 placeholder="Employee ID"
                                 sx={{ minWidth: 150, flex: 1 }}
-                                error={addRowData.employeeId && checkDuplicateEmployeeId(addRowData.employeeId)}
+                                error={!!(addRowData.employeeId && checkDuplicateEmployeeId(addRowData.employeeId))}
                                 helperText={addRowData.employeeId && checkDuplicateEmployeeId(addRowData.employeeId) ? 'Employee ID already exists' : ''}
                             />
                             <TextField
@@ -1423,7 +2208,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                                 required
                                 size="small"
                                 data-field-type="name"
-                                InputLabelProps={{ style: { fontSize: '0.8rem' } }}
+                                InputLabelProps={{ style: { fontSize: '1rem' } }}
                                 inputProps={{ style: { fontSize: '0.8rem' } }}
                                 placeholder="Designation"
                                 sx={{ minWidth: 150, flex: 1 }}
@@ -1535,8 +2320,8 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                         </Box>
                     </Paper>
                 </Collapse>
-
-                {/* Users Table */}
+                
+                {/* Users Table/Card View */}
                 {loading ? (
                     <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
                         <CircularProgress />
@@ -1547,10 +2332,10 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                     <Paper 
                         elevation={0} 
                         sx={{ 
-                            borderRadius: 2, 
-                            backgroundColor: '#ffffff',
+                            borderRadius: '8px', 
+                            overflow: 'hidden',
                             border: '1px solid #e0e0e0',
-                            overflow: 'hidden'
+                            width: '100%'
                         }}
                     >
                         {filteredUsers.length === 0 ? (
@@ -1560,599 +2345,686 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                                 </Typography>
                             </Box>
                         ) : (
-                            <>
-                                <TableContainer sx={{ 
-                                    maxHeight: 400,
-                                    '&::-webkit-scrollbar': {
-                                        width: '6px !important',
-                                        height: '6px !important',
-                                    },
-                                    '&::-webkit-scrollbar-track': {
-                                        background: '#f1f1f1 !important',
-                                        borderRadius: '3px !important',
-                                    },
-                                    '&::-webkit-scrollbar-thumb': {
-                                        background: '#c1c1c1 !important',
-                                        borderRadius: '3px !important',
-                                        '&:hover': {
-                                            background: '#a8a8a8 !important',
-                                        },
-                                    },
-                                }}>
-                                    <Table size="small" sx={{ minWidth: 700, borderCollapse: 'collapse' }}>
-                                        <TableHead sx={{ bgcolor: '#f5f7fa' }}>
-                                                    <TableRow>
-                                                <TableCell sx={{ py: 0.5, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0', width: '5%' }}>
-                                                    #
-                                                </TableCell>
-                                                        {!(user && user.role === 'site_admin') && (
-                                                    <TableCell sx={{ py: 0.5, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0', width: adjustedColumnWidths.companyName }}>
-                                                        Company Name
-                                                    </TableCell>
-                                                )}
-                                                <TableCell sx={{ py: 0.5, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0', width: adjustedColumnWidths.firstName }}>
-                                                    First Name
-                                                </TableCell>
-                                                <TableCell sx={{ py: 0.5, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0', width: adjustedColumnWidths.lastName }}>
-                                                    Last Name
-                                                </TableCell>
-                                                <TableCell sx={{ py: 0.5, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0', width: adjustedColumnWidths.employeeId }}>
-                                                    Employee ID
-                                                </TableCell>
-                                                <TableCell sx={{ py: 0.5, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0', width: adjustedColumnWidths.email }}>
-                                                    Email
-                                                </TableCell>
-                                                <TableCell sx={{ py: 0.5, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0', width: adjustedColumnWidths.designation }}>
-                                                    Designation
-                                                </TableCell>
-                                                <TableCell sx={{ py: 0.5, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0', width: adjustedColumnWidths.contactNumber }}>
-                                                    Contact
-                                                </TableCell>
-                                                <TableCell sx={{ py: 0.5, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0', width: adjustedColumnWidths.managerEmail }}>
-                                                    Manager Email
-                                                </TableCell>
-                                                <TableCell sx={{ py: 0.5, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', borderRight: '1px solid #e0e0e0', width: adjustedColumnWidths.employmentType }}>
-                                                    Employment Type
-                                                </TableCell>
-                                                <TableCell align="right" sx={{ py: 0.5, px: 2, fontWeight: 600, color: '#455a64', fontSize: '0.8rem', width: adjustedColumnWidths.actions }}>
-                                                    Actions
-                                                </TableCell>
-                                                    </TableRow>
-                                                </TableHead>
-                                                <TableBody>
-                                            {filteredUsers.length === 0 ? (
-                                                <TableRow>
-                                                    <TableCell colSpan={user && user.role === 'site_admin' ? 9 : 10} align="center" sx={{ py: 4 }}>
-                                                        <Typography variant="body2" color="textSecondary">
-                                                            No user profiles found.
-                                                        </Typography>
-                                                    </TableCell>
-                                                </TableRow>
-                                            ) : (
-                                                filteredUsers
-                                                    .slice(filteredUsers.length > 10 ? page * rowsPerPage : 0, filteredUsers.length > 10 ? page * rowsPerPage + rowsPerPage : filteredUsers.length)
-                                                    .sort((a, b) => a.email.localeCompare(b.email))
-                                                    .map((u, i) => (
-                                                        <TableRow 
-                                                            key={u.uid}
-                                                            hover
-                                                            sx={{ 
-                                                                '&:nth-of-type(odd)': { bgcolor: '#fafbfc' },
-                                                                '&:hover': { bgcolor: '#f1f5f9' }
-                                                            }}
-                                                        >
-                                                            <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0', width: '5%' }}>
-                                                                {filteredUsers.length > 10 ? page * rowsPerPage + i + 1 : i + 1}
-                                                            </TableCell>
-                                                                    {!(user && user.role === 'site_admin') && (
-                                                                <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0', width: adjustedColumnWidths.companyName }}>
-                                                                    {u.companyName || u.client_name || '-'}
-                                                                        </TableCell>
-                                                                    )}
-                                                            <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0', width: adjustedColumnWidths.firstName }}>
-                                                                        {u.firstName || (u.name ? u.name.split(' ')[0] : '')}
-                                                            </TableCell>
-                                                            <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0', width: adjustedColumnWidths.lastName }}>
-                                                                        {u.lastName || (u.name ? u.name.split(' ').slice(1).join(' ') : '')}
-                                                                    </TableCell>
-                                                            <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0', width: adjustedColumnWidths.employeeId }}>
-                                                                {u.employeeId || '-'}
-                                                                    </TableCell>
-                                                            <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0', width: adjustedColumnWidths.email }}>
-                                                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                                                                    <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>
-                                                                            {u.email}
-                                                                    </Typography>
-                                                                    <Typography 
-                                                                        variant="caption" 
-                                                                        sx={{ 
-                                                                            fontSize: '0.7rem',
-                                                                            color: u.role === 'user' ? '#1976d2' : u.role === 'site_admin' ? '#d32f2f' : '#666',
-                                                                            fontWeight: 500
-                                                                        }}
-                                                                    >
-                                                                        ({u.role})
-                                                                    </Typography>
-                                                                </Box>
-                                                                    </TableCell>
-                                                            <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0', width: adjustedColumnWidths.designation }}>
-                                                                {u.designation || '-'}
-                                                            </TableCell>
-                                                            <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0', width: adjustedColumnWidths.contactNumber }}>
-                                                                {u.contactNumber || '-'}
-                                                            </TableCell>
-                                                            <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0', width: adjustedColumnWidths.managerEmail }}>
-                                                                {u.managerEmail || '-'}
-                                                            </TableCell>
-                                                            <TableCell sx={{ py: 0.4, px: 2, fontSize: '0.8rem', borderRight: '1px solid #e0e0e0', width: adjustedColumnWidths.employmentType }}>
-                                                                {u.employmentType || '-'}
-                                                            </TableCell>
-                                                            <TableCell align="right" sx={{ py: 0.4, px: 2, width: adjustedColumnWidths.actions }}>
-                                                                {passwordChangeNotifications[u.uid] ? (
-                                                                    <Typography 
-                                                                        variant="body2" 
-                                                                        sx={{ 
-                                                                            fontSize: '0.7rem',
-                                                                            color: passwordChangeNotifications[u.uid].message.includes('success') ? '#2e7d32' : '#d32f2f',
-                                                                            fontWeight: 500,
-                                                                            textAlign: 'right',
-                                                                            py: 0.5
-                                                                        }}
-                                                                    >
-                                                                        {passwordChangeNotifications[u.uid].message}
-                                                                    </Typography>
-                                                                ) : (
-                                                                    <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-                                                                        <Tooltip title="Reset Password">
-                                                                            <IconButton 
-                                                                                onClick={() => openChangePwdModal(u.uid)} 
-                                                                                size="small" 
-                                                                                sx={{ 
-                                                                                    p: 0.7,
-                                                                                    color: '#607d8b',
-                                                                                    '&:hover': { color: '#455a64', bgcolor: 'rgba(96, 125, 139, 0.1)' }
-                                                                                }}
-                                                                            >
-                                                                                <LockResetIcon fontSize="small" />
-                                                                            </IconButton>
-                                                                        </Tooltip>
-                                                                        <Tooltip title="Edit">
-                                                                            <IconButton 
-                                                                                onClick={() => handleEditClick(u)} 
-                                                                                size="small" 
-                                                                                sx={{ 
-                                                                                    p: 0.7,
-                                                                                    color: '#607d8b',
-                                                                                    '&:hover': { color: '#455a64', bgcolor: 'rgba(96, 125, 139, 0.1)' }
-                                                                                }}
-                                                                            >
-                                                                                <EditIcon fontSize="small" />
-                                                                            </IconButton>
-                                                                        </Tooltip>
-                                                                        <Tooltip title="Delete">
-                                                                            <IconButton 
-                                                                                onClick={(event) => handleDeleteClick(event, u.uid, u.email)} 
-                                                                                size="small" 
-                                                                                sx={{ 
-                                                                                    p: 0.7,
-                                                                                    color: '#e57373',
-                                                                                    '&:hover': { color: '#f44336', bgcolor: 'rgba(244, 67, 54, 0.1)' }
-                                                                                }}
-                                                                            >
-                                                                                <DeleteIcon fontSize="small" />
-                                                                            </IconButton>
-                                                                        </Tooltip>
-                                                                    </Box>
-                                                                )}
-                                                                    </TableCell>
-                                                        </TableRow>
-                                                    ))
-                                            )}
-                                                </TableBody>
-                                            </Table>
-                                        </TableContainer>
-                                
-                                {filteredUsers.length > 10 && (
-                                    <TablePagination
-                                        rowsPerPageOptions={[5, 10, 25]}
-                                        component="div"
-                                        count={filteredUsers.length}
-                                        rowsPerPage={rowsPerPage}
-                                        page={page}
-                                        onPageChange={handleChangePage}
-                                        onRowsPerPageChange={handleChangeRowsPerPage}
-                                        sx={{
-                                            '.MuiTablePagination-selectLabel, .MuiTablePagination-displayedRows': {
-                                                fontSize: '0.8rem'
-                                            },
-                                            '.MuiTablePagination-toolbar': {
-                                                minHeight: '40px'
-                                            }
-                                        }}
+                            <div className="table-container">
+                                {groupedUsersByClient.map(({ clientName, users }, groupIndex) => (
+                                    <div key={clientName} className="client-group">
+                                        <div className="client-header">
+                                            <div className="client-info" onClick={() => handleToggleClientCollapse(clientName)}>
+                                                <span className="client-name">{clientName}</span>
+                                                <span className="user-count">{users.length} users</span>
+                                            </div>
+                                            <div className="client-actions">
+                                                <ClientActionDropdown
+                                                    clientName={clientName}
+                                                    onAddUser={() => handleClientAddUser(clientName)}
+                                                    onImportUsers={() => handleClientImportUsers(clientName)}
+                                                    onExportUsers={() => handleClientExportUsers(clientName)}
+                                                />
+      <div
+          onClick={() => handleToggleActionsColumn(clientName)}
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors duration-150 cursor-pointer border ${
+              showActionsColumn[clientName]
+                  ? 'text-red-700 bg-white hover:bg-red-50 border-red-300'
+                  : 'text-gray-700 bg-white hover:bg-gray-50 border-gray-300'
+          }`}
+      >
+          <AdminIcon sx={{ fontSize: '14px', color: 'inherit' }} />
+          {showActionsColumn[clientName] ? 'Cancel' : 'Manage'}
+      </div>
+                                                <div className="client-toggle" onClick={() => handleToggleClientCollapse(clientName)}>
+                                                    {collapsedClients[clientName] ? <ExpandMoreIcon /> : <ExpandLessIcon />}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        {!collapsedClients[clientName] && (
+                                            <div className="table-wrapper">
+                                                <table className="user-table">
+                                                    <thead>
+                                                        <tr>
+                            {showCheckboxes && (
+                                                                <th style={{ width: '30px', minWidth: '30px', maxWidth: '30px' }}>
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        className="checkbox"
+                                        checked={users.length > 0 && users.every(u => selectedUsers.includes(u.uid))}
+                                    onChange={() => {
+                                                                            if (users.every(u => selectedUsers.includes(u.uid))) {
+                                                                                setSelectedUsers(selectedUsers.filter(id => !users.map(u => u.uid).includes(id)));
+                                        } else {
+                                                                                setSelectedUsers([...selectedUsers, ...users.map(u => u.uid)]);
+                                        }
+                                    }}
+                                />
+                                                                </th>
+                                                            )}
+                                                            <th style={{ width: '40px', minWidth: '40px', maxWidth: '40px' }}>#</th>
+                                                            <th style={{ 
+                                                                width: showActionsColumn[clientName] ? '160px' : '200px', 
+                                                                minWidth: showActionsColumn[clientName] ? '160px' : '200px' 
+                                                            }}>Name</th>
+                                                            <th style={{ 
+                                                                width: showActionsColumn[clientName] ? '140px' : '180px', 
+                                                                minWidth: showActionsColumn[clientName] ? '140px' : '180px' 
+                                                            }}>Email</th>
+                                                            <th style={{ 
+                                                                width: showActionsColumn[clientName] ? '80px' : '100px', 
+                                                                minWidth: showActionsColumn[clientName] ? '80px' : '100px',
+                                                                maxWidth: showActionsColumn[clientName] ? '80px' : '100px'
+                                                            }}>Contact</th>
+                                                            <th style={{ 
+                                                                width: showActionsColumn[clientName] ? '60px' : '80px', 
+                                                                minWidth: showActionsColumn[clientName] ? '60px' : '80px',
+                                                                maxWidth: showActionsColumn[clientName] ? '60px' : '80px'
+                                                            }}>Role</th>
+                                                            {showActionsColumn[clientName] && (
+                                                                <th style={{ width: '120px', minWidth: '120px', textAlign: 'center' }}>Actions</th>
+                                                            )}
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                        {users.map((u, i) => (
+                                                            <tr key={u.uid} className="user-row">
+                                {showCheckboxes && (
+                                                                    <td style={{ width: '30px', minWidth: '30px', maxWidth: '30px' }}>
+                                                                        <input
+                                                                            type="checkbox"
+                                                                            className="checkbox"
+                                        checked={selectedUsers.includes(u.uid)}
+                                        onChange={() => handleSelectUser(u.uid)}
                                     />
-                                )}
-                            </>
+                                                                    </td>
+                                                                )}
+                                                                <td style={{ width: '40px', minWidth: '40px', maxWidth: '40px' }}>{i + 1}</td>
+                                                                <td style={{ 
+                                                                    width: showActionsColumn[clientName] ? '160px' : '200px', 
+                                                                    minWidth: showActionsColumn[clientName] ? '160px' : '200px' 
+                                                                }}>
+                                                                    <div 
+                                                                        className="user-name clickable-name" 
+                                                                        onClick={() => handleViewUser(u)}
+                                                                        style={{ cursor: 'pointer' }}
+                                                                    >
+                                                                        <div className="user-name-primary" style={{ 
+                                                                            overflow: 'hidden', 
+                                                                            textOverflow: 'ellipsis', 
+                                                                            whiteSpace: 'nowrap' 
+                                                                        }}>
+                                            {u.firstName || (u.name ? u.name.split(' ')[0] : '')}
+                                                                        </div>
+                                                                        <div className="user-name-secondary" style={{ 
+                                                                            overflow: 'hidden', 
+                                                                            textOverflow: 'ellipsis', 
+                                                                            whiteSpace: 'nowrap' 
+                                                                        }}>
+                                            {u.lastName || (u.name ? u.name.split(' ').slice(1).join(' ') : '')}
+                                                                        </div>
+                                                                    </div>
+                                                                </td>
+                                                                <td style={{ 
+                                                                    width: showActionsColumn[clientName] ? '140px' : '180px', 
+                                                                    minWidth: showActionsColumn[clientName] ? '140px' : '180px' 
+                                                                }}>
+                                                                    <div style={{ 
+                                                                        overflow: 'hidden', 
+                                                                        textOverflow: 'ellipsis', 
+                                                                        whiteSpace: 'nowrap' 
+                                                                    }} title={u.email}>
+                                                                        {u.email}
+                                                                    </div>
+                                                                </td>
+                                                                <td style={{ 
+                                                                    width: showActionsColumn[clientName] ? '80px' : '100px', 
+                                                                    minWidth: showActionsColumn[clientName] ? '80px' : '100px',
+                                                                    maxWidth: showActionsColumn[clientName] ? '80px' : '100px'
+                                                                }}>
+                                                                    <div style={{ 
+                                                                        overflow: 'hidden', 
+                                                                        textOverflow: 'ellipsis', 
+                                                                        whiteSpace: 'nowrap' 
+                                                                    }} title={u.contactNumber || '-'}>
+                                                                        {u.contactNumber || '-'}
+                                                                    </div>
+                                                                </td>
+                                                                <td style={{ 
+                                                                    width: showActionsColumn[clientName] ? '60px' : '80px', 
+                                                                    minWidth: showActionsColumn[clientName] ? '60px' : '80px',
+                                                                    maxWidth: showActionsColumn[clientName] ? '60px' : '80px'
+                                                                }}>
+                                                                    <span className={`role-badge role-${u.role}`} style={{ 
+                                                                        fontSize: showActionsColumn[clientName] ? '10px' : '12px',
+                                                                        padding: showActionsColumn[clientName] ? '2px 6px' : '4px 8px'
+                                                                    }}>
+                                                                        {u.role === 'user' ? 'User' : u.role === 'site_admin' ? 'Site Admin' : u.role || 'User'}
+                                                                    </span>
+                                                                </td>
+                                                                {showActionsColumn[clientName] && (
+                                                                    <td style={{ 
+                                                                        width: '120px', 
+                                                                        minWidth: '120px',
+                                                                        textAlign: 'center'
+                                                                    }}>
+                                        {passwordChangeNotifications[u.uid] ? (
+                                                                            <span className="password-notification">
+                                                {passwordChangeNotifications[u.uid].message}
+                                                                            </span>
+                                                                        ) : (
+                                                                            <div className="action-buttons">
+                                                                                <TooltipBubble title="View User">
+                                                                                    <button
+                                                                                        className="action-btn view"
+                                                        onClick={() => handleViewUser(u)} 
+                                                                                    >
+                                                                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                                                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                                                                                            <circle cx="12" cy="12" r="3"/>
+                                                                                        </svg>
+                                                                                    </button>
+                                                                                </TooltipBubble>
+                                                                                <TooltipBubble title="Edit User">
+                                                                                    <button
+                                                                                        className="action-btn edit"
+                                                        onClick={() => handleEditClick(u)} 
+                                                                                    >
+                                                                                        <EditIcon fontSize="small" />
+                                                                                    </button>
+                                                                                </TooltipBubble>
+                                                                                <TooltipBubble title="Delete User">
+                                                                                    <button
+                                                                                        className="action-btn delete"
+                                                        onClick={(event) => handleDeleteClick(event, u.uid, u.email)} 
+                                                                                    >
+                                                                                        <DeleteIcon fontSize="small" />
+                                                                                    </button>
+                                                                                </TooltipBubble>
+                                                                            </div>
+                                                                        )}
+                                                                    </td>
+                                                                )}
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
                         )}
                     </Paper>
                 )}
-
-  
-
-<Dialog
-    open={addUserModalOpen}
-    onClose={closeAddUserModal}
-    maxWidth="md"
-    fullWidth
-    PaperProps={{
-        sx: {
-            borderRadius: 0,
-            boxShadow: '0 8px 30px rgba(0,0,0,0.1)',
-            bgcolor: '#ffffff',
-        }
-    }}
->
-    <DialogTitle
-        sx={{
-            background: '#283149',
-            minHeight: '50px',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            color: 'white',
-            px: 2.5,
-            py: 2,
-            borderBottom: '1px solid #e0e0e0'
-        }}
-    >
-        <Typography variant="h6" component="div" sx={{ fontSize: '1rem', fontWeight: 600 }}>
-            Add User
-        </Typography>
-        <IconButton onClick={closeAddUserModal} sx={{ color: 'white', '&:hover': { bgcolor: 'rgba(255,255,255,0.1)' } }}>
-            <CloseIcon fontSize="small" />
-        </IconButton>
-    </DialogTitle>
-
-    <DialogContent sx={{ p: { xs: 2, sm: 2.5 }, bgcolor: '#f5f5f5' }}>
-        <Box component="form" onSubmit={handleAddUserSave} sx={{ display: 'flex', flexDirection: 'column', gap: 2 }} autoComplete="off">
-            {/* Hidden password field to trick Chrome autofill */}
-            <input type="password" style={{ display: 'none' }} autoComplete="new-password" />
-
-            {/* User Information Section */}
-            <Box sx={{ bgcolor: 'white', p: 2, border: '1px solid #e0e0e0', borderRadius: 1 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.5 }}>
-                    <PersonIcon sx={{ color: '#666', mr: 1 }} fontSize="small" />
-                    <Typography variant="subtitle1" sx={{ fontSize: '0.9rem', fontWeight: 600, color: '#333' }}>User Information</Typography>
-                </Box>
-                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 1.5 }}>
-{user && user.role === 'site_admin' ? (
-<TextField
-                            label="Company Name *" 
-name="companyName"
-value={addUserData.companyName}
-                            InputProps={{ 
-                                readOnly: true,
-                                startAdornment: <InputAdornment position="start"><BusinessIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
-                            }} 
-required
-size="small"
-fullWidth
-helperText="Auto-filled from your company"
-                            InputLabelProps={{ 
-                                shrink: true, 
-                                sx: { 
-                                    fontSize: '1rem',
-                                    color: '#1976d2',
-                                    fontWeight: 600,
-                                    '&.Mui-focused': {
-                                        color: '#1565c0'
-                                    }
-                                } 
-                            }}
-                            sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
-/>
-) : (
-                        <TextField 
-                            select
-                            label="Company Name *" 
-name="companyName"
-value={addUserData.companyName}
-onChange={handleAddUserChange}
-required
-size="small"
-                            fullWidth
-                            InputProps={{
-                                startAdornment: <InputAdornment position="start"><BusinessIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
-                            }}
-                            InputLabelProps={{ 
-                                shrink: true, 
-                                sx: { 
-                                    fontSize: '1rem',
-                                    color: '#1976d2',
-                                    fontWeight: 600,
-                                    '&.Mui-focused': {
-                                        color: '#1565c0'
-                                    }
-                                } 
-                            }}
-                            sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
-                        >
-                            <MenuItem value="" disabled sx={{ fontSize: '0.85rem' }}>Select Company</MenuItem>
-{previousClientsRef.current.map(c => (
-                                <MenuItem key={c['Client name'] || c.companyName || c.id} value={c['Client name'] || c.companyName} sx={{ fontSize: '0.85rem' }}>
-                                    {c['Client name'] || c.companyName}
-                                </MenuItem>
-))}
-                        </TextField>
-)}
-                    
-                    <TextField
-                        label="Employee ID *" 
-                        name="employeeId" 
-                        value={addUserData.employeeId} 
-                        onChange={handleAddUserChange} 
-                        required 
-                        size="small"
-                        fullWidth
-                        error={addUserData.employeeId && checkDuplicateEmployeeId(addUserData.employeeId)}
-                        helperText={addUserData.employeeId && checkDuplicateEmployeeId(addUserData.employeeId) ? 'Employee ID already exists' : ''}
-                        InputProps={{
-                            startAdornment: <InputAdornment position="start"><BadgeIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
+                
+                {/* Add User Modal */}
+                <Dialog
+                    open={addUserModalOpen}
+                    onClose={closeAddUserModal}
+                    maxWidth="md"
+                    fullWidth
+                    PaperProps={{
+                        sx: {
+                            borderRadius: 0,
+                            boxShadow: '0 8px 30px rgba(0,0,0,0.1)',
+                            bgcolor: '#ffffff',
+                        }
+                    }}
+                >
+                    <DialogTitle
+                        sx={{
+                            background: 'linear-gradient(135deg, #ff6b35 0%, #f7931e 100%)',
+                            minHeight: '60px',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            color: 'white',
+                            px: 3,
+                            py: 2
                         }}
-                        InputLabelProps={{ 
-                            shrink: true, 
-                            sx: { 
-                                fontSize: '1rem',
-                                color: '#1976d2',
-                                fontWeight: 600,
-                                '&.Mui-focused': {
-                                    color: '#1565c0'
-                                }
-                            } 
-                        }}
-                        sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
-                    />
-                    
-                    <TextField 
-                        label="First Name *" 
-name="firstName"
-value={addUserData.firstName}
-onChange={handleAddUserChange}
-required
-size="small"
-fullWidth
-                        InputLabelProps={{ 
-                            shrink: true, 
-                            sx: { 
-                                fontSize: '1rem',
-                                color: '#1976d2',
-                                fontWeight: 600,
-                                '&.Mui-focused': {
-                                    color: '#1565c0'
-                                }
-                            } 
-                        }}
-                        sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
-                    />
-                    
-<TextField
-                        label="Last Name *" 
-name="lastName"
-value={addUserData.lastName}
-onChange={handleAddUserChange}
-required
-size="small"
-fullWidth
-                        InputLabelProps={{ 
-                            shrink: true, 
-                            sx: { 
-                                fontSize: '1rem',
-                                color: '#1976d2',
-                                fontWeight: 600,
-                                '&.Mui-focused': {
-                                    color: '#1565c0'
-                                }
-                            } 
-                        }}
-                        sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
-                    />
-                    
-<TextField
-                        label="Email *" 
-name="email"
-value={addUserData.email}
-onChange={handleAddUserChange}
-required
-size="small"
-fullWidth
-                        InputProps={{
-                            startAdornment: <InputAdornment position="start"><EmailIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
-                        }}
-                        InputLabelProps={{ 
-                            shrink: true, 
-                            sx: { 
-                                fontSize: '1rem',
-                                color: '#1976d2',
-                                fontWeight: 600,
-                                '&.Mui-focused': {
-                                    color: '#1565c0'
-                                }
-                            } 
-                        }}
-                        sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
-                    />
-                    
-<TextField
-                        label="Password *" 
-name="password"
-value={addUserData.password}
-                        InputProps={{ 
-                            readOnly: true,
-                            startAdornment: <InputAdornment position="start"><LockIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
-                        }} 
-                        required 
-size="small"
-fullWidth
-helperText="Auto-generated password"
-                        InputLabelProps={{ 
-                            shrink: true, 
-                            sx: { 
-                                fontSize: '1rem',
-                                color: '#1976d2',
-                                fontWeight: 600,
-                                '&.Mui-focused': {
-                                    color: '#1565c0'
-                                }
-                            } 
-                        }}
-                        sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
-                    />
-                    
-<TextField
-                        label="Contact Number *" 
-name="contactNumber"
-value={addUserData.contactNumber}
-onChange={handleAddUserChange}
-required
-size="small"
-fullWidth
-                        InputProps={{
-                            startAdornment: <InputAdornment position="start"><PhoneIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
-                        }}
-                        InputLabelProps={{ 
-                            shrink: true, 
-                            sx: { 
-                                fontSize: '1rem',
-                                color: '#1976d2',
-                                fontWeight: 600,
-                                '&.Mui-focused': {
-                                    color: '#1565c0'
-                                }
-                            } 
-                        }}
-                        sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
-                    />
-                    
-<TextField
-                        label="Manager Email *" 
-name="managerEmail"
-value={addUserData.managerEmail}
-onChange={handleAddUserChange}
-required
-size="small"
-fullWidth
-                        InputProps={{
-                            startAdornment: <InputAdornment position="start"><SupervisorAccountIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
-                        }}
-                        InputLabelProps={{ 
-                            shrink: true, 
-                            sx: { 
-                                fontSize: '1rem',
-                                color: '#1976d2',
-                                fontWeight: 600,
-                                '&.Mui-focused': {
-                                    color: '#1565c0'
-                                }
-                            } 
-                        }}
-                        sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
-                    />
-                    
-                    <TextField 
-                        select 
-                        label="Employment Type *" 
-name="employmentType"
-value={addUserData.employmentType}
-onChange={handleAddUserChange}
-required
-size="small"
-                        fullWidth
-                        InputProps={{
-                            startAdornment: <InputAdornment position="start"><WorkIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
-                        }}
-                        InputLabelProps={{ 
-                            shrink: true, 
-                            sx: { 
-                                fontSize: '1rem',
-                                color: '#1976d2',
-                                fontWeight: 600,
-                                '&.Mui-focused': {
-                                    color: '#1565c0'
-                                }
-                            } 
-                        }}
-                        sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
                     >
-                        <MenuItem value="" disabled sx={{ fontSize: '0.85rem' }}>Select Employment Type</MenuItem>
-{EMPLOYMENT_TYPES.map(opt => (
-                            <MenuItem key={opt.value} value={opt.value} sx={{ fontSize: '0.85rem' }}>{opt.label}</MenuItem>
-))}
-                    </TextField>
-                    
-<TextField
-                        label="Designation *" 
-name="designation"
-value={addUserData.designation}
-onChange={handleAddUserChange}
-required
-size="small"
-fullWidth
-                        InputProps={{
-                            startAdornment: <InputAdornment position="start"><AdminIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
-                        }}
-                        InputLabelProps={{ 
-                            shrink: true, 
-                            sx: { 
-                                fontSize: '1rem',
-                                color: '#1976d2',
-                                fontWeight: 600,
-                                '&.Mui-focused': {
-                                    color: '#1565c0'
-                                }
-                            } 
-                        }}
-                        sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
-                    />
-                </Box>
-            </Box>
-        </Box>
-    </DialogContent>
-    
-    <DialogActions sx={{ py: 2, px: 3, bgcolor: '#f8f9fa', borderTop: '1px solid #e0e0e0' }}>
-        <Button 
-            onClick={closeAddUserModal} 
-            variant="outlined" 
-            size="small"
-            sx={{ 
-                textTransform: 'none', 
-                fontSize: '0.85rem',
-                borderRadius: 1,
-                px: 2
-            }}
-        >
-            Cancel
-        </Button>
-        <Button 
-            type="submit" 
-            variant="contained" 
-            color="primary" 
-            size="small"
-            onClick={handleAddUserSave}
-            sx={{ 
-                textTransform: 'none', 
-                fontSize: '0.85rem',
-                borderRadius: 1,
-                px: 2,
-                boxShadow: 'none',
-                '&:hover': {
-                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-                }
-            }}
-        >
-            Add User
-        </Button>
-    </DialogActions>
-</Dialog>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                            <Box sx={{ 
+                                p: 1, 
+                                bgcolor: 'rgba(255,255,255,0.2)', 
+                                borderRadius: 1,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                            }}>
+                                <PersonIcon sx={{ fontSize: '1.2rem' }} />
+                            </Box>
+                            <Box>
+                                <Typography variant="body2" sx={{ fontSize: '1rem', opacity: 0.9 }}>
+                                    Create a new user profile
+                                </Typography>
+                            </Box>
+                        </Box>
+                        <IconButton onClick={closeAddUserModal} sx={{ color: 'white', '&:hover': { bgcolor: 'rgba(255,255,255,0.1)' } }}>
+                            <CloseIcon fontSize="small" />
+                        </IconButton>
+                    </DialogTitle>
+                    <DialogContent sx={{ p: { xs: 2, sm: 3 }, bgcolor: '#f8f9fa' }}>
+                        <Box component="form" onSubmit={handleAddUserSave} sx={{ display: 'flex', flexDirection: 'column', gap: 3 }} autoComplete="off">
+                            {/* Hidden password field to trick Chrome autofill */}
+                            <input type="password" style={{ display: 'none' }} autoComplete="new-password" />
+                            
+                            {/* Contact Information Section */}
+                            <Box sx={{ bgcolor: 'white', p: 2.5, border: '1px solid #e0e0e0', borderRadius: 1.5 }}>
+                                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                                    <Box sx={{ width: 3, height: 20, bgcolor: '#ff6b35', borderRadius: 1.5, mr: 1.5 }} />
+                                    <Typography variant="subtitle1" sx={{ fontSize: '1rem', fontWeight: 600, color: '#666' }}>
+                                        Contact Information
+                                    </Typography>
+                                </Box>
+                                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr 1fr' }, gap: 2 }}>
+                                    {user && user.role === 'site_admin' ? (
+                                        <TextField
+                                            label="Company Name" 
+                                            name="companyName"
+                                            value={addUserData.companyName}
+                                            InputProps={{ 
+                                                readOnly: true,
+                                                startAdornment: <InputAdornment position="start"><BusinessIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
+                                            }} 
+                                            required
+                                            size="small"
+                                            fullWidth
+                                            helperText="Auto-filled from your company"
+                                            InputLabelProps={{ 
+                                                shrink: true, 
+                                                sx: { 
+                                                    fontSize: '0.9rem',
+                                                    color: '#666',
+                                                    fontWeight: 500,
+                                                    '&.Mui-focused': {
+                                                        color: '#333'
+                                                    }
+                                                } 
+                                            }}
+                                            sx={{ 
+                                                '& .MuiInputBase-input': { fontSize: '0.9rem' },
+                                                '& .MuiOutlinedInput-root': {
+                                                    '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                                                        borderColor: '#ff6b35',
+                                                    }
+                                                }
+                                            }}
+                                        />
+                                    ) : (
+                                        <TextField 
+                                            select
+                                            label="Company Name" 
+                                            name="companyName"
+                                            value={addUserData.companyName}
+                                            onChange={handleAddUserChange}
+                                            required
+                                            size="small"
+                                            fullWidth
+                                            disabled={!!selectedClientForAction}
+                                            InputProps={{
+                                                startAdornment: <InputAdornment position="start"><BusinessIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
+                                            }}
+                                            InputLabelProps={{ 
+                                                shrink: true, 
+                                                sx: { 
+                                                    fontSize: '0.9rem',
+                                                    color: '#666',
+                                                    fontWeight: 500,
+                                                    '&.Mui-focused': {
+                                                        color: '#333'
+                                                    }
+                                                } 
+                                            }}
+                                            sx={{ 
+                                                '& .MuiInputBase-input': { fontSize: '0.9rem' },
+                                                '& .MuiOutlinedInput-root': {
+                                                    '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                                                        borderColor: '#ff6b35',
+                                                    }
+                                                }
+                                            }}
+                                            helperText={selectedClientForAction ? `Pre-filled for ${selectedClientForAction}` : ''}
+                                        >
+                                            <MenuItem value="" disabled sx={{ fontSize: '0.85rem' }}>Select Company</MenuItem>
+                                            {previousClientsRef.current.map(c => (
+                                                <MenuItem key={c['Client name'] || c.companyName || c.id} value={c['Client name'] || c.companyName} sx={{ fontSize: '0.85rem' }}>
+                                                    {c['Client name'] || c.companyName}
+                                                </MenuItem>
+                                            ))}
+                                        </TextField>
+                                    )}
+                                    
+                                    <TextField
+                                        label="Employee ID" 
+                                        name="employeeId" 
+                                        value={addUserData.employeeId} 
+                                        onChange={handleAddUserChange} 
+                                        required 
+                                        size="small"
+                                        fullWidth
+                                        error={!!(addUserData.employeeId && checkDuplicateEmployeeId(addUserData.employeeId))}
+                                        helperText={addUserData.employeeId && checkDuplicateEmployeeId(addUserData.employeeId) ? 'Employee ID already exists' : ''}
+                                        InputProps={{
+                                            startAdornment: <InputAdornment position="start"><BadgeIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
+                                        }}
+                                        InputLabelProps={{ 
+                                            shrink: true, 
+                                            sx: { 
+                                                fontSize: '0.9rem',
+                                                color: '#666',
+                                                fontWeight: 500,
+                                                '&.Mui-focused': {
+                                                    color: '#333'
+                                                }
+                                            } 
+                                        }}
+                                        sx={{ 
+                                            '& .MuiInputBase-input': { fontSize: '0.9rem' },
+                                            '& .MuiOutlinedInput-root': {
+                                                '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                                                    borderColor: '#ff6b35',
+                                                }
+                                            }
+                                        }}
+                                    />
+                                    
+                                    <TextField 
+                                        label="First Name" 
+                                        name="firstName"
+                                        value={addUserData.firstName}
+                                        onChange={handleAddUserChange}
+                                        required
+                                        size="small"
+                                        fullWidth
+                                        InputLabelProps={{ 
+                                            shrink: true, 
+                                            sx: { 
+                                                fontSize: '0.9rem',
+                                                color: '#666',
+                                                fontWeight: 500,
+                                                '&.Mui-focused': {
+                                                    color: '#333'
+                                                }
+                                            } 
+                                        }}
+                                        sx={{ 
+                                            '& .MuiInputBase-input': { fontSize: '0.9rem' },
+                                            '& .MuiOutlinedInput-root': {
+                                                '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                                                    borderColor: '#ff6b35',
+                                                }
+                                            }
+                                        }}
+                                    />
+                                    
+                                    <TextField
+                                        label="Last Name" 
+                                        name="lastName"
+                                        value={addUserData.lastName}
+                                        onChange={handleAddUserChange}
+                                        required
+                                        size="small"
+                                        fullWidth
+                                        InputLabelProps={{ 
+                                            shrink: true, 
+                                            sx: { 
+                                                fontSize: '0.9rem',
+                                                color: '#666',
+                                                fontWeight: 500,
+                                                '&.Mui-focused': {
+                                                    color: '#333'
+                                                }
+                                            } 
+                                        }}
+                                        sx={{ 
+                                            '& .MuiInputBase-input': { fontSize: '0.9rem' },
+                                            '& .MuiOutlinedInput-root': {
+                                                '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                                                    borderColor: '#ff6b35',
+                                                }
+                                            }
+                                        }}
+                                    />
+                                    
+                                    <TextField
+                                        label="Email" 
+                                        name="email"
+                                        value={addUserData.email}
+                                        onChange={handleAddUserChange}
+                                        required
+                                        size="small"
+                                        fullWidth
+                                        InputProps={{
+                                            startAdornment: <InputAdornment position="start"><EmailIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
+                                        }}
+                                        InputLabelProps={{ 
+                                            shrink: true, 
+                                            sx: { 
+                                                fontSize: '0.9rem',
+                                                color: '#666',
+                                                fontWeight: 500,
+                                                '&.Mui-focused': {
+                                                    color: '#333'
+                                                }
+                                            } 
+                                        }}
+                                        sx={{ 
+                                            '& .MuiInputBase-input': { fontSize: '0.9rem' },
+                                            '& .MuiOutlinedInput-root': {
+                                                '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                                                    borderColor: '#ff6b35',
+                                                }
+                                            }
+                                        }}
+                                    />
+                                    
+                                    
+                                    <TextField
+                                        label="Contact Number" 
+                                        name="contactNumber"
+                                        value={addUserData.contactNumber}
+                                        onChange={handleAddUserChange}
+                                        required
+                                        size="small"
+                                        fullWidth
+                                        InputProps={{
+                                            startAdornment: <InputAdornment position="start"><PhoneIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
+                                        }}
+                                        InputLabelProps={{ 
+                                            shrink: true, 
+                                            sx: { 
+                                                fontSize: '0.9rem',
+                                                color: '#666',
+                                                fontWeight: 500,
+                                                '&.Mui-focused': {
+                                                    color: '#333'
+                                                }
+                                            } 
+                                        }}
+                                        sx={{ 
+                                            '& .MuiInputBase-input': { fontSize: '0.9rem' },
+                                            '& .MuiOutlinedInput-root': {
+                                                '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                                                    borderColor: '#ff6b35',
+                                                }
+                                            }
+                                        }}
+                                    />
+                                    
+                                    <TextField
+                                        label="Manager Email" 
+                                        name="managerEmail"
+                                        value={addUserData.managerEmail}
+                                        onChange={handleAddUserChange}
+                                        required
+                                        size="small"
+                                        fullWidth
+                                        InputProps={{
+                                            startAdornment: <InputAdornment position="start"><SupervisorAccountIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
+                                        }}
+                                        InputLabelProps={{ 
+                                            shrink: true, 
+                                            sx: { 
+                                                fontSize: '0.9rem',
+                                                color: '#666',
+                                                fontWeight: 500,
+                                                '&.Mui-focused': {
+                                                    color: '#333'
+                                                }
+                                            } 
+                                        }}
+                                        sx={{ 
+                                            '& .MuiInputBase-input': { fontSize: '0.9rem' },
+                                            '& .MuiOutlinedInput-root': {
+                                                '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                                                    borderColor: '#ff6b35',
+                                                }
+                                            }
+                                        }}
+                                    />
+                                    
+                                </Box>
+                            </Box>
 
+                            {/* Professional Information Section */}
+                            <Box sx={{ bgcolor: 'white', p: 2.5, border: '1px solid #e0e0e0', borderRadius: 1.5 }}>
+                                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                                    <Box sx={{ width: 3, height: 20, bgcolor: '#ff6b35', borderRadius: 1.5, mr: 1.5 }} />
+                                    <Typography variant="subtitle1" sx={{ fontSize: '1rem', fontWeight: 600, color: '#666' }}>
+                                        Professional Information
+                                    </Typography>
+                                </Box>
+                                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr 1fr' }, gap: 2 }}>
+                                    <TextField 
+                                        select 
+                                        label="Employment Type" 
+                                        name="employmentType"
+                                        value={addUserData.employmentType}
+                                        onChange={handleAddUserChange}
+                                        required
+                                        size="small"
+                                        fullWidth
+                                        InputProps={{
+                                            startAdornment: <InputAdornment position="start"><WorkIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
+                                        }}
+                                        InputLabelProps={{ 
+                                            shrink: true, 
+                                            sx: { 
+                                                fontSize: '0.9rem',
+                                                color: '#666',
+                                                fontWeight: 500,
+                                                '&.Mui-focused': {
+                                                    color: '#333'
+                                                }
+                                            } 
+                                        }}
+                                        sx={{ 
+                                            '& .MuiInputBase-input': { fontSize: '0.9rem' },
+                                            '& .MuiOutlinedInput-root': {
+                                                '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                                                    borderColor: '#ff6b35',
+                                                }
+                                            }
+                                        }}
+                                    >
+                                        <MenuItem value="" disabled sx={{ fontSize: '0.9rem' }}>Select Employment Type</MenuItem>
+                                        {EMPLOYMENT_TYPES.map(opt => (
+                                            <MenuItem key={opt.value} value={opt.value} sx={{ fontSize: '0.9rem' }}>{opt.label}</MenuItem>
+                                        ))}
+                                    </TextField>
+                                    
+                                    <TextField
+                                        label="Designation" 
+                                        name="designation"
+                                        value={addUserData.designation}
+                                        onChange={handleAddUserChange}
+                                        required
+                                        size="small"
+                                        fullWidth
+                                        InputProps={{
+                                            startAdornment: <InputAdornment position="start"><AdminIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
+                                        }}
+                                        InputLabelProps={{ 
+                                            shrink: true, 
+                                            sx: { 
+                                                fontSize: '0.9rem',
+                                                color: '#666',
+                                                fontWeight: 500,
+                                                '&.Mui-focused': {
+                                                    color: '#333'
+                                                }
+                                            } 
+                                        }}
+                                        sx={{ 
+                                            '& .MuiInputBase-input': { fontSize: '0.9rem' },
+                                            '& .MuiOutlinedInput-root': {
+                                                '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                                                    borderColor: '#ff6b35',
+                                                }
+                                            }
+                                        }}
+                                    />
+                                    
+                                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                                        <TextField
+                                            label="Password" 
+                                            name="password"
+                                            value={addUserData.password}
+                                            InputProps={{ 
+                                                readOnly: true,
+                                                startAdornment: <InputAdornment position="start"><LockIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} /></InputAdornment>,
+                                            }} 
+                                            required 
+                                            size="small"
+                                            fullWidth
+                                            InputLabelProps={{ 
+                                                shrink: true, 
+                                                sx: { 
+                                                    fontSize: '0.9rem',
+                                                    color: '#666',
+                                                    fontWeight: 500
+                                                } 
+                                            }}
+                                            sx={{ 
+                                                '& .MuiInputBase-input': { 
+                                                    fontSize: '0.9rem',
+                                                    bgcolor: '#f5f5f5',
+                                                    color: '#666'
+                                                },
+                                                '& .MuiOutlinedInput-root': {
+                                                    '& fieldset': {
+                                                        borderColor: '#e0e0e0',
+                                                    }
+                                                }
+                                            }}
+                                        />
+                                        <Typography variant="caption" sx={{ fontSize: '0.75rem', color: '#666', ml: 1 }}>
+                                            Auto-generated password
+                                        </Typography>
+                                    </Box>
+                                </Box>
+                            </Box>
+                        </Box>
+                    </DialogContent>
+                    
+                    <DialogActions sx={{ py: 2, px: 3, bgcolor: '#f8f9fa', borderTop: '1px solid #e0e0e0' }}>
+                        <CustomButton 
+                            onClick={closeAddUserModal} 
+                            variant="outline" 
+                            size="sm"
+                        >
+                            Cancel
+                        </CustomButton>
+                        <CustomButton 
+                            type="submit" 
+                            variant="primary" 
+                            size="sm"
+                            onClick={handleAddUserSave}
+                            startIcon={<PersonIcon />}
+                        >
+                            Add User
+                        </CustomButton>
+                    </DialogActions>
+                </Dialog>
+                
                 {/* Edit User Modal */}
                 <Dialog
                     open={editRowId !== null}
@@ -2187,7 +3059,6 @@ fullWidth
                             <ClearIcon fontSize="small" />
                         </IconButton>
                     </DialogTitle>
-
                     <DialogContent sx={{ p: { xs: 2, sm: 2.5 }, bgcolor: '#f5f5f5' }}>
                         <Box component="form" onSubmit={(e) => {
                             e.preventDefault();
@@ -2212,15 +3083,22 @@ fullWidth
                                             InputLabelProps={{ 
                                                 shrink: true, 
                                                 sx: { 
-                                                    fontSize: '1rem',
-                                                    color: '#1976d2',
-                                                    fontWeight: 600,
+                                                    fontSize: '0.9rem',
+                                                    color: '#666',
+                                                    fontWeight: 500,
                                                     '&.Mui-focused': {
-                                                        color: '#1565c0'
+                                                        color: '#333'
                                                     }
                                                 } 
                                             }}
-                                            sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                                            sx={{ 
+                                                '& .MuiInputBase-input': { fontSize: '0.9rem' },
+                                                '& .MuiOutlinedInput-root': {
+                                                    '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                                                        borderColor: '#ff6b35',
+                                                    }
+                                                }
+                                            }}
                                         />
                                     )}
                                     
@@ -2235,15 +3113,22 @@ fullWidth
                                         InputLabelProps={{ 
                                             shrink: true, 
                                             sx: { 
-                                                fontSize: '1rem',
-                                                color: '#1976d2',
-                                                fontWeight: 600,
+                                                fontSize: '0.9rem',
+                                                color: '#666',
+                                                fontWeight: 500,
                                                 '&.Mui-focused': {
-                                                    color: '#1565c0'
+                                                    color: '#333'
                                                 }
                                             } 
                                         }}
-                                        sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                                        sx={{ 
+                                            '& .MuiInputBase-input': { fontSize: '0.9rem' },
+                                            '& .MuiOutlinedInput-root': {
+                                                '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                                                    borderColor: '#ff6b35',
+                                                }
+                                            }
+                                        }}
                                     />
                                     
                                     <TextField 
@@ -2257,37 +3142,51 @@ fullWidth
                                         InputLabelProps={{ 
                                             shrink: true, 
                                             sx: { 
-                                                fontSize: '1rem',
-                                                color: '#1976d2',
-                                                fontWeight: 600,
+                                                fontSize: '0.9rem',
+                                                color: '#666',
+                                                fontWeight: 500,
                                                 '&.Mui-focused': {
-                                                    color: '#1565c0'
+                                                    color: '#333'
                                                 }
                                             } 
                                         }}
-                                        sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                                        sx={{ 
+                                            '& .MuiInputBase-input': { fontSize: '0.9rem' },
+                                            '& .MuiOutlinedInput-root': {
+                                                '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                                                    borderColor: '#ff6b35',
+                                                }
+                                            }
+                                        }}
                                     />
                                     
                                     <TextField 
                                         label="Employee ID *" 
-name="employeeId"
+                                        name="employeeId"
                                         value={editRowData.employeeId || ''} 
                                         onChange={handleEditChange} 
-required
-size="small"
-fullWidth
+                                        required
+                                        size="small"
+                                        fullWidth
                                         InputLabelProps={{ 
                                             shrink: true, 
                                             sx: { 
-                                                fontSize: '1rem',
-                                                color: '#1976d2',
-                                                fontWeight: 600,
+                                                fontSize: '0.9rem',
+                                                color: '#666',
+                                                fontWeight: 500,
                                                 '&.Mui-focused': {
-                                                    color: '#1565c0'
+                                                    color: '#333'
                                                 }
                                             } 
                                         }}
-                                        sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                                        sx={{ 
+                                            '& .MuiInputBase-input': { fontSize: '0.9rem' },
+                                            '& .MuiOutlinedInput-root': {
+                                                '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                                                    borderColor: '#ff6b35',
+                                                }
+                                            }
+                                        }}
                                     />
                                     
                                     <TextField 
@@ -2320,15 +3219,22 @@ fullWidth
                                         InputLabelProps={{ 
                                             shrink: true, 
                                             sx: { 
-                                                fontSize: '1rem',
-                                                color: '#1976d2',
-                                                fontWeight: 600,
+                                                fontSize: '0.9rem',
+                                                color: '#666',
+                                                fontWeight: 500,
                                                 '&.Mui-focused': {
-                                                    color: '#1565c0'
+                                                    color: '#333'
                                                 }
                                             } 
                                         }}
-                                        sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                                        sx={{ 
+                                            '& .MuiInputBase-input': { fontSize: '0.9rem' },
+                                            '& .MuiOutlinedInput-root': {
+                                                '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                                                    borderColor: '#ff6b35',
+                                                }
+                                            }
+                                        }}
                                     />
                                     
                                     <TextField 
@@ -2342,15 +3248,22 @@ fullWidth
                                         InputLabelProps={{ 
                                             shrink: true, 
                                             sx: { 
-                                                fontSize: '1rem',
-                                                color: '#1976d2',
-                                                fontWeight: 600,
+                                                fontSize: '0.9rem',
+                                                color: '#666',
+                                                fontWeight: 500,
                                                 '&.Mui-focused': {
-                                                    color: '#1565c0'
+                                                    color: '#333'
                                                 }
                                             } 
                                         }}
-                                        sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                                        sx={{ 
+                                            '& .MuiInputBase-input': { fontSize: '0.9rem' },
+                                            '& .MuiOutlinedInput-root': {
+                                                '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                                                    borderColor: '#ff6b35',
+                                                }
+                                            }
+                                        }}
                                     />
                                     
                                     <TextField 
@@ -2364,15 +3277,22 @@ fullWidth
                                         InputLabelProps={{ 
                                             shrink: true, 
                                             sx: { 
-                                                fontSize: '1rem',
-                                                color: '#1976d2',
-                                                fontWeight: 600,
+                                                fontSize: '0.9rem',
+                                                color: '#666',
+                                                fontWeight: 500,
                                                 '&.Mui-focused': {
-                                                    color: '#1565c0'
+                                                    color: '#333'
                                                 }
                                             } 
                                         }}
-                                        sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                                        sx={{ 
+                                            '& .MuiInputBase-input': { fontSize: '0.9rem' },
+                                            '& .MuiOutlinedInput-root': {
+                                                '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                                                    borderColor: '#ff6b35',
+                                                }
+                                            }
+                                        }}
                                     />
                                     
                                     <FormControl fullWidth size="small" required>
@@ -2405,49 +3325,193 @@ fullWidth
                                     </FormControl>
                                 </Box>
                             </Box>
-
-
                         </Box>
-</DialogContent>
+                    </DialogContent>
+                    
                     <DialogActions sx={{ py: 2, px: 3, bgcolor: '#f5f5f5' }}>
-                        <Button onClick={handleEditCancel} variant="outlined" size="small">
+                        <CustomButton onClick={handleEditCancel} variant="outline" size="sm">
                             Cancel
-                        </Button>
-                        <Button 
+                        </CustomButton>
+                        <CustomButton 
                             onClick={() => handleEditSave(editRowId)} 
-                            variant="contained" 
-                            color="primary" 
-                            size="small"
+                            variant="primary" 
+                            size="sm"
                         >
                             Save Changes
-                        </Button>
-</DialogActions>
-</Dialog>
-
+                        </CustomButton>
+                    </DialogActions>
+                </Dialog>
+                
                 {/* Change Password Modal */}
                 <Dialog open={changePwdModalOpen} onClose={closeChangePwdModal} maxWidth="xs" fullWidth>
-                  <DialogTitle sx={{ fontSize: 18, py: 1.5 }}>Change Password</DialogTitle>
-                  <form onSubmit={handleChangePassword}>
-                    <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, py: 2 }}>
-                      <TextField
-                        label="New Password"
-                        name="newPassword"
-                        value={newPassword}
-                        InputProps={{ readOnly: true }}
-                        required
-                        size="small"
-                        fullWidth
-                        type="text"
-                        helperText="Auto-generated password. Copy and share with the user."
-                      />
-                    </DialogContent>
-                    <DialogActions sx={{ py: 1, px: 2 }}>
-                      <Button onClick={closeChangePwdModal} size="small">Cancel</Button>
-                      <Button type="submit" variant="contained" color="primary" size="small">Update</Button>
-                    </DialogActions>
-                  </form>
+                    <DialogTitle sx={{ fontSize: 18, py: 1.5 }}>Change Password</DialogTitle>
+                    <form onSubmit={handleChangePassword}>
+                        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, py: 2 }}>
+                            <Box sx={{ 
+                                bgcolor: '#f8f9fa', 
+                                p: 2, 
+                                borderRadius: 1, 
+                                border: '1px solid #e0e0e0',
+                                mb: 1
+                            }}>
+                                <Typography variant="body2" sx={{ mb: 1, fontWeight: 500, color: '#1976d2' }}>
+                                    Generated Password:
+                                </Typography>
+                                <Box sx={{ 
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    gap: 1,
+                                    bgcolor: 'white',
+                                    p: 1.5,
+                                    borderRadius: 1,
+                                    border: '1px solid #e0e0e0'
+                                }}>
+                                    <Typography 
+                                        variant="body1" 
+                                        sx={{ 
+                                            fontFamily: 'monospace', 
+                                            fontSize: '1rem',
+                                            fontWeight: 600,
+                                            color: '#2c3e50',
+                                            flex: 1,
+                                            letterSpacing: '0.1em'
+                                        }}
+                                    >
+                                        {newPassword}
+                                    </Typography>
+                                    <Button
+                                        variant="contained"
+                                        startIcon={passwordCopied ? <CheckCircleIcon /> : <ContentCopyIcon />}
+                                        onClick={() => {
+                                            navigator.clipboard.writeText(newPassword);
+                                            setPasswordCopied(true);
+                                            showFlashMessage('Password copied to clipboard!', 'success');
+                                        }}
+                                        disabled={passwordCopied}
+                                        size="small"
+                                        sx={{ 
+                                            bgcolor: passwordCopied ? '#6c757d' : '#28a745',
+                                            '&:hover': { 
+                                                bgcolor: passwordCopied ? '#5a6268' : '#218838' 
+                                            },
+                                            textTransform: 'none',
+                                            fontWeight: 500,
+                                            opacity: passwordCopied ? 0.7 : 1,
+                                            cursor: passwordCopied ? 'not-allowed' : 'pointer'
+                                        }}
+                                    >
+                                        {passwordCopied ? 'Copied!' : 'Copy'}
+                                    </Button>
+                                    
+                                </Box>
+                                
+                                {/* Email Checkbox */}
+                                <Box sx={{ mt: 2, display: 'flex', alignItems: 'center' }}>
+                                    <Tooltip title="When checked, the password will be automatically sent to the user via email when you click Update">
+                                        <FormControlLabel
+                                            control={
+                                                <Checkbox
+                                                    checked={emailSent}
+                                                    onChange={(e) => setEmailSent(e.target.checked)}
+                                                    disabled={isPasswordResetting}
+                                                    sx={{
+                                                        color: '#007bff',
+                                                        '&.Mui-checked': {
+                                                            color: '#007bff',
+                                                        },
+                                                    }}
+                                                />
+                                            }
+                                            label={
+                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                    <EmailIcon fontSize="small" sx={{ color: '#007bff' }} />
+                                                    <Typography variant="body2" sx={{ fontSize: '0.9rem' }}>
+                                                        Send password via email to user
+                                                    </Typography>
+                                                </Box>
+                                            }
+                                            sx={{ 
+                                                margin: 0,
+                                                '& .MuiFormControlLabel-label': {
+                                                    fontSize: '0.9rem',
+                                                    color: '#333'
+                                                }
+                                            }}
+                                        />
+                                    </Tooltip>
+                                </Box>
+                                <Typography variant="caption" sx={{ color: '#6c757d', mt: 1, display: 'block' }}>
+                                    Copy this password and share it securely with the user. The user will be required to change it on login.
+                                </Typography>
+                                {!passwordCopied && !emailSent && (
+                                    <Typography variant="caption" sx={{ color: '#dc3545', mt: 1, display: 'block', fontWeight: 500 }}>
+                                        ⚠️ You must either copy the password or check the email option before proceeding with the update.
+                                    </Typography>
+                                )}
+                                {passwordCopied && (
+                                    <Typography variant="caption" sx={{ color: '#28a745', mt: 1, display: 'block', fontWeight: 500 }}>
+                                        ✅ Password copied! You can now proceed with the update.
+                                    </Typography>
+                                )}
+                                {emailSent && (
+                                    <Typography variant="caption" sx={{ color: '#28a745', mt: 1, display: 'block', fontWeight: 500 }}>
+                                        ✅ Email option selected! Password will be sent via email when you update.
+                                    </Typography>
+                                )}
+                            </Box>
+                            
+                            <TextField
+                                label="New Password"
+                                name="newPassword"
+                                value={newPassword}
+                                InputProps={{ readOnly: true }}
+                                required
+                                size="small"
+                                fullWidth
+                                type="text"
+                                sx={{ display: 'none' }}
+                            />
+                            {changePwdError && (
+                                <Alert severity="error" sx={{ mb: 2 }}>
+                                    {changePwdError}
+                                </Alert>
+                            )}
+                            {passwordResetStatus && (
+                                <Alert 
+                                    severity={passwordResetStatus.includes('successfully') ? 'success' : 
+                                             passwordResetStatus.includes('failed') ? 'error' : 'info'} 
+                                    sx={{ mb: 2 }}
+                                >
+                                    {passwordResetStatus}
+                                </Alert>
+                            )}
+                        </DialogContent>
+                        <DialogActions sx={{ py: 1, px: 2 }}>
+                            <Button 
+                                onClick={closeChangePwdModal} 
+                                size="small"
+                                disabled={isPasswordResetting}
+                            >
+                                Cancel
+                            </Button>
+                            <Button 
+                                type="submit" 
+                                variant="contained" 
+                                color="primary" 
+                                size="small"
+                                disabled={isPasswordResetting || (!passwordCopied && !emailSent)}
+                                startIcon={isPasswordResetting ? <CircularProgress size={16} /> : null}
+                                sx={{
+                                    opacity: (!passwordCopied && !emailSent) ? 0.6 : 1,
+                                    cursor: (!passwordCopied && !emailSent) ? 'not-allowed' : 'pointer'
+                                }}
+                            >
+                                {isPasswordResetting ? 'Updating...' : 'Update'}
+                            </Button>
+                        </DialogActions>
+                    </form>
                 </Dialog>
-
+                
                 {/* Import Excel Modal */}
                 <Dialog open={importModalOpen} onClose={closeImportModal} maxWidth="lg" fullWidth sx={{ '& .MuiDialog-paper': { minHeight: '80vh' } }}>
                     <DialogTitle sx={{ fontSize: 18, py: 1.5, textAlign: 'center', borderBottom: '1px solid #e0e0e0' }}>Import Users from Excel</DialogTitle>
@@ -2455,9 +3519,9 @@ fullWidth
                         {!importResults && !importedUsers.length && (
                             <>
                                 <Box sx={{ mt: 2 }}>
-                                    <Button onClick={handleDownloadTemplate} variant="outlined" size="small" sx={{ mb: 1, width: 'fit-content' }}>
+                                    <CustomButton onClick={handleDownloadTemplate} variant="outline" size="sm" className="mb-1 w-fit">
                                         Download CSV Template
-                                    </Button>
+                                    </CustomButton>
                                 </Box>
                                 <Box sx={{ 
                                     border: '2px dashed #ccc', 
@@ -2630,47 +3694,114 @@ fullWidth
                     <DialogActions sx={{ py: 1, px: 2 }}>
                         {importResults && importedPasswords.length > 0 && !credentialsDownloaded ? (
                             <>
-                                <Button 
+                                <CustomButton 
                                     onClick={() => setShowCloseConfirmation(true)} 
-                                    size="small" 
-                                    color="error"
+                                    size="sm" 
+                                    variant="danger"
                                 >
                                     Close Anyway
-                                </Button>
-                                <Button 
+                                </CustomButton>
+                                <CustomButton 
                                     onClick={handleDownloadCredentials} 
-                                    variant="contained" 
-                                    color="primary" 
-                                    size="small"
+                                    variant="primary" 
+                                    size="sm"
                                 >
                                     Download User Credentials
-                                </Button>
+                                </CustomButton>
                             </>
                         ) : importResults && importedPasswords.length > 0 && credentialsDownloaded ? (
                             <>
-                                <Button onClick={closeImportModal} size="small" color="primary">
+                                <CustomButton onClick={closeImportModal} size="sm" variant="primary">
                                     Close
-                                </Button>
+                                </CustomButton>
                             </>
                         ) : (
                             <>
-                                <Button onClick={closeImportModal} size="small" color="error">
+                                <CustomButton onClick={closeImportModal} size="sm" variant="danger">
                                     Cancel
-                                </Button>
-                                <Button 
+                                </CustomButton>
+                                <CustomButton 
                                     onClick={handleConfirmImport} 
-                                    variant="contained" 
-                                    color="primary" 
-                                    size="small" 
+                                    variant="primary" 
+                                    size="sm" 
                                     disabled={importedUsers.length === 0 || !!importResults}
                                 >
                                     Confirm Import
-                                </Button>
+                                </CustomButton>
                             </>
                         )}
                     </DialogActions>
                 </Dialog>
-
+                
+                {/* Bulk Action Modal */}
+                <Dialog
+                    open={bulkActionModalOpen}
+                    onClose={closeBulkActionModal}
+                    maxWidth="sm"
+                    fullWidth
+                    PaperProps={{
+                        sx: {
+                            borderRadius: 0,
+                            boxShadow: '0 8px 30px rgba(0,0,0,0.1)',
+                            bgcolor: '#ffffff',
+                        }
+                    }}
+                >
+                    <DialogTitle
+                        sx={{
+                            background: bulkAction === 'delete' ? '#d32f2f' : '#1976d2',
+                            minHeight: '50px',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            color: 'white',
+                            px: 2.5,
+                            py: 2,
+                            borderBottom: '1px solid #e0e0e0'
+                        }}
+                    >
+                        <Typography variant="h6" component="div" sx={{ fontSize: '1rem', fontWeight: 600 }}>
+                            {bulkAction === 'delete' ? 'Delete Users' : 'Reset Passwords'}
+                        </Typography>
+                        <IconButton onClick={closeBulkActionModal} sx={{ color: 'white', '&:hover': { bgcolor: 'rgba(255,255,255,0.1)' } }}>
+                            <CloseIcon fontSize="small" />
+                        </IconButton>
+                    </DialogTitle>
+                    <DialogContent sx={{ p: { xs: 2, sm: 2.5 }, bgcolor: '#f5f5f5' }}>
+                        <Box sx={{ bgcolor: 'white', p: 2, border: '1px solid #e0e0e0', borderRadius: 1 }}>
+                            <Typography variant="body1" sx={{ mb: 2 }}>
+                                {bulkAction === 'delete' 
+                                    ? `Are you sure you want to delete ${selectedUsers.length} users? This action cannot be undone.`
+                                    : `Are you sure you want to reset passwords for ${selectedUsers.length} users? New passwords will be generated and users will be required to change them on next login.`
+                                }
+                            </Typography>
+                            <Alert severity={bulkAction === 'delete' ? 'error' : 'warning'}>
+                                {bulkAction === 'delete' 
+                                    ? 'Deleting users will permanently remove all their data from the system.'
+                                    : 'Users will be logged out of all active sessions and will need to use their new password to log in again.'
+                                }
+                            </Alert>
+                        </Box>
+                    </DialogContent>
+                    
+                    <DialogActions sx={{ py: 2, px: 3, bgcolor: '#f8f9fa', borderTop: '1px solid #e0e0e0' }}>
+                        <CustomButton 
+                            onClick={closeBulkActionModal} 
+                            variant="outline" 
+                            size="sm"
+                        >
+                            Cancel
+                        </CustomButton>
+                        <CustomButton 
+                            onClick={handleBulkAction} 
+                            variant={bulkAction === 'delete' ? 'danger' : 'primary'} 
+                            size="sm"
+                        >
+                            {bulkAction === 'delete' ? 'Delete Users' : 'Reset Passwords'}
+                        </CustomButton>
+                    </DialogActions>
+                </Dialog>
+                
                 {/* Custom Close Confirmation Dialog */}
                 <Dialog 
                     open={showCloseConfirmation} 
@@ -2704,7 +3835,7 @@ fullWidth
                         </Button>
                     </DialogActions>
                 </Dialog>
-
+                
                 {/* Delete Confirmation Dialog */}
                 <Dialog
                     open={openConfirmPopover}
@@ -2739,21 +3870,20 @@ fullWidth
                             <CloseIcon fontSize="small" />
                         </IconButton>
                     </DialogTitle>
-
                     <DialogContent sx={{ p: { xs: 2, sm: 2.5 }, bgcolor: '#f5f5f5' }}>
                         <Box sx={{ bgcolor: 'white', p: 2, border: '1px solid #e0e0e0', borderRadius: 1 }}>
                             <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.5 }}>
                                 <Typography variant="subtitle1" sx={{ fontSize: '0.9rem', fontWeight: 600, color: '#333' }}>
                                     Confirm Deletion
                                 </Typography>
-                        </Box>
+                            </Box>
                             <Typography variant="body2" sx={{ mb: 2, fontSize: '0.85rem', lineHeight: 1.5 }}>
                                 Are you sure you want to delete <strong>{currentUserEmailToDelete}</strong>? 
                             </Typography>
                             <Typography variant="body2" sx={{ fontSize: '0.8rem', color: '#d32f2f', fontWeight: 500 }}>
                                 ⚠️ This action cannot be undone and will permanently remove the user from the system.
                             </Typography>
-                    </Box>
+                        </Box>
                     </DialogContent>
                     
                     <DialogActions sx={{ py: 2, px: 3, bgcolor: '#f8f9fa', borderTop: '1px solid #e0e0e0' }}>
@@ -2791,9 +3921,22 @@ fullWidth
                         </Button>
                     </DialogActions>
                 </Dialog>
-
+                
                 {/* Snackbar */}
-                <Snackbar open={snackbar.open} autoHideDuration={3000} onClose={() => setSnackbar({ ...snackbar, open: false })}>
+                <Snackbar 
+                    open={snackbar.open} 
+                    autoHideDuration={3000} 
+                    onClose={() => setSnackbar({ ...snackbar, open: false })}
+                    anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+                    sx={{ 
+                        top: '80px !important', // Position below the header/tabs
+                        '& .MuiAlert-root': {
+                            minWidth: '300px',
+                            borderRadius: '8px',
+                            boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+                        }
+                    }}
+                >
                     <Alert onClose={() => setSnackbar({ ...snackbar, open: false })} severity={snackbar.severity} sx={{ width: '100%' }}>
                         {snackbar.message}
                     </Alert>
@@ -2803,4 +3946,17 @@ fullWidth
     );
 };
 
-export default UserManagementComponent;
+UserManagementComponent.displayName = 'UserManagementComponent';
+
+// Custom comparison function to prevent unnecessary re-renders
+const arePropsEqual = (prevProps, nextProps) => {
+    // Only re-render if user ID, role, or company name changes
+    // Ignore showFlashMessage as it's recreated on every parent render
+    return (
+        prevProps.user?.uid === nextProps.user?.uid &&
+        prevProps.user?.role === nextProps.user?.role &&
+        prevProps.user?.companyName === nextProps.user?.companyName
+    );
+};
+
+export default React.memo(UserManagementComponent, arePropsEqual);

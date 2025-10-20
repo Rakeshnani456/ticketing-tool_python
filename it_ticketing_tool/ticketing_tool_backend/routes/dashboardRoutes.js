@@ -9,8 +9,9 @@ module.exports = (db, ticketsCollection, clientsCollection, usersCollection, req
     // @access  Super Admin only
     router.get('/clients-count', requireSuperAdmin, async (req, res) => {
         try {
-            const clientsSnapshot = await clientsCollection.get();
-            return res.status(200).json({ total_clients: clientsSnapshot.size });
+            // OPTIMIZED: Use count() instead of reading all documents
+            const clientsCount = await clientsCollection.count().get();
+            return res.status(200).json({ total_clients: clientsCount.data().count });
         } catch (error) {
             console.error('Error fetching clients count:', error);
             return res.status(500).json({ error: 'Failed to fetch clients count.' });
@@ -22,8 +23,9 @@ module.exports = (db, ticketsCollection, clientsCollection, usersCollection, req
     // @access  Super Admin only
     router.get('/active-users-count', requireSuperAdmin, async (req, res) => {
         try {
-            const usersSnapshot = await usersCollection.where('active', '==', true).get();
-            return res.status(200).json({ active_users: usersSnapshot.size });
+            // OPTIMIZED: Use count() instead of reading all documents
+            const activeUsersCount = await usersCollection.where('active', '==', true).count().get();
+            return res.status(200).json({ active_users: activeUsersCount.data().count });
         } catch (error) {
             console.error('Error fetching active users count:', error);
             return res.status(500).json({ error: 'Failed to fetch active users count.' });
@@ -35,7 +37,8 @@ module.exports = (db, ticketsCollection, clientsCollection, usersCollection, req
     // @access  Super Admin only
     router.get('/top-clients', requireSuperAdmin, async (req, res) => {
         try {
-            const ticketsSnapshot = await ticketsCollection.get();
+            // OPTIMIZED: Add limit to prevent reading all tickets
+            const ticketsSnapshot = await ticketsCollection.limit(1000).get();
             const clientTicketCounts = {};
             ticketsSnapshot.forEach(doc => {
                 const data = doc.data();

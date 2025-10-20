@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { signInWithEmailAndPassword, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
-import { LogIn, AlertCircle, CheckCircle, Eye, EyeOff, Wifi, WifiOff } from 'lucide-react';
+import { LogIn, AlertCircle, CheckCircle, Eye, EyeOff, Wifi, WifiOff, Shield, Lock } from 'lucide-react';
 
 // Import common UI components
 import FormInput from '../common/FormInput';
@@ -13,6 +13,43 @@ import LinkButton from '../common/LinkButton';
 import { authClient, dbClient } from '../../config/firebase';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { API_BASE_URL } from '../../config/constants';
+
+/**
+ * Simple Security Alert Component
+ */
+const SecurityAlert = ({ onProceed, onCancel }) => {
+    return (
+        <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-4">
+            <div className="flex items-start space-x-3">
+                <div className="bg-orange-100 rounded-full p-1.5 flex-shrink-0">
+                    <Shield className="w-4 h-4 text-orange-600" />
+                </div>
+                <div className="flex-1">
+                    <h4 className="font-medium text-orange-800 mb-1">
+                        Password Change Required
+                    </h4>
+                    <p className="text-orange-700 text-sm mb-3">
+                        For your security, you must change your password before accessing the system.
+                    </p>
+                    <div className="flex space-x-2">
+                        <button
+                            onClick={onCancel}
+                            className="px-3 py-1.5 text-orange-600 border border-orange-300 rounded text-xs font-medium hover:bg-orange-100 transition-colors"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={onProceed}
+                            className="px-3 py-1.5 bg-orange-600 text-white rounded text-xs font-medium hover:bg-orange-700 transition-colors"
+                        >
+                            Continue
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
 
 /**
  * Enhanced Toast Component for better user feedback
@@ -137,12 +174,11 @@ const LoginComponent = ({ onLoginSuccess, navigateTo, showFlashMessage }) => {
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     
-    // Password change state
-    const [mustChangePassword, setMustChangePassword] = useState(false);
-    const [userUidForChange, setUserUidForChange] = useState(null);
-    const [newPassword, setNewPassword] = useState('');
-    const [confirmPassword, setConfirmPassword] = useState('');
-    const [passwordChangeLoading, setPasswordChangeLoading] = useState(false);
+
+    
+    // Security alert state
+    const [showSecurityAlert, setShowSecurityAlert] = useState(false);
+    const [pendingUserData, setPendingUserData] = useState(null);
     
     // Error and feedback state
     const [formError, setFormError] = useState('');
@@ -212,7 +248,7 @@ const LoginComponent = ({ onLoginSuccess, navigateTo, showFlashMessage }) => {
         else feedback.push('a special character');
 
         const strengthText = score < 2 ? 'Weak' : score < 4 ? 'Fair' : score < 5 ? 'Good' : 'Strong';
-        const feedbackText = feedback.length > 0 ? `Add ${feedback.join(', ')}` : 'Strong password!';
+        const feedbackText = feedback.length > 0 ? `Add ${feedback.join(', ')}` : '';
 
         return { score, feedback: feedbackText, strength: strengthText };
     };
@@ -236,6 +272,31 @@ const LoginComponent = ({ onLoginSuccess, navigateTo, showFlashMessage }) => {
         };
 
         return errorMessages[errorCode] || 'An unexpected error occurred. Please try again.';
+    };
+
+    /**
+     * Handle security alert proceed action
+     */
+    const handleSecurityAlertProceed = () => {
+        setShowSecurityAlert(false);
+        // Navigate to the dedicated password change route
+        navigateTo('/initial-password-change', null, { 
+            state: { userData: pendingUserData.user } 
+        });
+    };
+
+    /**
+     * Handle security alert cancel action
+     */
+    const handleSecurityAlertCancel = () => {
+        setShowSecurityAlert(false);
+        setPendingUserData(null);
+        // Clear form and go back to login
+        setEmail('');
+        setPassword('');
+        setFormError('');
+        // Sign out the user since they cancelled
+        authClient.signOut();
     };
 
     /**
@@ -298,9 +359,10 @@ const LoginComponent = ({ onLoginSuccess, navigateTo, showFlashMessage }) => {
                     });
                 }, 1000);
             } else if (response.status === 403 && data.mustChangePassword) {
-                setMustChangePassword(true);
-                setUserUidForChange(data.user.id);
-                showToast('Password change required for security.', 'warning');
+                // Show simple security alert and don't proceed with login
+                setPendingUserData(data);
+                setShowSecurityAlert(true);
+                // Don't call onLoginSuccess - user should stay on login page
             } else {
                 const errorMsg = data.error || 'Login verification failed. Please try again.';
                 setFormError(errorMsg);
@@ -338,73 +400,7 @@ const LoginComponent = ({ onLoginSuccess, navigateTo, showFlashMessage }) => {
         }
     };
 
-    /**
-     * Enhanced password change handler
-     */
-    const handleChangePassword = async (e) => {
-        e.preventDefault();
-        clearErrors();
 
-        // Validation
-        if (newPassword !== confirmPassword) {
-            setFieldErrors({ confirmPassword: 'Passwords do not match' });
-            showToast('Passwords do not match. Please try again.', 'error');
-            return;
-        }
-
-        const strength = validatePasswordStrength(newPassword);
-        if (strength.score < 3) {
-            setFieldErrors({ newPassword: 'Password is too weak' });
-            showToast(`Password too weak. ${strength.feedback}`, 'error');
-            return;
-        }
-
-        setPasswordChangeLoading(true);
-
-        try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 15000);
-
-            const response = await fetch(`${API_BASE_URL}/change-password`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ uid: userUidForChange, newPassword }),
-                signal: controller.signal
-            });
-
-            clearTimeout(timeoutId);
-            const data = await response.json();
-
-            if (response.ok) {
-                showToast('Password updated successfully! Please log in with your new password.', 'success');
-                
-                // Reset all states
-                setMustChangePassword(false);
-                setUserUidForChange(null);
-                setNewPassword('');
-                setConfirmPassword('');
-                setEmail('');
-                setPassword('');
-                clearErrors();
-                
-                await authClient.signOut();
-            } else {
-                const errorMsg = data.error || 'Failed to update password. Please try again.';
-                setFormError(errorMsg);
-                showToast(errorMsg, 'error');
-            }
-        } catch (error) {
-            console.error('Password change error:', error);
-            const errorMsg = error.name === 'AbortError' 
-                ? 'Request timed out. Please try again.'
-                : 'Failed to update password. Please try again.';
-            
-            setFormError(errorMsg);
-            showToast(errorMsg, 'error');
-        } finally {
-            setPasswordChangeLoading(false);
-        }
-    };
 
     /**
      * Handle input focus events
@@ -416,194 +412,143 @@ const LoginComponent = ({ onLoginSuccess, navigateTo, showFlashMessage }) => {
         }
     };
 
-    /**
-     * Handle password input for strength checking
-     */
-    const handleNewPasswordChange = (e) => {
-        const value = e.target.value;
-        setNewPassword(value);
-        setPasswordStrength(validatePasswordStrength(value));
-    };
 
-    /**
-     * Password strength indicator component
-     */
-    const PasswordStrengthIndicator = ({ strength }) => {
-        if (!strength.score) return null;
 
-        const getStrengthColor = (score) => {
-            if (score < 2) return 'bg-red-500';
-            if (score < 4) return 'bg-yellow-500';
-            return 'bg-green-500';
-        };
 
-        return (
-            <div className="mt-2">
-                <div className="flex space-x-1">
-                    {[1, 2, 3, 4, 5].map((level) => (
-                        <div
-                            key={level}
-                            className={`h-1 flex-1 rounded ${
-                                level <= strength.score 
-                                    ? getStrengthColor(strength.score)
-                                    : 'bg-gray-200'
-                            }`}
-                        />
-                    ))}
-                </div>
-                <p className="text-xs text-gray-600 mt-1">
-                    {strength.strength}: {strength.feedback}
-                </p>
-            </div>
-        );
-    };
-
-    // Password change form
-    if (mustChangePassword) {
-        return (
-            <>
-                <Toast {...toast} onClose={hideToast} />
-                <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-gray-50 to-blue-100 p-4">
-                    <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md border border-gray-100 animate-fade-in">
-                        <div className="flex flex-col items-center mb-6">
-                            <img src={require('../../assets/logo/logo.png')} alt="Company Logo" className="h-10 mb-2" />
-                            <h2 className="text-2xl font-bold text-gray-800 mb-1 tracking-tight">Set New Password</h2>
-                            <p className="text-gray-500 text-sm text-center">
-                                For your security, please create a new strong password.
-                            </p>
-                        </div>
-
-                        <NetworkStatus isOnline={isOnline} />
-                        <ErrorAlert error={formError} onDismiss={() => setFormError('')} />
-
-                        <form onSubmit={handleChangePassword} className="space-y-4">
-                            <div>
-                                <FormInput
-                                    id="newPassword"
-                                    label="New Password"
-                                    type="password"
-                                    value={newPassword}
-                                    onChange={handleNewPasswordChange}
-                                    onFocus={() => handleInputFocus('newPassword')}
-                                    required
-                                    showPasswordToggle={true}
-                                    error={!!fieldErrors.newPassword}
-                                />
-                                {fieldErrors.newPassword && (
-                                    <p className="text-red-500 text-xs mt-1">{fieldErrors.newPassword}</p>
-                                )}
-                                <PasswordStrengthIndicator strength={passwordStrength} />
-                            </div>
-
-                            <div>
-                                <FormInput
-                                    id="confirmPassword"
-                                    label="Confirm New Password"
-                                    type="password"
-                                    value={confirmPassword}
-                                    onChange={(e) => setConfirmPassword(e.target.value)}
-                                    onFocus={() => handleInputFocus('confirmPassword')}
-                                    required
-                                    showPasswordToggle={true}
-                                    error={!!fieldErrors.confirmPassword}
-                                />
-                                {fieldErrors.confirmPassword && (
-                                    <p className="text-red-500 text-xs mt-1">{fieldErrors.confirmPassword}</p>
-                                )}
-                            </div>
-
-                            <div className="flex items-center justify-center pt-4">
-                                <PrimaryButton 
-                                    type="submit" 
-                                    loading={passwordChangeLoading} 
-                                    Icon={LogIn} 
-                                    className="w-full"
-                                    disabled={!isOnline || passwordStrength.score < 3}
-                                >
-                                    {passwordChangeLoading ? "Updating Password..." : "Update Password"}
-                                </PrimaryButton>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            </>
-        );
-    }
 
     // Main login form
     return (
         <>
             <Toast {...toast} onClose={hideToast} />
-            <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-gray-50 to-blue-100 p-4">
-                <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md border border-gray-100 animate-fade-in">
-                    <div className="flex flex-col items-center mb-6">
-                        <img src={require('../../assets/logo/logo.png')} alt="Company Logo" className="h-20 mb-2" />
-                        <h2 className="text-2xl font-bold text-gray-800 mb-1 tracking-tight">Welcome Back</h2>
-                        <p className="text-gray-500 text-sm">Sign in to continue to your account</p>
+            <div className="h-screen bg-gray-50 flex overflow-hidden">
+                {/* Left side - Company Name */}
+                <div className="hidden lg:flex lg:w-1/2 xl:w-3/5 bg-white relative overflow-hidden" style={{
+                    backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23f3f4f6' fill-opacity='0.4'%3E%3Ccircle cx='30' cy='30' r='2'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
+                    backgroundRepeat: 'repeat'
+                }}>
+                    <div className="relative z-10 flex flex-col justify-center items-center px-12 py-16 text-gray-800">
+                        <img src={require('../../assets/logo/logo_final.png')} alt="Company Logo" className="h-20 mb-8" />
                     </div>
+                    
+                    {/* Footer copyright */}
+                    <div className="absolute bottom-6 left-6 right-6">
+                        <div className="text-center">
+                            <p className="text-xs text-gray-600">Copyright © 2024 KriaSol Technologies LLP. All Rights Reserved.</p>
+                        </div>
+                    </div>
+                </div>
 
-                    <NetworkStatus isOnline={isOnline} />
-                    <ErrorAlert error={formError} onDismiss={() => setFormError('')} />
-
-                    <form onSubmit={handleSubmit} className="space-y-4">
-                        <div>
-                            <FormInput
-                                id="email"
-                                label="Email Address"
-                                type="email"
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
-                                onFocus={() => handleInputFocus('email')}
-                                required
-                                autoComplete="username"
-                                error={!!fieldErrors.email}
-                            />
-                            {fieldErrors.email && (
-                                <p className="text-red-500 text-xs mt-1">{fieldErrors.email}</p>
-                            )}
+                {/* Right side - Login Form */}
+                <div className="w-full lg:w-1/2 xl:w-2/5 flex items-center justify-center p-4 overflow-y-auto">
+                    <div className="w-full max-w-md">
+                        {/* Mobile logo */}
+                        <div className="lg:hidden flex justify-center mb-4">
+                            <img src={require('../../assets/logo/logo_final.png')} alt="Company Logo" className="h-10" />
                         </div>
 
-                        <div>
-                            <FormInput
-                                id="password"
-                                label="Password"
-                                type="password"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                onFocus={() => handleInputFocus('password')}
-                                required
-                                error={!!fieldErrors.password}
-                                showPasswordToggle={true}
-                                autoComplete="current-password"
-                            />
-                            {fieldErrors.password && (
-                                <p className="text-red-500 text-xs mt-1">{fieldErrors.password}</p>
-                            )}
-                        </div>
-
-                        <div className="flex items-center justify-center pt-4">
-                            <PrimaryButton 
-                                type="submit" 
-                                loading={loading} 
-                                Icon={LogIn} 
-                                className="w-full"
-                                disabled={!isOnline}
-                            >
-                                {loading ? "Signing In..." : "Sign In"}
-                            </PrimaryButton>
-                        </div>
-
-                        {attemptCount >= 3 && (
-                            <div className="text-center mt-4">
-                                <LinkButton 
-                                    onClick={() => navigateTo('forgot-password')}
-                                    className="text-sm text-blue-600 hover:text-blue-800"
-                                >
-                                    Forgot your password?
-                                </LinkButton>
+                        <div className="bg-white rounded-2xl border border-gray-100 p-6">
+                            <div className="text-center mb-6">
+                                <h2 className="text-xl font-bold text-gray-900 mb-1">Sign In</h2>
+                                <p className="text-gray-600 text-sm">Enter your credentials to access your account</p>
                             </div>
-                        )}
-                    </form>
+
+                            <NetworkStatus isOnline={isOnline} />
+                            <ErrorAlert error={formError} onDismiss={() => setFormError('')} />
+                            
+                            {showSecurityAlert ? (
+                                <SecurityAlert 
+                                    onProceed={handleSecurityAlertProceed}
+                                    onCancel={handleSecurityAlertCancel}
+                                />
+                            ) : (
+                                <form onSubmit={handleSubmit} className="space-y-4">
+                                    <div>
+                                        <FormInput
+                                            id="email"
+                                            label="Email Address"
+                                            type="email"
+                                            value={email}
+                                            onChange={(e) => setEmail(e.target.value)}
+                                            onFocus={() => handleInputFocus('email')}
+                                            required
+                                            autoComplete="username"
+                                            error={!!fieldErrors.email}
+                                            className="h-10"
+                                        />
+                                        {fieldErrors.email && (
+                                            <p className="text-red-500 text-xs mt-1">{fieldErrors.email}</p>
+                                        )}
+                                    </div>
+
+                                    <div>
+                                        <FormInput
+                                            id="password"
+                                            label="Password"
+                                            type="password"
+                                            value={password}
+                                            onChange={(e) => setPassword(e.target.value)}
+                                            onFocus={() => handleInputFocus('password')}
+                                            required
+                                            error={!!fieldErrors.password}
+                                            showPasswordToggle={true}
+                                            autoComplete="current-password"
+                                            className="h-10"
+                                        />
+                                        {fieldErrors.password && (
+                                            <p className="text-red-500 text-xs mt-1">{fieldErrors.password}</p>
+                                        )}
+                                    </div>
+
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center">
+                                            <input
+                                                id="remember-me"
+                                                name="remember-me"
+                                                type="checkbox"
+                                                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                                            />
+                                            <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-700">
+                                                Remember me
+                                            </label>
+                                        </div>
+
+                                        {attemptCount >= 3 && (
+                                            <LinkButton 
+                                                onClick={() => navigateTo('forgot-password')}
+                                                className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                                            >
+                                                Forgot password?
+                                            </LinkButton>
+                                        )}
+                                    </div>
+
+                                    <div className="pt-1">
+                                        <PrimaryButton 
+                                            type="submit" 
+                                            loading={loading} 
+                                            Icon={LogIn} 
+                                            className="w-full h-10 text-sm font-semibold"
+                                            disabled={!isOnline}
+                                        >
+                                            {loading ? "Signing In..." : "Sign In"}
+                                        </PrimaryButton>
+                                    </div>
+                                </form>
+                            )}
+
+                        </div>
+                        
+                        {/* Footer links */}
+                        <div className="mt-6 pt-4 border-t border-gray-200">
+                            <div className="flex items-center justify-center space-x-4 text-xs text-gray-600">
+                                <a href="#" className="hover:text-gray-800 transition-colors">Privacy Policy</a>
+                                <span>•</span>
+                                <a href="#" className="hover:text-gray-800 transition-colors">Terms of Service</a>
+                                <span>•</span>
+                                <a href="#" className="hover:text-gray-800 transition-colors">Contact</a>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </>

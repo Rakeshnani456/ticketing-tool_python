@@ -68,3 +68,4 @@ build/
 
 # dataconnect generated files
 .dataconnect
+.vercel

@@ -1,0 +1,19 @@
+Run App Local:
+
+cd ticketing_tool_backend
+node server.js
+
+cd it_ticketing_frontend
+npm start
+
+-----------------------------------------
+
+
+### Frontend Deployment
+```bash
+
+cd it_ticketing_frontend
+npm run build
+firebase deploy --only hosting
+
+```

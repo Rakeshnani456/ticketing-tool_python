@@ -1,0 +1,19 @@
+{
+  "dependencies": {
+    "@chakra-ui/react": "^3.22.0",
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@mui/icons-material": "^7.2.0",
+    "@mui/material": "^7.2.0",
+    "@mui/x-data-grid": "^8.6.0",
+    "@tanstack/react-table": "^8.21.3",
+    "animate.css": "^4.1.1",
+    "antd": "^5.26.6",
+    "downshift": "^9.0.10",
+    "framer-motion": "^12.23.7",
+    "pdfjs-dist": "^5.3.93",
+    "react-circular-progressbar": "^2.2.0",
+    "reselect": "^4.1.8",
+    "styled-components": "^6.1.19"
+  }
+}

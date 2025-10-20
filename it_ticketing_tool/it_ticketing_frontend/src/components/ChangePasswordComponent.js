@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth'; // Import reauthenticateWithCredential and EmailAuthProvider
 import { doc, updateDoc } from 'firebase/firestore'; // Import Firestore helpers
-import { FilePenLine, Loader2, XCircle } from 'lucide-react'; // Icons
+import { FilePenLine, Loader2, XCircle, Shield, Lock } from 'lucide-react'; // Icons
 import { dbClient } from '../config/firebase'; // Import dbClient
 
 // Import common UI components
@@ -90,45 +90,73 @@ const ChangePasswordComponent = ({ user, showFlashMessage, navigateTo }) => {
         return <div className="text-center text-red-600 mt-8 text-base flex items-center justify-center space-x-2"><XCircle size={20} /> <span>You must be logged in to change your password.</span></div>;
     }
 
-    // Only show new password and confirm password fields, and a single change button
+    // Only show password change form without logo and branding
     return (
-        <div className="p-4 bg-offwhite flex-1 overflow-auto">
-            <h2 className="text-xl font-extrabold text-gray-800 mb-4 text-center">Set New Password</h2>
-            <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-md mx-auto border border-gray-200">
-                <form onSubmit={handleChangePassword} className="space-y-3">
-                    <FormInput
-                        id="currentPassword"
-                        label="Current Password"
-                        type="password"
-                        value={currentPassword}
-                        onChange={(e) => setCurrentPassword(e.target.value)}
-                        required
-                        showPasswordToggle={true}
-                    />
-                    <FormInput
-                        id="newPassword"
-                        label="New Password"
-                        type="password"
-                        value={newPassword}
-                        onChange={(e) => setNewPassword(e.target.value)}
-                        required
-                        showPasswordToggle={true}
-                    />
-                    <FormInput
-                        id="confirmPassword"
-                        label="Re-enter New Password"
-                        type="password"
-                        value={confirmPassword}
-                        onChange={(e) => setConfirmPassword(e.target.value)}
-                        required
-                        showPasswordToggle={true}
-                        error={!!passwordError}
-                    />
-                    {passwordError && <p className="text-red-500 text-xs mt-1">{passwordError}</p>}
-                    <PrimaryButton type="submit" loading={passwordChangeLoading ? "Changing..." : null} Icon={FilePenLine} className="bg-orange-600 hover:bg-orange-700 focus:ring-orange-300 w-full">
-                        {passwordChangeLoading ? "Changing..." : "Change Password"}
-                    </PrimaryButton>
-                </form>
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+            <div className="w-full max-w-md">
+                <div className="bg-white rounded-2xl shadow-2xl border border-gray-100 p-6">
+                    <div className="text-center mb-6">
+                        <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                            <FilePenLine className="w-6 h-6 text-blue-600" />
+                        </div>
+                        <h2 className="text-xl font-bold text-gray-900 mb-1">Change Password</h2>
+                        <p className="text-gray-600 text-sm">Update your account password for enhanced security</p>
+                    </div>
+
+                    <form onSubmit={handleChangePassword} className="space-y-4">
+                        <div>
+                            <FormInput
+                                id="currentPassword"
+                                label="Current Password"
+                                type="password"
+                                value={currentPassword}
+                                onChange={(e) => setCurrentPassword(e.target.value)}
+                                required
+                                showPasswordToggle={true}
+                                className="h-10"
+                            />
+                        </div>
+                        
+                        <div>
+                            <FormInput
+                                id="newPassword"
+                                label="New Password"
+                                type="password"
+                                value={newPassword}
+                                onChange={(e) => setNewPassword(e.target.value)}
+                                required
+                                showPasswordToggle={true}
+                                className="h-10"
+                            />
+                        </div>
+                    
+                        <div>
+                            <FormInput
+                                id="confirmPassword"
+                                label="Confirm New Password"
+                                type="password"
+                                value={confirmPassword}
+                                onChange={(e) => setConfirmPassword(e.target.value)}
+                                required
+                                showPasswordToggle={true}
+                                error={!!passwordError}
+                                className="h-10"
+                            />
+                            {passwordError && <p className="text-red-500 text-xs mt-1">{passwordError}</p>}
+                        </div>
+
+                        <div className="pt-1">
+                            <PrimaryButton 
+                                type="submit" 
+                                loading={passwordChangeLoading ? "Changing..." : null} 
+                                Icon={FilePenLine} 
+                                className="w-full h-10 text-sm font-semibold bg-blue-600 hover:bg-blue-700 focus:ring-blue-300"
+                            >
+                                {passwordChangeLoading ? "Changing..." : "Change Password"}
+                            </PrimaryButton>
+                        </div>
+                    </form>
+                </div>
             </div>
         </div>
     );

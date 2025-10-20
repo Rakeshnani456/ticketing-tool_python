@@ -1,9 +1,9 @@
 const express = require('express');
 const router = express.Router();
 
-module.exports = (db, usersCollection, verifyFirebaseToken, requireSuperAdmin) => {
+module.exports = (db, usersCollection, authenticateToken, requireSuperAdmin) => {
     // List all admins
-    router.get('/', verifyFirebaseToken, requireSuperAdmin, async (req, res) => {
+    router.get('/', authenticateToken, requireSuperAdmin, async (req, res) => {
         try {
             const snapshot = await usersCollection.where('role', '==', 'admin').get();
             const admins = snapshot.docs.map(doc => {
@@ -23,7 +23,7 @@ module.exports = (db, usersCollection, verifyFirebaseToken, requireSuperAdmin) =
     });
 
     // Create admin
-    router.post('/', verifyFirebaseToken, requireSuperAdmin, async (req, res) => {
+    router.post('/', authenticateToken, requireSuperAdmin, async (req, res) => {
         const { email, password, role = 'admin' } = req.body;
         if (!email || !password || !['admin', 'read_only_admin', 'super_admin'].includes(role)) {
             return res.status(400).json({ error: 'Invalid input.' });
@@ -46,7 +46,7 @@ module.exports = (db, usersCollection, verifyFirebaseToken, requireSuperAdmin) =
     });
 
     // Edit admin (role, enable/disable)
-    router.put('/:uid', verifyFirebaseToken, requireSuperAdmin, async (req, res) => {
+    router.put('/:uid', authenticateToken, requireSuperAdmin, async (req, res) => {
         const { uid } = req.params;
         const { role, active } = req.body;
         if (!role && typeof active === 'undefined') {
@@ -64,7 +64,7 @@ module.exports = (db, usersCollection, verifyFirebaseToken, requireSuperAdmin) =
     });
 
     // Delete admin
-    router.delete('/:uid', verifyFirebaseToken, requireSuperAdmin, async (req, res) => {
+    router.delete('/:uid', authenticateToken, requireSuperAdmin, async (req, res) => {
         const { uid } = req.params;
         try {
             await usersCollection.doc(uid).delete();
@@ -76,7 +76,7 @@ module.exports = (db, usersCollection, verifyFirebaseToken, requireSuperAdmin) =
     });
 
     // Get login activity for all admins
-    router.get('/login-activity', verifyFirebaseToken, requireSuperAdmin, async (req, res) => {
+    router.get('/login-activity', authenticateToken, requireSuperAdmin, async (req, res) => {
         try {
             const snapshot = await usersCollection.where('role', 'in', ['admin', 'read_only_admin', 'super_admin']).get();
             const activity = snapshot.docs.map(doc => ({ uid: doc.id, email: doc.data().email, loginActivity: doc.data().loginActivity || [] }));

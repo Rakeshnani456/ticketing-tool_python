@@ -2,12 +2,12 @@
 const express = require('express');
 const router = express.Router();
 
-module.exports = (db, admin, usersCollection, verifyFirebaseToken, checkRole) => {
+module.exports = (db, admin, usersCollection, authenticateToken, checkRole) => {
 
     // @route   GET /admin/users
     // @desc    Get all users (admin only)
     // @access  Private (requires admin role)
-    router.get('/users', verifyFirebaseToken, checkRole(['admin', 'super_admin']), async (req, res) => {
+    router.get('/users', authenticateToken, checkRole(['admin', 'super_admin']), async (req, res) => {
         try {
             const usersSnapshot = await usersCollection.get();
             const usersList = [];
@@ -37,7 +37,7 @@ module.exports = (db, admin, usersCollection, verifyFirebaseToken, checkRole) =>
     // @route   GET /admin/users/:uid
     // @desc    Get details of a specific user.
     // @access  Private (requires admin role)
-    router.get('/users/:uid', verifyFirebaseToken, checkRole(['admin', 'super_admin']), async (req, res) => {
+    router.get('/users/:uid', authenticateToken, checkRole(['admin', 'super_admin']), async (req, res) => {
         const userId = req.params.uid;
         try {
             const userDoc = await usersCollection.doc(userId).get();
@@ -55,7 +55,7 @@ module.exports = (db, admin, usersCollection, verifyFirebaseToken, checkRole) =>
     // @route   PATCH /admin/users/:uid
     // @desc    Update a user's role.
     // @access  Private (requires admin role)
-    router.patch('/users/:uid', verifyFirebaseToken, checkRole(['admin', 'super_admin']), async (req, res) => {
+    router.patch('/users/:uid', authenticateToken, checkRole(['admin', 'super_admin']), async (req, res) => {
         const { uid } = req.params;
         const { role } = req.body;
 
@@ -81,7 +81,7 @@ module.exports = (db, admin, usersCollection, verifyFirebaseToken, checkRole) =>
     // @route   DELETE /admin/users/:uid
     // @desc    Delete a user (from Firebase Auth and Firestore).
     // @access  Private (requires admin role)
-    router.delete('/users/:uid', verifyFirebaseToken, checkRole(['admin', 'super_admin']), async (req, res) => {
+    router.delete('/users/:uid', authenticateToken, checkRole(['admin', 'super_admin']), async (req, res) => {
         const { uid } = req.params;
 
         if (uid === req.user.uid) {
@@ -133,7 +133,7 @@ module.exports = (db, admin, usersCollection, verifyFirebaseToken, checkRole) =>
     });
 
     // Inline Admin Management Route (can be moved to its own file later if needed)
-    router.get('/', verifyFirebaseToken, checkRole(['super_admin']), async (req, res) => {
+    router.get('/', authenticateToken, checkRole(['super_admin']), async (req, res) => {
         try {
             const snapshot = await usersCollection.where('role', '==', 'admin').get();
             const admins = snapshot.docs.map(doc => {

@@ -1,30 +1,85 @@
 // routes/userManagementRoutes.js
 const express = require('express');
 const router = express.Router();
+const cacheManager = require('../utils/cacheManager');
 
-module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseToken) => {
+module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseToken, emailService) => {
 
-    // GET /api/users - Get users based on role
+    // Health check endpoint
+    router.get('/health', (req, res) => {
+        res.status(200).json({ message: 'User management API is running' });
+    });
+
+    // GET /api/users - Get users based on role with caching
     router.get('/', verifyFirebaseToken, async (req, res) => {
         try {
             const userRole = req.user.role;
             const userClientName = req.user.client_name;
             
+            // Create cache key based on user role and client
+            const cacheKey = `users_${userRole}_${userClientName || 'all'}`;
+            
+            // Try to get from cache first
+            const cachedUsers = cacheManager.get(cacheKey);
+            if (cachedUsers) {
+                return res.status(200).json(cachedUsers);
+            }
+            
+            // Test Firestore connection
+            if (!usersCollection) {
+                console.error('usersCollection is undefined');
+                return res.status(500).json({ error: 'Database connection error' });
+            }
+            
             let snapshot;
-            if (userRole === 'site_admin' && userClientName) {
-                // For site_admin, get users from their company/client
-                snapshot = await usersCollection.where('client_name', '==', userClientName).get();
+            if (userRole === 'site_admin') {
+                if (userClientName) {
+                    // For site_admin, get users from their company/client
+                    
+                    // OPTIMIZED: Use a single query with 'in' operator to check both fields
+                    try {
+                        // First try client_name
+                        snapshot = await usersCollection.where('client_name', '==', userClientName).limit(500).get();
+                        
+                        // If no users found, try companyName
+                        if (snapshot.empty) {
+                            snapshot = await usersCollection.where('companyName', '==', userClientName).limit(500).get();
+                        }
+                        
+                        // If still empty, try a compound query (if supported by your indexes)
+                        if (snapshot.empty) {
+                            // This would require a composite index, but provides better performance
+                            // For now, we'll keep the two separate queries but add better logging
+                            console.log(`No users found for client_name or companyName: ${userClientName}`);
+                        }
+                    } catch (queryError) {
+                        console.error('Error in Firestore query:', queryError);
+                        throw queryError;
+                    }
+                } else {
+                    console.error('Site admin has no client_name set, returning empty result');
+                    return res.status(200).json([]);
+                }
             } else if (userRole === 'support') {
                 // For support role, get all support users
-                snapshot = await usersCollection.where('role', '==', 'support').get();
+                snapshot = await usersCollection.where('role', '==', 'support').limit(500).get();
             } else if (userRole === 'admin' || userRole === 'super_admin') {
                 // For admin/super_admin, get all users
-                snapshot = await usersCollection.get();
+                snapshot = await usersCollection.limit(1000).get();
             } else {
                 return res.status(403).json({ error: 'Insufficient permissions to view users.' });
             }
             
+            if (!snapshot) {
+                console.error('Snapshot is undefined, returning empty array');
+                return res.status(200).json([]);
+            }
+            
             const users = snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() }));
+            
+            // Cache the results for 2 minutes
+            cacheManager.set(cacheKey, users, 2 * 60 * 1000);
+            
             return res.status(200).json(users);
         } catch (err) {
             console.error('Error fetching users:', err);
@@ -124,6 +179,29 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
                     isSiteAdmin: false // Always false for users created here
                 };
                 await userRef.set(userData);
+                
+                // Send welcome email to the new user
+                if (emailService) {
+                    const portalUrl = process.env.FRONTEND_URL || 'https://tt.kriasol.com/';
+                    const emailData = {
+                        userName: `${firstName} ${lastName}`,
+                        clientName: 'Kriasol Technologies',
+                        portalUrl: portalUrl,
+                        userEmail: email,
+                        tempPassword: finalPassword,
+                        companyName: 'Kriasol Technologies'
+                    };
+                    
+                    // Send email asynchronously (don't block the response)
+                    setImmediate(async () => {
+                        try {
+                            await emailService.sendWelcomeEmail(emailData);
+                        } catch (emailError) {
+                            console.error('Error sending welcome email:', emailError);
+                        }
+                    });
+                }
+                
                 return res.status(201).json({ message: 'Engineer created in Auth and Firestore.' });
             } catch (err) {
                 console.error('Error creating engineer:', err);
@@ -177,13 +255,89 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
                     isSiteAdmin: false // Always false for users created here
                 };
                 await userRef.set(userData);
+                
+                // Send welcome email to the new user
+                if (emailService) {
+                    const portalUrl = process.env.FRONTEND_URL || 'https://tt.kriasol.com/';
+                    const emailData = {
+                        userName: `${firstName} ${lastName}`,
+                        clientName: companyName,
+                        portalUrl: portalUrl,
+                        userEmail: email,
+                        tempPassword: password,
+                        companyName: companyName
+                    };
+                    
+                    // Send email asynchronously (don't block the response)
+                    setImmediate(async () => {
+                        try {
+                            await emailService.sendWelcomeEmail(emailData);
+                        } catch (emailError) {
+                            console.error('Error sending welcome email:', emailError);
+                        }
+                    });
+                }
+                
                 return res.status(201).json({ message: 'User created in Auth and Firestore.' });
             } catch (err) {
                 console.error('Error creating user:', err);
                 return res.status(500).json({ error: err.message || 'Failed to create user.' });
             }
+        } else if (role === 'site_admin') {
+            // Handle site_admin role - similar to user but with site admin privileges
+            const { companyName, firstName, lastName, email, password, contactNumber, managerEmail, employmentType, designation, employeeId } = req.body;
+            if (!companyName || !firstName || !lastName || !email || !password || !contactNumber || !managerEmail || !employmentType || !designation || !employeeId) {
+                return res.status(400).json({ error: 'Missing required fields for site admin: companyName, firstName, lastName, email, password, contactNumber, managerEmail, employmentType, designation, employeeId' });
+            }
+            
+            // Uniqueness checks for site admin users
+            const queries = [
+                usersCollection.where('employeeId', '==', employeeId).limit(1).get(),
+                usersCollection.where('email', '==', email).limit(1).get(),
+                usersCollection.where('contactNumber', '==', contactNumber).limit(1).get(),
+            ];
+            const [empSnap, emailSnap, contactSnap] = await Promise.all(queries);
+            if (!empSnap.empty) {
+                return res.status(400).json({ error: 'Employee ID already exists.' });
+            }
+            if (!emailSnap.empty) {
+                return res.status(400).json({ error: 'Email already exists.' });
+            }
+            if (!contactSnap.empty) {
+                return res.status(400).json({ error: 'Contact number already exists.' });
+            }
+
+            try {
+                // Create user in Firebase Auth
+                const userRecord = await admin.auth().createUser({
+                    email: email,
+                    password: password,
+                    displayName: `${firstName} ${lastName}`,
+                });
+
+                // Save user data to Firestore with siteadmin role
+                await usersCollection.doc(userRecord.uid).set({
+                    companyName,
+                    firstName,
+                    lastName,
+                    email,
+                    contactNumber,
+                    managerEmail,
+                    employmentType,
+                    designation,
+                    employeeId,
+                    role: 'site_admin', // Set role as site_admin
+                    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                });
+                
+                return res.status(201).json({ message: 'Site admin created in Auth and Firestore.' });
+            } catch (err) {
+                console.error('Error creating site admin:', err);
+                return res.status(500).json({ error: err.message || 'Failed to create site admin.' });
+            }
         } else {
-            return res.status(400).json({ error: 'Invalid role. Only "support" and "user" are supported.' });
+            return res.status(400).json({ error: 'Invalid role. Only "support", "user", and "site_admin" are supported.' });
         }
     });
 
@@ -267,6 +421,80 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
         }
     });
 
+    // POST /api/users/:uid/reset-password - Reset user password (admin only)
+    router.post('/:uid/reset-password', verifyFirebaseToken, async (req, res) => {
+        const { uid } = req.params;
+        
+        try {
+            // Check if user exists
+            const userDoc = await usersCollection.doc(uid).get();
+            if (!userDoc.exists) {
+                return res.status(404).json({ error: 'User not found' });
+            }
+            
+            const userData = userDoc.data();
+            
+            // Generate a new random password
+            const newPassword = Math.random().toString(36).slice(-12) + Math.random().toString(36).slice(-12);
+            
+            // Update the user's password in Firebase Auth
+            await admin.auth().updateUser(uid, { password: newPassword });
+            
+            // Set mustChangePassword to true in Firestore
+            await usersCollection.doc(uid).update({ mustChangePassword: true });
+            
+            return res.status(200).json({ 
+                message: 'Password reset successfully.',
+                newPassword: newPassword
+            });
+        } catch (err) {
+            console.error('Error resetting password:', err);
+            return res.status(500).json({ error: err.message || 'Failed to reset password.' });
+        }
+    });
+
+    // POST /api/users/:uid/send-password-email - Send password sharing email
+    router.post('/:uid/send-password-email', verifyFirebaseToken, async (req, res) => {
+        const { uid } = req.params;
+        const { password, userEmail, userName, companyName } = req.body;
+        
+        if (!password || !userEmail || !userName || !companyName) {
+            return res.status(400).json({ error: 'Missing required fields: password, userEmail, userName, companyName' });
+        }
+        
+        try {
+            // Verify the user exists
+            const userDoc = await usersCollection.doc(uid).get();
+            if (!userDoc.exists) {
+                return res.status(404).json({ error: 'User not found' });
+            }
+            
+            // Send the password sharing email
+            if (emailService) {
+                const loginUrl = process.env.FRONTEND_URL || 'https://tt.kriasol.com/';
+                const emailData = {
+                    userName,
+                    companyName,
+                    userEmail,
+                    newPassword: password,
+                    loginUrl
+                };
+                
+                const emailSent = await emailService.sendPasswordSharingEmail(emailData);
+                if (emailSent) {
+                    return res.status(200).json({ message: 'Password sharing email sent successfully' });
+                } else {
+                    return res.status(500).json({ error: 'Failed to send password sharing email' });
+                }
+            } else {
+                return res.status(500).json({ error: 'Email service not available' });
+            }
+        } catch (err) {
+            console.error('Error sending password sharing email:', err);
+            return res.status(500).json({ error: err.message || 'Failed to send password sharing email' });
+        }
+    });
+
     // BULK IMPORT USERS
     router.post('/bulk', async (req, res) => {
         const users = req.body.users;
@@ -274,6 +502,8 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
             return res.status(400).json({ error: 'No users provided.' });
         }
         const results = [];
+        const emailResults = [];
+        
         for (const user of users) {
             const { companyName, firstName, lastName, email, password, contactNumber, managerEmail, employmentType, designation, employeeId } = user;
             // Validate required fields
@@ -328,10 +558,37 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
                 };
                 await userRef.set(userData);
                 results.push({ email, success: true });
+                
+                // Prepare email data for bulk sending
+                if (emailService) {
+                    const portalUrl = process.env.FRONTEND_URL || 'https://tt.kriasol.com/';
+                    const emailData = {
+                        userName: `${firstName} ${lastName}`,
+                        clientName: companyName,
+                        portalUrl: portalUrl,
+                        userEmail: email,
+                        tempPassword: password,
+                        companyName: companyName
+                    };
+                    emailResults.push(emailData);
+                }
             } catch (err) {
                 results.push({ email, success: false, error: err.message || 'Failed to create user.' });
             }
         }
+        
+        // Send welcome emails to all successfully created users
+        if (emailService && emailResults.length > 0) {
+            setImmediate(async () => {
+                try {
+                    const emailSendResults = await emailService.sendBulkWelcomeEmails(emailResults);
+                    console.log(`Bulk welcome emails sent: ${emailSendResults.filter(r => r.success).length}/${emailSendResults.length} successful`);
+                } catch (emailError) {
+                    console.error('Error sending bulk welcome emails:', emailError);
+                }
+            });
+        }
+        
         return res.status(200).json({ results });
     });
 

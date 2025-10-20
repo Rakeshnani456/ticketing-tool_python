@@ -30,7 +30,7 @@ const FormInput = ({ id, label, type, value, onChange, required, error, onFocus,
     return (
         <div>
             {/* Render label only if provided */}
-            {label && <label htmlFor={id} className="block text-gray-700 text-sm font-semibold mb-1">{label}:</label>}
+            {label && <label htmlFor={id} className="block text-gray-700 text-sm font-semibold mb-1">{label}</label>}
             <div className="relative">
                 <input
                     type={inputType}

@@ -17,6 +17,7 @@ import ContactPhoneIcon from '@mui/icons-material/ContactPhone';
 import ContactMailIcon from '@mui/icons-material/ContactMail';
 import GroupIcon from '@mui/icons-material/Group';
 import { useNavigate } from 'react-router-dom';
+import FaviconIcon from '../common/FaviconIcon';
 
 const InfoRow = ({ icon, label, value, link, itemSx }) => (
   <Box
@@ -217,10 +218,13 @@ const ClientCard = ({ client, index, onEdit, onRemove, showEdit, showRemove, use
         borderRadius: 0,
         boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
         transition: 'box-shadow 0.2s',
-        '&:hover': { boxShadow: '0 4px 16px rgba(0,0,0,0.08)' },
-        width: '100%',
+        width: 'calc(100% - 32px)',
         borderLeft: 'none',
         borderRight: 'none',
+        mx: 2,
+        '&:hover': {
+          boxShadow: '0px 1px 2px 0px rgba(var(--theme-color-elevation-shadow-rgb), 0.3), 0px 1px 3px 1px rgba(var(--theme-color-elevation-shadow-rgb), 0.15) !important',
+        },
       }}
     >
       <Box
@@ -253,8 +257,12 @@ const ClientCard = ({ client, index, onEdit, onRemove, showEdit, showRemove, use
         </Box>
         
         <Box display="flex" alignItems="center" gap={1} sx={{ pl: 1 }}>
-          <BusinessIcon sx={{ color: 'primary.main', fontSize: '1.1rem' }} />
-          <Typography variant="h6" sx={{ fontWeight: 700, fontSize: '0.85rem', minWidth: 100 }}>
+          <FaviconIcon 
+            websiteUrl={client.website} 
+            size="26px"
+            alt={`${client.companyName} favicon`}
+          />
+          <Typography variant="h6" sx={{ fontWeight: 700, fontSize: '0.85rem', minWidth: 100, color: '#1e293b' }}>
             {client.companyName || '-'}
           </Typography>
         </Box>
@@ -282,9 +290,7 @@ const ClientCard = ({ client, index, onEdit, onRemove, showEdit, showRemove, use
                   border: userCount > 0 ? '1px solid #bbdefb' : '1px solid #e0e0e0',
                   cursor: userCount > 0 ? 'pointer' : 'default',
                   '&:hover': userCount > 0 ? {
-                    bgcolor: '#bbdefb',
-                    transform: 'scale(1.05)',
-                    transition: 'all 0.2s ease-in-out'
+                    bgcolor: '#bbdefb'
                   } : {},
                   '& .MuiChip-label': {
                     px: 1,
@@ -407,7 +413,7 @@ const ClientCard = ({ client, index, onEdit, onRemove, showEdit, showRemove, use
                   value={client.domain || 'N/A'}
                 />
                 <ContactInfoItem 
-                  icon={<BusinessIcon fontSize="small" />}
+                  icon={<FaviconIcon websiteUrl={client.website} size="24px" alt={`${client.companyName} favicon`} />}
                   label="Company"
                   value={client.companyName || 'N/A'}
                 />

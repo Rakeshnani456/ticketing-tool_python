@@ -1,9 +1,7 @@
 // src/components/tickets/TicketDetailsSection.js
 
 import React from 'react';
-import { User, Calendar, Info, Paperclip, Download, MessageSquare } from 'lucide-react';
-import { CircularProgressbar, buildStyles } from 'react-circular-progressbar';
-import 'react-circular-progressbar/dist/styles.css';
+import { User, Calendar, Info, Paperclip, Download, MessageSquare, Upload, AlertCircle, X } from 'lucide-react';
 import UserProfilePopup from '../common/UserProfilePopup';
 
 // Import file icons
@@ -23,16 +21,17 @@ const FieldBox = ({ children, className = "", isDisplayOnly = false, hasError = 
     </div>
 );
 
-const EditableTextarea = ({ id, value, onChange, rows = 3, className = "", disabled, hasError = false, inputRef, maxLength }) => (
+const EditableTextarea = ({ id, value, onChange, onBlur, rows = 3, className = "", disabled, hasError = false, inputRef, maxLength }) => (
     <textarea
         id={id}
         value={value}
         onChange={onChange}
+        onBlur={onBlur}
         rows={rows}
         ref={inputRef}
-        className={`border-2 rounded-md px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none flex-shrink-0 w-full transition-all duration-200 text-xs
-            ${disabled ? 'bg-gradient-to-r from-gray-50 to-gray-100 border-gray-300 cursor-not-allowed text-gray-600' : 'bg-white border-gray-300 hover:border-blue-400'}
-            ${hasError ? 'border-red-500 ring-2 ring-red-200 bg-red-50' : ''}
+        className={`rounded-md px-2 py-1.5 focus:outline-none resize-none flex-shrink-0 w-full transition-all duration-200 text-xs border border-gray-300
+            ${disabled ? 'bg-gradient-to-r from-gray-50 to-gray-100 cursor-not-allowed text-gray-600' : 'bg-white hover:border-blue-400'}
+            ${hasError ? 'border-red-500 bg-red-50' : ''}
             ${className}`}
         disabled={disabled}
         maxLength={maxLength}
@@ -78,6 +77,14 @@ const TicketDetailsSection = ({
     onCommentsClick,
     onAttachmentsClick
 }) => {
+    const [showAllAttachments, setShowAllAttachments] = React.useState(false);
+    const [isDragOver, setIsDragOver] = React.useState(false);
+    const [unsupportedFileError, setUnsupportedFileError] = React.useState('');
+    const [selectedFiles, setSelectedFiles] = React.useState([]);
+    const [isUploading, setIsUploading] = React.useState(false);
+    const [localUploadingFiles, setLocalUploadingFiles] = React.useState([]);
+    const [uploadingToUploaded, setUploadingToUploaded] = React.useState({});
+    
     const handleCommentsClick = () => {
         const commentsSection = document.getElementById('comments-section');
         if (commentsSection) commentsSection.scrollIntoView({ behavior: 'smooth' });
@@ -88,9 +95,195 @@ const TicketDetailsSection = ({
         if (attachmentsSection) attachmentsSection.scrollIntoView({ behavior: 'smooth' });
     };
 
+    const handleDragOver = (e) => {
+        e.preventDefault();
+        if (canAddAttachments) {
+            setIsDragOver(true);
+        }
+    };
+
+    const handleDragLeave = (e) => {
+        e.preventDefault();
+        setIsDragOver(false);
+    };
+
+    const handleLocalFileChange = (e) => {
+        const files = Array.from(e.target.files);
+        const validFiles = [];
+        let hasUnsupportedTypes = false;
+        let hasOversizedFiles = false;
+        let unsupportedTypeNames = [];
+        let oversizedFileNames = [];
+
+        for (const file of files) {
+            const allowedTypes = [
+                'application/pdf',
+                'image/jpeg',
+                'image/png',
+                'application/msword',
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                'application/vnd.ms-excel',
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                'application/zip',
+                'application/x-zip-compressed'
+            ];
+            
+            if (!allowedTypes.includes(file.type)) {
+                hasUnsupportedTypes = true;
+                unsupportedTypeNames.push(file.name);
+                continue;
+            }
+            
+            if (file.size > 10 * 1024 * 1024) {
+                hasOversizedFiles = true;
+                oversizedFileNames.push(file.name);
+                continue;
+            }
+            
+            validFiles.push(file);
+        }
+
+        // Helper function to truncate filenames while keeping extensions
+        const truncateFileName = (fileName, maxLength = 20) => {
+            if (fileName.length <= maxLength) return fileName;
+            
+            const lastDotIndex = fileName.lastIndexOf('.');
+            if (lastDotIndex === -1) {
+                // No extension, truncate from middle
+                return fileName.substring(0, maxLength - 3) + '...';
+            }
+            
+            const name = fileName.substring(0, lastDotIndex);
+            const extension = fileName.substring(lastDotIndex);
+            
+            if (name.length <= maxLength - extension.length - 3) {
+                return fileName;
+            }
+            
+            const truncatedName = name.substring(0, maxLength - extension.length - 3) + '...';
+            return truncatedName + extension;
+        };
+
+        // Set error message for different types of issues
+        let errorMessage = '';
+        if (hasUnsupportedTypes && hasOversizedFiles) {
+            const truncatedUnsupported = unsupportedTypeNames.map(name => truncateFileName(name)).join(', ');
+            const truncatedOversized = oversizedFileNames.map(name => truncateFileName(name)).join(', ');
+            errorMessage = `Unsupported file types: ${truncatedUnsupported}. Files too large (>10MB): ${truncatedOversized}.`;
+        } else if (hasUnsupportedTypes) {
+            const truncatedNames = unsupportedTypeNames.map(name => truncateFileName(name)).join(', ');
+            errorMessage = `Unsupported file types: ${truncatedNames}.`;
+        } else if (hasOversizedFiles) {
+            const truncatedNames = oversizedFileNames.map(name => truncateFileName(name)).join(', ');
+            errorMessage = `Files too large (>10MB): ${truncatedNames}.`;
+        }
+        
+        if (errorMessage) {
+            setUnsupportedFileError(errorMessage);
+            
+            // Clear error after 5 seconds
+            setTimeout(() => {
+                setUnsupportedFileError('');
+            }, 5000);
+        } else {
+            setUnsupportedFileError('');
+        }
+
+        // Add valid files to selected files instead of immediately uploading
+        if (validFiles.length > 0) {
+            setSelectedFiles(prev => {
+                const existingFileNames = prev.map(f => f.name);
+                const newFiles = validFiles.filter(file => !existingFileNames.includes(file.name));
+                return [...prev, ...newFiles];
+            });
+        }
+        
+        // Clear the input value to allow reselection of the same file
+        e.target.value = '';
+    };
+
+    const handleDrop = (e) => {
+        e.preventDefault();
+        setIsDragOver(false);
+        
+        if (!canAddAttachments) return;
+        
+        const files = Array.from(e.dataTransfer.files);
+        if (files.length > 0) {
+            // Create a synthetic event object to pass to handleLocalFileChange
+            const syntheticEvent = {
+                target: {
+                    files: files
+                }
+            };
+            handleLocalFileChange(syntheticEvent);
+        }
+    };
+
+    const removeSelectedFile = (indexToRemove) => {
+        setSelectedFiles(prev => prev.filter((_, index) => index !== indexToRemove));
+    };
+
+    const clearAllSelectedFiles = () => {
+        setSelectedFiles([]);
+    };
+
+    const handleUploadFiles = async () => {
+        if (selectedFiles.length === 0) return;
+        
+        setIsUploading(true);
+        
+        try {
+            // Create a synthetic event object to pass to handleFileChange
+            const syntheticEvent = {
+                target: {
+                    files: selectedFiles
+                }
+            };
+            
+            // Move files from selected to local uploading state
+            const filesToUpload = selectedFiles.map(file => ({
+                file: file,
+                status: 'uploading',
+                id: `temp-${Date.now()}-${Math.random()}`
+            }));
+            
+            // Clear selected files immediately (they disappear from "Files Ready for Upload")
+            setSelectedFiles([]);
+            
+            // Add files to local uploading state (they appear in attachments grid with loading)
+            setLocalUploadingFiles(prev => [...prev, ...filesToUpload]);
+            
+            // Call the parent's file change handler
+            await handleFileChange(syntheticEvent);
+            
+            // Mark files as transitioning from uploading to uploaded
+            const transitionFiles = {};
+            filesToUpload.forEach(fileObj => {
+                transitionFiles[fileObj.file.name] = {
+                    status: 'transitioning',
+                    timestamp: Date.now()
+                };
+            });
+            setUploadingToUploaded(prev => ({ ...prev, ...transitionFiles }));
+            
+            // After a short delay, remove the transitioning files
+            setTimeout(() => {
+                setLocalUploadingFiles([]);
+                setUploadingToUploaded({});
+            }, 1500); // Give time for smooth transition
+            
+        } catch (error) {
+            console.error('Upload failed:', error);
+            // If upload fails, we could potentially restore files to selected state
+        } finally {
+            setIsUploading(false);
+        }
+    };
+
     return (
         <div className="bg-white p-3 sm:p-4 w-full min-w-0 max-w-full overflow-x-hidden">
-            <div className="mb-3 sm:mb-4 flex items-center justify-between gap-2">
+            <div className="mb-3 sm:mb-4 flex items-center gap-2">
                 <div className="flex items-center gap-2">
                     <div className="w-1 h-5 bg-gradient-to-b from-blue-600 to-blue-800 rounded-full"></div>
                     <span className="text-xs sm:text-sm font-bold">Ticket Details</span>
@@ -223,35 +416,39 @@ const TicketDetailsSection = ({
                 <label className="block text-xs font-bold mb-2">
                     Description:
                 </label>
-                {isEditing && canEdit ? (
-                    <>
-                        <EditableTextarea
-                            id="long_description"
-                            value={editableFields.long_description}
-                            onChange={handleEditChange}
-                            rows={10}
-                            disabled={!canEdit}
-                            className="FieldBox border border-blue-300 px-3 py-2 bg-white rounded-md w-full min-w-0 max-w-full text-xs focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-transparent"
-                            style={{ height: '200px' }}
-                            maxLength={1200}
-                        />
-                        {isEditing && canEdit && (
+                <div className="border border-gray-200 px-3 py-2 bg-gradient-to-r from-gray-50 to-gray-100 rounded-md w-full min-w-0 max-w-full overflow-y-auto" style={{ height: '200px' }}>
+                    {isEditing && canEdit ? (
+                        <>
+                            <EditableTextarea
+                                id="long_description"
+                                value={editableFields.long_description}
+                                onChange={handleEditChange}
+                                onBlur={() => {
+                                    // trigger autosave via custom event the parent listens to (debounced save lives in progress section)
+                                    const evt = new CustomEvent('ticket-autosave');
+                                    window.dispatchEvent(evt);
+                                }}
+                                rows={10}
+                                disabled={!canEdit}
+                                className="w-full min-w-0 max-w-full text-xs bg-transparent border-none focus:outline-none resize-none"
+                                style={{ height: '180px', lineHeight: '1.4', wordWrap: 'break-word', overflowWrap: 'break-word', fontFamily: 'inherit' }}
+                                maxLength={1200}
+                            />
                             <div className="text-xs text-gray-500 mt-2 text-right w-full font-medium">{editableFields.long_description.length}/1200 characters</div>
-                        )}
-                    </>
-                ) : (
-                    <div className="border border-gray-200 px-3 py-2 bg-gradient-to-r from-gray-50 to-gray-100 rounded-md w-full min-w-0 max-w-full overflow-y-auto" style={{ height: '200px' }}>
-                        {ticket.long_description ? (
-                            <span className="text-xs whitespace-pre-wrap break-words w-full min-w-0 max-w-full" style={{ lineHeight: '1.4', wordWrap: 'break-word', overflowWrap: 'break-word', fontFamily: 'inherit' }}>
-                                {ticket.long_description}
-                            </span>
-                        ) : (
-                            <span className="text-xs italic whitespace-pre-wrap break-words mt-0 w-full min-w-0 max-w-full" style={{ lineHeight: '1.4', wordWrap: 'break-word', overflowWrap: 'break-word', fontFamily: 'inherit' }}>
-                                No description provided.
-                            </span>
-                        )}
-                    </div>
-                )}
+                        </>
+                    ) : (
+                        <>
+                            {ticket.long_description ? (
+                                <span className="text-xs whitespace-pre-wrap break-words w-full min-w-0 max-w-full" style={{ lineHeight: '1.4', wordWrap: 'break-word', overflowWrap: 'break-word', fontFamily: 'inherit' }}>
+                                    {ticket.long_description}
+                                </span>
+                            ) : (
+                                <span className="text-gray-500 text-[10px] col-span-full text-left py-2 font-medium" style={{ lineHeight: '1.4', wordWrap: 'break-word', overflowWrap: 'break-word', fontFamily: 'inherit' }}>No description provided.
+                                </span>
+                            )}
+                        </>
+                    )}
+                </div>
             </div>
 
             {/* Attachments section */}
@@ -262,18 +459,16 @@ const TicketDetailsSection = ({
                         <h3 className="text-xs font-bold text-gray-800 flex items-center">
                             Attachments
                         </h3>
-                        {canAddAttachments && (
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    const input = document.getElementById('attachment-upload-btn');
-                                    if (input) input.click();
-                                }}
-                                className="p-2 rounded-md hover:bg-green-50 text-green-600 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-green-300 focus:ring-offset-2"
-                                title="Upload attachments"
-                            >
-                                <Paperclip className="w-4 h-4 text-green-600" />
-                            </button>
+                        {unsupportedFileError && (
+                            <div className="flex items-center gap-1 ml-2 px-2 py-1 bg-red-50 border border-red-200 rounded-md">
+                                <AlertCircle className="w-3 h-3 text-red-500 flex-shrink-0" />
+                                <div className="text-xs text-red-600 font-medium">
+                                    <span className="font-semibold">Error: </span>
+                                    <span className="font-normal">{unsupportedFileError}</span>
+                                    <span className="font-normal">. Allowed types: </span>
+                                    <span className="font-semibold text-blue-600">png, jpg, pdf, word, excel, zip (max 10mb)</span>
+                                </div>
+                            </div>
                         )}
                         {!canAddAttachments && (
                             <Paperclip className="w-4 h-4 text-green-600 ml-1" />
@@ -283,106 +478,276 @@ const TicketDetailsSection = ({
                         id="attachment-upload-btn"
                         type="file"
                         multiple
-                        onChange={handleFileChange}
+                        accept=".png,.jpg,.jpeg,.pdf,.doc,.docx,.xls,.xlsx,.zip"
+                        onChange={handleLocalFileChange}
                         hidden
                         disabled={!canAddAttachments}
                         value=""
                     />
                 </div>
-                <div id="attachments-section" className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 2xl:grid-cols-9 gap-x-1 gap-y-1.5 w-full min-w-0 max-w-full overflow-x-hidden">
-                    {uploadingFiles.map((fileObj, idx) => (
-                        <div key={fileObj.file.name} className="relative w-full h-16 sm:h-18 flex flex-col items-center justify-start text-center group overflow-hidden bg-white rounded-md border border-gray-200 hover:shadow-md transition-all duration-200 min-w-0">
-                            {/* Content container */}
-                            <div className="relative z-10 flex flex-col items-center justify-center h-full w-full p-1 min-w-0">
-                                {/* Thumbnail container with progress overlay */}
-                                <div className="relative">
-                                    {fileObj.isImage ? (
-                                        <div className="relative">
-                                            {/* Blurred background image */}
-                                            <img 
-                                                src={fileObj.previewUrl} 
-                                                alt={fileObj.file.name} 
-                                                className="w-8 h-8 sm:w-10 sm:h-10 object-cover rounded shadow-sm blur-sm opacity-60" 
-                                            />
-                                            {/* Progress overlay on thumbnail */}
-                                            <div className="absolute inset-0 flex items-center justify-center">
-                                                <CircularProgressbar
-                                                    value={uploadProgress[fileObj.file.name] || 0}
-                                                    text={`${uploadProgress[fileObj.file.name] || 0}%`}
-                                                    styles={buildStyles({ 
-                                                        pathColor: '#059669', 
-                                                        textColor: '#059669', 
-                                                        trailColor: '#e5e7eb', 
-                                                        textSize: '8px',
-                                                        backgroundColor: 'transparent'
-                                                    })}
-                                                />
-                                            </div>
-                                        </div>
-                                    ) : (
-                                        <div className="relative">
-                                            {/* Blurred file icon background */}
-                                            <div className="w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center bg-gray-100 rounded opacity-60">
-                                                <FileIcon fileName={fileObj.file.name} className="w-5 h-5 sm:w-6 sm:h-6 opacity-70 blur-sm" />
-                                            </div>
-                                            {/* Progress overlay on file icon */}
-                                            <div className="absolute inset-0 flex items-center justify-center">
-                                                <CircularProgressbar
-                                                    value={uploadProgress[fileObj.file.name] || 0}
-                                                    text={`${uploadProgress[fileObj.file.name] || 0}%`}
-                                                    styles={buildStyles({ 
-                                                        pathColor: '#059669', 
-                                                        textColor: '#059669', 
-                                                        trailColor: '#e5e7eb', 
-                                                        textSize: '8px',
-                                                        backgroundColor: 'transparent'
-                                                    })}
-                                                />
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                                <span className="text-[8px] sm:text-[9px] mt-0.5 truncate w-full px-0.5 font-medium leading-tight min-w-0">
-                                    {fileObj.file.name}
-                                </span>
-                            </div>
+
+                {/* Drag and Drop Zone */}
+                {canAddAttachments && (
+                    <div
+                        className={`mb-3 border-2 border-dashed rounded-lg transition-all duration-200 cursor-pointer ${
+                            isDragOver 
+                                ? 'border-green-400 bg-green-50 scale-105' 
+                                : 'border-gray-300 hover:border-green-400 hover:bg-gray-50'
+                        }`}
+                        onDragOver={handleDragOver}
+                        onDragLeave={handleDragLeave}
+                        onDrop={handleDrop}
+                        onClick={() => {
+                            const input = document.getElementById('attachment-upload-btn');
+                            if (input) input.click();
+                        }}
+                        style={{ height: '60px' }} // Even smaller height as requested
+                    >
+                        <div className="flex flex-col items-center justify-center h-full p-4 text-center">
+                            <Upload className={`w-5 h-5 mb-1 transition-colors duration-200 ${
+                                isDragOver ? 'text-green-600' : 'text-gray-400'
+                            }`} />
+                            <p className={`text-xs font-medium transition-colors duration-200 ${
+                                isDragOver ? 'text-green-700' : 'text-gray-600'
+                            }`}>
+                                {isDragOver ? 'Drop files here' : 'Drop files here or click to browse'}
+                            </p>
+                            <p className="text-[10px] text-gray-500 mt-1">
+                                png, jpg, pdf, word, excel, zip (max 10mb)
+                            </p>
                         </div>
-                    ))}
-                    {/* Existing attachments */}
-                    {ticket.attachments && ticket.attachments.length > 0 ? (
-                        ticket.attachments.map((attachment, index) => {
-                            const isImage = attachment.fileName && /\.(jpg|jpeg|png)$/i.test(attachment.fileName);
-                            return (
-                                <a
-                                    key={index}
-                                    href={attachment.url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    download={attachment.fileName}
-                                    className="flex flex-col items-center justify-start transition-all duration-200 text-center group w-full h-16 sm:h-18 overflow-hidden relative bg-white rounded-md border border-gray-200 hover:shadow-lg hover:border-green-300 min-w-0"
-                                    title={attachment.fileName}
+                    </div>
+                )}
+
+                {/* Selected Files Display */}
+                {selectedFiles.length > 0 && (
+                    <div className="mb-4 p-3 bg-white border border-orange-200 rounded-lg shadow-sm">
+                        <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                                <div className="w-2 h-2 bg-orange-500 rounded-full animate-pulse"></div>
+                                <h4 className="text-xs font-semibold text-orange-800">Files Ready for Upload</h4>
+                                <span className="px-2 py-0.5 bg-orange-100 text-orange-700 text-xs font-medium rounded-full">
+                                    {selectedFiles.length} file{selectedFiles.length !== 1 ? 's' : ''}
+                                </span>
+                                <button
+                                    onClick={handleUploadFiles}
+                                    disabled={isUploading}
+                                    className={`flex items-center gap-1 px-3 py-1.5 rounded-md font-medium text-xs transition-all duration-200 ${
+                                        isUploading
+                                            ? 'bg-gray-400 cursor-not-allowed text-white'
+                                            : 'bg-orange-600 hover:bg-orange-700 text-white'
+                                    }`}
                                 >
-                                    <div className="absolute inset-0 flex items-center justify-center opacity-100 group-hover:opacity-0 transition-opacity duration-200">
-                                        {isImage ? (
-                                            <img src={attachment.url} alt={attachment.fileName} className="w-8 h-8 sm:w-10 sm:h-10 object-cover rounded shadow-sm" />
-                                        ) : (
-                                            <FileIcon fileName={attachment.fileName} className="w-8 h-8 sm:w-10 sm:h-10" />
-                                        )}
+                                    {isUploading ? (
+                                        <>
+                                            <div className="animate-spin h-3 w-3">
+                                                <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                                                </svg>
+                                            </div>
+                                            <span>Uploading...</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Upload className="w-3 h-3" />
+                                            <span>Upload</span>
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                            <button
+                                onClick={clearAllSelectedFiles}
+                                className="text-xs bg-red-100 hover:bg-red-200 text-red-700 hover:text-red-800 px-3 py-1.5 rounded-md transition-all duration-200 font-medium border border-red-200 hover:border-red-300"
+                                title="Cancel file selection"
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                        
+                        <div className="space-y-1.5">
+                            {selectedFiles.map((file, index) => (
+                                <div key={`${file.name}-${index}`} className="flex items-center justify-between p-2 bg-orange-25 rounded-md border border-orange-100 hover:border-orange-200 transition-all duration-200">
+                                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                                        <FileIcon fileName={file.name} className="w-8 h-8 text-orange-600" />
+                                        <div className="flex flex-col min-w-0 flex-1">
+                                            <span className="text-xs text-gray-800 truncate font-medium">
+                                                {file.name}
+                                            </span>
+                                            <span className="text-[10px] text-gray-500">
+                                                {(file.size / 1024 / 1024).toFixed(2)} MB
+                                            </span>
+                                        </div>
                                     </div>
-                                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                                        <Download className="w-3 h-3 sm:w-4 sm:h-4 text-green-600" />
+                                    <button
+                                        onClick={() => removeSelectedFile(index)}
+                                        className="text-xs text-red-500 hover:text-red-700 hover:underline transition-all duration-200 flex-shrink-0 font-medium"
+                                        title="Remove file"
+                                    >
+                                        Remove
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+                
+
+                
+                {/* Attachments section - Shows both existing and uploading files */}
+                <div id="attachments-section" className="w-full min-w-0 max-w-full overflow-x-hidden">
+                    {/* Combine existing attachments with uploading files */}
+                    {(() => {
+                        const allAttachments = [];
+                        
+                        // Add existing attachments
+                        if (ticket.attachments && ticket.attachments.length > 0) {
+                            allAttachments.push(...ticket.attachments.map(att => ({ ...att, type: 'existing' })));
+                        }
+                        
+                        // Add uploading files from local state
+                        if (localUploadingFiles && localUploadingFiles.length > 0) {
+                            allAttachments.push(...localUploadingFiles.map(fileObj => {
+                                const fileName = fileObj.file.name;
+                                const isTransitioning = uploadingToUploaded[fileName]?.status === 'transitioning';
+                                
+                                return {
+                                    fileName: fileName,
+                                    url: '#', // Placeholder for uploading files
+                                    added_at: new Date().toISOString(),
+                                    type: isTransitioning ? 'transitioning' : 'uploading'
+                                };
+                            }));
+                        }
+                        
+                        // Sort attachments by date: newest first (uploading files will be at the top)
+                        allAttachments.sort((a, b) => {
+                            // Uploading files always come first
+                            if (a.type === 'uploading' && b.type !== 'uploading') return -1;
+                            if (a.type !== 'uploading' && b.type === 'uploading') return 1;
+                            
+                            // For existing files, sort by date (newest first)
+                            if (a.type === 'existing' && b.type === 'existing') {
+                                return new Date(b.added_at) - new Date(a.added_at);
+                            }
+                            
+                            return 0;
+                        });
+                        
+                        return allAttachments.length > 0 ? (
+                            <>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                    {(showAllAttachments ? allAttachments : allAttachments.slice(0, 3)).map((attachment, index) => (
+                                        <div key={`${attachment.fileName}-${index}`} className={`flex items-start justify-between gap-2 p-2 border rounded-md transition-all duration-500 ${
+                                            attachment.type === 'uploading' 
+                                                ? 'bg-yellow-50 border-yellow-200 hover:bg-yellow-100' 
+                                                : attachment.type === 'transitioning'
+                                                ? 'bg-green-50 border-green-200 hover:bg-green-100'
+                                                : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+                                        }`}>
+                                            <div className="flex items-start gap-2 flex-1 min-w-0">
+                                                <FileIcon fileName={attachment.fileName} className="w-3.5 h-3.5 text-gray-800 flex-shrink-0 mt-0.5" />
+                                                <div className="flex flex-col min-w-0 flex-1">
+                                                    <span className="text-xs text-black truncate font-medium mb-0.5">
+                                                        {attachment.type === 'uploading' ? (
+                                                            <span className="text-yellow-700 font-medium">
+                                                                {attachment.fileName}
+                                                            </span>
+                                                        ) : attachment.type === 'transitioning' ? (
+                                                            <span className="text-green-700 font-medium">
+                                                                {attachment.fileName}
+                                                            </span>
+                                                        ) : (
+                                                            <div className="flex items-center gap-2">
+                                                                <a
+                                                                    href={attachment.url}
+                                                                    target="_blank"
+                                                                    rel="noopener noreferrer"
+                                                                    className="text-black hover:text-gray-800 hover:underline font-medium"
+                                                                    title={attachment.fileName}
+                                                                >
+                                                                    {attachment.fileName}
+                                                                </a>
+                                                            </div>
+                                                        )}
+                                                    </span>
+                                                    <span className="text-[10px] text-gray-400 font-normal">
+                                                        {attachment.type === 'uploading' ? (
+                                                            <span className="text-yellow-600 font-normal">Uploading...</span>
+                                                        ) : attachment.type === 'transitioning' ? (
+                                                            <span className="text-green-600 font-normal">Uploaded!</span>
+                                                        ) : attachment.added_at && !isNaN(new Date(attachment.added_at).getTime()) ? (
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-gray-400 font-normal">
+                                                                    {new Date(attachment.added_at).toLocaleString()}
+                                                                </span>
+                                                                {/* Show "Latest" badge for the most recent file */}
+                                                                {index === 0 && attachment.type === 'existing' && (
+                                                                    <span className="px-1.5 py-0.5 bg-green-100 text-green-700 text-[8px] font-bold rounded-full">
+                                                                        Latest
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        ) : ticket.updated_at && !isNaN(new Date(ticket.updated_at).getTime()) ? (
+                                                            <span className="text-gray-400 font-normal">
+                                                                {new Date(ticket.updated_at).toLocaleString()}
+                                                            </span>
+                                                        ) : ticket.created_at && !isNaN(new Date(ticket.created_at).getTime()) ? (
+                                                            <span className="text-gray-400 font-normal">
+                                                                {new Date(ticket.created_at).toLocaleString()}
+                                                            </span>
+                                                        ) : 'Date not available'}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            {attachment.type === 'uploading' ? (
+                                                <div className="flex-shrink-0 flex items-center justify-center">
+                                                    <div className="animate-spin h-4 w-4">
+                                                        <svg className="w-4 h-4 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                                                        </svg>
+                                                    </div>
+                                                </div>
+                                            ) : attachment.type === 'transitioning' ? (
+                                                <div className="flex-shrink-0 flex items-center justify-center">
+                                                    <div className="text-green-600">
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                        </svg>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <a
+                                                    href={attachment.url}
+                                                    download={attachment.fileName}
+                                                    className="p-1.5 text-gray-500 hover:text-green-600 hover:bg-green-50 rounded transition-colors duration-200 flex-shrink-0 flex items-center justify-center"
+                                                    title="Download file"
+                                                >
+                                                    <Download className="w-4 h-4" />
+                                                </a>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                                
+                                {/* Show More/Less button - positioned below the grid */}
+                                {allAttachments.length > 3 && (
+                                    <div className="mt-3 text-center">
+                                        <button
+                                            onClick={() => setShowAllAttachments(!showAllAttachments)}
+                                            className="text-[10px] text-orange-600 hover:text-orange-800 hover:underline font-medium"
+                                        >
+                                            {showAllAttachments 
+                                                ? 'Show Less' 
+                                                : `Show More (${allAttachments.length - 3} older attachments)`
+                                            }
+                                        </button>
                                     </div>
-                                    <div className="absolute bottom-0 left-0 right-0 p-0.5">
-                                        <span className="text-[8px] sm:text-[9px] text-gray-700 font-medium leading-tight truncate block w-full px-0.5 min-w-0">
-                                            {attachment.fileName}
-                                        </span>
-                                    </div>
-                                </a>
-                            );
-                        })
-                    ) : (
-                        <p className="text-gray-500 text-[10px] col-span-full text-center py-2 font-medium">No attachments yet.</p>
-                    )}
+                                )}
+                            </>
+                        ) : (
+                            <p className="text-gray-500 text-[10px] col-span-full text-left py-2 font-medium">No attachments yet.</p>
+                        );
+                    })()}
                 </div>
             </div>
         </div>

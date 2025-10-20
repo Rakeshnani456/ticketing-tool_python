@@ -45,8 +45,7 @@ import UserProfilePopup from '../common/UserProfilePopup';
 import Button from '@mui/material/Button';
 import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
-import { CircularProgressbar, buildStyles } from 'react-circular-progressbar';
-import 'react-circular-progressbar/dist/styles.css';
+
 
 // Import the new modular components
 import TicketDetailHeader from './TicketDetailHeader';
@@ -57,7 +56,7 @@ import TicketUpdatesSection from './TicketUpdatesSection';
 const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
     const { ticketId } = useParams();
     const [ticket, setTicket] = useState(null);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(false); // Start with false to avoid spinner flash
     const [error, setError] = useState(null);
     const [isEditing, setIsEditing] = useState(false);
     const [commentText, setCommentText] = useState('');
@@ -149,7 +148,8 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
         }
     }, [ticket?.short_description, subjectExpanded]);
 
-    const isSupportUser = user?.role === 'support' || user?.role === 'admin' || user?.role === 'super_admin';
+    const isSupportUser = user?.role === 'support' || user?.role === 'admin' || user?.role === 'super_admin' || user?.role === 'site_admin' || user?.role === 'engineer';
+    const isEngineer = user?.role === 'support' || user?.role === 'super_admin' || user?.role === 'engineer';
 
     const priorities = [
         { value: 'Low', label: 'Low' },
@@ -223,6 +223,19 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                     return { ...history, timestamp: history.timestamp.toDate().toISOString() };
                 }
                 return history;
+            });
+        }
+
+        // Handle notes timestamps
+        if (newData.notes && Array.isArray(newData.notes)) {
+            newData.notes = newData.notes.map(note => {
+                if (note.timestamp && note.timestamp.toDate) {
+                    return { ...note, timestamp: note.timestamp.toDate().toISOString() };
+                }
+                if (note.created_at && note.created_at.toDate) {
+                    return { ...note, created_at: note.created_at.toDate().toISOString() };
+                }
+                return note;
             });
         }
 
@@ -308,7 +321,9 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                         timestamp: comment.timestamp,
                         label: `Comment`,
                         icon: MessageSquare,
-                        detail: comment.commenter ? comment.commenter.split('@')[0] : 'Anonymous'
+                        detail: comment.commenter ? comment.commenter.split('@')[0] : 'Anonymous',
+                        comment_text: comment.comment || comment.text || '',
+                        comment: comment.comment || comment.text || ''
                     });
                 }
             });
@@ -393,9 +408,43 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
 
         setError(null);
 
+        // OPTIMIZED: Check cache first
+        const cacheKey = `ticket_detail_${ticketId}`;
+        const cachedData = localStorage.getItem(cacheKey);
+        const cacheTime = localStorage.getItem(`${cacheKey}_time`);
+        const now = Date.now();
+        
+        // Use cached data if it's less than 1 minute old
+        if (cachedData && cacheTime && (now - parseInt(cacheTime)) < 60000) {
+            try {
+                const parsedData = JSON.parse(cachedData);
+                setTicket(parsedData.ticket);
+                setTimelineEvents(parsedData.timelineEvents || []);
+                setLoading(false);
+                
+                if (['Resolved', 'Cancelled'].includes(parsedData.ticket.status)) {
+                    setIsEditing(false);
+                }
+            } catch (e) {
+                console.warn('Failed to parse cached ticket detail data:', e);
+            }
+        }
+
         const ticketDocRef = doc(db, 'tickets', ticketId);
 
+        // Add timeout to prevent infinite loading
+        const loadingTimeout = setTimeout(() => {
+            if (loading) {
+                console.warn('Ticket loading timeout - ticket may not exist yet');
+                setError('Ticket is still being created. Please wait a moment and refresh.');
+                showFlashMessage('Ticket is still being created. Please wait a moment and refresh.', 'warning');
+                setLoading(false);
+            }
+        }, 10000); // 10 second timeout
+
         const unsubscribe = onSnapshot(ticketDocRef, (docSnapshot) => {
+            clearTimeout(loadingTimeout); // Clear timeout when data is received
+            
             if (docSnapshot.exists()) {
                 const fetchedTicket = { id: docSnapshot.id, ...formatTicketData(docSnapshot.data()) };
 
@@ -408,65 +457,75 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                 }
 
                 setTicket(fetchedTicket);
-                setTimelineEvents(generateTimelineEvents(fetchedTicket));
+                const timelineEventsData = generateTimelineEvents(fetchedTicket);
+                setTimelineEvents(timelineEventsData);
+                
                 if (['Resolved', 'Cancelled'].includes(fetchedTicket.status)) {
                     setIsEditing(false);
                 }
-
-                if (!isEditing || !ticket) {
-                    setEditableFields({
-                        short_description: fetchedTicket.short_description || '',
-                        long_description: fetchedTicket.long_description || '',
-                        priority: fetchedTicket.priority || '',
-                        status: fetchedTicket.status || '',
-                        assigned_to_email: fetchedTicket.assigned_to_email || '',
-                        closed_by_email: fetchedTicket.closed_by_email || '',
-                        category: fetchedTicket.category || '',
-                    });
-                    setClosureNotes(fetchedTicket.closure_notes || '');
-                    setTimeSpent(fetchedTicket.time_spent || '');
-                } else if (isEditing) {
-                    if (['Resolved', 'Cancelled'].includes(fetchedTicket.status)) {
-                        setEditableFields(prev => ({
-                            ...prev,
-                            status: fetchedTicket.status,
-                            priority: fetchedTicket.priority,
-                            assigned_to_email: fetchedTicket.assigned_to_email,
-                            closed_by_email: fetchedTicket.closed_by_email,
-                            category: fetchedTicket.category || '',
-                        }));
-                        setClosureNotes(fetchedTicket.closure_notes || '');
-                        setTimeSpent(fetchedTicket.time_spent || '');
-                    }
-                }
-
+                
+                // Cache the data
+                const dataToCache = {
+                    ticket: fetchedTicket,
+                    timelineEvents: timelineEventsData,
+                    timestamp: now
+                };
+                localStorage.setItem(cacheKey, JSON.stringify(dataToCache));
+                localStorage.setItem(`${cacheKey}_time`, now.toString());
+                
                 setLoading(false);
                 setError(null);
-                setAssignedToErrorMessage('');
-                setClosureNotesErrorMessage('');
-                setTimeSpentErrorMessage('');
-                setAssignedToHasError(false);
-                setTimeSpentHasError(false);
-                setClosureNotesHasError(false);
-
             } else {
-                setError(`Ticket with ID ${ticketId} not found.`);
-                showFlashMessage(`Ticket with ID ${ticketId} not found.`, 'error');
-                setTicket(null);
-                setLoading(false);
+                // Ticket doesn't exist yet - this might be a newly created ticket
+                console.log('Ticket not found in Firestore yet, waiting...');
+                // Don't set error immediately, keep loading for a bit
             }
         }, (err) => {
+            clearTimeout(loadingTimeout);
             console.error("Firestore onSnapshot error (TicketDetailComponent):", err);
             setError(`Failed to load ticket details: ${err.message}`);
             showFlashMessage(`Failed to load ticket details: ${err.message}`, 'error');
             setLoading(false);
         });
 
-        return () => unsubscribe();
-    }, [ticketId, db, generateTimelineEvents, user, isSupportUser, isEditing, showFlashMessage]);
+        return () => {
+            clearTimeout(loadingTimeout);
+            unsubscribe();
+        };
+    }, [ticketId, user, db, isSupportUser]);
+
+    // Derived permissions and helpers (placed before effects that depend on them)
+    const isTicketClosedOrResolved = ticket && ['Resolved', 'Cancelled'].includes(ticket.status);
+    const isTicketCreator = ticket && ticket.reporter_id === user?.uid;
+    // Only Engineers can edit tickets (not ticket creators or other support users)
+    const canEdit = !isTicketClosedOrResolved && isEngineer;
+    // Comments and attachments can be added by anyone if ticket is not closed/resolved
+    const canAddComments = !isTicketClosedOrResolved;
+    const canAddAttachments = !isTicketClosedOrResolved;
+    const hasChanges = useCallback(() => {
+        if (!ticket) return false;
+        const fieldsChanged = Object.keys(editableFields).some(key => editableFields[key] !== (ticket[key] || ''));
+        const closureNotesChanged = closureNotes !== (ticket.closure_notes || '');
+        const timeSpentChanged = timeSpent !== (ticket.time_spent || '');
+
+        return fieldsChanged || closureNotesChanged || timeSpentChanged;
+    }, [editableFields, ticket, closureNotes, timeSpent]);
+
+    // Listen for description blur autosave events and trigger save if changes present
+    useEffect(() => {
+        const handler = () => {
+            if (canEdit && hasChanges()) {
+                handleUpdateTicket('save');
+            }
+        };
+        window.addEventListener('ticket-autosave', handler);
+        return () => window.removeEventListener('ticket-autosave', handler);
+    }, [canEdit, hasChanges]);
+
+    const editableInitRef = useRef(false);
 
     useEffect(() => {
-        if (isEditing && ticket) {
+        if (isEditing && ticket && !editableInitRef.current) {
             setEditableFields({
                 short_description: ticket.short_description || '',
                 long_description: ticket.long_description || '',
@@ -478,11 +537,23 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
             });
             setClosureNotes(ticket.closure_notes || '');
             setTimeSpent(ticket.time_spent || '');
+            editableInitRef.current = true;
+        }
+        if (!isEditing) {
+            editableInitRef.current = false;
         }
     }, [isEditing, ticket]);
 
+    // Initialize time_spent and closure_notes when ticket loads (regardless of editing mode)
     useEffect(() => {
-        if (isEditing && isSupportUser) {
+        if (ticket) {
+            setTimeSpent(ticket.time_spent || '');
+            setClosureNotes(ticket.closure_notes || '');
+        }
+    }, [ticket]);
+
+    useEffect(() => {
+        if (isEditing && (isSupportUser || isEngineer)) {
             setSupportUsersLoading(true);
             user.firebaseUser.getIdToken()
                 .then(idToken => {
@@ -495,7 +566,7 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                 })
                 .then(res => res.json())
                 .then(data => {
-                    setSupportUsers(Array.isArray(data) ? data.filter(u => u.role === 'support') : []);
+                    setSupportUsers(Array.isArray(data) ? data.filter(u => u.role === 'support' || u.role === 'super_admin') : []);
                     setSupportUsersLoading(false);
                 })
                 .catch(() => {
@@ -503,22 +574,17 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                     setSupportUsersLoading(false);
                 });
         }
-    }, [isEditing, isSupportUser, user]);
+    }, [isEditing, isSupportUser, isEngineer, user]);
 
-    const isTicketClosedOrResolved = ticket && ['Resolved', 'Cancelled'].includes(ticket.status);
-    const canEdit = !isTicketClosedOrResolved && 
-                   ['support'].includes(user?.role);
-    const canAddComments = !isTicketClosedOrResolved;
-    const canAddAttachments = !isTicketClosedOrResolved;
-
-    const hasChanges = useCallback(() => {
-        if (!ticket) return false;
-        const fieldsChanged = Object.keys(editableFields).some(key => editableFields[key] !== (ticket[key] || ''));
-        const closureNotesChanged = closureNotes !== (ticket.closure_notes || '');
-        const timeSpentChanged = timeSpent !== (ticket.time_spent || '');
-
-        return fieldsChanged || closureNotesChanged || timeSpentChanged;
-    }, [editableFields, ticket, closureNotes, timeSpent]);
+    // Auto-enable editing for authorized roles when possible
+    useEffect(() => {
+        if (ticket && canEdit) {
+            setIsEditing(true);
+        }
+        if (isTicketClosedOrResolved) {
+            setIsEditing(false);
+        }
+    }, [ticket, canEdit, isTicketClosedOrResolved]);
 
     const handleEditChange = useCallback((e) => {
         const { id, value } = e.target;
@@ -720,8 +786,10 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                 }
                 setError(null);
 
+                // Optimistically update local ticket to reflect edits immediately
+                setTicket(prev => prev ? ({ ...prev, ...payload }) : prev);
+
                 setTimeout(() => {
-                    setIsEditing(false);
                     if (actionType === 'close') {
                         setCloseButtonState('default');
                     } else {
@@ -733,7 +801,7 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                     setAssignedToHasError(false);
                     setTimeSpentHasError(false);
                     setClosureNotesHasError(false);
-                }, 1500);
+                }, 500);
             } else {
                 if (actionType === 'close') {
                     setCloseButtonState('error');
@@ -795,9 +863,18 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
             showFlashMessage('Comment text cannot be empty.', 'error');
             return;
         }
+        
+        // Store original comment text for potential retry
+        const originalCommentText = commentText;
+        
         setCommentLoading(true);
         try {
             const idToken = await user.firebaseUser.getIdToken();
+            
+            // Add timeout to prevent hanging requests
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+            
             const response = await fetch(`${API_BASE_URL}/tickets/${ticketId}/add_comment`, {
                 method: 'POST',
                 headers: {
@@ -805,17 +882,26 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                     'Authorization': `Bearer ${idToken}`
                 },
                 body: JSON.stringify({ comment_text: commentText, commenter_name: user?.email }),
+                signal: controller.signal
             });
+            
+            clearTimeout(timeoutId);
             const data = await response.json();
+            
             if (response.ok) {
                 setCommentText('');
                 setVisibleCommentCount(6);
+                showFlashMessage('Comment added successfully!', 'success');
             } else {
                 showFlashMessage(data.error || 'Failed to add comment.', 'error');
             }
         } catch (error) {
             console.error('Add comment error:', error);
-            showFlashMessage('Network error or server unreachable during comment addition.', 'error');
+            if (error.name === 'AbortError') {
+                showFlashMessage('Comment submission timed out. Please try again.', 'error');
+            } else {
+                showFlashMessage('Network error or server unreachable during comment addition.', 'error');
+            }
         } finally {
             setCommentLoading(false);
         }
@@ -832,10 +918,13 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                 'image/png',
                 'application/msword',
                 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                'text/plain'
+                'application/vnd.ms-excel',
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                'application/zip',
+                'application/x-zip-compressed'
             ];
             if (!allowedTypes.includes(file.type)) {
-                showFlashMessage(`File type "${file.type}" not allowed for ${file.name}. Allowed types: PDF, JPG, PNG, Word, TXT.`, 'error');
+                showFlashMessage(`File type "${file.type}" not allowed for ${file.name}. Allowed types: PNG, JPG, PDF, Word, Excel, ZIP.`, 'error');
                 continue;
             }
             if (file.size > 10 * 1024 * 1024) {
@@ -906,7 +995,9 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
             });
         });
         await Promise.all(uploadPromises);
-        setUploadingFiles(prev => prev.filter(f => !filesToUpload.some(file => file.name === f.file.name)));
+        
+        // Don't remove uploading files immediately - let them stay until ticket data refreshes
+        // This prevents the brief disappearance and position jumping
         setUploadProgress(prev => {
             const newProgress = { ...prev };
             filesToUpload.forEach(file => { delete newProgress[file.name]; });
@@ -925,6 +1016,11 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                 if (response.ok) {
                     setAttachmentFiles([]);
                     showFlashMessage('Attachments added successfully!', 'success');
+                    
+                    // Now that the ticket has been updated, remove the uploading files
+                    // This ensures smooth transition without gaps or position jumping
+                    setUploadingFiles(prev => prev.filter(f => !filesToUpload.some(file => file.name === f.file.name)));
+                    
                     if (!anyUploadFailed) {
                         setUploadButtonState('success');
                     } else {
@@ -937,6 +1033,10 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                     const errorData = await response.json();
                     setUploadButtonState('error');
                     showFlashMessage(`Failed to update ticket with attachments: ${errorData.error || 'Server error'}`, 'error');
+                    
+                    // Clean up uploading files on error too
+                    setUploadingFiles(prev => prev.filter(f => !filesToUpload.some(file => file.name === f.file.name)));
+                    
                     setTimeout(() => {
                         setUploadButtonState('upload');
                     }, 2000);
@@ -953,6 +1053,10 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
             if (!anyUploadFailed) {
                 showFlashMessage('No attachments were successfully uploaded to add to the ticket.', 'error');
             }
+            
+            // Clean up uploading files when no attachments were uploaded
+            setUploadingFiles(prev => prev.filter(f => !filesToUpload.some(file => file.name === f.file.name)));
+            
             setTimeout(() => {
                 setUploadButtonState('upload');
             }, 2000);
@@ -991,6 +1095,7 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
             <div className="bg-white rounded-xl shadow-lg p-8 border border-gray-200 max-w-md mx-auto">
                 <Loader2 className="animate-spin text-blue-600 mx-auto mb-4" size={48} />
                 <p className="text-gray-700 text-center font-medium">Loading ticket details...</p>
+                <p className="text-gray-500 text-center text-sm mt-2">Preparing ticket view...</p>
             </div>
         </div>
     );
@@ -1090,6 +1195,7 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                         isAtBottom={isAtBottom}
                         setIsAtBottom={setIsAtBottom}
                         user={user}
+                        showFlashMessage={showFlashMessage}
                         profilePopup={profilePopup}
                         showProfilePopup={showProfilePopup}
                         cancelShowProfilePopup={cancelShowProfilePopup}
@@ -1097,6 +1203,7 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                         popupHideTimeout={popupHideTimeout}
                     />
                 </div>
+
             </div>
         </div>
     );

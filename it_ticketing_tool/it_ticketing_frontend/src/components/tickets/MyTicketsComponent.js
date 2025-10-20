@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Loader2, XCircle, PlusCircle, User, ChevronLeft, ChevronRight } from 'lucide-react'; // Icons
-import { collection, query, onSnapshot, where, orderBy, getFirestore } from 'firebase/firestore'; // NEW: Firestore imports
+import { collection, query, onSnapshot, where, orderBy, getFirestore, limit } from 'firebase/firestore'; // NEW: Firestore imports
 
 // Import common UI components
 import LinkButton from '../common/LinkButton';
@@ -22,10 +22,10 @@ import { app, dbClient } from '../../config/firebase'; // Import 'app' and 'dbCl
  */
 const MyTicketsComponent = ({ user, navigateTo, showFlashMessage, searchKeyword, refreshKey }) => {
     const [tickets, setTickets] = useState([]);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(false); // Start with false to avoid spinner flash
     const [error, setError] = useState(null);
     const [currentPage, setCurrentPage] = useState(1);
-    const ticketsPerPage = 15;
+    const ticketsPerPage = 30;
     const totalPages = Math.ceil(tickets.length / ticketsPerPage);
     const paginatedTickets = tickets.slice((currentPage - 1) * ticketsPerPage, currentPage * ticketsPerPage);
 
@@ -74,15 +74,33 @@ const MyTicketsComponent = ({ user, navigateTo, showFlashMessage, searchKeyword,
 
         setError(null);
 
+        // OPTIMIZED: Check cache first
+        const cacheKey = `my_tickets_${firebaseUser.uid}_${searchKeyword || 'default'}`;
+        const cachedData = localStorage.getItem(cacheKey);
+        const cacheTime = localStorage.getItem(`${cacheKey}_time`);
+        const now = Date.now();
+        
+        // Use cached data if it's less than 2 minutes old
+        if (cachedData && cacheTime && (now - parseInt(cacheTime)) < 120000) {
+            try {
+                const parsedData = JSON.parse(cachedData);
+                setTickets(parsedData);
+                setLoading(false);
+            } catch (e) {
+                console.warn('Failed to parse cached my tickets data:', e);
+            }
+        }
+
         let ticketsRef = collection(db, 'tickets');
         let q;
         
-        // If searching, include all tickets including cancelled ones
+        // OPTIMIZED: Apply proper filtering and limits
         if (searchKeyword) {
             q = query(
                 ticketsRef,
                 where('reporter_id', '==', firebaseUser.uid), // Filter by current user's ID
-                orderBy('created_at', 'desc') // Order by creation date
+                orderBy('created_at', 'desc'), // Order by creation date
+                limit(100) // Limit to prevent excessive reads
             );
         } else {
             // Default filter: show active tickets only (Open, In Progress, Hold)
@@ -90,7 +108,8 @@ const MyTicketsComponent = ({ user, navigateTo, showFlashMessage, searchKeyword,
                 ticketsRef,
                 where('reporter_id', '==', firebaseUser.uid), // Filter by current user's ID
                 where('status', 'in', ['Open', 'In Progress', 'Hold']), // Default filter: show active tickets only
-                orderBy('created_at', 'desc') // Order by creation date
+                orderBy('created_at', 'desc'), // Order by creation date
+                limit(50) // Limit to prevent excessive reads
             );
         }
 
@@ -103,7 +122,8 @@ const MyTicketsComponent = ({ user, navigateTo, showFlashMessage, searchKeyword,
                 ticketsRef,
                 where('reporter_id', '==', firebaseUser.uid),
                 where('display_id', '==', exactId),
-                orderBy('created_at', 'desc')
+                orderBy('created_at', 'desc'),
+                limit(10) // Limit for exact searches
             );
         }
 
@@ -135,6 +155,10 @@ const MyTicketsComponent = ({ user, navigateTo, showFlashMessage, searchKeyword,
             setTickets(fetchedTickets);
             setLoading(false);
             setError(null);
+            
+            // Cache the data
+            localStorage.setItem(cacheKey, JSON.stringify(fetchedTickets));
+            localStorage.setItem(`${cacheKey}_time`, now.toString());
         }, (err) => {
             console.error("Firestore onSnapshot error (MyTicketsComponent):", err);
             setError(`Failed to load your tickets: ${err.message}`);
@@ -160,20 +184,17 @@ const MyTicketsComponent = ({ user, navigateTo, showFlashMessage, searchKeyword,
       if (end - start < 2) start = Math.max(1, end - 2);
       for (let i = start; i <= end; i++) {
         pages.push(
-          <button key={i} onClick={() => handlePageChange(i)} className={`mx-0.5 w-5 h-5 flex items-center justify-center rounded-full text-[10px] font-semibold transition-colors duration-200 ${i === currentPage ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}>{i}</button>
+          <button key={i} onClick={() => handlePageChange(i)} className={`mx-0.5 w-7 h-7 flex items-center justify-center rounded-full text-xs font-semibold transition-colors duration-200 ${i === currentPage ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}>{i}</button>
         );
       }
       const firstTicket = (currentPage - 1) * ticketsPerPage + 1;
       const lastTicket = Math.min(currentPage * ticketsPerPage, tickets.length);
       return (
-        <>
-          <div className="inline-flex items-center gap-0.5 align-middle">
-            <button onClick={() => handlePageChange(currentPage - 1)} disabled={currentPage === 1} className="w-5 h-5 flex items-center justify-center rounded-full bg-gray-200 text-gray-800 hover:bg-gray-300 disabled:opacity-50"><ChevronLeft size={10} /></button>
-            {pages}
-            <button onClick={() => handlePageChange(currentPage + 1)} disabled={currentPage === totalPages} className="w-5 h-5 flex items-center justify-center rounded-full bg-gray-200 text-gray-800 hover:bg-gray-300 disabled:opacity-50"><ChevronRight size={10} /></button>
-          </div>
-          <div className="text-[10px] text-gray-500 mt-1 ml-1 text-right">Showing tickets {firstTicket}-{lastTicket} of {tickets.length}</div>
-        </>
+        <div className="inline-flex items-center gap-1 align-middle">
+          <button onClick={() => handlePageChange(currentPage - 1)} disabled={currentPage === 1} className="w-7 h-7 flex items-center justify-center rounded-full bg-gray-200 text-gray-800 hover:bg-gray-300 disabled:opacity-50"><ChevronLeft size={12} /></button>
+          {pages}
+          <button onClick={() => handlePageChange(currentPage + 1)} disabled={currentPage === totalPages} className="w-7 h-7 flex items-center justify-center rounded-full bg-gray-200 text-gray-800 hover:bg-gray-300 disabled:opacity-50"><ChevronRight size={12} /></button>
+        </div>
       );
     }
 
@@ -212,23 +233,41 @@ const MyTicketsComponent = ({ user, navigateTo, showFlashMessage, searchKeyword,
 
     return (
         <div className="p-4 bg-white flex-1 overflow-auto">
-            {/* Header layout: title and Create Ticket button on the left, pagination on the far right */}
+            {/* Header layout: title on the left, pagination on the far right */}
             <div className="flex items-center mb-4 gap-2 flex-wrap">
                 <h2 className="text-xl font-extrabold text-gray-800 mr-2">
                     {searchKeyword ? `Search Results for "${searchKeyword}" (including resolved and cancelled tickets)` : 'My Tickets'}
                 </h2>
-                <LinkButton onClick={() => navigateTo('create-ticket')} className="text-sm flex items-center space-x-1 ml-2">
-                    <PlusCircle size={16} /> <span>Create Ticket</span>
-                </LinkButton>
                 <div className="relative flex flex-col items-end ml-auto">
                     {renderPagination()}
                 </div>
             </div>
             {tickets.length === 0 ? (
                 // Message when no tickets are found
-                <div className="text-center text-gray-600 text-sm p-6 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50">
-                    <p className="mb-2">{searchKeyword ? `No tickets found matching "${searchKeyword}".` : "You haven't created any tickets yet."}</p>
-                    {!searchKeyword && <p className="font-semibold">Click "Create Ticket" to get started!</p>}
+                <div className="text-center text-gray-600 text-sm p-12 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50 min-h-[200px] flex flex-col justify-center">
+                    <div className="mb-4">
+                        <User className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                        <h3 className="text-lg font-semibold text-gray-800 mb-2">
+                            {searchKeyword ? `No tickets found matching "${searchKeyword}"` : "No tickets found"}
+                        </h3>
+                        <p className="text-gray-600">
+                            {searchKeyword 
+                                ? "Try adjusting your search criteria or create a new ticket." 
+                                : "Create your first support ticket to get started with our help desk system."
+                            }
+                        </p>
+                    </div>
+                    {!searchKeyword && (
+                        <div className="mt-4">
+                            <LinkButton 
+                                onClick={() => navigateTo('create-ticket')} 
+                                className="inline-flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+                            >
+                                <PlusCircle size={16} />
+                                <span>Create Ticket</span>
+                            </LinkButton>
+                        </div>
+                    )}
                 </div>
             ) : (
                 // Table to display tickets
@@ -249,37 +288,52 @@ const MyTicketsComponent = ({ user, navigateTo, showFlashMessage, searchKeyword,
                         <tbody className="divide-y divide-gray-200">
                             {paginatedTickets.map((ticket, index) => (
                                 <tr key={ticket.id} className="block sm:table-row bg-white border-b border-gray-200 hover:bg-gray-50 transition-colors duration-150 text-xs">
-                                    <td className="block sm:table-cell px-2 py-2 text-xs text-gray-800 whitespace-normal break-words border-r border-gray-200">
+                                    <td className="block sm:table-cell px-2 py-4 text-xs text-gray-800 whitespace-normal break-words border-r border-gray-200">
                                         <span className="block sm:hidden font-semibold text-gray-600">#:</span>
                                         {index + 1}
                                     </td>
-                                    <td className="block sm:table-cell px-2 py-2 text-xs text-blue-700 hover:underline font-medium cursor-pointer whitespace-normal break-words border-r border-gray-200" onClick={() => navigateTo('/tickets', ticket.id)}>
+                                    <td className="block sm:table-cell px-2 py-4 text-xs text-blue-700 hover:underline font-medium cursor-pointer whitespace-normal break-words border-r border-gray-200">
                                         <span className="block sm:hidden font-semibold text-gray-600">Ticket ID:</span>
-                                        {ticket.display_id}
+                                        <a
+                                            href={`/tickets/${ticket.id}`}
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                navigateTo('/tickets', ticket.id);
+                                            }}
+                                        >
+                                            {ticket.display_id}
+                                        </a>
                                     </td>
-                                    <td className="block sm:table-cell px-2 py-2 text-xs text-gray-800 max-w-xs truncate whitespace-normal break-words border-r border-gray-200" title={ticket.short_description}>
+                                    <td className="block sm:table-cell px-2 py-4 text-xs text-gray-800 max-w-xs truncate whitespace-normal break-words border-r border-gray-200" title={ticket.short_description}>
                                         <span className="block sm:hidden font-semibold text-gray-600">Short Description:</span>
                                         {ticket.short_description}
                                     </td>
-                                    <td className="block sm:table-cell px-2 py-2 text-xs text-gray-800 whitespace-normal break-words border-r border-gray-200">
+                                    <td className="block sm:table-cell px-2 py-4 text-xs text-gray-800 whitespace-normal break-words border-r border-gray-200">
                                         <span className="block sm:hidden font-semibold text-gray-600">Category:</span>
                                         {ticket.category}
                                     </td>
-                                    <td className="block sm:table-cell px-2 py-2 text-xs text-gray-800 whitespace-normal break-words border-r border-gray-200">
+                                    <td className="block sm:table-cell px-2 py-4 text-xs text-gray-800 whitespace-normal break-words border-r border-gray-200">
                                         <span className="block sm:hidden font-semibold text-gray-600">Priority:</span>
                                         <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getPriorityClasses(ticket.priority)}`}>{ticket.priority}</span>
                                     </td>
-                                    <td className="block sm:table-cell px-2 py-2 whitespace-normal break-words text-xs text-gray-800 border-r border-gray-200">
+                                    <td className="block sm:table-cell px-2 py-4 whitespace-normal break-words text-xs text-gray-800 border-r border-gray-200">
                                         <span className="block sm:hidden font-semibold text-gray-600">Status:</span>
                                         <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getStatusClasses(ticket.status)}`}>{ticket.status}</span>
                                     </td>
-                                    <td className="block sm:table-cell px-2 py-2 whitespace-normal break-words text-xs text-gray-800 border-r border-gray-200">
+                                    <td className="block sm:table-cell px-2 py-4 whitespace-normal break-words text-xs text-gray-800 border-r border-gray-200">
                                         <span className="block sm:hidden font-semibold text-gray-600">Assigned To:</span>
                                         {ticket.assigned_to_email || 'Unassigned'}
                                     </td>
-                                    <td className="block sm:table-cell px-2 py-2 whitespace-normal break-words text-xs text-gray-800">
+                                    <td className="block sm:table-cell px-2 py-4 whitespace-normal break-words text-xs text-gray-800">
                                         <span className="block sm:hidden font-semibold text-gray-600">Last Updated:</span>
-                                        {ticket.updated_at ? new Date(ticket.updated_at).toLocaleString() : 'N/A'}
+                                        {ticket.updated_at ? new Date(ticket.updated_at).toLocaleDateString('en-US', { 
+                                            month: 'short', 
+                                            day: '2-digit', 
+                                            year: 'numeric',
+                                            hour: '2-digit',
+                                            minute: '2-digit',
+                                            hour12: true 
+                                        }) : 'N/A'}
                                     </td>
                                 </tr>
                             ))}

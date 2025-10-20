@@ -1299,7 +1299,7 @@ app.get('/tickets/my', verifyFirebaseToken, async (req, res) => {
 // @desc    Get all tickets in the system.
 // @access  Private (requires support, admin, or super_admin role)
 // MODIFIED: Use checkRole middleware
-app.get('/tickets/all', verifyFirebaseToken, checkRole(['support', 'admin', 'super_admin']), async (req, res) => {
+app.get('/tickets/all', verifyFirebaseToken, checkRole(['support', 'admin', 'super_admin', 'site_admin']), async (req, res) => {
     const filterStatus = req.query.status;
     const filterAssignment = req.query.assignment;
     const searchKeyword = req.query.keyword ? req.query.keyword.toLowerCase() : '';
@@ -1365,8 +1365,8 @@ app.get('/ticket/:ticket_id', verifyFirebaseToken, async (req, res) => {
 
         const ticketData = ticketDoc.data();
 
-        // Authorization check: Only reporter, support associate, admin, or super_admin can view
-        if (ticketData.reporter_id !== authenticatedUid && !['support', 'admin', 'super_admin'].includes(authenticatedUserRole)) {
+        // Authorization check: Only reporter, support associate, admin, super_admin, or site_admin can view
+        if (ticketData.reporter_id !== authenticatedUid && !['support', 'admin', 'super_admin', 'site_admin'].includes(authenticatedUserRole)) {
             return res.status(403).json({ error: 'Forbidden: You do not have permission to view this ticket.' });
         }
 
@@ -1384,7 +1384,7 @@ app.get('/ticket/:ticket_id', verifyFirebaseToken, async (req, res) => {
 // // @desc    Export all tickets (including cancelled/resolved) to CSV based on duration.
 // @access  Private (requires support, admin, or super_admin role)
 // MODIFIED: Use checkRole middleware
-app.get('/tickets/export', verifyFirebaseToken, checkRole(['support', 'admin', 'super_admin']), async (req, res) => {
+app.get('/tickets/export', verifyFirebaseToken, checkRole(['support', 'admin', 'super_admin', 'site_admin']), async (req, res) => {
     const { start_date, end_date, status } = req.query; // <-- Add status here
 
     try {

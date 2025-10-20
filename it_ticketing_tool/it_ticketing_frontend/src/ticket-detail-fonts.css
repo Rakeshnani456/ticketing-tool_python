@@ -3,10 +3,14 @@
 
 .ticket-detail-container {
     font-size: 110% !important;
+    color: #4a5568 !important; /* Softer gray instead of black */
+    font-weight: 400 !important; /* Normal weight instead of bold */
 }
 
 .ticket-detail-container * {
     font-size: inherit;
+    color: inherit;
+    font-weight: inherit;
 }
 
 /* Specific font size adjustments for ticket detail components */
@@ -147,4 +151,158 @@
         font-size: 0.963rem !important; /* Increased by 10% */
         line-height: 1.375rem !important;
     }
+}
+
+/* Override scrollbar styles for comments container - must be more specific */
+.ticket-detail-container #comments-container::-webkit-scrollbar {
+    width: 12px !important;
+    height: 12px !important;
+    background-color: transparent !important;
+    display: block !important;
+}
+
+.ticket-detail-container #comments-container::-webkit-scrollbar-track {
+    background: #f1f5f9 !important;
+    border-radius: 4px !important;
+}
+
+.ticket-detail-container #comments-container::-webkit-scrollbar-thumb {
+    background: #cbd5e1 !important;
+    border-radius: 4px !important;
+}
+
+.ticket-detail-container #comments-container::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8 !important;
+}
+
+.ticket-detail-container #comments-container::-webkit-scrollbar-button {
+    display: none !important;
+}
+
+.ticket-detail-container #comments-container::-webkit-scrollbar-corner {
+    background: transparent !important;
+}
+
+/* Color variation for different text elements */
+.ticket-detail-container h1,
+.ticket-detail-container h2,
+.ticket-detail-container h3,
+.ticket-detail-container h4,
+.ticket-detail-container h5,
+.ticket-detail-container h6 {
+    color: #374151 !important; /* Darker gray for headings to stand out */
+    font-weight: 500 !important; /* Medium weight instead of bold */
+}
+
+.ticket-detail-container p {
+    color: #4a5568 !important; /* Medium gray for paragraphs */
+    font-weight: 400 !important; /* Normal weight */
+}
+
+.ticket-detail-container span {
+    color: #6b7280 !important; /* Lighter gray for spans */
+    font-weight: 400 !important; /* Normal weight */
+}
+
+.ticket-detail-container div {
+    color: #4a5568 !important; /* Base gray for divs */
+    font-weight: 400 !important; /* Normal weight */
+}
+
+/* Specific color variations for different content types */
+.ticket-detail-container .text-black {
+    color: #374151 !important; /* Dark gray instead of black */
+}
+
+.ticket-detail-container .text-gray-800 {
+    color: #4a5568 !important; /* Medium gray */
+}
+
+.ticket-detail-container .text-gray-700 {
+    color: #6b7280 !important; /* Lighter gray */
+}
+
+.ticket-detail-container .text-gray-600 {
+    color: #9ca3af !important; /* Light gray */
+}
+
+.ticket-detail-container .text-gray-500 {
+    color: #d1d5db !important; /* Very light gray */
+}
+
+/* Font weight variations */
+.ticket-detail-container .font-semibold {
+    font-weight: 500 !important; /* Medium instead of semibold */
+}
+
+.ticket-detail-container .font-medium {
+    font-weight: 400 !important; /* Normal instead of medium */
+}
+
+.ticket-detail-container .font-bold {
+    font-weight: 500 !important; /* Medium instead of bold */
+}
+
+/* Additional color variations for ticket details */
+.ticket-detail-container .ticket-subject {
+    color: #1e40af !important; /* Blue for ticket subject */
+    font-weight: 500 !important;
+}
+
+.ticket-detail-container .ticket-requester {
+    color: #7c3aed !important; /* Purple for requester */
+    font-weight: 500 !important;
+}
+
+.ticket-detail-container .ticket-email {
+    color: #0891b2 !important; /* Cyan for email */
+    font-weight: 400 !important;
+}
+
+.ticket-detail-container .ticket-phone {
+    color: #ea580c !important; /* Orange for phone */
+    font-weight: 400 !important;
+}
+
+.ticket-detail-container .ticket-location {
+    color: #0d9488 !important; /* Teal for location */
+    font-weight: 400 !important;
+}
+
+.ticket-detail-container .ticket-urgency {
+    color: #dc2626 !important; /* Red for urgency */
+    font-weight: 500 !important;
+}
+
+.ticket-detail-container .ticket-impact {
+    color: #be185d !important; /* Pink for impact */
+    font-weight: 500 !important;
+}
+
+.ticket-detail-container .ticket-source {
+    color: #059669 !important; /* Green for source */
+    font-weight: 400 !important;
+}
+
+.ticket-detail-container .ticket-type {
+    color: #1e40af !important; /* Blue for ticket type */
+    font-weight: 500 !important;
+}
+
+.ticket-detail-container .ticket-subtype {
+    color: #6b7280 !important; /* Gray for subtype */
+    font-weight: 400 !important;
+}
+
+/* Fix edit button text color specifically */
+.ticket-detail-container .ticket-progress-section button {
+    color: inherit !important; /* Preserve original button colors */
+}
+
+.ticket-detail-container .ticket-progress-section button.text-white {
+    color: #ffffff !important; /* Force white text for edit button */
+}
+
+.ticket-detail-container .ticket-progress-section button.text-gray-600 {
+    color: #4b5563 !important; /* Force proper gray for cancel button */
 }

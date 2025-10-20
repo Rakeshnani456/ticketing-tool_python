@@ -1,0 +1,727 @@
+// src/components/common/UpdatesComponent.js
+import React, { useState, useEffect, useMemo } from 'react';
+import { 
+  Bell, 
+  CheckCircle, 
+  AlertCircle, 
+  Info, 
+  Clock, 
+  User, 
+  FileText, 
+  TrendingUp, 
+  Users, 
+  Activity,
+  ExternalLink,
+  Filter,
+  RefreshCw,
+  Eye,
+  EyeOff,
+  MoreHorizontal,
+  Calendar,
+  Tag,
+  MessageSquare,
+  Zap,
+  Shield,
+  Star
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import CustomDropdown from './CustomDropdown';
+import { collection, query, where, orderBy, limit, onSnapshot } from 'firebase/firestore';
+import { dbClient } from '../../config/firebase';
+
+const UpdatesComponent = ({ 
+  user, 
+  activities = [], 
+  tickets = [], 
+  darkMode = false,
+  onNavigateTo,
+  onMarkAsRead,
+  onMarkAsUnread,
+  readStates = { activities: new Set(), tickets: new Set() },
+  showRead = true
+}) => {
+  const [filterType, setFilterType] = useState('all');
+  const [sortBy, setSortBy] = useState('recent');
+  const [expandedItems, setExpandedItems] = useState(new Set());
+  const [isLoading, setIsLoading] = useState(false);
+  const [realTimeActivities, setRealTimeActivities] = useState([]);
+  const [realTimeTickets, setRealTimeTickets] = useState([]);
+
+  // Real-time activity listener
+  useEffect(() => {
+    if (!user?.uid || !dbClient) return;
+
+    console.log('🔄 Setting up real-time activities listener for UpdatesComponent');
+    
+    let activitiesQuery;
+    try {
+      // Create query for recent activities
+      activitiesQuery = query(
+        collection(dbClient, 'activities'),
+        orderBy('timestamp', 'desc'),
+        limit(20)
+      );
+    } catch (error) {
+      console.error('Error creating activities query:', error);
+      return;
+    }
+
+    const unsubscribe = onSnapshot(
+      activitiesQuery,
+      (snapshot) => {
+        const newActivities = [];
+        snapshot.forEach((doc) => {
+          const activity = { id: doc.id, ...doc.data() };
+          newActivities.push(activity);
+        });
+        
+        console.log('🔄 Real-time activities update received:', newActivities.length, 'activities');
+        setRealTimeActivities(newActivities);
+      },
+      (error) => {
+        console.error('Error in real-time activities listener:', error);
+      }
+    );
+
+    return () => {
+      console.log('🔄 Cleaning up real-time activities listener');
+      unsubscribe();
+    };
+  }, [user?.uid]);
+
+  // Real-time tickets listener for recent tickets
+  useEffect(() => {
+    if (!user?.uid || !dbClient) return;
+
+    console.log('🔄 Setting up real-time tickets listener for UpdatesComponent');
+    
+    let ticketsQuery;
+    try {
+      // Create query for recent tickets (last 2 days, open/in progress)
+      const twoDaysAgo = new Date();
+      twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
+      
+      ticketsQuery = query(
+        collection(dbClient, 'tickets'),
+        where('created_at', '>=', twoDaysAgo),
+        where('status', 'in', ['Open', 'In Progress']),
+        orderBy('created_at', 'desc'),
+        limit(10)
+      );
+    } catch (error) {
+      console.error('Error creating tickets query:', error);
+      return;
+    }
+
+    const unsubscribe = onSnapshot(
+      ticketsQuery,
+      (snapshot) => {
+        const newTickets = [];
+        snapshot.forEach((doc) => {
+          const ticket = { id: doc.id, ...doc.data() };
+          newTickets.push(ticket);
+        });
+        
+        console.log('🔄 Real-time tickets update received:', newTickets.length, 'tickets');
+        setRealTimeTickets(newTickets);
+      },
+      (error) => {
+        console.error('Error in real-time tickets listener:', error);
+      }
+    );
+
+    return () => {
+      console.log('🔄 Cleaning up real-time tickets listener');
+      unsubscribe();
+    };
+  }, [user?.uid]);
+
+  // Memoized update processing
+  const processedUpdates = useMemo(() => {
+    const updates = [];
+
+    // Use real-time data if available, otherwise fall back to props
+    const currentActivities = realTimeActivities.length > 0 ? realTimeActivities : activities;
+    const currentTickets = realTimeTickets.length > 0 ? realTimeTickets : tickets;
+
+    // Process activities as updates
+    currentActivities.forEach(activity => {
+      const update = {
+        id: `activity-${activity.id}`,
+        type: 'activity',
+        category: getActivityCategory(activity.type),
+        priority: getActivityPriority(activity.type),
+        title: getActivityTitle(activity),
+        description: getActivityDescription(activity),
+        timestamp: activity.timestamp,
+        user: activity.user_name || activity.user_email || 'System',
+        ticketId: activity.ticket_id || activity.ticketId,
+        ticketDisplayId: activity.ticket_display_id || activity.display_id,
+        ticketTitle: activity.ticket_title,
+        status: activity.new_status || activity.status,
+        isRead: readStates.activities.has(activity.id),
+        icon: getActivityIcon(activity.type),
+        color: getActivityColor(activity.type),
+        metadata: getActivityMetadata(activity)
+      };
+      updates.push(update);
+    });
+
+    // Process tickets as updates
+    currentTickets.forEach(ticket => {
+      const update = {
+        id: `ticket-${ticket.id}`,
+        type: 'ticket',
+        category: 'ticket',
+        priority: ticket.priority || 'Medium',
+        title: `Ticket ${ticket.display_id || ticket.ticket_id || ticket.id}`,
+        description: ticket.short_description || ticket.subject || ticket.title || 'No description',
+        timestamp: ticket.created_at || ticket.updated_at,
+        user: ticket.reporter_name || ticket.reporter || ticket.user_name || 'Unknown',
+        ticketId: ticket.id,
+        ticketDisplayId: ticket.display_id,
+        ticketTitle: ticket.title || ticket.subject,
+        status: ticket.status,
+        isRead: readStates.tickets.has(ticket.id),
+        icon: getTicketIcon(ticket.status),
+        color: getTicketColor(ticket.status),
+        metadata: {
+          priority: ticket.priority,
+          status: ticket.status,
+          client: ticket.client_name || ticket.companyName
+        }
+      };
+      updates.push(update);
+    });
+
+    return updates.sort((a, b) => {
+      if (sortBy === 'recent') {
+        return new Date(b.timestamp) - new Date(a.timestamp);
+      } else if (sortBy === 'priority') {
+        const priorityOrder = { 'Critical': 4, 'High': 3, 'Medium': 2, 'Low': 1 };
+        return (priorityOrder[b.priority] || 0) - (priorityOrder[a.priority] || 0);
+      }
+      return 0;
+    });
+  }, [realTimeActivities, realTimeTickets, activities, tickets, readStates, sortBy]);
+
+  // Filter updates based on selected filter
+  const filteredUpdates = useMemo(() => {
+    if (filterType === 'all') return processedUpdates;
+    if (filterType === 'unread') return processedUpdates.filter(update => !update.isRead);
+    if (filterType === 'tickets') return processedUpdates.filter(update => update.type === 'ticket');
+    if (filterType === 'activities') return processedUpdates.filter(update => update.type === 'activity');
+    return processedUpdates;
+  }, [processedUpdates, filterType]);
+
+  // Show only unread if showRead is false
+  const displayUpdates = useMemo(() => {
+    if (!showRead) {
+      return filteredUpdates.filter(update => !update.isRead);
+    }
+    return filteredUpdates;
+  }, [filteredUpdates, showRead]);
+
+  // Helper functions
+  function getActivityCategory(type) {
+    const categories = {
+      'status_change': 'Status Update',
+      'assignment': 'Assignment',
+      'comment': 'Comment',
+      'resolved': 'Resolution',
+      'attachment': 'Attachment',
+      'created': 'Creation',
+      'priority_change': 'Priority Update',
+      'cancelled': 'Cancellation'
+    };
+    return categories[type] || 'Activity';
+  }
+
+  function getActivityPriority(type) {
+    const priorities = {
+      'status_change': 'High',
+      'assignment': 'Medium',
+      'comment': 'Low',
+      'resolved': 'High',
+      'attachment': 'Low',
+      'created': 'High',
+      'priority_change': 'Medium',
+      'cancelled': 'High'
+    };
+    return priorities[type] || 'Medium';
+  }
+
+  function getActivityTitle(activity) {
+    switch (activity.type) {
+      case 'status_change':
+        return 'Status Update';
+      case 'assignment':
+        return `Assigned to ${activity.assigned_to || activity.assigned_to_name || activity.engineer_name || 'Unknown'}`;
+      case 'comment':
+        return 'New comment added';
+      case 'resolved':
+        return 'Ticket resolved';
+      case 'attachment':
+        return `File attached: ${activity.filename || 'Unknown file'}`;
+      case 'created':
+        return 'New ticket created';
+      case 'priority_change':
+        return 'Priority Update';
+      case 'cancelled':
+        return 'Ticket cancelled';
+      default:
+        return 'Activity update';
+    }
+  }
+
+  function getActivityDescription(activity) {
+    if (activity.type === 'comment' && activity.comment_text) {
+      return activity.comment_text;
+    }
+    if (activity.type === 'attachment') {
+      return `File: ${activity.filename} (${activity.file_size ? `${(activity.file_size / 1024).toFixed(1)} KB` : 'Unknown size'})`;
+    }
+    if (activity.type === 'resolved' && activity.resolution_time) {
+      return `Resolved in ${Math.round(activity.resolution_time)} minutes`;
+    }
+    return activity.description || 'No additional details';
+  }
+
+  function getActivityIcon(type) {
+    const icons = {
+      'status_change': AlertCircle,
+      'assignment': Users,
+      'comment': MessageSquare,
+      'resolved': CheckCircle,
+      'attachment': FileText,
+      'created': Zap,
+      'priority_change': TrendingUp,
+      'cancelled': AlertCircle
+    };
+    return icons[type] || Activity;
+  }
+
+  function getActivityColor(type) {
+    const colors = {
+      'status_change': 'text-blue-600',
+      'assignment': 'text-purple-600',
+      'comment': 'text-gray-600',
+      'resolved': 'text-green-600',
+      'attachment': 'text-violet-600',
+      'created': 'text-emerald-600',
+      'priority_change': 'text-orange-600',
+      'cancelled': 'text-red-600'
+    };
+    return colors[type] || 'text-gray-600';
+  }
+
+  function getActivityMetadata(activity) {
+    const metadata = {};
+    if (activity.old_status && activity.new_status) {
+      metadata.statusChange = { from: activity.old_status, to: activity.new_status };
+    }
+    if (activity.old_priority && activity.new_priority) {
+      metadata.priorityChange = { from: activity.old_priority, to: activity.new_priority };
+    }
+    if (activity.assigned_to) {
+      metadata.assignedTo = activity.assigned_to;
+    }
+    if (activity.resolution_time) {
+      metadata.resolutionTime = Math.round(activity.resolution_time);
+    }
+    return metadata;
+  }
+
+  function getTicketIcon(status) {
+    const icons = {
+      'Open': AlertCircle,
+      'In Progress': Clock,
+      'Resolved': CheckCircle,
+      'Hold': Clock,
+      'Cancelled': AlertCircle
+    };
+    return icons[status] || FileText;
+  }
+
+  function getTicketColor(status) {
+    const colors = {
+      'Open': 'text-orange-600',
+      'In Progress': 'text-blue-600',
+      'Resolved': 'text-green-600',
+      'Hold': 'text-yellow-600',
+      'Cancelled': 'text-red-600'
+    };
+    return colors[status] || 'text-gray-600';
+  }
+
+  function formatTimestamp(timestamp) {
+    if (!timestamp) return 'Unknown time';
+    
+    let safeTimestamp = timestamp;
+    if (timestamp && typeof timestamp === 'object' && timestamp.toDate) {
+      safeTimestamp = timestamp.toDate();
+    } else if (typeof timestamp === 'string') {
+      safeTimestamp = new Date(timestamp);
+    } else if (typeof timestamp === 'number') {
+      safeTimestamp = new Date(timestamp);
+    }
+
+    if (isNaN(safeTimestamp.getTime())) return 'Invalid date';
+
+    const now = new Date();
+    const diffInMinutes = Math.floor((now - safeTimestamp) / (1000 * 60));
+    
+    if (diffInMinutes < 1) return 'Just now';
+    if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
+    if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}h ago`;
+    return `${Math.floor(diffInMinutes / 1440)}d ago`;
+  }
+
+  function formatAbsoluteTime(timestamp) {
+    if (!timestamp) return 'Unknown time';
+    
+    let safeTimestamp = timestamp;
+    if (timestamp && typeof timestamp === 'object' && timestamp.toDate) {
+      safeTimestamp = timestamp.toDate();
+    } else if (typeof timestamp === 'string') {
+      safeTimestamp = new Date(timestamp);
+    } else if (typeof timestamp === 'number') {
+      safeTimestamp = new Date(timestamp);
+    }
+
+    if (isNaN(safeTimestamp.getTime())) return 'Invalid date';
+
+    return `${safeTimestamp.getDate().toString().padStart(2, '0')}-${safeTimestamp.toLocaleDateString('en-US', { month: 'short' })}-${safeTimestamp.getFullYear()}`;
+  }
+
+  function getPriorityColor(priority) {
+    const colors = {
+      'Critical': 'bg-red-100 text-red-800 border-red-200',
+      'High': 'bg-orange-100 text-orange-800 border-orange-200',
+      'Medium': 'bg-yellow-100 text-yellow-800 border-yellow-200',
+      'Low': 'bg-green-100 text-green-800 border-green-200'
+    };
+    return colors[priority] || 'bg-gray-100 text-gray-800 border-gray-200';
+  }
+
+  function getStatusColor(status) {
+    const colors = {
+      'Open': 'bg-orange-100 text-orange-800 border-orange-200',
+      'In Progress': 'bg-blue-100 text-blue-800 border-blue-200',
+      'Resolved': 'bg-green-100 text-green-800 border-green-200',
+      'Hold': 'bg-yellow-100 text-yellow-800 border-yellow-200',
+      'Cancelled': 'bg-red-100 text-red-800 border-red-200'
+    };
+    return colors[status] || 'bg-gray-100 text-gray-800 border-gray-200';
+  }
+
+  function toggleExpanded(id) {
+    const newExpanded = new Set(expandedItems);
+    if (newExpanded.has(id)) {
+      newExpanded.delete(id);
+    } else {
+      newExpanded.add(id);
+    }
+    setExpandedItems(newExpanded);
+  }
+
+  function handleMarkAsRead(update) {
+    if (onMarkAsRead) {
+      onMarkAsRead(update);
+    }
+  }
+
+  function handleMarkAsUnread(update) {
+    if (onMarkAsUnread) {
+      onMarkAsUnread(update);
+    }
+  }
+
+  function handleNavigateToTicket(ticketId) {
+    if (onNavigateTo && ticketId) {
+      onNavigateTo(`/tickets/${ticketId}`);
+    }
+  }
+
+  const bgClass = darkMode ? 'bg-gray-900' : 'bg-white';
+  const cardClass = darkMode ? 'bg-gray-800/70 border-gray-400' : 'bg-white border-gray-300';
+  const textClass = darkMode ? 'text-white' : 'text-gray-900';
+
+  return (
+    <div className={`rounded-lg border ${cardClass} shadow-sm overflow-hidden`} style={{ fontFamily: 'Arial, sans-serif' }}>
+      {/* Header */}
+      <div className="px-4 py-3 border-b border-gray-200">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <h2 className="text-lg font-semibold text-gray-700">
+              Updates
+            </h2>
+            <div className="flex items-center gap-3 text-sm text-gray-600">
+              <span className="flex items-center gap-1">
+                <span className="font-medium">{displayUpdates.length}</span>
+                <span>total</span>
+              </span>
+              <span className="flex items-center gap-1">
+                <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                <span className="font-medium text-blue-600">{displayUpdates.filter(u => !u.isRead).length}</span>
+                <span>unread</span>
+              </span>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            {/* Filter Dropdown */}
+            <CustomDropdown
+              value={filterType}
+              onChange={setFilterType}
+              options={[
+                { value: "all", label: "All Updates" },
+                { value: "unread", label: "Unread Only" },
+                { value: "tickets", label: "Tickets" },
+                { value: "activities", label: "Activities" }
+              ]}
+              className="min-w-[140px]"
+              size="sm"
+            />
+
+            {/* Sort Dropdown */}
+            <CustomDropdown
+              value={sortBy}
+              onChange={setSortBy}
+              options={[
+                { value: "recent", label: "Most Recent" },
+                { value: "priority", label: "Priority" }
+              ]}
+              className="min-w-[120px]"
+              size="sm"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Updates List */}
+      <div className="max-h-[32rem] overflow-y-auto">
+        <AnimatePresence>
+          {displayUpdates.length > 0 ? (
+            displayUpdates.map((update, index) => {
+              const IconComponent = update.icon;
+              const isExpanded = expandedItems.has(update.id);
+              
+              return (
+                <motion.div
+                  key={update.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ duration: 0.2, delay: index * 0.05 }}
+                  className={`border-b border-gray-200 last:border-b-0 ${
+                    !update.isRead ? 'bg-blue-50/50' : ''
+                  }`}
+                >
+                  <div className={`px-4 py-3 hover:bg-gray-50 transition-all duration-200 group border-l-4 ${
+                    !update.isRead ? 'border-l-blue-500 bg-blue-50/30' : 'border-l-transparent'
+                  }`}>
+                    <div className="grid grid-cols-12 gap-3 items-start">
+                      {/* Left Column - Icon and Main Info */}
+                      <div className="col-span-1 flex flex-col items-center">
+                        <div className={`p-2 rounded-lg ${update.color.replace('text-', 'bg-').replace('-600', '-100')} shadow-sm`}>
+                          <IconComponent className={`w-4 h-4 ${update.color}`} />
+                        </div>
+                        {!update.isRead && (
+                          <div className="mt-1 w-1.5 h-1.5 bg-blue-500 rounded-full"></div>
+                        )}
+                      </div>
+
+                      {/* Center Column - Content */}
+                      <div className="col-span-8 flex flex-col gap-2">
+                        {/* Header Row */}
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <h3 className="font-semibold text-gray-900 text-sm">
+                                {update.title}
+                              </h3>
+                              {update.ticketDisplayId && (
+                                <button
+                                  onClick={() => handleNavigateToTicket(update.ticketId)}
+                                  className="px-2 py-0.5 bg-blue-100 hover:bg-blue-200 text-blue-800 text-xs font-bold rounded transition-colors cursor-pointer"
+                                >
+                                  #{update.ticketDisplayId}
+                                </button>
+                              )}
+                            </div>
+                            <p className="text-gray-700 text-xs leading-relaxed line-clamp-3">
+                              {update.description}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Metadata Row */}
+                        <div className="flex items-center gap-4 text-xs text-gray-600">
+                          <div className="flex items-center gap-1">
+                            <User className="w-3 h-3" />
+                            <span className="font-medium">{update.user}</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            <span>{formatTimestamp(update.timestamp)}</span>
+                          </div>
+                          {update.ticketTitle && (
+                            <div className="flex items-center gap-1">
+                              <FileText className="w-3 h-3" />
+                              <span className="truncate max-w-32 font-medium" title={update.ticketTitle}>
+                                {update.ticketTitle}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Status Changes */}
+                        {update.metadata?.statusChange && (
+                          <div className="flex items-center gap-2 p-2 bg-gray-50 rounded text-xs">
+                            <span className="font-medium text-gray-700">Status:</span>
+                            <div className="flex items-center gap-1">
+                              <span className={`px-2 py-0.5 rounded text-xs font-medium border ${getStatusColor(update.metadata.statusChange.from)}`}>
+                                {update.metadata.statusChange.from}
+                              </span>
+                              <span className="text-gray-500">→</span>
+                              <span className={`px-2 py-0.5 rounded text-xs font-medium border ${getStatusColor(update.metadata.statusChange.to)}`}>
+                                {update.metadata.statusChange.to}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Priority Changes */}
+                        {update.metadata?.priorityChange && (
+                          <div className="flex items-center gap-2 p-2 bg-gray-50 rounded text-xs">
+                            <span className="font-medium text-gray-700">Priority:</span>
+                            <div className="flex items-center gap-1">
+                              <span className={`px-2 py-0.5 rounded text-xs font-medium border ${getPriorityColor(update.metadata.priorityChange.from)}`}>
+                                {update.metadata.priorityChange.from}
+                              </span>
+                              <span className="text-gray-500">→</span>
+                              <span className={`px-2 py-0.5 rounded text-xs font-medium border ${getPriorityColor(update.metadata.priorityChange.to)}`}>
+                                {update.metadata.priorityChange.to}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Resolution Time */}
+                        {update.metadata?.resolutionTime && (
+                          <div className="p-2 bg-green-50 rounded text-xs">
+                            <span className="font-medium text-green-800">
+                              ⚡ Resolved in {update.metadata.resolutionTime} minutes
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Right Column - Status, Priority */}
+                      <div className="col-span-3 flex flex-col items-end gap-1">
+                        {/* Top Row - Status and Priority badges */}
+                        <div className="flex items-center gap-1">
+                          <span className={`px-2 py-1 rounded text-xs font-medium bg-gray-100 ${getPriorityColor(update.priority).split(' ')[1]}`}>
+                            {update.priority}
+                          </span>
+                          {update.status && (
+                            <span className={`px-2 py-1 rounded text-xs font-medium bg-gray-100 ${getStatusColor(update.status).split(' ')[1]}`}>
+                              {update.status}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Middle Row - Read Status */}
+                        <div className="flex items-center gap-1">
+                          {!update.isRead ? (
+                            <div className="flex items-center gap-1 px-1.5 py-0.5 bg-blue-100 rounded text-xs">
+                              <div className="w-1 h-1 bg-blue-600 rounded-full"></div>
+                              <span className="font-medium text-blue-800">Unread</span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1 px-1.5 py-0.5 bg-gray-100 rounded text-xs">
+                              <div className="w-1 h-1 bg-gray-400 rounded-full"></div>
+                              <span className="font-medium text-gray-600">Read</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Bottom Row - Actions at bottom right */}
+                    <div className="flex justify-end gap-2 -mt-2">
+                      {update.ticketId && (
+                        <button
+                          onClick={() => handleNavigateToTicket(update.ticketId)}
+                          className="opacity-0 group-hover:opacity-100 flex items-center gap-1 bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded text-xs font-medium transition-all duration-200"
+                        >
+                          <ExternalLink className="w-3 h-3" />
+                          <span>View Ticket</span>
+                        </button>
+                      )}
+                      
+                      {!update.isRead ? (
+                        <button
+                          onClick={() => handleMarkAsRead(update)}
+                          className="opacity-0 group-hover:opacity-100 bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded text-xs font-medium transition-all duration-200"
+                        >
+                          Mark Read
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleMarkAsUnread(update)}
+                          className="opacity-0 group-hover:opacity-100 bg-gray-600 hover:bg-gray-700 text-white px-2 py-1 rounded text-xs font-medium transition-all duration-200"
+                        >
+                          <EyeOff className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </motion.div>
+              );
+            })
+          ) : (
+            <div className="p-12 text-center">
+              <div className="w-20 h-20 mx-auto mb-6 bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-700 rounded-full flex items-center justify-center shadow-lg">
+                <Bell className="w-10 h-10 text-gray-400" />
+              </div>
+              <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-3">
+                No updates found
+              </h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400 max-w-sm mx-auto">
+                {filterType === 'unread' 
+                  ? 'All updates have been read. Great job staying on top of things!'
+                  : 'No updates match your current filter. Try adjusting your filter settings.'
+                }
+              </p>
+            </div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      {/* Footer - Compact */}
+      {displayUpdates.length > 0 && (
+        <div className="px-4 py-2 border-t border-gray-200 bg-gray-50">
+          <div className="flex items-center justify-between text-xs text-gray-600">
+            <span>
+              {displayUpdates.length} of {processedUpdates.length} updates
+            </span>
+            <div className="flex items-center gap-2">
+              <span className="flex items-center gap-1">
+                <div className="w-1.5 h-1.5 bg-blue-500 rounded-full"></div>
+                <span>Unread</span>
+              </span>
+              <span className="flex items-center gap-1">
+                <div className="w-1.5 h-1.5 bg-gray-300 rounded-full"></div>
+                <span>Read</span>
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default UpdatesComponent;

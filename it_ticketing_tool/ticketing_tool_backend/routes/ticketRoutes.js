@@ -16,29 +16,208 @@ const {
     logPriorityChange
 } = require('../utils/activityLogger');
 
-module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCollection, transporter, verifyFirebaseToken, checkRole, jsonSerializableTicket, jsonSerializableNotification, generateDisplayId, sendEmailAlert) => {
+module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCollection, transporter, verifyFirebaseToken, checkRole, jsonSerializableTicket, jsonSerializableNotification, generateDisplayId, emailService) => {
 
     const validTicketCategories = ['software', 'hardware', 'troubleshoot'];
     const validTicketPriorities = ['Low', 'Medium', 'High', 'Critical'];
     const validTicketStatuses = ['Open', 'In Progress', 'Hold', 'Resolved', 'Cancelled'];
 
-    // --- Helper for generating a simple display ID (if not moved to a shared utility) ---
-    // Make sure generateDisplayId is accessible, either passed in or in a utility file
+    // Function to trigger analytics updates when tickets change
+    const triggerAnalyticsUpdate = async (action, ticketData) => {
+        try {
+            if (global.broadcastAnalyticsUpdate) {
+                // Trigger real-time analytics update
+                global.broadcastAnalyticsUpdate({
+                    type: 'ticket_update',
+                    action: action, // 'created', 'updated', 'deleted'
+                    data: ticketData,
+                    timestamp: new Date().toISOString()
+                });
+                console.log(`Analytics update triggered for ticket ${action}:`, ticketData.id || ticketData.display_id);
+            }
+        } catch (error) {
+            console.error('Error triggering analytics update:', error);
+        }
+    };
+
+    // --- Helper for generating a simple display ID using atomic counter ---
     async function generateDisplayIdInternal() {
-        const lastTicketQuery = await ticketsCollection.orderBy('created_at', 'desc').limit(1).get();
-        let nextIdNum = 1;
-        if (!lastTicketQuery.empty) {
-            const lastTicket = lastTicketQuery.docs[0].data();
-            const lastDisplayId = lastTicket.display_id;
-            if (lastDisplayId && lastDisplayId.startsWith('TT')) {
-                const numPart = parseInt(lastDisplayId.substring(2));
-                if (!isNaN(numPart)) {
-                    nextIdNum = numPart + 1;
+        try {
+            const counterRef = db.collection('counters').doc('ticket_display_id');
+            
+            // Use Firestore transaction to atomically increment the counter
+            const result = await db.runTransaction(async (transaction) => {
+                const counterDoc = await transaction.get(counterRef);
+                
+                let nextNumber = 1;
+                
+                if (counterDoc.exists) {
+                    const counterData = counterDoc.data();
+                    nextNumber = (counterData.count || 0) + 1;
+                    console.log('🔍 Current counter value:', counterData.count, 'Next will be:', nextNumber);
+                } else {
+                    console.log('🔍 Counter document does not exist, starting from 1');
                 }
+                
+                // Ensure we don't exceed 6 digits (max 999999)
+                if (nextNumber > 999999) {
+                    console.error('🔍 Display ID counter exceeded 999999, resetting to 1');
+                    nextNumber = 1;
+                }
+                
+                // Update the counter
+                transaction.set(counterRef, { 
+                    count: nextNumber,
+                    last_updated: admin.firestore.FieldValue.serverTimestamp()
+                }, { merge: true });
+                
+                return nextNumber;
+            });
+            
+            // Format as 6-digit number with leading zeros
+            const displayId = `TT${result.toString().padStart(6, '0')}`;
+            console.log('🎫 Generated sequential display ID:', displayId, 'from counter:', result);
+            return displayId;
+            
+        } catch (error) {
+            console.error('Error generating display ID with counter:', error);
+            
+            // Fallback: Get the highest existing display ID and increment
+            try {
+                const lastTicketQuery = await ticketsCollection
+                    .orderBy('display_id', 'desc')
+                    .limit(1)
+                    .get();
+                
+                let nextNumber = 1;
+                
+                if (!lastTicketQuery.empty) {
+                    const lastTicket = lastTicketQuery.docs[0].data();
+                    const lastDisplayId = lastTicket.display_id;
+                    console.log('🔍 Fallback - Last ticket display_id:', lastDisplayId);
+                    
+                    if (lastDisplayId && lastDisplayId.startsWith('TT')) {
+                        const numberPart = lastDisplayId.substring(2);
+                        const lastNumber = parseInt(numberPart, 10);
+                        if (!isNaN(lastNumber) && lastNumber > 0) {
+                            nextNumber = lastNumber + 1;
+                        }
+                    }
+                }
+                
+                // Ensure we don't exceed 6 digits
+                if (nextNumber > 999999) {
+                    nextNumber = 1;
+                }
+                
+                const displayId = `TT${nextNumber.toString().padStart(6, '0')}`;
+                console.log('🎫 Generated fallback display ID:', displayId);
+                return displayId;
+                
+            } catch (fallbackError) {
+                console.error('Fallback display ID generation failed:', fallbackError);
+                // Final fallback to timestamp
+                const timestamp = Date.now();
+                const fallbackNumber = parseInt(timestamp.toString().slice(-6), 10);
+                return `TT${fallbackNumber.toString().padStart(6, '0')}`;
             }
         }
-        return `TT${String(nextIdNum).padStart(6, '0')}`;
     }
+
+    // --- Helper to initialize counter from existing tickets ---
+    async function initializeCounterFromExistingTickets() {
+        try {
+            const counterRef = db.collection('counters').doc('ticket_display_id');
+            const counterDoc = await counterRef.get();
+            
+            if (counterDoc.exists) {
+                console.log('🔍 Counter already exists, no initialization needed');
+                return;
+            }
+            
+            console.log('🔍 Initializing counter from existing tickets...');
+            
+            // Get the highest existing display ID
+            const lastTicketQuery = await ticketsCollection
+                .orderBy('display_id', 'desc')
+                .limit(1)
+                .get();
+            
+            let highestNumber = 0;
+            
+            if (!lastTicketQuery.empty) {
+                const lastTicket = lastTicketQuery.docs[0].data();
+                const lastDisplayId = lastTicket.display_id;
+                console.log('🔍 Highest existing display_id:', lastDisplayId);
+                
+                if (lastDisplayId && lastDisplayId.startsWith('TT')) {
+                    const numberPart = lastDisplayId.substring(2);
+                    const lastNumber = parseInt(numberPart, 10);
+                    if (!isNaN(lastNumber) && lastNumber > 0) {
+                        highestNumber = lastNumber;
+                    }
+                }
+            }
+            
+            // Set the counter to the highest existing number
+            await counterRef.set({
+                count: highestNumber,
+                initialized_at: admin.firestore.FieldValue.serverTimestamp(),
+                last_updated: admin.firestore.FieldValue.serverTimestamp()
+            });
+            
+            console.log('🔍 Counter initialized with value:', highestNumber);
+            
+        } catch (error) {
+            console.error('Error initializing counter:', error);
+        }
+    }
+
+    // --- Initialize counter on server start ---
+    initializeCounterFromExistingTickets();
+
+    // --- New Endpoint: Initialize Display ID Counter ---
+    router.post('/initialize-counter', verifyFirebaseToken, checkRole(['admin', 'super_admin']), async (req, res) => {
+        try {
+            await initializeCounterFromExistingTickets();
+            res.status(200).json({ 
+                message: 'Display ID counter initialized successfully',
+                success: true 
+            });
+        } catch (error) {
+            console.error('Error initializing counter:', error);
+            res.status(500).json({ 
+                error: 'Failed to initialize counter',
+                success: false 
+            });
+        }
+    });
+
+    // --- New Endpoint: Get Display ID Counter Status ---
+    router.get('/counter-status', verifyFirebaseToken, checkRole(['admin', 'super_admin']), async (req, res) => {
+        try {
+            const counterRef = db.collection('counters').doc('ticket_display_id');
+            const counterDoc = await counterRef.get();
+            
+            if (counterDoc.exists) {
+                const counterData = counterDoc.data();
+                res.status(200).json({
+                    exists: true,
+                    current_count: counterData.count || 0,
+                    last_updated: counterData.last_updated,
+                    initialized_at: counterData.initialized_at
+                });
+            } else {
+                res.status(200).json({
+                    exists: false,
+                    message: 'Counter not initialized'
+                });
+            }
+        } catch (error) {
+            console.error('Error getting counter status:', error);
+            res.status(500).json({ error: 'Failed to get counter status' });
+        }
+    });
 
     // --- New Endpoint: Get Ticket Summary Counts ---
     router.get('/summary-counts', verifyFirebaseToken, async (req, res) => {
@@ -46,18 +225,19 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
 
         try {
             let activeTicketsQuery = ticketsCollection.where('status', 'in', ['Open', 'In Progress', 'Hold']);
-            let assignedToMeTicketsQuery = ticketsCollection.where('assigned_to_id', '==', authenticatedUid);
+            // Changed: Count tickets created by the user instead of assigned to the user
+            let createdByMeTicketsQuery = ticketsCollection.where('reporter_id', '==', authenticatedUid);
             let totalTicketsQuery = ticketsCollection;
 
-            const [activeSnapshot, assignedSnapshot, totalSnapshot] = await Promise.all([
+            const [activeSnapshot, createdByMeSnapshot, totalSnapshot] = await Promise.all([
                 activeTicketsQuery.get(),
-                assignedToMeTicketsQuery.get(),
+                createdByMeTicketsQuery.get(),
                 totalTicketsQuery.get()
             ]);
 
             const counts = {
                 active_tickets: activeSnapshot.size,
-                assigned_to_me: assignedSnapshot.size,
+                assigned_to_me: createdByMeSnapshot.size, // This now represents tickets created by the user
                 total_tickets: totalSnapshot.size,
             };
 
@@ -96,8 +276,11 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
         }
     });
 
-    // --- New Route: Create a new ticket ---
+    // --- New Route: Create a new ticket (ULTRA-FAST) ---
     router.post('/', verifyFirebaseToken, async (req, res) => {
+        const startTime = Date.now();
+        console.log('🚀 Ticket creation started at:', new Date().toISOString());
+        
         const {
             request_for_email,
             category,
@@ -127,62 +310,23 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
         }
 
         try {
-            // Look up client_name for reporter_email and request_for_email
+            // OPTIMIZATION: Skip client_name lookup entirely for maximum speed
+            // This will be populated later via a background job if needed
             let clientName = null;
-            // Try reporter_email first
-            let userSnap = await usersCollection.where('email', '==', reporterEmail).limit(1).get();
-            if (!userSnap.empty) {
-                const userData = userSnap.docs[0].data();
-                clientName = userData.client_name || null;
-                console.log("Found user by reporter_email:", {
-                    email: reporterEmail,
-                    client_name: userData.client_name,
-                    companyName: userData.companyName,
-                    role: userData.role
-                });
-            } else {
-                // Try request_for_email
-                userSnap = await usersCollection.where('email', '==', request_for_email).limit(1).get();
-                if (!userSnap.empty) {
-                    const userData = userSnap.docs[0].data();
-                    clientName = userData.client_name || null;
-                    console.log("Found user by request_for_email:", {
-                        email: request_for_email,
-                        client_name: userData.client_name,
-                        companyName: userData.companyName,
-                        role: userData.role
-                    });
-                } else {
-                    console.warn("No user found for either reporter_email or request_for_email:", {
-                        reporterEmail,
-                        request_for_email
-                    });
-                }
-            }
 
-            console.log("Final client_name for ticket:", clientName);
-
+            // OPTIMIZATION: Generate display ID sequentially
             const newDisplayId = await generateDisplayIdInternal();
 
-            // Get user data for storing name information
-            const userDoc = await usersCollection.doc(reporterId).get();
-            const userData = userDoc.exists ? userDoc.data() : {};
-            let reporterName = reporterEmail;
-            if (userData.firstName || userData.lastName) {
-                reporterName = `${userData.firstName || ''} ${userData.lastName || ''}`.trim();
-            } else if (userData.name) {
-                reporterName = userData.name;
-            } else if (userData.client_name) {
-                reporterName = userData.client_name;
-            }
+            // OPTIMIZATION: Use email as reporter name to avoid database lookup
+            const reporterName = reporterEmail;
 
             const newTicket = {
                 display_id: newDisplayId,
                 reporter_id: reporterId,
                 reporter_email: reporterEmail,
                 reporter_name: reporterName,
-                reporter_firstName: userData.firstName || null,
-                reporter_lastName: userData.lastName || null,
+                reporter_firstName: null,
+                reporter_lastName: null,
                 request_for_email: request_for_email,
                 category: category,
                 short_description: short_description,
@@ -194,7 +338,7 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                 created_at: admin.firestore.FieldValue.serverTimestamp(),
                 updated_at: admin.firestore.FieldValue.serverTimestamp(),
                 comments: [],
-                attachments: attachments,
+                attachments: attachments || [],
                 assigned_to_id: null,
                 assigned_to_email: null,
                 resolved_at: null,
@@ -202,77 +346,115 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                 closure_notes: null,
                 status_history: [],
                 assigned_to_history: [],
-                client_name: clientName,
+                notes: [], // Internal notes visible only to engineers/support
+                client_name: clientName || null,
             };
 
             const docRef = await ticketsCollection.add(newTicket);
+            const dbTime = Date.now();
+            console.log('📊 Database write completed in:', dbTime - startTime, 'ms');
 
-            // Log ticket creation activity with enhanced context
-            await logTicketCreated(db, docRef.id, reporterName, reporterEmail, { 
-                ...newTicket, 
-                ticket_display_id: newDisplayId,
-                client_name: clientName 
-            });
+            // OPTIMIZATION: Return response immediately, handle all non-essential operations asynchronously
+            const responseData = { 
+                message: 'Ticket created successfully!', 
+                id: docRef.id, 
+                display_id: newDisplayId,
+                ticket_id: docRef.id // Add ticket_id for frontend compatibility
+            };
 
-            const reporterUserRole = req.user.role;
-            if (reporterUserRole === 'user') {
-                await notificationsCollection.add({
-                    userId: reporterId,
-                    message: `Your ticket ${newDisplayId} - "${short_description}" has been created.`,
-                    type: 'ticket_created',
-                    read: false,
-                    timestamp: admin.firestore.FieldValue.serverTimestamp(),
-                    ticketId: docRef.id
-                });
-            }
+            // Send response immediately
+            res.status(201).json(responseData);
+            const responseTime = Date.now();
+            console.log('⚡ Response sent in:', responseTime - startTime, 'ms');
 
-            // Prepare email content before setImmediate
-            const emailSubject = `🔔 New IT Support Ticket Logged – ${newDisplayId}: ${short_description}`;
-            const emailText = `Dear Team,\n\nA new IT support request has been logged in the Kriasol Helpdesk. Please review the details below and take appropriate action as needed.\n\nTicket ID: ${newDisplayId}\nIssue Summary: ${short_description}\nCategory: ${category}\nPriority: ${priority || 'Low'}\nRequested For: ${request_for_email}\nRequested By: ${reporterEmail}\nContact Number: ${contact_number}\n\nAccess the Kriasol Helpdesk to view, assign, or update the ticket.\n\nThank you for your prompt attention.\n\nBest regards,\nIT Service Desk\nKriasol Technologies`;
-            const baseUrl = getBaseUrl(req);
-            const ticketLink = `${baseUrl}/tickets/${docRef.id}`;
-            const emailHtml = `
-                <div style=\"font-family: Arial, sans-serif; color: #222;\">
-                    <p>Dear Team,</p>
-                    <p>A new IT support request has been logged in the <strong>Kriasol Helpdesk</strong>. Please review the details below and take appropriate action as needed.</p>
-                    <div style=\"margin: 18px 0 10px 0; font-size: 1.1em;\">📌 <strong>Ticket Information</strong></div>
-                    <table style=\"border-collapse: collapse; margin: 10px 0 18px 0;\">
-                        <tr><td style=\"padding: 4px 8px; font-weight: bold;\">Ticket ID:</td><td style=\"padding: 4px 8px;\"><a href=\"${ticketLink}\" style=\"color: #2563eb; text-decoration: underline; font-weight: bold;\" target=\"_blank\">${newDisplayId}</a></td></tr>
-                        <tr><td style=\"padding: 4px 8px; font-weight: bold;\">Issue Summary:</td><td style=\"padding: 4px 8px;\">${short_description}</td></tr>
-                        <tr><td style=\"padding: 4px 8px; font-weight: bold;\">Category:</td><td style=\"padding: 4px 8px;\">${category}</td></tr>
-                        <tr><td style=\"padding: 4px 8px; font-weight: bold;\">Priority:</td><td style=\"padding: 4px 8px;\">${priority || 'Low'}</td></tr>
-                        <tr><td style=\"padding: 4px 8px; font-weight: bold;\">Requested For:</td><td style=\"padding: 4px 8px;\">${request_for_email}</td></tr>
-                        <tr><td style=\"padding: 4px 8px; font-weight: bold;\">Requested By:</td><td style=\"padding: 4px 8px;\">${reporterEmail}</td></tr>
-                        <tr><td style=\"padding: 4px 8px; font-weight: bold;\">Contact Number:</td><td style=\"padding: 4px 8px;\">${contact_number}</td></tr>
-                    </table>
-                    <div style=\"margin: 18px 0 10px 0;\">🔗 <a href=\"${ticketLink}\" style=\"color: #2563eb; text-decoration: underline; font-weight: bold;\" target=\"_blank\">Access the Kriasol Helpdesk to view, assign, or update the ticket.</a></div>
-                    <p>Thank you for your prompt attention.</p>
-                    <p style=\"margin-top: 24px;\">Best regards,<br/>IT Service Desk<br/>Kriasol Technologies</p>
-                </div>
-            `;
-            // Send email with proper To and CC fields
-            setImmediate(() => {
-                const toEmail = 'tt.support@kriasol.com';
-                let ccList = [];
-                
-                // Add requested by email and requested for email to CC (if they're different)
-                if (request_for_email && reporterEmail) {
-                    if (request_for_email === reporterEmail) {
-                        ccList.push(request_for_email);
-                    } else {
-                        ccList.push(request_for_email, reporterEmail);
+            // OPTIMIZATION: Handle all non-essential operations asynchronously after response
+            setImmediate(async () => {
+                try {
+                    // OPTIMIZATION: Populate client_name in background
+                    let resolvedClientName = null;
+                    try {
+                        if (reporterEmail !== request_for_email) {
+                            const [reporterSnap, requestSnap] = await Promise.all([
+                                usersCollection.where('email', '==', reporterEmail).limit(1).get(),
+                                usersCollection.where('email', '==', request_for_email).limit(1).get()
+                            ]);
+                            
+                            if (!reporterSnap.empty) {
+                                const userData = reporterSnap.docs[0].data();
+                                resolvedClientName = userData.client_name || null;
+                            } else if (!requestSnap.empty) {
+                                const userData = requestSnap.docs[0].data();
+                                resolvedClientName = userData.client_name || null;
+                            }
+                        } else {
+                            const reporterSnap = await usersCollection.where('email', '==', reporterEmail).limit(1).get();
+                            if (!reporterSnap.empty) {
+                                const userData = reporterSnap.docs[0].data();
+                                resolvedClientName = userData.client_name || null;
+                            }
+                        }
+                        
+                        // Update ticket with client_name if found
+                        if (resolvedClientName) {
+                            await ticketsCollection.doc(docRef.id).update({
+                                client_name: resolvedClientName
+                            });
+                        }
+                    } catch (lookupError) {
+                        console.warn("Background client lookup failed:", lookupError.message);
                     }
-                } else if (request_for_email) {
-                    ccList.push(request_for_email);
-                } else if (reporterEmail) {
-                    ccList.push(reporterEmail);
+
+                    // Log ticket creation activity (non-blocking)
+                    await logTicketCreated(db, docRef.id, reporterName, reporterEmail, { 
+                        ...newTicket, 
+                        ticket_display_id: newDisplayId,
+                        client_name: resolvedClientName || clientName 
+                    });
+
+                    // Add notification (non-blocking)
+                    const reporterUserRole = req.user.role;
+                    if (reporterUserRole === 'user') {
+                        await notificationsCollection.add({
+                            userId: reporterId,
+                            message: `Your ticket ${newDisplayId} - "${short_description}" has been created.`,
+                            type: 'ticket_created',
+                            read: false,
+                            timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                            ticketId: docRef.id
+                        });
+                    }
+
+                    // Trigger analytics update (non-blocking)
+                    await triggerAnalyticsUpdate('created', { ...newTicket, id: docRef.id });
+                } catch (error) {
+                    console.error('Error in post-creation tasks:', error);
                 }
-                
-                const ccEmail = ccList.length > 0 ? ccList.join(',') : null;
-                sendEmailAlert(toEmail, emailSubject, emailText, emailHtml, ccEmail);
             });
 
-            return res.status(201).json({ message: 'Ticket created successfully!', id: docRef.id, display_id: newDisplayId });
+            // OPTIMIZATION: Move email processing to the async setImmediate block
+            setImmediate(async () => {
+                try {
+                    // Send email notification (non-blocking)
+                    const baseUrl = getBaseUrl(req);
+                    const ticketUrl = `${baseUrl}/tickets/${docRef.id}`;
+                    
+                    const ticketData = {
+                        ticketId: newDisplayId,
+                        subject: short_description,
+                        description: long_description || short_description,
+                        priority: priority || 'Low',
+                        category: category,
+                        reporterName: reporterEmail,
+                        ticketUrl: ticketUrl,
+                        toEmail: 'process.env.DISTRIBUTION_EMAIL',
+                        ccEmail: request_for_email === reporterEmail ? request_for_email : `${request_for_email},${reporterEmail}`
+                    };
+                    
+                    await emailService.sendTicketNotificationEmail(ticketData);
+                } catch (error) {
+                    console.error('Error sending ticket notification email:', error);
+                }
+            });
         } catch (error) {
             console.error(`Error creating ticket: ${error.message}`);
             return res.status(500).json({ error: `Error creating ticket: ${error.message}` });
@@ -319,12 +501,28 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                 return res.status(403).json({ error: "Forbidden: Cannot update a resolved or cancelled ticket as a regular user." });
             }
 
-            // Only support users (engineers) can edit tickets
-            if (!['support'].includes(authenticatedUserRole)) {
-                return res.status(403).json({ error: "Forbidden: Only support users can edit tickets." });
+            // Check if user is either the ticket creator or has appropriate permissions
+            const isTicketCreator = ticketData.reporter_id === authenticatedUid;
+            const hasEditPermission = ['support', 'admin', 'super_admin', 'site_admin'].includes(authenticatedUserRole);
+            
+            if (!isTicketCreator && !hasEditPermission) {
+                return res.status(403).json({ error: "Forbidden: Only ticket creators and users with appropriate permissions can edit tickets." });
             }
 
-            // Since only support users can edit tickets, no additional permission checks needed for status/priority updates
+            // Additional permission checks for specific operations
+            // Only users with appropriate permissions can change status, priority, category, and assign tickets
+            if (status !== undefined || priority !== undefined || category !== undefined || assigned_to_email !== undefined) {
+                if (!hasEditPermission) {
+                    return res.status(403).json({ error: "Forbidden: Only users with appropriate permissions can change ticket status, priority, category, or assign tickets." });
+                }
+            }
+
+            // Only users with appropriate permissions can add closure notes and time spent
+            if (closure_notes !== undefined || time_spent !== undefined) {
+                if (!hasEditPermission) {
+                    return res.status(403).json({ error: "Forbidden: Only users with appropriate permissions can add closure notes or time spent." });
+                }
+            }
 
             const updateData = {
                 updated_at: admin.firestore.FieldValue.serverTimestamp()
@@ -364,7 +562,7 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                     userName = userData.client_name;
                 }
                 for (const attachment of attachments) {
-                    const filename = attachment.originalFilename || attachment.filename || 'Unknown file';
+                    const filename = attachment.originalFilename || attachment.fileName || attachment.filename || 'Unknown file';
                     const attachmentDetails = {
                         file_size: attachment.size || null,
                         file_type: attachment.mimetype || null,
@@ -373,6 +571,71 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                     };
                     await logAttachmentUploaded(db, ticketId, userName, filename, req.user.email, { ...attachmentDetails, ticket_display_id: ticketData.display_id });
                 }
+
+                // Send attachment upload notification emails
+                setImmediate(async () => {
+                    try {
+                        const baseUrl = getBaseUrl(req);
+                        const ticketUrl = `${baseUrl}/tickets/${ticketId}`;
+                        
+                        // Determine recipients based on who performed the action
+                        const isEngineerAction = ['support', 'admin', 'super_admin', 'site_admin'].includes(authenticatedUserRole);
+                        
+                        if (isEngineerAction) {
+                            // Engineer action: Notify ticket stakeholders
+                            let toList = [];
+                            if (ticketData.request_for_email && ticketData.reporter_email) {
+                                if (ticketData.request_for_email === ticketData.reporter_email) {
+                                    toList.push(ticketData.request_for_email);
+                                } else {
+                                    toList.push(ticketData.request_for_email, ticketData.reporter_email);
+                                }
+                            } else if (ticketData.request_for_email) {
+                                toList.push(ticketData.request_for_email);
+                            } else if (ticketData.reporter_email) {
+                                toList.push(ticketData.reporter_email);
+                            }
+                            
+                            let ccList = ['process.env.DISTRIBUTION_EMAIL'];
+                            // Add the engineer who uploaded the attachment
+                            ccList.push(req.user.email);
+                            if (ticketData.assigned_to_email) {
+                                ccList.push(ticketData.assigned_to_email);
+                            }
+                            
+                            // Send email for each attachment
+                            for (const attachment of attachments) {
+                                const filename = attachment.originalFilename || attachment.fileName || attachment.filename || 'Unknown file';
+                                const emailData = {
+                                    display_id: ticketData.display_id,
+                                    short_description: ticketData.short_description,
+                                    fileName: filename,
+                                    uploadedBy: userName,
+                                    ticketUrl: ticketUrl,
+                                    toEmail: toList.join(','),
+                                    ccEmail: ccList.join(',')
+                                };
+                                
+                                await emailService.sendAttachmentUploadEmail(emailData);
+                            }
+                        } else {
+                            // Non-engineer action: Notify support team
+                            const emailData = {
+                                display_id: ticketData.display_id,
+                                short_description: ticketData.short_description,
+                                fileName: attachments.map(att => att.originalFilename || att.fileName || att.filename || 'Unknown file').join(', '),
+                                uploadedBy: userName,
+                                ticketUrl: ticketUrl,
+                                toEmail: 'process.env.DISTRIBUTION_EMAIL',
+                                ccEmail: req.user.email
+                            };
+                            
+                            await emailService.sendAttachmentUploadEmail(emailData);
+                        }
+                    } catch (error) {
+                        console.error('Error sending attachment upload notification email:', error);
+                    }
+                });
             }
 
             // Status change logic
@@ -430,7 +693,7 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                 const isEngineerAction = ['support', 'admin', 'super_admin', 'site_admin'].includes(authenticatedUserRole);
                 
                 if (isEngineerAction) {
-                    // Engineer action: To = request_for_email/reporter_email, CC = tt.support@kriasol.com + assigned engineer
+                    // Engineer action: To = request_for_email/reporter_email, CC = process.env.DISTRIBUTION_EMAIL + assigned engineer
                     let toList = [];
                     if (requestForEmail && ticketReporterEmail) {
                         if (requestForEmail === ticketReporterEmail) {
@@ -444,18 +707,34 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                         toList.push(ticketReporterEmail);
                     }
                     
-                    let ccList = ['tt.support@kriasol.com'];
+                    let ccList = ['process.env.DISTRIBUTION_EMAIL'];
                     if (ticketData.assigned_to_email) {
                         ccList.push(ticketData.assigned_to_email);
                     }
                     
-                    setImmediate(() => {
-                        sendEmailAlert(toList.join(','), emailSubject, emailText, emailHtml, ccList.join(','));
+                    setImmediate(async () => {
+                        try {
+                            const baseUrl = getBaseUrl(req);
+                            const ticketUrl = `${baseUrl}/tickets/${ticketId}`;
+                            
+                            const emailData = {
+                                display_id: ticketData.display_id,
+                                short_description: ticketData.short_description,
+                                status: status,
+                                ticketUrl: ticketUrl,
+                                toEmail: toList.join(','),
+                                ccEmail: ccList.join(',')
+                            };
+                            
+                            await emailService.sendTicketStatusUpdateEmail(emailData);
+                        } catch (error) {
+                            console.error('Error sending ticket status update email:', error);
+                        }
                     });
                 } else {
-                    // Non-engineer action: To = tt.support@kriasol.com + users, CC = none
-                    setImmediate(() => {
-                        let toList = ['tt.support@kriasol.com'];
+                    // Non-engineer action: To = process.env.DISTRIBUTION_EMAIL + users, CC = none
+                    setImmediate(async () => {
+                        let toList = ['process.env.DISTRIBUTION_EMAIL'];
                         
                         // Add user emails to "To" field
                         if (requestForEmail && ticketReporterEmail) {
@@ -470,16 +749,25 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                             toList.push(ticketReporterEmail);
                         }
                         
-                        sendEmailAlert(toList.join(','), emailSubject, emailText, emailHtml);
+                        const baseUrl = getBaseUrl(req);
+                        const ticketUrl = `${baseUrl}/tickets/${ticketId}`;
+                        
+                        const emailData = {
+                            display_id: ticketData.display_id,
+                            short_description: ticketData.short_description,
+                            status: status,
+                            ticketUrl: ticketUrl,
+                            toEmail: toList.join(','),
+                            ccEmail: null
+                        };
+                        
+                        await emailService.sendTicketStatusUpdateEmail(emailData);
                     });
                 }
             }
 
             // Assignment logic - only process if assignment actually changed
             if (assigned_to_email !== undefined && assigned_to_email !== ticketData.assigned_to_email) {
-                if (!['support', 'admin'].includes(authenticatedUserRole)) {
-                    return res.status(403).json({ error: 'Forbidden: Only support associates or admins can assign tickets.' });
-                }
                 if (assigned_to_email === null || assigned_to_email === '') {
                     updateData.assigned_to_id = null;
                     updateData.assigned_to_email = null;
@@ -507,9 +795,25 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                     }
                     const assignedUserDoc = userQuery.docs[0];
                     const assignedUserData = assignedUserDoc.data();
-                    if (!['support', 'admin'].includes(assignedUserData.role)) {
-                        return res.status(400).json({ error: 'User cannot be assigned as they are not a support associate or admin.' });
+                    
+                    // Allow assignment based on user role
+                    let canAssign = false;
+                    if (authenticatedUserRole === 'site_admin') {
+                        // Site admin can assign to support, admin, and site_admin users
+                        canAssign = ['support', 'admin', 'site_admin'].includes(assignedUserData.role);
+                    } else {
+                        // Other users can assign to support, admin, and super_admin users
+                        canAssign = ['support', 'admin', 'super_admin'].includes(assignedUserData.role);
                     }
+                    
+                    if (!canAssign) {
+                        if (authenticatedUserRole === 'site_admin') {
+                            return res.status(400).json({ error: 'User cannot be assigned as they are not a support associate, admin, or site admin.' });
+                        } else {
+                            return res.status(400).json({ error: 'User cannot be assigned as they are not a support associate, admin, or super admin.' });
+                        }
+                    }
+                    
                     updateData.assigned_to_id = assignedUserDoc.id;
                     updateData.assigned_to_email = assigned_to_email;
 
@@ -569,7 +873,7 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                     const isEngineerAction = ['support', 'admin', 'super_admin', 'site_admin'].includes(authenticatedUserRole);
                     
                     if (isEngineerAction) {
-                        // Engineer action: To = request_for_email/reporter_email, CC = tt.support@kriasol.com + assigned engineer
+                        // Engineer action: To = request_for_email/reporter_email, CC = process.env.DISTRIBUTION_EMAIL + assigned engineer
                         let toList = [];
                         if (requestForEmail && reporterEmail) {
                             if (requestForEmail === reporterEmail) {
@@ -583,13 +887,29 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                             toList.push(reporterEmail);
                         }
                         
-                        let ccList = ['tt.support@kriasol.com'];
+                        let ccList = ['process.env.DISTRIBUTION_EMAIL'];
                         if (assignedEngineerEmail) {
                             ccList.push(assignedEngineerEmail);
                         }
                         
-                        setImmediate(() => {
-                            sendEmailAlert(toList.join(','), emailSubject, emailText, emailHtml, ccList.join(','));
+                        setImmediate(async () => {
+                            try {
+                                const baseUrl = getBaseUrl(req);
+                                const ticketUrl = `${baseUrl}/tickets/${ticketId}`;
+                                
+                                const emailData = {
+                                    display_id: ticketData.display_id,
+                                    short_description: ticketData.short_description,
+                                    assignedEngineerEmail: assignedEngineerEmail,
+                                    ticketUrl: ticketUrl,
+                                    toEmail: toList.join(','),
+                                    ccEmail: ccList.join(',')
+                                };
+                                
+                                await emailService.sendTicketAssignmentEmail(emailData, false); // false = team notification
+                            } catch (error) {
+                                console.error('Error sending ticket assignment email:', error);
+                            }
                         });
                     } else {
                         // Non-engineer action: To = reporter_email, request_for_email; CC = assigned engineer
@@ -597,8 +917,24 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                         if (reporterEmail) toList.push(reporterEmail);
                         if (requestForEmail && requestForEmail !== reporterEmail) toList.push(requestForEmail);
                         let ccList = assignedEngineerEmail;
-                        setImmediate(() => {
-                            sendEmailAlert(toList.join(','), emailSubject, emailText, emailHtml, ccList);
+                        setImmediate(async () => {
+                            try {
+                                const baseUrl = getBaseUrl(req);
+                                const ticketUrl = `${baseUrl}/tickets/${ticketId}`;
+                                
+                                const emailData = {
+                                    display_id: ticketData.display_id,
+                                    short_description: ticketData.short_description,
+                                    assignedEngineerEmail: assignedEngineerEmail,
+                                    ticketUrl: ticketUrl,
+                                    toEmail: toList.join(','),
+                                    ccEmail: ccList
+                                };
+                                
+                                await emailService.sendTicketAssignmentEmail(emailData, true); // true = user notification
+                            } catch (error) {
+                                console.error('Error sending ticket assignment email:', error);
+                            }
                         });
                     }
                 }
@@ -640,6 +976,10 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
             }
 
             await ticketsCollection.doc(ticketId).update(updateData);
+            
+            // Trigger analytics update for real-time reports
+            await triggerAnalyticsUpdate('updated', { ...ticketData, ...updateData, id: ticketId });
+            
             return res.status(200).json({ message: 'Ticket updated successfully!' });
         } catch (error) {
             console.error(`Error updating ticket: ${error.message}`);
@@ -706,6 +1046,9 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
             }
 
             await ticketsCollection.doc(ticketId).update(updateData);
+            
+            // Trigger analytics update for real-time reports
+            await triggerAnalyticsUpdate('updated', { ...ticketData, ...updateData, id: ticketId });
 
             // Log cancellation activity with enhanced context
             const userDoc = await usersCollection.doc(authenticatedUid).get();
@@ -753,8 +1096,8 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
             const baseUrl = getBaseUrl(req);
             const ticketLink = `${baseUrl}/tickets/${ticketId}`;
             const emailHtml = `<div style=\"font-family: Arial, sans-serif; color: #222;\"><p>Your ticket (<a href=\"${ticketLink}\" style=\"color: #2563eb; text-decoration: underline;\" target=\"_blank\"><strong>${ticketData.display_id}</strong></a> - ${ticketData.short_description}) has been cancelled.</p><p>Access the Ticketing Tool for more details.</p></div>`;
-            setImmediate(() => {
-                let toList = ['tt.support@kriasol.com'];
+            setImmediate(async () => {
+                let toList = ['process.env.DISTRIBUTION_EMAIL'];
                 
                 // Add user emails to "To" field
                 if (requestForEmail && ticketReporterEmail) {
@@ -765,11 +1108,22 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                     }
                 } else if (requestForEmail) {
                     toList.push(requestForEmail);
-                } else if (ticketReporterEmail) {
-                    toList.push(ticketReporterEmail);
-                }
-                
-                sendEmailAlert(toList.join(','), emailSubject, emailText, emailHtml);
+                                    } else if (ticketReporterEmail) {
+                        toList.push(ticketReporterEmail);
+                    }
+                    
+                    const baseUrl = getBaseUrl(req);
+                    const ticketUrl = `${baseUrl}/tickets/${ticketId}`;
+                    
+                    const emailData = {
+                        display_id: ticketData.display_id,
+                        short_description: ticketData.short_description,
+                        ticketUrl: ticketUrl,
+                        toEmail: toList.join(','),
+                        ccEmail: null
+                    };
+                    
+                    await emailService.sendTicketCancellationEmail(emailData);
             });
 
             return res.status(200).json({ message: 'Ticket cancelled successfully!', id: ticketId });
@@ -806,13 +1160,180 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                 timestamp: new Date()
             };
 
+            // Primary database operation - update ticket with comment
             await ticketsCollection.doc(ticketId).update({
                 comments: admin.firestore.FieldValue.arrayUnion(newComment),
                 updated_at: admin.firestore.FieldValue.serverTimestamp()
             });
             
-            // Log comment addition activity with enhanced context
-            const userDoc = await usersCollection.doc(req.user.uid).get();
+            // Return success immediately to user
+            res.status(200).json({ message: 'Comment added successfully!' });
+            
+            // Handle all background operations asynchronously
+            setImmediate(async () => {
+                try {
+                    // Trigger analytics update for real-time reports
+                    await triggerAnalyticsUpdate('updated', { ...ticketData, id: ticketId });
+                    
+                    // Log comment addition activity with enhanced context
+                    const userDoc = await usersCollection.doc(req.user.uid).get();
+                    const userData = userDoc.exists ? userDoc.data() : {};
+                    let userName = req.user.email;
+                    if (userData.firstName || userData.lastName) {
+                        userName = `${userData.firstName || ''} ${userData.lastName || ''}`.trim();
+                    } else if (userData.name) {
+                        userName = userData.name;
+                    } else if (userData.client_name) {
+                        userName = userData.client_name;
+                    }
+                    await logCommentAdded(db, ticketId, userName, req.user.email, comment_text, { ...ticketData, ticket_display_id: ticketData.display_id });
+
+                    // Add notifications asynchronously
+                    const notificationPromises = [];
+                    
+                    if (req.user.uid !== ticketData.reporter_id) {
+                        notificationPromises.push(
+                            notificationsCollection.add({
+                                userId: ticketData.reporter_id,
+                                message: `New comment on your ticket ${ticketData.display_id} by ${commenter_name}.`,
+                                type: 'new_comment_on_my_ticket',
+                                read: false,
+                                timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                                ticketId: ticketId
+                            })
+                        );
+                    }
+
+                    if (ticketData.assigned_to_id && req.user.uid !== ticketData.assigned_to_id) {
+                        notificationPromises.push(
+                            notificationsCollection.add({
+                                userId: ticketData.assigned_to_id,
+                                message: `New comment on assigned ticket ${ticketData.display_id} by ${commenter_name}.`,
+                                type: 'new_comment_on_assigned_ticket',
+                                read: false,
+                                timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                                ticketId: ticketId
+                            })
+                        );
+                    }
+                    
+                    // Execute all notifications in parallel
+                    await Promise.allSettled(notificationPromises);
+
+                    // Handle email sending in background
+                    const reporterEmail = ticketData.reporter_email;
+                    const requestForEmail = ticketData.request_for_email;
+                    const assignedToEmail = ticketData.assigned_to_email;
+                    const commenterEmail = commenter_name;
+                    const baseUrl = getBaseUrl(req);
+                    const ticketLink = `${baseUrl}/tickets/${ticketId}`;
+                    
+                    // Check if action is performed by engineer
+                    const isEngineerAction = ['support', 'admin', 'super_admin', 'site_admin'].includes(req.user.role);
+                    
+                    if (isEngineerAction) {
+                        // Engineer action: To = request_for_email/reporter_email, CC = process.env.DISTRIBUTION_EMAIL + assigned engineer
+                        let toList = [];
+                        if (requestForEmail && reporterEmail) {
+                            if (requestForEmail === reporterEmail) {
+                                toList.push(requestForEmail);
+                            } else {
+                                toList.push(requestForEmail, reporterEmail);
+                            }
+                        } else if (requestForEmail) {
+                            toList.push(requestForEmail);
+                        } else if (reporterEmail) {
+                            toList.push(reporterEmail);
+                        }
+                        
+                        let ccList = ['process.env.DISTRIBUTION_EMAIL'];
+                        if (assignedToEmail) {
+                            ccList.push(assignedToEmail);
+                        }
+                        
+                        emailService.sendTicketCommentEmail({
+                            toEmail: toList.join(','),
+                            ccEmail: ccList.join(','),
+                            display_id: ticketData.display_id,
+                            short_description: ticketData.short_description,
+                            comment_text: comment_text,
+                            commenterEmail: commenterEmail,
+                            ticketUrl: ticketLink
+                        });
+                    } else {
+                        // Non-engineer action: To = process.env.DISTRIBUTION_EMAIL + assigned engineer, CC = request_for_email/reporter_email
+                        let toList = ['process.env.DISTRIBUTION_EMAIL'];
+                        
+                        // Add assigned engineer to "To" field if ticket is assigned
+                        if (assignedToEmail) {
+                            toList.push(assignedToEmail);
+                        }
+                        
+                        let ccList = [];
+                        
+                        // Add requested by email and requested for email to CC (if they're different)
+                        if (requestForEmail && reporterEmail) {
+                            if (requestForEmail === reporterEmail) {
+                                ccList.push(requestForEmail);
+                            } else {
+                                ccList.push(requestForEmail, reporterEmail);
+                            }
+                        } else if (requestForEmail) {
+                            ccList.push(requestForEmail);
+                        } else if (reporterEmail) {
+                            ccList.push(reporterEmail);
+                        }
+                        
+                        const toEmail = toList.join(',');
+                        const ccEmail = ccList.length > 0 ? ccList.join(',') : null;
+                        emailService.sendTicketCommentEmail({
+                            toEmail: toEmail,
+                            ccEmail: ccEmail,
+                            display_id: ticketData.display_id,
+                            short_description: ticketData.short_description,
+                            comment_text: comment_text,
+                            commenterEmail: commenterEmail,
+                            ticketUrl: ticketLink
+                        });
+                    }
+                } catch (error) {
+                    console.error('Background comment processing error:', error);
+                }
+            });
+        } catch (error) {
+            console.error(`Error adding comment: ${error.message}`);
+            return res.status(500).json({ error: `Error adding comment: ${error.message}` });
+        }
+    });
+
+    // --- Add Note to Ticket (Engineer/Support only) ---
+    router.post('/:ticket_id/add_note', verifyFirebaseToken, checkRole(['support', 'admin', 'super_admin', 'site_admin']), async (req, res) => {
+        const ticketId = req.params.ticket_id;
+        const { note_text, note_type = 'internal' } = req.body;
+        const authenticatedUid = req.user.uid;
+        const authenticatedUserRole = req.user.role;
+
+        if (!note_text || note_text.trim() === '') {
+            return res.status(400).json({ error: 'Note text cannot be empty!' });
+        }
+
+        try {
+            const ticketDoc = await ticketsCollection.doc(ticketId).get();
+            if (!ticketDoc.exists) {
+                return res.status(404).json({ error: 'Ticket not found.' });
+            }
+
+            const ticketData = ticketDoc.data();
+
+            // For site admin users, check if they can access this ticket based on company
+            if (authenticatedUserRole === 'site_admin') {
+                if (req.user.client_name && ticketData.client_name !== req.user.client_name) {
+                    return res.status(403).json({ error: 'Forbidden: You do not have permission to add notes to tickets from other companies.' });
+                }
+            }
+
+            // Get user data for storing name information
+            const userDoc = await usersCollection.doc(authenticatedUid).get();
             const userData = userDoc.exists ? userDoc.data() : {};
             let userName = req.user.email;
             if (userData.firstName || userData.lastName) {
@@ -822,101 +1343,212 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
             } else if (userData.client_name) {
                 userName = userData.client_name;
             }
-            await logCommentAdded(db, ticketId, userName, req.user.email, comment_text, { ...ticketData, ticket_display_id: ticketData.display_id });
 
-            if (req.user.uid !== ticketData.reporter_id) {
-                await notificationsCollection.add({
-                    userId: ticketData.reporter_id,
-                    message: `New comment on your ticket ${ticketData.display_id} by ${commenter_name}.`,
-                    type: 'new_comment_on_my_ticket',
-                    read: false,
-                    timestamp: admin.firestore.FieldValue.serverTimestamp(),
-                    ticketId: ticketId
-                });
-            }
+            const newNote = {
+                text: note_text.trim(),
+                author: userName,
+                author_email: req.user.email,
+                author_id: authenticatedUid,
+                note_type: note_type, // 'internal', 'technical', 'escalation', etc.
+                timestamp: new Date(),
+                created_at: new Date()
+            };
 
-            if (ticketData.assigned_to_id && req.user.uid !== ticketData.assigned_to_id) {
-                await notificationsCollection.add({
-                    userId: ticketData.assigned_to_id,
-                    message: `New comment on assigned ticket ${ticketData.display_id} by ${commenter_name}.`,
-                    type: 'new_comment_on_assigned_ticket',
-                    read: false,
-                    timestamp: admin.firestore.FieldValue.serverTimestamp(),
-                    ticketId: ticketId
-                });
-            }
+            await ticketsCollection.doc(ticketId).update({
+                notes: admin.firestore.FieldValue.arrayUnion(newNote),
+                updated_at: admin.firestore.FieldValue.serverTimestamp()
+            });
 
-            const reporterEmail = ticketData.reporter_email;
-            const requestForEmail = ticketData.request_for_email;
-            const assignedToEmail = ticketData.assigned_to_email;
-            const commenterEmail = commenter_name;
-            const emailSubject = `New Comment on Ticket ${ticketData.display_id}`;
-            const emailText = `A new comment has been added to your ticket (${ticketData.display_id} - ${ticketData.short_description}):\n\n${comment_text}\n\nAccess the Ticketing Tool for more details.`;
-            const baseUrl = getBaseUrl(req);
-            const ticketLink = `${baseUrl}/tickets/${ticketId}`;
-            const emailHtml = `<div style=\"font-family: Arial, sans-serif; color: #222;\"><p>A new comment has been added to your ticket (<a href=\"${ticketLink}\" style=\"color: #2563eb; text-decoration: underline;\" target=\"_blank\"><strong>${ticketData.display_id}</strong></a> - ${ticketData.short_description}):</p><blockquote style=\"margin: 8px 0; padding-left: 12px; border-left: 2px solid #ccc;\">${comment_text}</blockquote><p>Access the Ticketing Tool for more details.</p></div>`;
-            
-            // Check if action is performed by engineer
-            const isEngineerAction = ['support', 'admin', 'super_admin', 'site_admin'].includes(req.user.role);
-            
-            if (isEngineerAction) {
-                // Engineer action: To = request_for_email/reporter_email, CC = tt.support@kriasol.com + assigned engineer
-                let toList = [];
-                if (requestForEmail && reporterEmail) {
-                    if (requestForEmail === reporterEmail) {
-                        toList.push(requestForEmail);
-                    } else {
-                        toList.push(requestForEmail, reporterEmail);
-                    }
-                } else if (requestForEmail) {
-                    toList.push(requestForEmail);
-                } else if (reporterEmail) {
-                    toList.push(reporterEmail);
+            // Log note addition activity
+            await logCommentAdded(db, ticketId, userName, req.user.email, `[INTERNAL NOTE] ${note_text}`, { 
+                ...ticketData, 
+                ticket_display_id: ticketData.display_id,
+                note_type: note_type 
+            });
+
+            // Trigger analytics update for real-time reports
+            await triggerAnalyticsUpdate('updated', { ...ticketData, id: ticketId });
+
+            return res.status(200).json({ 
+                message: 'Note added successfully!', 
+                note: {
+                    ...newNote,
+                    timestamp: newNote.created_at.toISOString()
                 }
-                
-                let ccList = ['tt.support@kriasol.com'];
-                if (assignedToEmail) {
-                    ccList.push(assignedToEmail);
-                }
-                
-                setImmediate(() => {
-                    sendEmailAlert(toList.join(','), emailSubject, emailText, emailHtml, ccList.join(','));
-                });
-            } else {
-                // Non-engineer action: To = tt.support@kriasol.com + assigned engineer, CC = request_for_email/reporter_email
-                setImmediate(() => {
-                    let toList = ['tt.support@kriasol.com'];
-                    
-                    // Add assigned engineer to "To" field if ticket is assigned
-                    if (assignedToEmail) {
-                        toList.push(assignedToEmail);
-                    }
-                    
-                    let ccList = [];
-                    
-                    // Add requested by email and requested for email to CC (if they're different)
-                    if (requestForEmail && reporterEmail) {
-                        if (requestForEmail === reporterEmail) {
-                            ccList.push(requestForEmail);
-                        } else {
-                            ccList.push(requestForEmail, reporterEmail);
-                        }
-                    } else if (requestForEmail) {
-                        ccList.push(requestForEmail);
-                    } else if (reporterEmail) {
-                        ccList.push(reporterEmail);
-                    }
-                    
-                    const toEmail = toList.join(',');
-                    const ccEmail = ccList.length > 0 ? ccList.join(',') : null;
-                    sendEmailAlert(toEmail, emailSubject, emailText, emailHtml, ccEmail);
-                });
-            }
-
-            return res.status(200).json({ message: 'Comment added successfully!' });
+            });
         } catch (error) {
-            console.error(`Error adding comment: ${error.message}`);
-            return res.status(500).json({ error: `Error adding comment: ${error.message}` });
+            console.error(`Error adding note: ${error.message}`);
+            return res.status(500).json({ error: `Error adding note: ${error.message}` });
+        }
+    });
+
+    // --- Update Note in Ticket (Engineer/Support only) ---
+    router.patch('/:ticket_id/notes/:note_index', verifyFirebaseToken, checkRole(['support', 'admin', 'super_admin', 'site_admin']), async (req, res) => {
+        const ticketId = req.params.ticket_id;
+        const noteIndex = parseInt(req.params.note_index);
+        const { note_text, note_type } = req.body;
+        const authenticatedUid = req.user.uid;
+        const authenticatedUserRole = req.user.role;
+
+        if (isNaN(noteIndex) || noteIndex < 0) {
+            return res.status(400).json({ error: 'Invalid note index!' });
+        }
+
+        if (!note_text || note_text.trim() === '') {
+            return res.status(400).json({ error: 'Note text cannot be empty!' });
+        }
+
+        try {
+            const ticketDoc = await ticketsCollection.doc(ticketId).get();
+            if (!ticketDoc.exists) {
+                return res.status(404).json({ error: 'Ticket not found.' });
+            }
+
+            const ticketData = ticketDoc.data();
+
+            // For site admin users, check if they can access this ticket based on company
+            if (authenticatedUserRole === 'site_admin') {
+                if (req.user.client_name && ticketData.client_name !== req.user.client_name) {
+                    return res.status(403).json({ error: 'Forbidden: You do not have permission to edit notes for tickets from other companies.' });
+                }
+            }
+
+            if (!ticketData.notes || !Array.isArray(ticketData.notes) || noteIndex >= ticketData.notes.length) {
+                return res.status(404).json({ error: 'Note not found!' });
+            }
+
+            const note = ticketData.notes[noteIndex];
+
+            // Only allow the note author or admin/super_admin to edit
+            if (note.author_id !== authenticatedUid && !['admin', 'super_admin'].includes(authenticatedUserRole)) {
+                return res.status(403).json({ error: 'Forbidden: You can only edit your own notes!' });
+            }
+
+            // Get user data for storing name information
+            const userDoc = await usersCollection.doc(authenticatedUid).get();
+            const userData = userDoc.exists ? userDoc.data() : {};
+            let userName = req.user.email;
+            if (userData.firstName || userData.lastName) {
+                userName = `${userData.firstName || ''} ${userData.lastName || ''}`.trim();
+            } else if (userData.name) {
+                userName = userData.name;
+            } else if (userData.client_name) {
+                userName = userData.client_name;
+            }
+
+            const updatedNote = {
+                ...note,
+                text: note_text.trim(),
+                note_type: note_type || note.note_type,
+                updated_by: userName,
+                updated_by_email: req.user.email,
+                updated_at: new Date()
+            };
+
+            // Update the specific note in the array
+            const updatedNotes = [...ticketData.notes];
+            updatedNotes[noteIndex] = updatedNote;
+
+            await ticketsCollection.doc(ticketId).update({
+                notes: updatedNotes,
+                updated_at: admin.firestore.FieldValue.serverTimestamp()
+            });
+
+            // Log note update activity
+            await logCommentAdded(db, ticketId, userName, req.user.email, `[INTERNAL NOTE UPDATED] ${note_text}`, { 
+                ...ticketData, 
+                ticket_display_id: ticketData.display_id,
+                note_type: note_type || note.note_type 
+            });
+
+            // Trigger analytics update for real-time reports
+            await triggerAnalyticsUpdate('updated', { ...ticketData, id: ticketId });
+
+            return res.status(200).json({ 
+                message: 'Note updated successfully!', 
+                note: {
+                    ...updatedNote,
+                    timestamp: updatedNote.created_at.toISOString(),
+                    updated_at: updatedNote.updated_at.toISOString()
+                }
+            });
+        } catch (error) {
+            console.error(`Error updating note: ${error.message}`);
+            return res.status(500).json({ error: `Error updating note: ${error.message}` });
+        }
+    });
+
+    // --- Delete Note from Ticket (Engineer/Support only) ---
+    router.delete('/:ticket_id/notes/:note_index', verifyFirebaseToken, checkRole(['support', 'admin', 'super_admin', 'site_admin']), async (req, res) => {
+        const ticketId = req.params.ticket_id;
+        const noteIndex = parseInt(req.params.note_index);
+        const authenticatedUid = req.user.uid;
+        const authenticatedUserRole = req.user.role;
+
+        if (isNaN(noteIndex) || noteIndex < 0) {
+            return res.status(400).json({ error: 'Invalid note index!' });
+        }
+
+        try {
+            const ticketDoc = await ticketsCollection.doc(ticketId).get();
+            if (!ticketDoc.exists) {
+                return res.status(404).json({ error: 'Ticket not found.' });
+            }
+
+            const ticketData = ticketDoc.data();
+
+            // For site admin users, check if they can access this ticket based on company
+            if (authenticatedUserRole === 'site_admin') {
+                if (req.user.client_name && ticketData.client_name !== req.user.client_name) {
+                    return res.status(403).json({ error: 'Forbidden: You do not have permission to delete notes from tickets from other companies.' });
+                }
+            }
+
+            if (!ticketData.notes || !Array.isArray(ticketData.notes) || noteIndex >= ticketData.notes.length) {
+                return res.status(404).json({ error: 'Note not found!' });
+            }
+
+            const note = ticketData.notes[noteIndex];
+
+            // Only allow the note author or admin/super_admin to delete
+            if (note.author_id !== authenticatedUid && !['admin', 'super_admin'].includes(authenticatedUserRole)) {
+                return res.status(403).json({ error: 'Forbidden: You can only delete your own notes!' });
+            }
+
+            // Get user data for storing name information
+            const userDoc = await usersCollection.doc(authenticatedUid).get();
+            const userData = userDoc.exists ? userDoc.data() : {};
+            let userName = req.user.email;
+            if (userData.firstName || userData.lastName) {
+                userName = `${userData.firstName || ''} ${userData.lastName || ''}`.trim();
+            } else if (userData.name) {
+                userName = userData.name;
+            } else if (userData.client_name) {
+                userName = userData.client_name;
+            }
+
+            // Remove the note from the array
+            const updatedNotes = ticketData.notes.filter((_, index) => index !== noteIndex);
+
+            await ticketsCollection.doc(ticketId).update({
+                notes: updatedNotes,
+                updated_at: admin.firestore.FieldValue.serverTimestamp()
+            });
+
+            // Log note deletion activity
+            await logCommentAdded(db, ticketId, userName, req.user.email, `[INTERNAL NOTE DELETED] ${note.text}`, { 
+                ...ticketData, 
+                ticket_display_id: ticketData.display_id,
+                note_type: note.note_type 
+            });
+
+            // Trigger analytics update for real-time reports
+            await triggerAnalyticsUpdate('updated', { ...ticketData, id: ticketId });
+
+            return res.status(200).json({ message: 'Note deleted successfully!' });
+        } catch (error) {
+            console.error(`Error deleting note: ${error.message}`);
+            return res.status(500).json({ error: `Error deleting note: ${error.message}` });
         }
     });
 
@@ -925,6 +1557,7 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
         const userId = req.query.userId;
         const authenticatedUid = req.user.uid;
         const searchKeyword = req.query.keyword ? req.query.keyword.toLowerCase() : '';
+        const limit = parseInt(req.query.limit) || 50; // OPTIMIZED: Add limit parameter
 
         if (userId !== authenticatedUid) {
             return res.status(403).json({ error: 'Unauthorized: You can only view your own tickets.' });
@@ -932,21 +1565,41 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
 
         try {
             let query = ticketsCollection.where('reporter_id', '==', userId);
-            query = query.where('status', 'in', ['Open', 'In Progress', 'Hold']);
+            
+            // OPTIMIZED: Only apply status filter if no search keyword
+            if (!searchKeyword) {
+                query = query.where('status', 'in', ['Open', 'In Progress', 'Hold']);
+            }
 
             if (searchKeyword) {
                 const exactIdMatch = `TT${searchKeyword.toUpperCase().padStart(5, '0')}`;
                 const exactIdMatchQuery = ticketsCollection
                     .where('reporter_id', '==', userId)
-                    .where('display_id', '==', exactIdMatch);
+                    .where('display_id', '==', exactIdMatch)
+                    .limit(10); // OPTIMIZED: Limit exact searches
                 const exactIdMatchSnapshot = await exactIdMatchQuery.get();
                 if (!exactIdMatchSnapshot.empty) {
-                    return res.status(200).json(exactIdMatchSnapshot.docs.map(doc => jsonSerializableTicket(doc.id, doc.data())));
+                    return res.status(200).json(exactIdMatchSnapshot.docs.map(doc => {
+                        const ticketData = doc.data();
+                        // Filter out notes for regular users - only engineers/support can see notes
+                        if (!['support', 'admin', 'super_admin', 'site_admin'].includes(req.user.role)) {
+                            delete ticketData.notes;
+                        }
+                        return jsonSerializableTicket(doc.id, ticketData);
+                    }));
                 }
             }
 
-            const snapshot = await query.orderBy('created_at', 'desc').get();
-            const tickets = snapshot.docs.map(doc => jsonSerializableTicket(doc.id, doc.data()));
+            // OPTIMIZED: Apply limit to prevent excessive reads
+            const snapshot = await query.orderBy('created_at', 'desc').limit(limit).get();
+            const tickets = snapshot.docs.map(doc => {
+                const ticketData = doc.data();
+                // Filter out notes for regular users - only engineers/support can see notes
+                if (!['support', 'admin', 'super_admin', 'site_admin'].includes(req.user.role)) {
+                    delete ticketData.notes;
+                }
+                return jsonSerializableTicket(doc.id, ticketData);
+            });
             return res.status(200).json(tickets);
         } catch (error) {
             console.error(`Error fetching my tickets for ${userId}: ${error.message}`);
@@ -960,6 +1613,7 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
         const filterAssignment = req.query.assignment;
         const filterCompany = req.query.company; // New company filter parameter
         const searchKeyword = req.query.keyword ? req.query.keyword.toLowerCase() : '';
+        const limit = parseInt(req.query.limit) || 100; // OPTIMIZED: Add limit parameter
 
         try {
             let query = ticketsCollection;
@@ -978,9 +1632,16 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                     exactIdMatchQuery = exactIdMatchQuery.where('client_name', '==', req.user.client_name);
                 }
                 
-                const exactIdMatchSnapshot = await exactIdMatchQuery.get();
+                const exactIdMatchSnapshot = await exactIdMatchQuery.limit(10).get(); // OPTIMIZED: Limit exact searches
                 if (!exactIdMatchSnapshot.empty) {
-                    return res.status(200).json(exactIdMatchSnapshot.docs.map(doc => jsonSerializableTicket(doc.id, doc.data())));
+                    return res.status(200).json(exactIdMatchSnapshot.docs.map(doc => {
+                        const ticketData = doc.data();
+                        // Filter out notes for regular users - only engineers/support can see notes
+                        if (!['support', 'admin', 'super_admin', 'site_admin'].includes(req.user.role)) {
+                            delete ticketData.notes;
+                        }
+                        return jsonSerializableTicket(doc.id, ticketData);
+                    }));
                 }
             }
 
@@ -1002,8 +1663,16 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                 query = query.where('client_name', '==', filterCompany);
             }
 
-            const snapshot = await query.orderBy('created_at', 'desc').get();
-            const tickets = snapshot.docs.map(doc => jsonSerializableTicket(doc.id, doc.data()));
+            // OPTIMIZED: Apply limit to prevent excessive reads
+            const snapshot = await query.orderBy('created_at', 'desc').limit(limit).get();
+            const tickets = snapshot.docs.map(doc => {
+                const ticketData = doc.data();
+                // Filter out notes for regular users - only engineers/support can see notes
+                if (!['support', 'admin', 'super_admin', 'site_admin'].includes(req.user.role)) {
+                    delete ticketData.notes;
+                }
+                return jsonSerializableTicket(doc.id, ticketData);
+            });
             return res.status(200).json(tickets);
         } catch (error) {
             console.error(`Error fetching all tickets: ${error.message}`);
@@ -1126,11 +1795,17 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                 if (req.user.client_name && ticketData.client_name !== req.user.client_name) {
                     return res.status(403).json({ error: 'Forbidden: You do not have permission to view tickets from other companies.' });
                 }
-            } else if (ticketData.reporter_id !== authenticatedUid && !['support', 'admin', 'super_admin'].includes(authenticatedUserRole)) {
+            } else if (ticketData.reporter_id !== authenticatedUid && !['support', 'admin', 'super_admin', 'site_admin'].includes(authenticatedUserRole)) {
                 return res.status(403).json({ error: 'Forbidden: You do not have permission to view this ticket.' });
             }
 
-            return res.status(200).json(jsonSerializableTicket(ticketDoc.id, ticketData));
+            // Filter out notes for regular users - only engineers/support can see notes
+            const filteredTicketData = { ...ticketData };
+            if (!['support', 'admin', 'super_admin', 'site_admin'].includes(authenticatedUserRole)) {
+                delete filteredTicketData.notes;
+            }
+
+            return res.status(200).json(jsonSerializableTicket(ticketDoc.id, filteredTicketData));
         } catch (error) {
             console.error(`Error fetching ticket ${ticketId}: ${error.message}`);
             return res.status(500).json({ error: `Failed to fetch ticket details: ${error.message}` });
@@ -1268,7 +1943,7 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
     });
 
     // --- Danger: Delete All Tickets Endpoint ---
-    router.delete('/all', verifyFirebaseToken, checkRole(['support', 'admin', 'super_admin']), async (req, res) => {
+    router.delete('/all', verifyFirebaseToken, checkRole(['support', 'admin', 'super_admin', 'site_admin']), async (req, res) => {
         try {
             const snapshot = await ticketsCollection.get();
             const batch = admin.firestore().batch();
