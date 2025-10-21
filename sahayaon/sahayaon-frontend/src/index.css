@@ -1,0 +1,2258 @@
+/* --- Modern Ticket Grid Typography Enhancements --- */
+.modern-table-cell {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-feature-settings: 'kern' 1, 'liga' 1, 'calt' 1;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.modern-grid-hover {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.modern-grid-hover:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+/* Enhanced typography for ticket grid */
+.ticket-id {
+  font-weight: 600;
+  letter-spacing: 0.025em;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.ticket-summary {
+  font-weight: 500;
+  line-height: 1.5;
+  letter-spacing: 0.01em;
+}
+
+.ticket-meta {
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+/* --- Global Scrollbar Styles (apply to all scrollable elements) --- */
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;500;600;700&display=swap');
+
+/* --- Theme Color Variables --- */
+:root {
+  --theme-color-elevation-shadow-rgb: 0, 0, 0;
+}
+
+/* --- Global Font Definitions --- */
+* {
+  font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+}
+
+/* Headings use Space Grotesk */
+h1, h2, h3, h4, h5, h6,
+.heading,
+.title,
+.logo {
+  font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+}
+
+/* Code elements use monospace */
+code, pre, .code, .mono {
+  font-family: 'Source Code Pro', Menlo, Monaco, Consolas, "Courier New", monospace;
+}
+
+/* --- Custom Shadow Classes --- */
+.theme-elevation-shadow {
+  box-shadow: 0px 0px 1px 0px rgba(var(--theme-color-elevation-shadow-rgb), 0.3), 0px 1px 3px 1px rgba(var(--theme-color-elevation-shadow-rgb), 0.15);
+  -webkit-box-shadow: 0px 0px 1px 0px rgba(var(--theme-color-elevation-shadow-rgb), 0.3), 0px 1px 3px 1px rgba(var(--theme-color-elevation-shadow-rgb), 0.15);
+}
+
+/* --- Advanced Search Component Styles --- */
+@keyframes slideInFromTop {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes fadeInDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.animate-in {
+    animation: slideInFromTop 0.2s ease-out;
+}
+
+.slide-in-from-top-2 {
+    animation: slideInFromTop 0.2s ease-out;
+}
+
+.duration-200 {
+    animation-duration: 200ms;
+}
+
+.line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+/* Modern Grid Enhancements */
+.modern-grid-hover {
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.modern-grid-hover:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.modern-badge {
+    font-weight: 500;
+    letter-spacing: 0.025em;
+    transition: all 0.15s ease;
+}
+
+.modern-table-cell {
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.modern-table-cell:hover {
+    background-color: rgba(59, 130, 246, 0.02);
+}
+
+/* Search highlight styles */
+.search-highlight {
+    background-color: #fef3c7;
+    color: #92400e;
+    padding: 1px 2px;
+    border-radius: 2px;
+    font-weight: 500;
+}
+
+/* Search dropdown scrollbar */
+.search-dropdown::-webkit-scrollbar {
+    width: 6px;
+}
+
+.search-dropdown::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    border-radius: 3px;
+}
+
+.search-dropdown::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 3px;
+}
+
+.search-dropdown::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
+
+/* --- Knowledge Base Styles --- */
+.line-clamp-3 {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.kb-card-hover {
+    transition: all 0.2s ease-in-out;
+}
+
+.kb-card-hover:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+}
+
+.kb-search-highlight {
+    background-color: #fef3c7;
+    padding: 2px 4px;
+    border-radius: 4px;
+}
+
+.kb-tag {
+    display: inline-block;
+    padding: 2px 8px;
+    background-color: #f3f4f6;
+    color: #374151;
+    font-size: 0.75rem;
+    border-radius: 9999px;
+    margin-right: 4px;
+    margin-bottom: 4px;
+}
+
+.kb-category-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    background-color: #dbeafe;
+    color: #1e40af;
+    font-size: 0.75rem;
+    font-weight: 500;
+    border-radius: 9999px;
+}
+
+.kb-public-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    background-color: #dcfce7;
+    color: #166534;
+    font-size: 0.75rem;
+    font-weight: 500;
+    border-radius: 9999px;
+}
+
+.kb-modal-overlay {
+    backdrop-filter: blur(4px);
+}
+
+.kb-search-input:focus {
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.kb-tab-active {
+    position: relative;
+}
+
+.kb-tab-active::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background-color: #3b82f6;
+}
+
+.kb-empty-state {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: #6b7280;
+}
+
+.kb-empty-state svg {
+    margin: 0 auto 1rem;
+    color: #d1d5db;
+}
+
+.kb-loading-spinner {
+    border: 2px solid #f3f4f6;
+    border-top: 2px solid #3b82f6;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* --- Fast Popup Animations --- */
+@keyframes fastZoomIn {
+    0% {
+        opacity: 0;
+        transform: scale(0.8);
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+@keyframes fastFadeIn {
+    0% {
+        opacity: 0;
+    }
+    100% {
+        opacity: 1;
+    }
+}
+
+@keyframes fastZoomOut {
+    0% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    100% {
+        opacity: 0;
+        transform: scale(0.8);
+    }
+}
+
+.fast-zoom-in {
+    animation: fastZoomIn 0.2s ease-out;
+}
+
+.fast-fade-in {
+    animation: fastFadeIn 0.15s ease-out;
+}
+
+.fast-zoom-out {
+    animation: fastZoomOut 0.15s ease-out;
+}
+/* Or if self-hosting: */
+/* @font-face {
+  font-family: 'MyCustomFont';
+  src: url('/fonts/MyCustomFont-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+} */
+/* For WebKit browsers (Chrome, Safari, Edge, Brave, etc.) */
+/* This targets the scrollbar itself */
+::-webkit-scrollbar {
+    width: 2px; /* Very thin vertical scrollbar */
+    height: 2px; /* Very thin horizontal scrollbar */
+    background-color: transparent; /* Ensure the background of the scrollbar area is transparent */
+}
+
+/* This targets the track (the area the thumb slides on) */
+::-webkit-scrollbar-track {
+    background: rgba(241, 241, 241, 0.1); /* Extremely low opacity, almost invisible track */
+    border-radius: 10px; /* Rounded corners for the track */
+}
+
+/* This targets the thumb (the draggable part) */
+::-webkit-scrollbar-thumb {
+    background: rgba(92, 91, 91, 0.2); /* Very light, semi-transparent grey thumb */
+    border-radius: 10px; /* Rounded corners for the thumb */
+}
+
+/* This targets the thumb on hover */
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(96, 96, 96, 0.4); /* Slightly more visible on hover, but still light */
+}
+
+/* IMPORTANT: These pseudo-elements remove the scrollbar buttons/arrows in WebKit */
+::-webkit-scrollbar-button {
+    display: none; /* Hides the up/down and left/right arrow buttons */
+}
+
+/* Optional: To remove scrollbar corner if present (when both horizontal and vertical scrollbars are visible) */
+::-webkit-scrollbar-corner {
+    background: transparent;
+}
+
+
+/* For Firefox */
+/* Note: Firefox has more limited styling options and does not support removing arrows directly via CSS.
+   'thin' is the most minimal width, and the color will be for the thumb and track. */
+html {
+    scrollbar-width: thin; /* Make scrollbar explicitly thin */
+    scrollbar-color: rgba(128, 128, 128, 0.2) rgba(241, 241, 241, 0.05); /* thumb color track color */
+}
+
+/* --- Specific Styles for your TicketDetailComponent (Optional but Recommended for targeted control) --- */
+
+/* If you want to ensure these styles apply specifically to the description boxes,
+   even if a global rule might be less specific. */
+/* Apply to the FieldBox when it has overflow (for display mode) */
+.FieldBox.overflow-y-auto {
+    /* For Firefox within FieldBox */
+    scrollbar-width: thin;
+    scrollbar-color: rgba(128, 128, 128, 0.15) rgba(241, 241, 241, 0.02);
+}
+
+.FieldBox.overflow-y-auto::-webkit-scrollbar {
+    width: 2px;
+    height: 2px;
+    background-color: transparent;
+}
+
+.FieldBox.overflow-y-auto::-webkit-scrollbar-track {
+    background: rgba(241, 241, 241, 0.02);
+}
+
+.FieldBox.overflow-y-auto::-webkit-scrollbar-thumb {
+    background: rgba(128, 128, 128, 0.15);
+}
+
+.FieldBox.overflow-y-auto::-webkit-scrollbar-thumb:hover {
+    background: rgba(96, 96, 96, 0.3);
+}
+
+.FieldBox.overflow-y-auto::-webkit-scrollbar-button {
+    display: none;
+}
+
+.FieldBox.overflow-y-auto::-webkit-scrollbar-corner {
+    background: transparent;
+}
+
+
+/* Also apply to the EditableTextarea for consistency in edit mode, if it scrolls */
+/* Assuming EditableTextarea is the direct element that scrolls in edit mode */
+textarea.max-w-none.w-full { /* Target the specific textarea if it needs its own scrollbar styling */
+    /* For Firefox within EditableTextarea */
+    scrollbar-width: thin;
+    scrollbar-color: rgba(152, 130, 130, 0.15) rgba(241, 241, 241, 0.02);
+}
+
+textarea.max-w-none.w-full::-webkit-scrollbar {
+    width: 2px;
+    height: 2px;
+    background-color: transparent;
+}
+
+textarea.max-w-none.w-full::-webkit-scrollbar-track {
+    background: rgba(241, 241, 241, 0.02);
+}
+
+textarea.max-w-none.w-full::-webkit-scrollbar-thumb {
+    background: rgba(128, 128, 128, 0.15);
+}
+
+textarea.max-w-none.w-full::-webkit-scrollbar-thumb:hover {
+    background: rgba(96, 96, 96, 0.3);
+}
+
+textarea.max-w-none.w-full::-webkit-scrollbar-button {
+    display: none;
+}
+
+textarea.max-w-none.w-full::-webkit-scrollbar-corner {
+    background: transparent;
+}
+
+/* Ripple effect for custom Edit button */
+.ripple {
+  animation: ripple-effect 0.5s linear;
+}
+@keyframes ripple-effect {
+  to {
+    width: 200%;
+    height: 200%;
+    opacity: 0;
+    left: -50%;
+    top: -50%;
+  }
+}
+
+@keyframes scale-up-tr-normal {
+  0% {
+    transform: scale(0.5);
+    transform-origin: 100% 0%;
+  }
+  100% {
+    transform: scale(1);
+    transform-origin: 100% 0%;
+  }
+}
+
+.scale-up-tr-normal {
+  animation: scale-up-tr-normal 0.4s cubic-bezier(0.390, 0.575, 0.565, 1.000) 0s 1 normal both;
+}
+
+@keyframes scale-up-center-normal {
+  0% { transform: scale(0.5); }
+  100% { transform: scale(1);}
+}
+.scale-up-center-normal { 
+  animation: scale-up-center-normal 0.1s cubic-bezier(0.390, 0.575, 0.565, 1.000) 0s 1 normal both; 
+}
+
+/* --- Modern Sidebar Styles --- */
+.sidebar-glass {
+  background: #111827; /* Gray-900 background */
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-radius: 0;
+  box-shadow: 0 10px 25px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  transition: none; /* Instant navigation */
+  font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+  height: calc(100vh - 44px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  box-sizing: border-box;
+  border-right: 1px solid #374151; /* Gray-700 border */
+  position: relative;
+}
+
+/* Disable all scaling and transform effects for sidebar menu items */
+.sidebar-glass * {
+  transform: none !important;
+  transition: none !important;
+  animation: none !important;
+}
+
+/* Add subtle top border accent */
+.sidebar-glass::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%);
+  opacity: 0.8;
+}
+
+.sidebar-glass .menu-item {
+  color: #d1d5db; /* Gray-300 text for better contrast */
+  background: transparent;
+  border-radius: 0; /* Remove rounded corners */
+  transition: none !important; /* Instant menu interactions */
+  transform: none !important; /* No transforms */
+  animation: none !important; /* No animations */
+  font-weight: 500;
+  font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+  padding: 0.875rem 1.25rem; /* Increased padding for better touch targets */
+  margin: 0.125rem 0.75rem; /* Consistent margins for all states */
+  font-size: 0.95rem; /* Slightly smaller for modern look */
+  box-sizing: border-box;
+  max-width: 100%;
+  overflow: visible; /* Allow count badges to extend beyond menu item */
+  position: relative;
+  min-height: 2.75rem; /* Ensure minimum height for count badges */
+}
+
+/* Add subtle glow effect on hover */
+.sidebar-glass .menu-item::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, rgba(249, 115, 22, 0.1) 0%, rgba(251, 146, 60, 0.05) 100%);
+  border-radius: 0; /* Remove rounded corners */
+  opacity: 0;
+  transition: none; /* Instant glow effect */
+  z-index: -1;
+}
+
+.sidebar-glass .menu-item:hover {
+  background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%); /* Dark blue hover background matching active state */
+  color: #ffffff;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(30, 58, 138, 0.2);
+  transform: none !important; /* Remove slide animation for instant response */
+  transition: background 0.15s ease-in-out !important; /* Smooth background transition */
+  animation: none !important; /* No animations */
+}
+
+.sidebar-glass .menu-item:hover::before {
+  opacity: 1;
+}
+
+/* Hover state for icons */
+.sidebar-glass .menu-item:hover svg {
+  color: #ffffff !important; /* White icons on hover */
+  stroke-width: 1.75 !important;
+}
+
+/* Hover state for text */
+.sidebar-glass .menu-item:hover span {
+  color: #ffffff !important; /* White text on hover */
+  font-weight: 500 !important;
+}
+
+.sidebar-glass .menu-item.active, .sidebar-glass .menu-item[aria-current="page"] {
+  background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%) !important; /* Rich dark blue gradient for matte finish */
+  color: #ffffff !important; /* Pure white text for active items */
+  border-radius: 0 !important; /* Remove rounded corners */
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(30, 58, 138, 0.3) !important; /* Subtle inset shadow for depth with matte border */
+  border: none !important; /* No border for active state */
+  position: relative;
+  z-index: 1;
+  transform: none !important; /* Remove slide animation for instant response */
+  transition: background 0.15s ease-in-out !important; /* Smooth background transition */
+  animation: none !important; /* No animations */
+  font-weight: 500 !important; /* Medium weight for active items */
+}
+
+.sidebar-glass .menu-item.active svg,
+.sidebar-glass .menu-item[aria-current="page"] svg {
+  color: #ffffff !important; /* White icons for active state */
+  stroke-width: 1.75 !important; /* Refined stroke for active state */
+}
+
+/* All menu icons should have consistent active styling */
+
+/* Ensure text color is applied with high specificity */
+.sidebar-glass .menu-item.active span,
+.sidebar-glass .menu-item[aria-current="page"] span,
+.sidebar-glass .menu-item.active .motion.span,
+.sidebar-glass .menu-item[aria-current="page"] .motion.span {
+  color: #ffffff !important; /* Pure white for active text */
+  font-weight: 500 !important; /* Medium weight for active state */
+}
+
+/* Focus state for menu items */
+.sidebar-glass .menu-item:focus,
+.sidebar-glass .menu-item:focus-visible {
+  outline: none;
+  border-radius: 0;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(30, 58, 138, 0.4) !important;
+  border: none;
+  background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%) !important; /* Dark blue focus background */
+  color: #ffffff !important; /* White text for focus */
+}
+
+/* Focus state for icons */
+.sidebar-glass .menu-item:focus svg,
+.sidebar-glass .menu-item:focus-visible svg {
+  color: #ffffff !important; /* White icons for focus */
+  stroke-width: 1.75 !important; /* Refined stroke width */
+}
+
+/* Focus state for text */
+.sidebar-glass .menu-item:focus span,
+.sidebar-glass .menu-item:focus-visible span,
+.sidebar-glass .menu-item:focus .motion.span,
+.sidebar-glass .menu-item:focus-visible .motion.span {
+  color: #ffffff !important; /* Pure white text for focus */
+  font-weight: 500 !important; /* Medium weight for focus state */
+}
+
+/* Persistent focus for active menu items */
+.sidebar-glass .menu-item.active:focus,
+.sidebar-glass .menu-item[aria-current="page"]:focus {
+  outline: none;
+  border-radius: 0;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(30, 58, 138, 0.4) !important;
+  border: none;
+  background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%) !important; /* Dark blue focus background */
+  color: #ffffff !important; /* White text */
+}
+
+.sidebar-glass .menu-item.active .sidebar-count-badge {
+  background: rgba(249, 115, 22, 0.15) !important; /* Subtle orange background */
+  color: #fb923c !important; /* Bright orange text for count badge */
+  box-shadow: 0 1px 3px rgba(249, 115, 22, 0.3);
+  border: 1px solid rgba(249, 115, 22, 0.4);
+  font-weight: 700 !important; /* Bold badge text */
+}
+
+.sidebar-glass .sidebar-count-badge {
+  background: transparent !important; /* Remove background */
+  color: #f97316 !important; /* Orange text */
+  font-size: 0.7rem !important;
+  font-weight: 600 !important;
+  min-width: auto;
+  min-height: auto;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0;
+  box-shadow: none;
+  border: none;
+  z-index: 10; /* Ensure count badges appear above other elements */
+  position: absolute;
+  top: -0.5rem; /* Keep position for visibility */
+  right: -0.25rem; /* Adjust right position */
+  pointer-events: none; /* Prevent interference with clicks */
+}
+
+.sidebar-glass .sidebar-section-header {
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-top: 0;
+  margin-bottom: 0.375rem;
+  padding-left: 0.75rem;
+  padding-top: 0.5rem;
+  padding-bottom: 0.375rem;
+  color: #6b7280; /* Gray-500 for section headers */
+  border-bottom: none;
+  margin-left: 0;
+  margin-right: 0;
+  opacity: 0.95;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.sidebar-glass .profile-section {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  margin: 1.5rem 0.5rem 0 0.5rem;
+  padding: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(10px);
+}
+
+.sidebar-glass .collapse-btn {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.05) 100%);
+  color: #94a3b8;
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  border-radius: 0; /* Remove rounded corners */
+  padding: 0.75rem 1rem;
+  margin: 1.5rem 0.5rem 0 0.5rem;
+  display: block;
+  cursor: pointer;
+  transition: none; /* Instant collapse button response */
+  font-weight: 500;
+}
+
+.sidebar-glass .collapse-btn:hover {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.2) 0%, rgba(139, 92, 246, 0.1) 100%);
+  color: #ffffff;
+  transform: none; /* Remove transform animation for instant response */
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+}
+
+.sidebar-glass .menu-item svg {
+  color: #d1d5db; /* Gray-300 color for icons */
+  transition: none; /* Instant icon changes */
+  stroke-width: 1.5; /* Balanced stroke width */
+}
+
+/* Collapse button text should be grey to match the icon - but not count badges or active items */
+.sidebar-glass .menu-item:not(.active):not([aria-current="page"]):not(:focus):not(:focus-visible) span:not(.sidebar-count-badge) {
+  color: #d1d5db !important; /* Gray-300 text for inactive items */
+}
+
+/* Ensure proper vertical alignment for collapsed sidebar icons */
+.sidebar-glass .flex.items-center.justify-center.w-7.h-7 {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  position: relative;
+  overflow: visible; /* Allow count badges to extend beyond container */
+}
+
+/* Ensure consistent spacing for collapsed sidebar menu items */
+.sidebar-glass .group.flex.items-center.px-3.py-1.rounded-xl {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  overflow: visible; /* Allow count badges to extend beyond container */
+  position: relative;
+}
+
+/* When collapsed, center the content */
+.sidebar-glass .group.flex.items-center.px-3.py-1.rounded-xl.justify-center {
+  justify-content: center;
+}
+
+/* When expanded, left-align the content */
+.sidebar-glass .group.flex.items-center.px-3.py-1.rounded-xl.justify-start {
+  justify-content: flex-start;
+}
+
+/* When collapsed, ensure icons are perfectly centered */
+.sidebar-glass:not(.expanded) .group.flex.items-center {
+  justify-content: center !important;
+}
+
+/* When expanded, ensure text is left-aligned */
+.sidebar-glass .group.flex.items-center.justify-start {
+  justify-content: flex-start !important;
+}
+
+/* Ensure proper text alignment for expanded state */
+.sidebar-glass .group.flex.items-center:not(.justify-center) {
+  justify-content: flex-start !important;
+}
+
+/* Force icon size for collapsed state - maintain consistent sizing on all screen sizes */
+.sidebar-glass .flex.items-center.justify-center.w-7.h-7 svg {
+  width: 23px !important;
+  height: 23px !important;
+  min-width: 23px !important;
+  min-height: 23px !important;
+  flex-shrink: 0 !important;
+}
+
+/* Ensure proper icon sizing for all collapsed navigation items */
+.sidebar-glass .TooltipBubble .flex.items-center.justify-center.w-7.h-7 svg {
+  width: 23px !important;
+  height: 23px !important;
+  min-width: 23px !important;
+  min-height: 23px !important;
+  flex-shrink: 0 !important;
+}
+
+/* Space Grotesk font for sidebar navigation links */
+.sidebar-glass .group.flex.items-center {
+  font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+  font-weight: 400;
+  color: #ffffff;
+}
+
+/* Space Grotesk font for sidebar section headers */
+.sidebar-glass .sidebar-section-header {
+  font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+  font-weight: 700;
+  color: #6b7280;
+  letter-spacing: 0.1em;
+}
+
+/* Space Grotesk font for sidebar count badges */
+.sidebar-glass .sidebar-count-badge {
+  font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+  font-weight: 400;
+}
+
+/* Main app header - fixed top header */
+header.fixed.top-0 {
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%) !important; /* Modern gradient header */
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+  backdrop-filter: blur(10px) !important;
+  -webkit-backdrop-filter: blur(10px) !important;
+}
+
+/* Responsive sidebar adjustments - Maintain good sizing while fitting content */
+@media (max-height: 900px) {
+  .sidebar-glass .menu-item {
+    padding: 0.625rem 0.75rem;
+    font-size: 0.95rem;
+    margin: 0.1875rem 0;
+    min-height: 2.5rem; /* Ensure minimum height for count bubbles */
+  }
+  
+  .sidebar-glass .sidebar-section-header {
+    font-size: 0.75rem;
+    margin-top: 0.625rem;
+    margin-bottom: 0.1875rem;
+    padding: 0.3125rem 0.4375rem;
+  }
+  
+  /* Ensure count bubbles have space on smaller screens */
+  .sidebar-glass .flex.items-center.justify-center.w-7.h-7 {
+    min-height: 2rem;
+    position: relative;
+  }
+}
+
+@media (max-height: 800px) {
+  .sidebar-glass .menu-item {
+    padding: 0.5rem 0.625rem;
+    font-size: 0.9rem;
+    margin: 0.125rem 0;
+    min-height: 2.25rem; /* Ensure minimum height for count bubbles */
+  }
+  
+  .sidebar-glass .sidebar-section-header {
+    font-size: 0.7rem;
+    margin-top: 0.5rem;
+    margin-bottom: 0.125rem;
+    padding: 0.25rem 0.375rem;
+  }
+  
+  /* Ensure count bubbles have space on smaller screens */
+  .sidebar-glass .flex.items-center.justify-center.w-7.h-7 {
+    min-height: 1.75rem;
+    position: relative;
+  }
+}
+
+@media (max-height: 700px) {
+  .sidebar-glass .menu-item {
+    padding: 0.375rem 0.5rem;
+    font-size: 0.85rem;
+    margin: 0.0625rem 0;
+    min-height: 2rem; /* Ensure minimum height for count bubbles */
+  }
+  
+  .sidebar-glass .sidebar-section-header {
+    font-size: 0.65rem;
+    margin-top: 0.375rem;
+    margin-bottom: 0.0625rem;
+    padding: 0.1875rem 0.3125rem;
+  }
+  
+  /* Ensure count bubbles have space on smaller screens */
+  .sidebar-glass .flex.items-center.justify-center.w-7.h-7 {
+    min-height: 1.5rem;
+    position: relative;
+  }
+}
+
+@media (max-height: 600px) {
+  .sidebar-glass .menu-item {
+    padding: 0.25rem 0.375rem;
+    font-size: 0.8rem;
+    margin: 0.03125rem 0;
+    min-height: 1.75rem; /* Ensure minimum height for count bubbles */
+  }
+  
+  .sidebar-glass .sidebar-section-header {
+    font-size: 0.6rem;
+    margin-top: 0.25rem;
+    margin-bottom: 0.03125rem;
+    padding: 0.125rem 0.25rem;
+  }
+  
+  /* Ensure count bubbles have space on smaller screens */
+  .sidebar-glass .flex.items-center.justify-center.w-7.h-7 {
+    min-height: 1.25rem;
+    position: relative;
+  }
+}
+
+/* Header button styles */
+.header-button {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.375rem 0.5rem;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: all 0.2s ease-in-out;
+  text-decoration: none;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+
+.header-button:hover {
+  background-color: #f9fafb;
+  color: #1f2937;
+}
+
+.header-button.active {
+  background-color: #f3f4f6;
+  color: #1f2937;
+}
+
+/* Responsive header adjustments */
+@media (max-width: 640px) {
+  header.fixed.top-0 {
+    padding: 0 0.75rem;
+  }
+  
+  .header-button {
+    padding: 0.25rem 0.375rem;
+    font-size: 0.8125rem;
+  }
+}
+
+@media (max-width: 768px) {
+  header.fixed.top-0 {
+    padding: 0 1rem;
+  }
+}
+
+
+body {
+  overflow-x: hidden;
+}
+
+/* Flip animation for login/password change box */
+.flip-container {
+  perspective: 1200px;
+  width: 100%;
+  min-height: 420px;
+  position: relative;
+}
+.flipper {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transition: transform 0.6s cubic-bezier(0.4,0.2,0.2,1);
+  transform-style: preserve-3d;
+}
+.flipped .flipper {
+  transform: rotateY(180deg);
+}
+.front, .back {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  top: 0;
+  left: 0;
+  backface-visibility: hidden;
+}
+.front {
+  z-index: 2;
+  transform: rotateY(0deg);
+}
+.back {
+  transform: rotateY(180deg);
+  z-index: 1;
+}
+
+/* NotificationModal title tweaks */
+.notification-modal-title-small .modal-title, 
+.notification-modal-title-small h2, 
+.notification-modal-title-small .modal-header-title {
+  font-size: 0.95rem !important;
+  margin-bottom: 0.25rem !important;
+  padding-bottom: 0.1rem !important;
+}
+
+/* Ticket Detail Component Responsive Styles */
+.ticket-detail-container {
+    max-width: 100vw;
+    overflow-x: hidden;
+    box-sizing: border-box;
+    width: 100%;
+}
+
+.ticket-detail-container > div {
+    max-width: 100%;
+    overflow-x: hidden;
+}
+
+.ticket-detail-container * {
+    box-sizing: border-box;
+}
+
+/* Ensure no horizontal overflow */
+.ticket-detail-container .grid {
+    min-width: 0;
+    max-width: 100%;
+    width: 100%;
+}
+
+.ticket-detail-container .grid > * {
+    min-width: 0;
+    max-width: 100%;
+}
+
+/* Specific styles for ticket details grid */
+.ticket-detail-container .grid.grid-cols-1.md\:grid-cols-2 {
+    gap: 0.5rem;
+}
+
+@media (max-width: 768px) {
+    .ticket-detail-container .grid.grid-cols-1.md\:grid-cols-2 {
+        grid-template-columns: repeat(1, minmax(0, 1fr));
+    }
+}
+
+/* Ensure field boxes don't overflow */
+.ticket-detail-container .FieldBox {
+    overflow: hidden;
+    word-wrap: break-word;
+}
+
+.ticket-detail-container .FieldBox span {
+    word-break: break-word;
+    overflow-wrap: break-word;
+    hyphens: auto;
+    max-width: 100%;
+}
+
+/* Responsive text sizing */
+@media (max-width: 640px) {
+    .ticket-detail-container .text-xs {
+        font-size: 0.825rem; /* Increased by 10% */
+        line-height: 1.1rem;
+    }
+    
+    .ticket-detail-container .text-sm {
+        font-size: 0.963rem; /* Increased by 10% */
+        line-height: 1.375rem;
+    }
+}
+
+/* Ensure proper spacing on very small screens */
+@media (max-width: 480px) {
+    .ticket-detail-container .p-1 {
+        padding: 0.25rem;
+    }
+    
+    .ticket-detail-container .gap-1 {
+        gap: 0.25rem;
+    }
+    
+    .ticket-detail-container .gap-1\.5 {
+        gap: 0.375rem;
+    }
+}
+
+/* Prevent text overflow in field boxes */
+.ticket-detail-container .FieldBox span {
+    word-break: break-word;
+    overflow-wrap: break-word;
+    hyphens: auto;
+}
+
+/* Ensure buttons don't overflow */
+.ticket-detail-container button {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Bulk assign loading spinner */
+.loader {
+    width: 48px;
+    height: 48px;
+    border: 5px solid #e5e7eb;
+    border-bottom-color: #3b82f6;
+    border-radius: 50%;
+    display: inline-block;
+    box-sizing: border-box;
+    animation: rotation 1s linear infinite;
+}
+
+@keyframes rotation {
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+/* Disable all hover scale/transform effects on client management page */
+.client-management-page *,
+.client-management-page *:hover,
+.client-management-page *:active,
+.client-management-page *:focus {
+    transform: none !important;
+    transition: none !important;
+    animation: none !important;
+    -webkit-transform: none !important;
+    -moz-transform: none !important;
+    -ms-transform: none !important;
+    -o-transform: none !important;
+}
+
+/* Specifically target Material-UI components on client management page */
+.client-management-page .MuiCard-root,
+.client-management-page .MuiCard-root:hover,
+.client-management-page .MuiChip-root,
+.client-management-page .MuiChip-root:hover,
+.client-management-page .MuiButton-root,
+.client-management-page .MuiButton-root:hover,
+.client-management-page .MuiIconButton-root,
+.client-management-page .MuiIconButton-root:hover,
+.client-management-page .MuiTableRow-root,
+.client-management-page .MuiTableRow-root:hover,
+.client-management-page .MuiTableCell-root,
+.client-management-page .MuiTableCell-root:hover,
+.client-management-page .MuiAvatar-root,
+.client-management-page .MuiAvatar-root:hover,
+.client-management-page .MuiFab-root,
+.client-management-page .MuiFab-root:hover {
+    transform: none !important;
+    transition: none !important;
+    animation: none !important;
+    box-shadow: inherit !important;
+}
+
+/* Force override the global MuiCard hover transform that causes bounce */
+.client-management-page .MuiCard-root:hover {
+    transform: translateY(0px) !important;
+    -webkit-transform: translateY(0px) !important;
+}
+
+/* Ensure no elevation or shadow changes that might suggest movement */
+.client-management-page .MuiCard-root,
+.client-management-page .MuiPaper-root {
+    box-shadow: none !important;
+}
+
+/* Disable all hover scale/transform effects on client detail page */
+.client-detail-page *,
+.client-detail-page *:hover,
+.client-detail-page *:active,
+.client-detail-page *:focus {
+    transform: none !important;
+    transition: none !important;
+    animation: none !important;
+    -webkit-transform: none !important;
+    -moz-transform: none !important;
+    -ms-transform: none !important;
+    -o-transform: none !important;
+}
+
+/* Specifically target Material-UI components on client detail page */
+.client-detail-page .MuiCard-root,
+.client-detail-page .MuiCard-root:hover,
+.client-detail-page .MuiChip-root,
+.client-detail-page .MuiChip-root:hover,
+.client-detail-page .MuiButton-root,
+.client-detail-page .MuiButton-root:hover,
+.client-detail-page .MuiIconButton-root,
+.client-detail-page .MuiIconButton-root:hover,
+.client-detail-page .MuiTableRow-root,
+.client-detail-page .MuiTableRow-root:hover,
+.client-detail-page .MuiTableCell-root,
+.client-detail-page .MuiTableCell-root:hover,
+.client-detail-page .MuiAvatar-root,
+.client-detail-page .MuiAvatar-root:hover,
+.client-detail-page .MuiTab-root,
+.client-detail-page .MuiTab-root:hover,
+.client-detail-page .MuiList-root,
+.client-detail-page .MuiListItem-root,
+.client-detail-page .MuiListItem-root:hover,
+.client-detail-page .MuiPaper-root,
+.client-detail-page .MuiPaper-root:hover {
+    transform: none !important;
+    transition: none !important;
+    animation: none !important;
+    box-shadow: inherit !important;
+}
+
+/* Force override the global MuiCard hover transform for client detail page */
+.client-detail-page .MuiCard-root:hover {
+    transform: translateY(0px) !important;
+    -webkit-transform: translateY(0px) !important;
+}
+
+/* Responsive grid adjustments */
+@media (max-width: 1024px) {
+    .ticket-detail-container .lg\:grid-cols-5 {
+        grid-template-columns: repeat(1, minmax(0, 1fr));
+    }
+    
+    .ticket-detail-container .lg\:col-span-3 {
+        grid-column: span 1 / span 1;
+    }
+    
+    .ticket-detail-container .lg\:col-span-2 {
+        grid-column: span 1 / span 1;
+    }
+}
+
+/* Color variations for different ticket detail elements */
+.ticket-detail-container .text-orange-600 {
+    color: #f59e0b !important; /* Softer orange for highlights */
+    font-weight: 400 !important; /* Normal weight */
+}
+
+.ticket-detail-container .text-gray-500 {
+    color: #9ca3af !important; /* Medium gray for secondary text */
+}
+
+.ticket-detail-container .text-gray-400 {
+    color: #d1d5db !important; /* Light gray for tertiary text */
+}
+
+.ticket-detail-container .underline {
+    text-decoration-color: #9ca3af !important; /* Softer underline color */
+}
+
+/* Button variations */
+.ticket-detail-container button {
+    font-weight: 400 !important; /* Normal weight for buttons */
+}
+
+.ticket-detail-container .MuiButton-root {
+    font-weight: 400 !important; /* Normal weight for Material-UI buttons */
+}
+
+.ticket-detail-container .MuiButton-root .MuiButton-label {
+    font-weight: 400 !important;
+}
+
+/* Field box variations with different colors */
+.ticket-detail-container .FieldBox {
+    color: #374151 !important; /* Darker gray for field content */
+}
+
+.ticket-detail-container .FieldBox span {
+    color: #4a5568 !important; /* Medium gray for field labels */
+    font-weight: 400 !important;
+}
+
+/* Comment section color variations */
+.ticket-detail-container .comment-item {
+    color: #4a5568 !important; /* Medium gray for comments */
+}
+
+.ticket-detail-container .comment-item .text-xs {
+    color: #6b7280 !important; /* Lighter gray for comment metadata */
+}
+
+/* Status and priority color variations */
+.ticket-detail-container .status-badge {
+    color: #374151 !important; /* Darker for status badges */
+    font-weight: 500 !important; /* Medium weight for emphasis */
+}
+
+.ticket-detail-container .status-open { color: #16a34a !important; }
+.ticket-detail-container .status-inprogress { color: #ca8a04 !important; }
+.ticket-detail-container .status-hold { color: #7c3aed !important; }
+.ticket-detail-container .status-resolved { color: #16a34a !important; }
+.ticket-detail-container .status-cancelled { color: #dc2626 !important; }
+
+.ticket-detail-container .priority-critical { color: #dc2626 !important; }
+.ticket-detail-container .priority-high { color: #ea580c !important; }
+.ticket-detail-container .priority-medium { color: #ca8a04 !important; }
+.ticket-detail-container .priority-low { color: #16a34a !important; }
+
+/* Increase specificity to override FieldBox text color */
+.ticket-detail-container .FieldBox .status-open { color: #16a34a !important; }
+.ticket-detail-container .FieldBox .status-inprogress { color: #ca8a04 !important; }
+.ticket-detail-container .FieldBox .status-hold { color: #7c3aed !important; }
+.ticket-detail-container .FieldBox .status-resolved { color: #16a34a !important; }
+.ticket-detail-container .FieldBox .status-cancelled { color: #dc2626 !important; }
+
+.ticket-detail-container .FieldBox .priority-critical { color: #dc2626 !important; }
+.ticket-detail-container .FieldBox .priority-high { color: #ea580c !important; }
+.ticket-detail-container .FieldBox .priority-medium { color: #ca8a04 !important; }
+.ticket-detail-container .FieldBox .priority-low { color: #16a34a !important; }
+
+/* Timeline and activity color variations */
+.ticket-detail-container .timeline-item {
+    color: #6b7280 !important; /* Lighter gray for timeline */
+}
+
+.ticket-detail-container .activity-text {
+    color: #4a5568 !important; /* Medium gray for activities */
+}
+
+/* Fix edit button text color */
+.ticket-detail-container .ticket-progress-section button {
+    color: inherit !important; /* Use the button's original color */
+}
+
+.ticket-detail-container .ticket-progress-section button[class*="text-white"] {
+    color: #ffffff !important; /* Ensure white text for edit button */
+}
+
+.ticket-detail-container .ticket-progress-section button[class*="text-gray-600"] {
+    color: #4b5563 !important; /* Ensure proper gray for cancel button */
+}
+
+/* Main ticket details color variations */
+.ticket-detail-container .ticket-id {
+    color: #1e40af !important; /* Blue for ticket ID */
+    font-weight: 500 !important;
+}
+
+.ticket-detail-container .ticket-status {
+    color: #059669 !important; /* Green for status */
+    font-weight: 500 !important;
+}
+
+.ticket-detail-container .ticket-priority {
+    color: #dc2626 !important; /* Red for priority */
+    font-weight: 500 !important;
+}
+
+.ticket-detail-container .ticket-assigned {
+    color: #7c3aed !important; /* Purple for assigned user */
+    font-weight: 500 !important;
+}
+
+.ticket-detail-container .ticket-created {
+    color: #ea580c !important; /* Orange for creation date */
+    font-weight: 400 !important;
+}
+
+.ticket-detail-container .ticket-updated {
+    color: #0891b2 !important; /* Cyan for last updated */
+    font-weight: 400 !important;
+}
+
+.ticket-detail-container .ticket-category {
+    color: #be185d !important; /* Pink for category */
+    font-weight: 500 !important;
+}
+
+.ticket-detail-container .ticket-department {
+    color: #0d9488 !important; /* Teal for department */
+    font-weight: 500 !important;
+}
+
+.ticket-detail-container .ticket-description {
+    color: #374151 !important; /* Dark gray for description */
+    font-weight: 400 !important;
+}
+
+.ticket-detail-container .ticket-resolution {
+    color: #059669 !important; /* Green for resolution */
+    font-weight: 400 !important;
+}
+
+/* Field-specific color variations */
+.ticket-detail-container .field-label {
+    color: #6b7280 !important; /* Medium gray for field labels */
+    font-weight: 500 !important;
+}
+
+.ticket-detail-container .field-value {
+    color: #374151 !important; /* Dark gray for field values */
+    font-weight: 400 !important;
+}
+
+.ticket-detail-container .field-required {
+    color: #dc2626 !important; /* Red for required fields */
+    font-weight: 500 !important;
+}
+
+.ticket-detail-container .field-optional {
+    color: #9ca3af !important; /* Light gray for optional fields */
+    font-weight: 400 !important;
+}
+
+/* Tooltip styling to ensure proper text visibility */
+[data-tooltip-id] {
+    color: #ffffff !important;
+    background-color: #1f2937 !important;
+}
+
+[data-theme="dark"] [data-tooltip-id] {
+    color: #f9fafb !important;
+    background-color: #374151 !important;
+    border: 1px solid #4b5563 !important;
+}
+
+/* Ensure tooltip text is always visible */
+[data-tooltip-id] * {
+    color: inherit !important;
+}
+
+/* Comments Interface Styles - Matching the exact design from the image */
+.comments-interface {
+    position: fixed;
+    bottom: 1rem;
+    right: 1rem;
+    width: 24rem; /* 384px - matches the image width */
+    background: white;
+    border-radius: 0.5rem;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+    border: 1px solid #e5e7eb;
+    z-index: 50;
+}
+
+.comments-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.comments-title {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: #111827;
+}
+
+.comments-close-btn {
+    color: #9ca3af;
+    transition: color 0.2s;
+}
+
+.comments-close-btn:hover {
+    color: #6b7280;
+}
+
+.comments-list {
+    max-height: 24rem; /* 384px */
+    overflow-y: auto;
+    padding: 1rem;
+}
+
+.comments-list > * + * {
+    margin-top: 1rem;
+}
+
+.comment-item {
+    display: flex;
+    gap: 0.75rem;
+}
+
+.comment-avatar {
+    flex-shrink: 0;
+    width: 2rem;
+    height: 2rem;
+    background: #f3f4f6;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #6b7280;
+}
+
+.comment-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.comment-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.25rem;
+}
+
+.comment-author {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: #111827;
+    line-height: 1.2;
+}
+
+.comment-timestamp {
+    font-size: 0.75rem;
+    color: #6b7280;
+    margin-left: 0;
+    margin-top: 2px;
+    line-height: 1.2;
+}
+
+.comment-options {
+    color: #9ca3af;
+    transition: color 0.2s;
+}
+
+.comment-options:hover {
+    color: #6b7280;
+}
+
+.comment-text {
+    font-size: 0.875rem;
+    color: #374151;
+    margin-top: 6px;
+    margin-bottom: 0.5rem;
+    line-height: 1.5;
+}
+
+.comment-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.comment-reply-btn {
+    font-size: 0.75rem;
+    color: #2563eb;
+    font-weight: 500;
+    transition: color 0.2s;
+}
+
+.comment-reply-btn:hover {
+    color: #1d4ed8;
+}
+
+.comment-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.comment-smile-btn {
+    color: #9ca3af;
+    transition: color 0.2s;
+}
+
+.comment-smile-btn:hover {
+    color: #6b7280;
+}
+
+.comment-id {
+    font-size: 0.75rem;
+    color: #9ca3af;
+}
+
+/* Reply Input Styles */
+.reply-input-container {
+    margin-top: 0.75rem;
+    background: #f9fafb;
+    border-radius: 0.5rem;
+    padding: 0.75rem;
+}
+
+.reply-input-form {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.reply-input {
+    flex: 1;
+    font-size: 0.875rem;
+    border: none;
+    background: transparent;
+    outline: none;
+    color: #374151;
+}
+
+.reply-input::placeholder {
+    color: #9ca3af;
+}
+
+.reply-smile-btn {
+    color: #9ca3af;
+    transition: color 0.2s;
+}
+
+.reply-smile-btn:hover {
+    color: #6b7280;
+}
+
+.reply-send-btn {
+    padding: 0.25rem 0.75rem;
+    border-radius: 0.25rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    transition: all 0.2s;
+    border: none;
+    cursor: pointer;
+}
+
+.reply-send-btn.active {
+    background: #7c3aed;
+    color: white;
+}
+
+.reply-send-btn.active:hover {
+    background: #6d28d9;
+}
+
+.reply-send-btn.inactive {
+    background: #d1d5db;
+    color: #9ca3af;
+    cursor: not-allowed;
+}
+
+/* New Comment Input Styles */
+.new-comment-container {
+    border-top: 1px solid #e5e7eb;
+    padding: 1rem;
+}
+
+.new-comment-form {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.new-comment-input {
+    flex: 1;
+    font-size: 0.875rem;
+    border: none;
+    outline: none;
+    color: #374151;
+}
+
+.new-comment-input::placeholder {
+    color: #9ca3af;
+}
+
+.new-comment-smile-btn {
+    color: #9ca3af;
+    transition: color 0.2s;
+}
+
+.new-comment-smile-btn:hover {
+    color: #6b7280;
+}
+
+.new-comment-send-btn {
+    padding: 0.25rem 0.75rem;
+    border-radius: 0.25rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    transition: all 0.2s;
+    border: none;
+    cursor: pointer;
+}
+
+.new-comment-send-btn.active {
+    background: #7c3aed;
+    color: white;
+}
+
+.new-comment-send-btn.active:hover {
+    background: #6d28d9;
+}
+
+.new-comment-send-btn.inactive {
+    background: #d1d5db;
+    color: #9ca3af;
+    cursor: not-allowed;
+}
+
+/* Comments Interface Toggle Button */
+.comments-toggle-btn {
+    position: fixed;
+    bottom: 1rem;
+    right: 1rem;
+    background: #7c3aed;
+    color: white;
+    padding: 0.75rem;
+    border-radius: 50%;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+    transition: all 0.2s;
+    border: none;
+    cursor: pointer;
+    z-index: 50;
+}
+
+.comments-toggle-btn:hover {
+    background: #6d28d9;
+    transform: scale(1.05);
+}
+
+/* Scrollbar styles for comments list */
+.comments-list::-webkit-scrollbar {
+    width: 4px;
+}
+
+.comments-list::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    border-radius: 2px;
+}
+
+.comments-list::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 2px;
+}
+
+.comments-list::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
+
+/* Modern Comments Interface - Using Space Grotesk for headings and Manrope for body text */
+
+.modern-comments-container {
+    background: #f8f9fa;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    border: 1px solid #e5e7eb;
+    overflow: hidden;
+    font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+}
+
+/* Comment Input Section */
+.comment-input-section {
+    padding: 16px;
+    background: #f8f9fa;
+}
+
+.comment-input-container {
+    position: relative;
+    background: white;
+    border-radius: 8px;
+    padding: 16px 16px 8px 16px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* Resizer Button */
+.resizer-btn {
+    position: absolute;
+    bottom: 8px;
+    right: 8px;
+    width: 16px;
+    height: 16px;
+    background: transparent;
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: nw-resize;
+    transition: all 0.2s;
+    color: #9ca3af;
+    z-index: 10;
+    opacity: 0.6;
+}
+
+.resizer-btn:hover {
+    color: #6b7280;
+    opacity: 0.8;
+}
+
+.resizer-btn:active {
+    cursor: nw-resize;
+    opacity: 1;
+}
+
+.comment-textarea {
+    width: 100%;
+    min-height: 140px;
+    max-height: 300px;
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    font-size: 13px !important;
+    line-height: 1.4;
+    color: #374151;
+    background: transparent;
+    resize: vertical;
+    outline: none;
+    transition: all 0.2s;
+    font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+    overflow-y: auto;
+}
+
+.comment-textarea:focus {
+    border: none;
+    background: transparent;
+    box-shadow: none;
+}
+
+.comment-textarea::placeholder {
+    color: #9ca3af;
+    font-weight: 400;
+    font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+    font-size: 13px !important;
+}
+
+/* Formatting Toolbar */
+.formatting-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 12px;
+    padding: 8px 0;
+    border-top: 1px solid #e5e7eb;
+}
+
+.format-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: none;
+    color: #6b7280;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+}
+
+.format-btn:hover {
+    background: #f3f4f6;
+    color: #374151;
+}
+
+.format-btn.active {
+    background: #7c3aed;
+    color: white;
+}
+
+.format-btn.active:hover {
+    background: #6d28d9;
+    color: white;
+}
+
+.format-separator {
+    width: 1px;
+    height: 20px;
+    background: #e5e7eb;
+    margin: 0 4px;
+}
+
+/* Submit Button Container */
+.submit-button-container {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 12px;
+    padding: 0 16px 16px 16px;
+}
+
+/* Submit Button */
+.submit-btn {
+    padding: 8px 16px !important;
+    border: none !important;
+    border-radius: 20px !important;
+    font-size: 14px !important;
+    font-weight: 500 !important;
+    cursor: pointer !important;
+    transition: all 0.2s !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+    line-height: 1.2 !important;
+    min-height: auto !important;
+    height: auto !important;
+    font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif !important;
+}
+
+.submit-btn.active {
+    background: #7c3aed;
+    color: white;
+}
+
+.submit-btn.active:hover {
+    background: #6d28d9;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(124, 58, 237, 0.3);
+}
+
+.submit-btn.inactive {
+    background: #e5e7eb;
+    color: #9ca3af;
+    cursor: not-allowed;
+}
+
+.submit-btn.loading {
+    background: #3b82f6;
+    color: white;
+    cursor: not-allowed;
+    opacity: 0.8;
+}
+
+.loading-spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid #ffffff;
+    border-top: 2px solid transparent;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    display: inline-block;
+    margin-right: 8px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Comments Header */
+.comments-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid #f1f5f9;
+    background: white;
+}
+
+.comments-title-section {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.comments-title {
+    font-size: 16px !important;
+    font-weight: 700 !important;
+    color: #111827 !important;
+    margin: 0 !important;
+    font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif !important;
+}
+
+/* More specific selectors to override global styles */
+.modern-comments-container .comments-title {
+    font-size: 16px !important;
+    font-weight: 700 !important;
+}
+
+.comments-header .comments-title {
+    font-size: 16px !important;
+    font-weight: 700 !important;
+}
+
+.comment-count-badge {
+    background: none;
+    color: #6b7280;
+    font-size: 14px;
+    font-weight: 400;
+    padding: 0;
+    border-radius: 0;
+    min-width: auto;
+    text-align: left;
+    font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+}
+
+.sort-option {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 14px;
+    color: #6b7280;
+    cursor: pointer;
+    transition: color 0.2s;
+    font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+}
+
+.sort-option:hover {
+    color: #374151;
+}
+
+/* Comments List */
+.comments-list {
+    max-height: 400px;
+    overflow-y: auto;
+    padding: 0;
+    background: white;
+}
+
+.comment-item {
+    padding: 16px 20px;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.comment-item:last-child {
+    border-bottom: none;
+}
+
+.main-comment {
+    display: flex;
+    gap: 12px;
+}
+
+.comment-avatar {
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    background: #f3f4f6;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: 600;
+    color: #6b7280;
+    font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+    border: 1px solid #e5e7eb;
+}
+
+.comment-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.comment-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+
+.commenter-name {
+    font-size: 13px !important;
+    font-weight: 700 !important;
+    color: #111827 !important;
+    font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif !important;
+}
+
+/* More specific selector to override global styles */
+.modern-comments-container .commenter-name {
+    font-weight: 700 !important;
+    font-size: 13px !important;
+}
+
+/* Even more specific to override any global span or text styles */
+.comment-content .commenter-name {
+    font-weight: 700 !important;
+    font-size: 13px !important;
+    color: #111827 !important;
+}
+
+.comment-timestamp {
+    font-size: 11px !important;
+    color: #9ca3af !important;
+    font-weight: 400 !important;
+    font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif !important;
+}
+
+.comment-text {
+    font-size: 13px !important;
+    color: #374151 !important;
+    line-height: 1.5 !important;
+    margin: 0 0 10px 0 !important;
+    font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif !important;
+}
+
+.comment-engagement {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.engagement-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    border: none;
+    background: none;
+    border-radius: 4px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.thumbs-up {
+    color: #7c3aed;
+}
+
+.thumbs-up:hover {
+    background: #f3f4f6;
+}
+
+.thumbs-down {
+    color: #9ca3af;
+}
+
+.thumbs-down:hover {
+    background: #f3f4f6;
+    color: #6b7280;
+}
+
+.reply-btn {
+    color: #9ca3af;
+}
+
+.reply-btn:hover {
+    background: #f3f4f6;
+    color: #6b7280;
+}
+
+/* Reply Section */
+.reply-section {
+    margin-top: 12px;
+    margin-left: 48px;
+    position: relative;
+}
+
+.reply-indicator {
+    position: absolute;
+    left: -24px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: #e5e7eb;
+}
+
+.reply-input-container {
+    display: flex;
+    gap: 12px;
+    padding: 12px;
+    background: #f8fafc;
+    border-radius: 8px;
+    border: 1px solid #e5e7eb;
+}
+
+.reply-avatar {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    background: linear-gradient(135deg, #7c3aed, #a855f7);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 600;
+    color: white;
+}
+
+.reply-content {
+    flex: 1;
+}
+
+.reply-textarea {
+    width: 100%;
+    min-height: 60px;
+    padding: 8px 12px;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    font-size: 13px;
+    line-height: 1.4;
+    color: #374151;
+    background: white;
+    resize: none;
+    outline: none;
+    transition: all 0.2s;
+}
+
+.reply-textarea:focus {
+    border-color: #7c3aed;
+    box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.1);
+}
+
+.reply-textarea::placeholder {
+    color: #9ca3af;
+}
+
+.reply-actions {
+    margin-top: 8px;
+    display: flex;
+    justify-content: flex-end;
+}
+
+.reply-submit-btn {
+    padding: 6px 12px;
+    border: none;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.reply-submit-btn.active {
+    background: #7c3aed;
+    color: white;
+}
+
+.reply-submit-btn.active:hover {
+    background: #6d28d9;
+}
+
+.reply-submit-btn.inactive {
+    background: #e5e7eb;
+    color: #9ca3af;
+    cursor: not-allowed;
+}
+
+/* Empty State */
+.empty-comments {
+    text-align: center;
+    padding: 40px 20px;
+    color: #9ca3af;
+    font-size: 14px;
+}
+
+/* Scrollbar Styles */
+.comments-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.comments-list::-webkit-scrollbar-track {
+    background: #f1f5f9;
+}
+
+.comments-list::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 3px;
+}
+
+.comments-list::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
+
+
+

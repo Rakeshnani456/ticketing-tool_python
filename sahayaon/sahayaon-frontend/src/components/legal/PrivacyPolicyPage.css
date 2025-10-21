@@ -1,0 +1,159 @@
+/* Privacy Policy Page Styles */
+
+.privacy-policy-page * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+.privacy-policy-page {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    line-height: 1.7;
+    color: #2c3e50;
+    background: #ffffff;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.privacy-header {
+    background: #2c3e50;
+    color: white;
+    padding: 3.5rem 2rem 2.5rem;
+    border-bottom: 3px solid #34495e;
+}
+
+.privacy-header-content {
+    max-width: 900px;
+    margin: 0 auto;
+}
+
+.privacy-header h1 {
+    font-size: 2.25rem;
+    font-weight: 600;
+    margin-bottom: 0.75rem;
+    letter-spacing: -0.5px;
+}
+
+.privacy-header .privacy-last-updated {
+    font-size: 0.95rem;
+    opacity: 0.85;
+    font-weight: 400;
+}
+
+.privacy-compliance {
+    display: inline-block;
+    margin-top: 1.25rem;
+    padding: 0.5rem 0;
+    font-size: 0.9rem;
+    opacity: 0.9;
+}
+
+.privacy-container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 3rem 2rem 4rem;
+    flex: 1;
+}
+
+.privacy-intro {
+    font-size: 1.05rem;
+    color: #555;
+    margin-bottom: 3rem;
+    padding-bottom: 2rem;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.privacy-section {
+    margin-bottom: 3rem;
+}
+
+.privacy-section h2 {
+    color: #2c3e50;
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin-bottom: 1.25rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid #2c3e50;
+}
+
+.privacy-section h3 {
+    color: #34495e;
+    font-size: 1.15rem;
+    font-weight: 600;
+    margin: 1.75rem 0 1rem;
+}
+
+.privacy-section p {
+    color: #555;
+    margin-bottom: 1.25rem;
+}
+
+.privacy-section ul,
+.privacy-section ol {
+    margin-left: 1.75rem;
+    margin-bottom: 1.25rem;
+}
+
+.privacy-section li {
+    color: #555;
+    margin-bottom: 0.75rem;
+    line-height: 1.7;
+}
+
+.privacy-section strong {
+    color: #2c3e50;
+    font-weight: 600;
+}
+
+.privacy-info-box {
+    background: #f8f9fa;
+    border-left: 3px solid #2c3e50;
+    padding: 1.5rem;
+    margin: 1.75rem 0;
+}
+
+.privacy-info-box h3 {
+    margin-top: 0;
+}
+
+.privacy-info-box ul {
+    margin-bottom: 0;
+}
+
+.privacy-rights-list {
+    margin: 1.5rem 0;
+}
+
+.privacy-rights-list li {
+    margin-bottom: 1rem;
+}
+
+.privacy-footer {
+    background: #2c3e50;
+    color: white;
+    padding: 2rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+.privacy-footer p {
+    font-size: 0.9rem;
+    opacity: 0.85;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .privacy-header h1 {
+        font-size: 1.75rem;
+    }
+
+    .privacy-container {
+        padding: 2rem 1.5rem 3rem;
+    }
+
+    .privacy-section h2 {
+        font-size: 1.35rem;
+    }
+}
+
