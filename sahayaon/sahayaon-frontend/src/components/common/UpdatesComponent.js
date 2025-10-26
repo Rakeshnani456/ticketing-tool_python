@@ -500,7 +500,7 @@ const UpdatesComponent = ({
       </div>
 
       {/* Updates List */}
-      <div className="max-h-[32rem] overflow-y-auto">
+      <div className="max-h-[32rem] overflow-y-auto p-1 space-y-1">
         <AnimatePresence>
           {displayUpdates.length > 0 ? (
             displayUpdates.map((update, index) => {
@@ -514,16 +514,16 @@ const UpdatesComponent = ({
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -20 }}
                   transition={{ duration: 0.2, delay: index * 0.05 }}
-                  className={`border-b border-gray-200 last:border-b-0 ${
-                    !update.isRead ? 'bg-blue-50/50' : ''
+                  className={`rounded-lg border border-gray-200 ${
+                    !update.isRead ? 'bg-blue-50/50 shadow-sm' : 'bg-white shadow-sm'
                   }`}
                 >
-                  <div className={`px-4 py-3 hover:bg-gray-50 transition-all duration-200 group border-l-4 ${
-                    !update.isRead ? 'border-l-blue-500 bg-blue-50/30' : 'border-l-transparent'
+                  <div className={`relative px-4 py-3.5 hover:bg-gray-50 hover:shadow-md transition-all duration-200 group border-l-4 rounded-lg ${
+                    !update.isRead ? 'border-l-blue-500 bg-blue-50/30' : 'border-l-gray-200'
                   }`}>
-                    <div className="grid grid-cols-12 gap-3 items-start">
-                      {/* Left Column - Icon and Main Info */}
-                      <div className="col-span-1 flex flex-col items-center">
+                    <div className="flex gap-3 items-start">
+                      {/* Left Column - Icon */}
+                      <div className="flex flex-col items-center flex-shrink-0">
                         <div className={`p-2 rounded-lg ${update.color.replace('text-', 'bg-').replace('-600', '-100')} shadow-sm`}>
                           <IconComponent className={`w-4 h-4 ${update.color}`} />
                         </div>
@@ -532,44 +532,67 @@ const UpdatesComponent = ({
                         )}
                       </div>
 
-                      {/* Center Column - Content */}
-                      <div className="col-span-8 flex flex-col gap-2">
+                      {/* Main Content Area */}
+                      <div className="flex-1 min-w-0 flex flex-col gap-2">
                         {/* Header Row */}
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1">
-                              <h3 className="font-semibold text-gray-900 text-sm">
-                                {update.title}
-                              </h3>
-                              {update.ticketDisplayId && (
-                                <button
-                                  onClick={() => handleNavigateToTicket(update.ticketId)}
-                                  className="px-2 py-0.5 bg-blue-100 hover:bg-blue-200 text-blue-800 text-xs font-bold rounded transition-colors cursor-pointer"
-                                >
-                                  #{update.ticketDisplayId}
-                                </button>
-                              )}
-                            </div>
-                            <p className="text-gray-700 text-xs leading-relaxed line-clamp-3">
-                              {update.description}
-                            </p>
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <h3 className="font-semibold text-gray-900 text-sm">
+                              {update.title}
+                            </h3>
+                            {update.ticketDisplayId && (
+                              <button
+                                onClick={() => handleNavigateToTicket(update.ticketId)}
+                                className="px-2 py-0.5 bg-blue-100 hover:bg-blue-200 text-blue-800 text-xs font-bold rounded transition-colors cursor-pointer"
+                              >
+                                #{update.ticketDisplayId}
+                              </button>
+                            )}
+                          </div>
+                          
+                          {/* Status and Priority badges */}
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            <span className={`px-2 py-1 rounded text-xs font-medium bg-gray-100 ${getPriorityColor(update.priority).split(' ')[1]}`}>
+                              {update.priority}
+                            </span>
+                            {update.status && (
+                              <span className={`px-2 py-1 rounded text-xs font-medium bg-gray-100 ${getStatusColor(update.status).split(' ')[1]}`}>
+                                {update.status}
+                              </span>
+                            )}
+                            {!update.isRead ? (
+                              <div className="flex items-center gap-1 px-1.5 py-0.5 bg-blue-100 rounded text-xs">
+                                <div className="w-1 h-1 bg-blue-600 rounded-full"></div>
+                                <span className="font-medium text-blue-800">Unread</span>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-1 px-1.5 py-0.5 bg-gray-100 rounded text-xs">
+                                <div className="w-1 h-1 bg-gray-400 rounded-full"></div>
+                                <span className="font-medium text-gray-600">Read</span>
+                              </div>
+                            )}
                           </div>
                         </div>
 
-                        {/* Metadata Row */}
-                        <div className="flex items-center gap-4 text-xs text-gray-600">
-                          <div className="flex items-center gap-1">
+                        {/* Description */}
+                        <p className="text-gray-700 text-xs leading-relaxed line-clamp-3">
+                          {update.description}
+                        </p>
+
+                        {/* Metadata Row - With full width ticket title */}
+                        <div className="flex items-center gap-4 text-xs text-gray-600 flex-wrap">
+                          <div className="flex items-center gap-1 flex-shrink-0">
                             <User className="w-3 h-3" />
                             <span className="font-medium">{update.user}</span>
                           </div>
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-1 flex-shrink-0">
                             <Clock className="w-3 h-3" />
                             <span>{formatTimestamp(update.timestamp)}</span>
                           </div>
                           {update.ticketTitle && (
-                            <div className="flex items-center gap-1">
-                              <FileText className="w-3 h-3" />
-                              <span className="truncate max-w-32 font-medium" title={update.ticketTitle}>
+                            <div className="flex items-center gap-1 flex-1 min-w-0">
+                              <FileText className="w-3 h-3 flex-shrink-0" />
+                              <span className="truncate font-medium" title={update.ticketTitle}>
                                 {update.ticketTitle}
                               </span>
                             </div>
@@ -617,44 +640,14 @@ const UpdatesComponent = ({
                           </div>
                         )}
                       </div>
-
-                      {/* Right Column - Status, Priority */}
-                      <div className="col-span-3 flex flex-col items-end gap-1">
-                        {/* Top Row - Status and Priority badges */}
-                        <div className="flex items-center gap-1">
-                          <span className={`px-2 py-1 rounded text-xs font-medium bg-gray-100 ${getPriorityColor(update.priority).split(' ')[1]}`}>
-                            {update.priority}
-                          </span>
-                          {update.status && (
-                            <span className={`px-2 py-1 rounded text-xs font-medium bg-gray-100 ${getStatusColor(update.status).split(' ')[1]}`}>
-                              {update.status}
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Middle Row - Read Status */}
-                        <div className="flex items-center gap-1">
-                          {!update.isRead ? (
-                            <div className="flex items-center gap-1 px-1.5 py-0.5 bg-blue-100 rounded text-xs">
-                              <div className="w-1 h-1 bg-blue-600 rounded-full"></div>
-                              <span className="font-medium text-blue-800">Unread</span>
-                            </div>
-                          ) : (
-                            <div className="flex items-center gap-1 px-1.5 py-0.5 bg-gray-100 rounded text-xs">
-                              <div className="w-1 h-1 bg-gray-400 rounded-full"></div>
-                              <span className="font-medium text-gray-600">Read</span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
                     </div>
 
-                    {/* Bottom Row - Actions at bottom right */}
-                    <div className="flex justify-end gap-2 -mt-2">
+                    {/* Overlay Action Buttons - Positioned absolutely on hover */}
+                    <div className="absolute bottom-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                       {update.ticketId && (
                         <button
                           onClick={() => handleNavigateToTicket(update.ticketId)}
-                          className="opacity-0 group-hover:opacity-100 flex items-center gap-1 bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded text-xs font-medium transition-all duration-200"
+                          className="flex items-center gap-1 bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded text-xs font-medium transition-all duration-200 shadow-lg"
                         >
                           <ExternalLink className="w-3 h-3" />
                           <span>View Ticket</span>
@@ -664,16 +657,17 @@ const UpdatesComponent = ({
                       {!update.isRead ? (
                         <button
                           onClick={() => handleMarkAsRead(update)}
-                          className="opacity-0 group-hover:opacity-100 bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded text-xs font-medium transition-all duration-200"
+                          className="bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded text-xs font-medium transition-all duration-200 shadow-lg"
                         >
                           Mark Read
                         </button>
                       ) : (
                         <button
                           onClick={() => handleMarkAsUnread(update)}
-                          className="opacity-0 group-hover:opacity-100 bg-gray-600 hover:bg-gray-700 text-white px-2 py-1 rounded text-xs font-medium transition-all duration-200"
+                          className="bg-gray-600 hover:bg-gray-700 text-white px-2 py-1 rounded text-xs font-medium transition-all duration-200 shadow-lg flex items-center gap-1"
                         >
                           <EyeOff className="w-3 h-3" />
+                          <span>Mark Unread</span>
                         </button>
                       )}
                     </div>

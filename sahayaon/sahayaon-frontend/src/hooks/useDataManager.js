@@ -40,33 +40,26 @@ const getTicketsFallback = async (userId, options = {}) => {
  */
 const getTicketCountsFallback = async (userId, options = {}) => {
     try {
-        const { userRole } = options;
+        const { userRole, clientName } = options;
         const tickets = await getTicketsFallback(userId, options);
         if (!tickets) return null;
         
         const totalTickets = tickets.length;
         const activeTickets = tickets.filter(t => ['Open', 'In Progress', 'Hold'].includes(t.status)).length;
         
-        let assignedToMeTickets = 0;
-        
-        if (userRole === 'user' || userRole === 'engineer') {
-            // For regular users, count tickets they created (not assigned to them)
-            // Query tickets created by the user with active status
-            const ticketsRef = collection(dbClient, 'tickets');
-            const createdByUserQuery = query(
-                ticketsRef, 
-                where('reporter_id', '==', userId),
-                where('status', 'in', ['Open', 'In Progress', 'Hold'])
-            );
-            const createdByUserSnapshot = await getDocs(createdByUserQuery);
-            assignedToMeTickets = createdByUserSnapshot.docs.length;
-        } else {
-            // For admin/support roles, count tickets they created
-            assignedToMeTickets = tickets.filter(t => t.reporter_id === userId && !['Closed', 'Resolved'].includes(t.status)).length;
-        }
+        // SIMPLIFIED: For ALL roles, "My Tickets" count = active tickets created by the user
+        // This matches what MyTicketsComponent actually displays
+        const ticketsRef = collection(dbClient, 'tickets');
+        const myTicketsQuery = query(
+            ticketsRef, 
+            where('reporter_id', '==', userId),
+            where('status', 'in', ['Open', 'In Progress', 'Hold'])
+        );
+        const myTicketsSnapshot = await getDocs(myTicketsQuery);
+        const assignedToMeTickets = myTicketsSnapshot.docs.length;
 
         return {
-            total_tickets: totalTickets,
+            total_tickets: activeTickets,
             active_tickets: activeTickets,
             assigned_to_me: assignedToMeTickets
         };

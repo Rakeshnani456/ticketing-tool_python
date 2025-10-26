@@ -261,24 +261,20 @@ class WebSocketServer {
         // This is different from the main tickets list for regular users
         let assignedToMeTickets = 0;
         
-        if (userRole === 'user' || userRole === 'engineer') {
-            // For regular users, get tickets assigned to them
-            const assignedQuery = db.collection('tickets')
-                .where('assigned_to_id', '==', userId)
-                .where('status', 'in', ['Open', 'In Progress', 'Hold']);
-            
-            const assignedSnapshot = await assignedQuery.get();
-            assignedToMeTickets = assignedSnapshot.docs.length;
-        } else {
-            // For admin/support roles, use the filtered tickets
-            assignedToMeTickets = tickets.filter(t => t.assigned_to_id === userId && !['Closed', 'Resolved'].includes(t.status)).length;
-        }
+        // SIMPLIFIED: For ALL roles, "My Tickets" count = active tickets created by the user
+        // This matches what MyTicketsComponent actually displays
+        const myTicketsQuery = db.collection('tickets')
+            .where('reporter_id', '==', userId)
+            .where('status', 'in', ['Open', 'In Progress', 'Hold']);
+        
+        const myTicketsSnapshot = await myTicketsQuery.get();
+        assignedToMeTickets = myTicketsSnapshot.docs.length;
         
         const totalTickets = tickets.length;
         const activeTickets = tickets.filter(t => ['Open', 'In Progress', 'Hold'].includes(t.status)).length;
 
         return {
-            total_tickets: totalTickets,
+            total_tickets: activeTickets, // Changed to show only active tickets to match dashboard
             active_tickets: activeTickets,
             assigned_to_me: assignedToMeTickets
         };

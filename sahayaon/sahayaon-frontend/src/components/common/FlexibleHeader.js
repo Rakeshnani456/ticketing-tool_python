@@ -220,9 +220,19 @@ const FlexibleHeader = ({
                     <div className="relative" ref={profileMenuRef}>
                         <button
                             onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
-                            className="flex items-center justify-center w-10 h-10 rounded-lg bg-white text-gray-700 font-semibold text-base border-2 border-gray-400 hover:bg-gray-50 hover:border-blue-500 transition-all duration-200 shadow-sm"
+                            className="flex items-center gap-2 px-2 py-1 rounded-lg bg-white hover:bg-gray-50 transition-all duration-200 focus:outline-none"
                         >
-                            {currentUser?.email?.charAt(0).toUpperCase()}
+                            <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-white text-gray-700 font-semibold text-base border border-gray-300 hover:border-blue-500 transition-all duration-200">
+                                {(currentUser?.firstName?.charAt(0) || currentUser?.fullName?.charAt(0) || currentUser?.email?.charAt(0))?.toUpperCase()}
+                            </div>
+                            <div className="hidden lg:flex flex-col items-start">
+                                <span className="text-xs font-medium text-gray-700 leading-tight">
+                                    {currentUser?.firstName || currentUser?.fullName?.split(' ')[0] || currentUser?.email?.split('@')[0]}
+                                </span>
+                                <span className="text-xs text-gray-500 capitalize leading-tight">
+                                    {currentUser?.role?.replace('_', ' ')}
+                                </span>
+                            </div>
                         </button>
                         
                         {isProfileMenuOpen && (
@@ -230,11 +240,11 @@ const FlexibleHeader = ({
                                 <div className="px-4 py-3">
                                     <div className="flex items-center gap-3">
                                         <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center text-gray-700 font-semibold text-sm border border-gray-200">
-                                            {currentUser?.email?.charAt(0).toUpperCase()}
+                                            {(currentUser?.firstName?.charAt(0) || currentUser?.fullName?.charAt(0) || currentUser?.email?.charAt(0))?.toUpperCase()}
                                         </div>
                                         <div className="min-w-0">
                                             <p className="text-sm font-semibold text-gray-800 truncate">
-                                                {currentUser?.email}
+                                                {currentUser?.fullName || currentUser?.email}
                                             </p>
                                             <p className="text-xs text-gray-500 capitalize truncate">
                                                 {currentUser?.role?.replace('_', ' ')}

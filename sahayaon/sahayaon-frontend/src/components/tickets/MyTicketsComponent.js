@@ -290,7 +290,7 @@ const MyTicketsComponent = ({ user, navigateTo, showFlashMessage, searchKeyword,
                                 <tr key={ticket.id} className="block sm:table-row bg-white border-b border-gray-200 hover:bg-gray-50 transition-colors duration-150 text-xs">
                                     <td className="block sm:table-cell px-2 py-4 text-xs text-gray-800 whitespace-normal break-words border-r border-gray-200">
                                         <span className="block sm:hidden font-semibold text-gray-600">#:</span>
-                                        {index + 1}
+                                        {(currentPage - 1) * ticketsPerPage + index + 1}
                                     </td>
                                     <td className="block sm:table-cell px-2 py-4 text-xs text-blue-700 hover:underline font-medium cursor-pointer whitespace-normal break-words border-r border-gray-200">
                                         <span className="block sm:hidden font-semibold text-gray-600">Ticket ID:</span>

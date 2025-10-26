@@ -76,6 +76,40 @@ const transporter = nodemailer.createTransport({
 // Initialize email service
 const emailService = new EmailService(transporter);
 
+// Initialize Email-to-Ticket Service
+const EmailToTicketService = require('./utils/emailToTicketService');
+let emailToTicketService = null;
+
+if (dbConnected) {
+    emailToTicketService = new EmailToTicketService(
+        db,
+        admin,
+        ticketsCollection,
+        usersCollection,
+        clientsCollection,
+        emailService
+    );
+    console.log('✅ Email-to-Ticket service initialized');
+
+    // Start automatic email polling every 5 minutes
+    const EMAIL_POLL_INTERVAL = parseInt(process.env.EMAIL_POLL_INTERVAL_MINUTES || '5') * 60 * 1000;
+    
+    if (process.env.ENABLE_EMAIL_TO_TICKET === 'true') {
+        setInterval(async () => {
+            try {
+                console.log('🔄 Automatic email polling started...');
+                await emailToTicketService.processEmails();
+            } catch (error) {
+                console.error('❌ Error in automatic email polling:', error);
+            }
+        }, EMAIL_POLL_INTERVAL);
+        
+        console.log(`✅ Automatic email polling enabled (every ${process.env.EMAIL_POLL_INTERVAL_MINUTES || '5'} minutes)`);
+    } else {
+        console.log('⚠️ Automatic email polling disabled. Set ENABLE_EMAIL_TO_TICKET=true to enable.');
+    }
+}
+
 // CORS configuration
 const corsOptions = {
     origin: function (origin, callback) {
@@ -351,14 +385,14 @@ async function generateDisplayId() {
         if (!lastTicketQuery.empty) {
             const lastTicket = lastTicketQuery.docs[0].data();
             const lastDisplayId = lastTicket.display_id;
-            if (lastDisplayId && lastDisplayId.startsWith('TT')) {
-                const numPart = parseInt(lastDisplayId.substring(2));
+            if (lastDisplayId && lastDisplayId.startsWith('INC')) {
+                const numPart = parseInt(lastDisplayId.substring(3));
                 if (!isNaN(numPart)) {
                     nextIdNum = numPart + 1;
                 }
             }
         }
-        return `TT${String(nextIdNum).padStart(6, '0')}`;
+        return `INC${String(nextIdNum).padStart(6, '0')}`;
     } catch (error) {
         console.error('Error generating display ID:', error);
         throw new Error('Failed to generate ticket display ID');
@@ -382,6 +416,7 @@ const personalNotesRoutes = require('./routes/personalNotesRoutes');
 const searchRoutes = require('./routes/searchRoutes');
 const readStatesRoutes = require('./routes/readStatesRoutes');
 const gdprRoutes = require('./routes/gdprRoutes');
+const emailToTicketRoutes = require('./routes/emailToTicketRoutes');
 
 
 app.use('/', authRoutes(db, admin, usersCollection, authenticateToken));
@@ -399,6 +434,11 @@ app.use('/api/personal-notes', personalNotesRoutes(db, admin, usersCollection, a
 app.use('/api/search', searchRoutes);
 app.use('/api/read-states', readStatesRoutes(db, admin, usersCollection, authenticateToken));
 app.use('/api/gdpr', gdprRoutes(db, admin, authenticateToken));
+
+// Email-to-Ticket route (only if service is initialized)
+if (emailToTicketService) {
+    app.use('/api/email-to-ticket', emailToTicketRoutes(emailToTicketService, authenticateToken, checkRole));
+}
 
 // Add cache statistics endpoint
 app.get('/api/cache/stats', (req, res) => {

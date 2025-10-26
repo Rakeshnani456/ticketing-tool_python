@@ -17,8 +17,8 @@ export const NotificationProvider = ({ children }) => {
      * @param {string} message - The notification message
      * @param {string} type - Type of notification: 'success', 'error', 'warning', 'info'
      * @param {object} options - Additional options
-     * @param {number} options.duration - Duration in milliseconds (default: 4000)
-     * @param {string} options.position - Position of notification (default: 'top-right')
+     * @param {number} options.duration - Duration in milliseconds (default: 2000)
+     * @param {string} options.position - Position of notification (default: 'top-center')
      * @param {string} options.id - Custom ID for the notification (auto-generated if not provided)
      */
     const showNotification = useCallback((message, type = 'info', options = {}) => {
@@ -28,7 +28,7 @@ export const NotificationProvider = ({ children }) => {
             message,
             type,
             duration: options.duration || 2000, // Reduced from 4000ms to 2000ms
-            position: options.position || 'top-right',
+            position: options.position || 'top-center',
             timestamp: Date.now()
         };
 

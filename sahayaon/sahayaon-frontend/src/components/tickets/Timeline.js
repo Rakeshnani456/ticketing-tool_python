@@ -321,7 +321,7 @@ const Timeline = ({ events = [] }) => {
                             onClick={handleScrollLeft}
                             aria-label="Scroll timeline left"
                         >
-                            <ChevronLeft className="w-4 h-4 text-blue-600" />
+                            <ChevronLeft className="w-4 h-4 text-blue-600" strokeWidth={2.5} style={{ filter: 'drop-shadow(0 0 1px rgba(0, 0, 0, 0.3))' }} />
                         </button>
                     </div>
                 )}
@@ -335,7 +335,7 @@ const Timeline = ({ events = [] }) => {
                             onClick={handleScrollRight}
                             aria-label="Scroll timeline right"
                         >
-                            <ChevronRight className="w-4 h-4 text-blue-600" />
+                            <ChevronRight className="w-4 h-4 text-blue-600" strokeWidth={2.5} style={{ filter: 'drop-shadow(0 0 1px rgba(0, 0, 0, 0.3))' }} />
                         </button>
                     </div>
                 )}
@@ -345,12 +345,12 @@ const Timeline = ({ events = [] }) => {
                     <div style={getTooltipStyle(hoveredIndex)}>
                         <div className="bg-white text-gray-900 text-xs rounded py-2 px-3 shadow-lg max-w-xs border border-gray-200">
                             <div className="absolute left-1/2 -top-2 w-0 h-0 border-l-6 border-r-6 border-b-6 border-l-transparent border-r-transparent border-b-white -translate-x-1/2"></div>
-                            <div className="font-bold mb-1 break-words text-gray-900">{events[hoveredIndex].label}</div>
-                            <div className="text-gray-600 text-xs mb-2">
+                            <div className="font-bold mb-1 break-words text-gray-900 tracking-tight">{events[hoveredIndex].label}</div>
+                            <div className="text-gray-700 text-xs mb-2 font-semibold">
                                 {new Date(events[hoveredIndex].timestamp).toLocaleString()}
                             </div>
                             {events[hoveredIndex].detail && (
-                                <div className="text-gray-700 text-xs leading-relaxed break-words whitespace-pre-wrap">
+                                <div className="text-gray-800 text-xs font-medium leading-relaxed break-words whitespace-pre-wrap">
                                     {events[hoveredIndex].detail}
                                 </div>
                             )}
@@ -363,13 +363,13 @@ const Timeline = ({ events = [] }) => {
                     <div style={getExpandedTooltipStyle(hoveredIndex)}>
                         <div className="bg-white text-gray-900 text-xs rounded-lg py-3 px-4 shadow-2xl border border-gray-200 max-w-none">
                             <div className="absolute left-1/2 -top-2 w-0 h-0 border-l-6 border-r-6 border-b-6 border-l-transparent border-r-transparent border-b-white -translate-x-1/2"></div>
-                            <div className="font-bold mb-3 text-sm break-words text-blue-600">{events[hoveredIndex].label}</div>
+                            <div className="font-extrabold mb-3 text-sm break-words text-blue-700 tracking-tight">{events[hoveredIndex].label}</div>
                             <div className="space-y-1">
                                 {getEventDetails(events[hoveredIndex]).map((detail, idx) => (
-                                    <div key={idx} className="text-gray-700 text-xs leading-relaxed break-words max-w-full overflow-hidden">
+                                    <div key={idx} className="text-gray-800 text-xs font-medium leading-relaxed break-words max-w-full overflow-hidden">
                                         {detail.split('**').map((part, partIdx) => 
                                             partIdx % 2 === 1 ? (
-                                                <span key={partIdx} className="font-bold text-blue-600 bg-blue-50 px-1 rounded">
+                                                <span key={partIdx} className="font-extrabold text-blue-700 bg-blue-50 px-1 rounded">
                                                     {part}
                                                 </span>
                                             ) : part
@@ -416,8 +416,10 @@ const Timeline = ({ events = [] }) => {
                                             <ArrowRight 
                                                 size={expanded ? 20 : 16} 
                                                 className={`transition-all duration-300 ${
-                                                    expanded ? 'text-blue-400' : 'text-gray-300'
-                                                }`} 
+                                                    expanded ? 'text-blue-600' : 'text-gray-500'
+                                                }`}
+                                                strokeWidth={2.5}
+                                                style={{ filter: 'drop-shadow(0 0 1px rgba(0, 0, 0, 0.3))' }}
                                             />
                                         </div>
                                     )}
@@ -426,7 +428,7 @@ const Timeline = ({ events = [] }) => {
                                             expanded 
                                                 ? 'flex flex-col justify-center items-center w-28 min-h-[140px] p-2' 
                                                 : 'flex justify-center items-center w-10 h-10'
-                                        } rounded bg-gray-50 text-gray-700 flex-shrink-0 relative cursor-pointer transition-all duration-300 ${
+                                        } rounded bg-gray-50 text-gray-900 flex-shrink-0 relative cursor-pointer transition-all duration-300 ${
                                             expanded ? 'hover:ring-1 hover:ring-blue-200' : ''
                                         } ${
                                             isAnimating ? expanded ? 'animate-zoomIn' : 'animate-zoomOut' : ''
@@ -439,27 +441,32 @@ const Timeline = ({ events = [] }) => {
                                                 expanded ? 'mb-2' : 'w-full h-full'
                                             }`}>
                                                 <IconComponent 
-                                                    size={expanded ? 16 : 14} 
+                                                    size={expanded ? 18 : 16} 
                                                     className={`transition-all duration-300 ${
                                                         event.iconColor || getIconColorClass(event.type)
                                                     } ${!expanded ? 'group-hover:scale-125' : ''}`}
+                                                    strokeWidth={2.5}
+                                                    style={{ 
+                                                        filter: 'drop-shadow(0 0 1px rgba(0, 0, 0, 0.3))',
+                                                        strokeWidth: '2.5px'
+                                                    }}
                                                 />
                                             </div>
                                         )}
                                         {expanded && (
                                             <>
-                                                <div className="text-xs font-semibold mb-1 w-full text-center line-clamp-1 transition-opacity duration-300">
+                                                <div className="text-xs font-bold text-gray-900 mb-1 w-full text-center line-clamp-1 transition-opacity duration-300 tracking-tight">
                                                     {event.label}
                                                 </div>
                                                 <p className="text-[10px] text-blue-700 font-bold flex items-center justify-center w-full truncate mb-1 transition-opacity duration-300">
-                                                    <Clock className="w-3 h-3 mr-1 text-blue-400 flex-shrink-0" />
+                                                    <Clock className="w-3 h-3 mr-1 text-blue-600 flex-shrink-0" strokeWidth={2.5} style={{ filter: 'drop-shadow(0 0 1px rgba(0, 0, 0, 0.3))' }} />
                                                     {new Date(event.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                                 </p>
-                                                <p className="text-[10px] text-gray-500 w-full text-center truncate mb-1 transition-opacity duration-300">
+                                                <p className="text-[10px] text-gray-700 font-semibold w-full text-center truncate mb-1 transition-opacity duration-300">
                                                     {new Date(event.timestamp).toLocaleDateString()}
                                                 </p>
                                                 {event.detail && (
-                                                    <p className="text-[10px] text-gray-400 w-full text-center line-clamp-2 transition-opacity duration-300">
+                                                    <p className="text-[10px] text-gray-600 font-medium w-full text-center line-clamp-2 transition-opacity duration-300">
                                                         {event.detail}
                                                     </p>
                                                 )}
@@ -476,7 +483,7 @@ const Timeline = ({ events = [] }) => {
             {/* Toggle button */}
             <div className="flex items-center justify-center">
                 <button
-                    className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold rounded-b-md bg-orange-50 text-orange-500 hover:bg-orange-100 transition-colors"
+                    className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-b-md bg-orange-50 text-orange-600 hover:bg-orange-100 transition-colors tracking-wide"
                     onClick={handleToggle}
                     aria-label={expanded ? 'Hide ticket workflow' : 'Show ticket workflow'}
                 >

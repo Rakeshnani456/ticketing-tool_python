@@ -155,7 +155,8 @@ function LeftMenuTooltipBubble({ title, children, id }) {
             ref={iconRef}
             onMouseEnter={() => setShow(true)}
             onMouseLeave={() => setShow(false)}
-            style={{ position: 'relative', display: 'inline-block', isolation: 'isolate' }}
+            className="w-full flex"
+            style={{ position: 'relative', isolation: 'isolate' }}
         >
             {children}
             {show && createPortal(

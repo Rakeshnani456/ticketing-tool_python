@@ -480,12 +480,23 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
     
     let activitiesQuery;
     try {
-      // Create query for recent activities
-      activitiesQuery = query(
-        collection(dbClient, 'activities'),
-        orderBy('timestamp', 'desc'),
-        limit(50)
-      );
+      // Create query for recent activities with client filtering for site admins
+      if (user?.role === 'site_admin' && user?.client_name) {
+        console.log('🔒 Filtering activities for site admin by client:', user.client_name);
+        activitiesQuery = query(
+          collection(dbClient, 'activities'),
+          where('client_name', '==', user.client_name),
+          orderBy('timestamp', 'desc'),
+          limit(50)
+        );
+      } else {
+        // For support/engineers, get all activities
+        activitiesQuery = query(
+          collection(dbClient, 'activities'),
+          orderBy('timestamp', 'desc'),
+          limit(50)
+        );
+      }
     } catch (error) {
       console.error('Error creating activities query for dashboard:', error);
       return;
@@ -512,7 +523,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
       console.log('🔄 Cleaning up real-time activities listener for dashboard');
       unsubscribe();
     };
-  }, [user?.uid]);
+  }, [user?.uid, user?.role, user?.client_name]);
   
   // State for time period filter (Ticket Volume Trend)
   const [selectedTimePeriod, setSelectedTimePeriod] = useState('7');
@@ -1165,7 +1176,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
         </div>
         
         {/* Stats Overview */}
-        <div className={`grid grid-cols-1 md:grid-cols-${(user?.role === 'support') ? '4' : user?.role === 'admin' || user?.role === 'super_admin' ? '4' : '3'} gap-3 mb-4`}>
+        <div className={`grid grid-cols-1 md:grid-cols-${(user?.role === 'support') ? '4' : user?.role === 'admin' || user?.role === 'super_admin' || user?.role === 'site_admin' ? '4' : '3'} gap-3 mb-4`}>
                      {/* Total Active Tickets - All roles can see */}
            <a 
              href="/all-tickets"
@@ -1316,8 +1327,8 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
             </a>
           )}
           
-          {/* Avg Resolution - Only Admin/Super Admin - NOT CLICKABLE */}
-          {(user?.role === 'admin' || user?.role === 'super_admin') && (
+          {/* Avg Resolution - Admin/Super Admin/Site Admin - NOT CLICKABLE */}
+          {(user?.role === 'admin' || user?.role === 'super_admin' || user?.role === 'site_admin') && (
             <div 
               className={`rounded-lg p-3 border hover:scale-100 transition duration-100 shadow-sm ${darkMode ? 'bg-gray-800/70 border-gray-400' : 'bg-white border-gray-300'}`}
             >
@@ -1335,7 +1346,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                   }}>{processedDashboardData.avgResolutionTime}m</p>
                   <div className="flex justify-end mt-1">
                     <p className="text-purple-500 text-xs font-normal">
-                      Minutes avg
+                      {user?.role === 'site_admin' ? 'Client avg' : 'Minutes avg'}
                     </p>
                   </div>
                 </div>

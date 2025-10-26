@@ -47,8 +47,8 @@ const TicketDetailHeader = ({
                         {/* Subject line */}
                         <div className="flex items-center min-w-0 bg-gray-50 rounded-md px-1.5 sm:px-2 py-1.5 border border-gray-200 flex-1 max-w-full overflow-hidden">
 
-                            <span className="text-sm sm:text-base lg:text-lg truncate font-medium min-w-0 flex-1 text-gray-800">
-                                {ticket.short_description || <span className="text-gray-400 italic">No subject provided</span>}
+                            <span className="text-sm sm:text-base lg:text-lg truncate font-bold min-w-0 flex-1 text-gray-900 tracking-tight">
+                                {ticket.short_description || <span className="text-gray-500 italic font-normal">No subject provided</span>}
                             </span>
                         </div>
                     </div>

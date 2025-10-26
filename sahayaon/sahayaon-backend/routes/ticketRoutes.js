@@ -75,7 +75,7 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
             });
             
             // Format as 6-digit number with leading zeros
-            const displayId = `TT${result.toString().padStart(6, '0')}`;
+            const displayId = `INC${result.toString().padStart(6, '0')}`;
             console.log('🎫 Generated sequential display ID:', displayId, 'from counter:', result);
             return displayId;
             
@@ -96,8 +96,8 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                     const lastDisplayId = lastTicket.display_id;
                     console.log('🔍 Fallback - Last ticket display_id:', lastDisplayId);
                     
-                    if (lastDisplayId && lastDisplayId.startsWith('TT')) {
-                        const numberPart = lastDisplayId.substring(2);
+                    if (lastDisplayId && lastDisplayId.startsWith('INC')) {
+                        const numberPart = lastDisplayId.substring(3);
                         const lastNumber = parseInt(numberPart, 10);
                         if (!isNaN(lastNumber) && lastNumber > 0) {
                             nextNumber = lastNumber + 1;
@@ -110,7 +110,7 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                     nextNumber = 1;
                 }
                 
-                const displayId = `TT${nextNumber.toString().padStart(6, '0')}`;
+                const displayId = `INC${nextNumber.toString().padStart(6, '0')}`;
                 console.log('🎫 Generated fallback display ID:', displayId);
                 return displayId;
                 
@@ -119,7 +119,7 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                 // Final fallback to timestamp
                 const timestamp = Date.now();
                 const fallbackNumber = parseInt(timestamp.toString().slice(-6), 10);
-                return `TT${fallbackNumber.toString().padStart(6, '0')}`;
+                return `INC${fallbackNumber.toString().padStart(6, '0')}`;
             }
         }
     }
@@ -150,8 +150,8 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                 const lastDisplayId = lastTicket.display_id;
                 console.log('🔍 Highest existing display_id:', lastDisplayId);
                 
-                if (lastDisplayId && lastDisplayId.startsWith('TT')) {
-                    const numberPart = lastDisplayId.substring(2);
+                if (lastDisplayId && lastDisplayId.startsWith('INC')) {
+                    const numberPart = lastDisplayId.substring(3);
                     const lastNumber = parseInt(numberPart, 10);
                     if (!isNaN(lastNumber) && lastNumber > 0) {
                         highestNumber = lastNumber;
@@ -222,23 +222,30 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
     // --- New Endpoint: Get Ticket Summary Counts ---
     router.get('/summary-counts', verifyFirebaseToken, async (req, res) => {
         const authenticatedUid = req.user.uid;
+        const authenticatedUserRole = req.user.role;
+        const authenticatedClientName = req.user.client_name;
 
         try {
             let activeTicketsQuery = ticketsCollection.where('status', 'in', ['Open', 'In Progress', 'Hold']);
-            // Changed: Count tickets created by the user instead of assigned to the user
-            let createdByMeTicketsQuery = ticketsCollection.where('reporter_id', '==', authenticatedUid);
-            let totalTicketsQuery = ticketsCollection;
+            let totalTicketsQuery = ticketsCollection.where('status', 'in', ['Open', 'In Progress', 'Hold']);
+            let assignedToMeQuery;
 
-            const [activeSnapshot, createdByMeSnapshot, totalSnapshot] = await Promise.all([
+            // SIMPLIFIED: For ALL roles, "My Tickets" count = active tickets created by the user
+            // This matches what MyTicketsComponent actually displays
+            assignedToMeQuery = ticketsCollection
+                .where('reporter_id', '==', authenticatedUid)
+                .where('status', 'in', ['Open', 'In Progress', 'Hold']);
+
+            const [activeSnapshot, assignedToMeSnapshot, totalSnapshot] = await Promise.all([
                 activeTicketsQuery.get(),
-                createdByMeTicketsQuery.get(),
+                assignedToMeQuery.get(),
                 totalTicketsQuery.get()
             ]);
 
             const counts = {
                 active_tickets: activeSnapshot.size,
-                assigned_to_me: createdByMeSnapshot.size, // This now represents tickets created by the user
-                total_tickets: totalSnapshot.size,
+                assigned_to_me: assignedToMeSnapshot.size,
+                total_tickets: totalSnapshot.size, // Now counts only active tickets
             };
 
             return res.status(200).json(counts);
@@ -310,9 +317,9 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
         }
 
         try {
-            // OPTIMIZATION: Skip client_name lookup entirely for maximum speed
-            // This will be populated later via a background job if needed
-            let clientName = null;
+            // OPTIMIZATION: Get client_name from authenticated user (no DB lookup needed)
+            // This ensures site_admin can immediately access tickets from their client
+            let clientName = req.user.client_name || null;
 
             // OPTIMIZATION: Generate display ID sequentially
             const newDisplayId = await generateDisplayIdInternal();
@@ -1572,7 +1579,7 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
             }
 
             if (searchKeyword) {
-                const exactIdMatch = `TT${searchKeyword.toUpperCase().padStart(5, '0')}`;
+                const exactIdMatch = `INC${searchKeyword.toUpperCase().padStart(5, '0')}`;
                 const exactIdMatchQuery = ticketsCollection
                     .where('reporter_id', '==', userId)
                     .where('display_id', '==', exactIdMatch)
@@ -1624,7 +1631,7 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
             }
 
             if (searchKeyword) {
-                const exactIdMatch = `TT${searchKeyword.toUpperCase().padStart(5, '0')}`;
+                const exactIdMatch = `INC${searchKeyword.toUpperCase().padStart(5, '0')}`;
                 let exactIdMatchQuery = ticketsCollection.where('display_id', '==', exactIdMatch);
                 
                 // Apply company filtering for site admin users in exact match query
@@ -1777,7 +1784,7 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
             let ticketDoc = await ticketsCollection.doc(ticketId).get();
 
             // If not found by document ID, try to find by display_id
-            if (!ticketDoc.exists && ticketId.startsWith('TT')) {
+            if (!ticketDoc.exists && ticketId.startsWith('INC')) {
                 const displayIdQuery = await ticketsCollection.where('display_id', '==', ticketId).limit(1).get();
                 if (!displayIdQuery.empty) {
                     ticketDoc = displayIdQuery.docs[0];

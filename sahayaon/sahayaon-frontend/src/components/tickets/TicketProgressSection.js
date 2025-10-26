@@ -115,10 +115,10 @@ const TicketProgressSection = ({
             <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-2 sm:mb-3 gap-2 sm:gap-0 w-full min-w-0 max-w-full overflow-x-hidden">
                 <div className="flex items-center gap-2">
                     <div className="w-1 h-5 bg-gradient-to-b from-purple-600 to-purple-800 rounded-full"></div>
-                    <h3 className="text-xs sm:text-sm font-bold flex items-center">
+                    <h3 className="text-xs sm:text-sm font-extrabold tracking-wide uppercase text-gray-900 flex items-center">
                         Workflow
                     </h3>
-                    <Activity width={16} height={16} className="" />
+                    <Activity width={16} height={16} className="text-purple-600" />
                 </div>
                 {/* Controls removed – autosave on change */}
             </div>
@@ -126,7 +126,7 @@ const TicketProgressSection = ({
             <div className="space-y-2 sm:space-y-2.5 w-full min-w-0 max-w-full overflow-x-hidden">
                 {/* Status */}
                 <div className="w-full min-w-0 max-w-full overflow-x-hidden">
-                    <label className="block text-xs font-bold mb-2">
+                    <label className="block text-xs font-semibold text-gray-900 mb-2 tracking-tight">
                         Status:
                     </label>
                     {isEditing && canEdit && !isTicketClosedOrResolved ? (
@@ -156,7 +156,7 @@ const TicketProgressSection = ({
 
                 {/* Priority */}
                 <div className="w-full min-w-0 max-w-full overflow-x-hidden">
-                    <label className="block text-xs font-bold mb-2">
+                    <label className="block text-xs font-semibold text-gray-900 mb-2 tracking-tight">
                         Priority:
                     </label>
                     {isEditing && canEdit ? (
@@ -186,7 +186,7 @@ const TicketProgressSection = ({
 
                 {/* Category */}
                 <div className="w-full min-w-0 max-w-full overflow-x-hidden">
-                    <label className="block text-xs font-bold mb-1.5">
+                    <label className="block text-xs font-semibold text-gray-900 mb-1.5 tracking-tight">
                         Category:
                     </label>
                     {isEditing && canEdit ? (
@@ -206,7 +206,7 @@ const TicketProgressSection = ({
                         />
                     ) : (
                         <FieldBox isDisplayOnly={true} className="w-full min-w-0 max-w-full overflow-x-hidden">
-                            <span className="text-xs truncate flex-1 min-w-0 max-w-full">
+                            <span className="text-xs font-medium text-gray-800 truncate flex-1 min-w-0 max-w-full">
                                 {ticket.category || 'N/A'}
                             </span>
                         </FieldBox>
@@ -215,7 +215,7 @@ const TicketProgressSection = ({
 
                 {/* Assigned to */}
                 <div className="w-full min-w-0 max-w-full overflow-x-hidden">
-                    <label className="block text-xs font-bold mb-1.5">
+                    <label className="block text-xs font-semibold text-gray-900 mb-1.5 tracking-tight">
                         Assigned to:
                     </label>
                     {isEditing && canEdit && !isTicketClosedOrResolved ? (
@@ -242,9 +242,9 @@ const TicketProgressSection = ({
                         </div>
                     ) : (
                         <FieldBox isDisplayOnly={true} className="w-full min-w-0 max-w-full overflow-x-hidden">
-                            <User className="w-3 h-3 text-gray-400 mr-1.5 shrink-0" />
+                            <User className="w-3 h-3 text-gray-500 mr-1.5 shrink-0" />
                             <span
-                                className="text-xs truncate flex-1 min-w-0 max-w-full cursor-pointer"
+                                className="text-xs font-medium text-gray-800 truncate flex-1 min-w-0 max-w-full cursor-pointer hover:text-blue-600 transition-colors"
                                 onMouseEnter={() => {
                                     if (ticket.assigned_to_email) {
                                         showProfilePopup({ email: ticket.assigned_to_email, fullName: ticket.assigned_to_name }, null);
@@ -257,7 +257,7 @@ const TicketProgressSection = ({
                                     }
                                 }}
                             >
-                                {ticket.assigned_to_email ? ticket.assigned_to_email : <span className="">Unassigned</span>}
+                                {ticket.assigned_to_email ? ticket.assigned_to_email : <span className="italic text-gray-500">Unassigned</span>}
                             </span>
                             <UserProfilePopup
                                 user={profilePopup.user}
@@ -277,13 +277,13 @@ const TicketProgressSection = ({
                 {/* Closed By (Always rendered for support, but only if resolved/cancelled) */}
                 {isSupportUser && (
                     <div className="w-full min-w-0 max-w-full overflow-x-hidden">
-                        <label className="block text-xs font-bold mb-1.5">
+                        <label className="block text-xs font-semibold text-gray-900 mb-1.5 tracking-tight">
                             Closed by:
                         </label>
                         <FieldBox className="w-full min-w-0 max-w-full overflow-x-hidden" isDisplayOnly={true}>
-                            <User className="w-3 h-3 text-gray-400 mr-1.5 shrink-0" />
+                            <User className="w-3 h-3 text-gray-500 mr-1.5 shrink-0" />
                             <span
-                                className="text-xs truncate flex-1 min-w-0 max-w-full cursor-pointer"
+                                className="text-xs font-medium text-gray-800 truncate flex-1 min-w-0 max-w-full cursor-pointer hover:text-blue-600 transition-colors"
                                 onMouseEnter={() => showProfilePopup({ email: (isEditing ? editableFields.closed_by_email : ticket.closed_by_email), fullName: null }, null)}
                                 onMouseLeave={() => { cancelShowProfilePopup(); hidePopup(); }}
                             >
@@ -293,8 +293,8 @@ const TicketProgressSection = ({
                                       ? editableFields.closed_by_email
                                       : ticket.closed_by_email
                                           ? ticket.closed_by_email
-                                          : <span className="">N/A</span>)
-                                  : <span className="">N/A</span>}
+                                          : <span className="italic text-gray-500">N/A</span>)
+                                  : <span className="italic text-gray-500">N/A</span>}
                             </span>
                             <UserProfilePopup
                                 user={profilePopup.user}
@@ -315,17 +315,17 @@ const TicketProgressSection = ({
                 {((isEditing ? editableFields.status : ticket.status) === 'Resolved' ||
                   (isEditing ? editableFields.status : ticket.status) === 'Cancelled') && (
                     <div className="w-full min-w-0 max-w-full overflow-x-hidden">
-                        <label className="block text-xs font-bold mb-1.5">
+                        <label className="block text-xs font-semibold text-gray-900 mb-1.5 tracking-tight">
                             Resolved Date:
                         </label>
                         <FieldBox className="w-full min-w-0 max-w-full overflow-x-hidden" isDisplayOnly={true}>
-                            <Calendar className="w-3 h-3 text-gray-400 mr-1.5 shrink-0" />
-                            <span className="text-xs text-wrap overflow-hidden flex-1 min-w-0 max-w-full">
+                            <Calendar className="w-3 h-3 text-gray-500 mr-1.5 shrink-0" />
+                            <span className="text-xs font-medium text-gray-800 text-wrap overflow-hidden flex-1 min-w-0 max-w-full">
                                 {(isEditing && editableFields.resolved_at
                                     ? new Date(editableFields.resolved_at).toLocaleString()
                                     : ticket.resolved_at
                                         ? new Date(ticket.resolved_at).toLocaleString()
-                                        : <span className="">N/A</span>)}
+                                        : <span className="italic text-gray-500">N/A</span>)}
                             </span>
                         </FieldBox>
                     </div>
@@ -334,13 +334,13 @@ const TicketProgressSection = ({
                 {/* Time Spent - Only for Engineers and when status is Resolved or closing or already resolved/cancelled */}
                 {(isSupportUser || canEdit) && (
                     <div className="w-full min-w-0 max-w-full overflow-x-hidden">
-                        <label className="text-xs font-bold mb-1.5">
-                            Time Spent <span className="text-xs font-normal">(minutes)</span>:
+                        <label className="text-xs font-semibold text-gray-900 mb-1.5 tracking-tight">
+                            Time Spent <span className="text-xs font-normal text-gray-600">(minutes)</span>:
                         </label>
                         {(isEditing && (editableFields.status === 'Resolved' || editableFields.status === 'Cancelled')) || isTicketClosedOrResolved ? (
                             <>
                                 <FieldBox hasError={timeSpentHasError} className={`w-full min-w-0 max-w-full overflow-x-hidden`}>
-                                    <Clock className="w-3 h-3 text-gray-400 mr-1.5 shrink-0" />
+                                    <Clock className="w-3 h-3 text-gray-500 mr-1.5 shrink-0" />
                                     <input
                                         id="time_spent"
                                         type="text"
@@ -359,9 +359,9 @@ const TicketProgressSection = ({
                             </>
                         ) : (
                             <FieldBox className="w-full min-w-0 max-w-full overflow-x-hidden" isDisplayOnly={true}>
-                                <Clock className="w-3 h-3 text-gray-400 mr-1.5 shrink-0" />
-                                <span className="text-xs truncate flex-1 min-w-0 max-w-full">
-                                    {ticket.time_spent ? `${ticket.time_spent} minutes` : <span className="">N/A</span>}
+                                <Clock className="w-3 h-3 text-gray-500 mr-1.5 shrink-0" />
+                                <span className="text-xs font-medium text-gray-800 truncate flex-1 min-w-0 max-w-full">
+                                    {ticket.time_spent ? `${ticket.time_spent} minutes` : <span className="italic text-gray-500">N/A</span>}
                                 </span>
                             </FieldBox>
                         )}

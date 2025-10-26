@@ -49,6 +49,66 @@
   font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
 }
 
+/* Force white text in profile icons across the app */
+.rounded-full.bg-blue-500,
+.rounded-full.bg-purple-500,
+.rounded-full.bg-pink-500,
+.rounded-full.bg-green-500,
+.rounded-full.bg-yellow-500,
+.rounded-full.bg-red-500,
+.rounded-full.bg-indigo-500,
+.rounded-full.bg-teal-500 {
+  color: #ffffff !important;
+}
+
+.rounded-full.bg-blue-500 span,
+.rounded-full.bg-purple-500 span,
+.rounded-full.bg-pink-500 span,
+.rounded-full.bg-green-500 span,
+.rounded-full.bg-yellow-500 span,
+.rounded-full.bg-red-500 span,
+.rounded-full.bg-indigo-500 span,
+.rounded-full.bg-teal-500 span {
+  color: #ffffff !important;
+}
+
+/* Force white text on all colored buttons */
+button.bg-blue-600,
+button.bg-blue-600:hover,
+button.bg-blue-700,
+button.bg-green-600,
+button.bg-green-600:hover,
+button.bg-green-700,
+button.bg-red-600,
+button.bg-red-600:hover,
+button.bg-red-700,
+button.bg-indigo-600,
+button.bg-indigo-600:hover,
+button.bg-indigo-700 {
+  color: #ffffff !important;
+}
+
+button.bg-blue-600 span,
+button.bg-blue-600 svg,
+button.bg-blue-700 span,
+button.bg-blue-700 svg,
+button.bg-green-600 span,
+button.bg-green-600 svg,
+button.bg-green-700 span,
+button.bg-green-700 svg,
+button.bg-red-600 span,
+button.bg-red-600 svg,
+button.bg-red-700 span,
+button.bg-red-700 svg,
+button.bg-indigo-600 span,
+button.bg-indigo-600 svg,
+button.bg-indigo-700 span,
+button.bg-indigo-700 svg {
+  color: #ffffff !important;
+  fill: #ffffff !important;
+  stroke: #ffffff !important;
+}
+
 /* Headings use Space Grotesk */
 h1, h2, h3, h4, h5, h6,
 .heading,
@@ -617,7 +677,7 @@ textarea.max-w-none.w-full::-webkit-scrollbar-corner {
 .sidebar-glass .menu-item:focus-visible {
   outline: none;
   border-radius: 0;
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(30, 58, 138, 0.4) !important;
+  box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.5) !important; /* Single clean focus ring */
   border: none;
   background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%) !important; /* Dark blue focus background */
   color: #ffffff !important; /* White text for focus */
@@ -644,7 +704,7 @@ textarea.max-w-none.w-full::-webkit-scrollbar-corner {
 .sidebar-glass .menu-item[aria-current="page"]:focus {
   outline: none;
   border-radius: 0;
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(30, 58, 138, 0.4) !important;
+  box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.5) !important; /* Single clean focus ring */
   border: none;
   background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%) !important; /* Dark blue focus background */
   color: #ffffff !important; /* White text */
@@ -813,18 +873,37 @@ textarea.max-w-none.w-full::-webkit-scrollbar-corner {
   color: #ffffff;
 }
 
-/* Space Grotesk font for sidebar section headers */
+/* Space Grotesk font for sidebar section headers - compact */
 .sidebar-glass .sidebar-section-header {
   font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
   font-weight: 700;
   color: #6b7280;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.05em;
+  padding-left: 0.5rem !important;
+  padding-right: 0.5rem !important;
+  font-size: 0.65rem !important;
 }
 
 /* Space Grotesk font for sidebar count badges */
 .sidebar-glass .sidebar-count-badge {
   font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
   font-weight: 400;
+}
+
+/* Ensure sidebar menu items display counts properly - compact padding */
+.sidebar-glass .menu-item.group {
+  padding-left: 0.5rem !important;
+  padding-right: 0.5rem !important;
+}
+
+/* Ensure text spans in sidebar can display full content including counts */
+.sidebar-glass .menu-item span {
+  white-space: nowrap;
+}
+
+/* Reduce spacing around icons when expanded */
+.sidebar-glass .menu-item .flex.items-center.justify-center.w-5.h-5.mr-2 {
+  margin-right: 0.375rem !important;
 }
 
 /* Main app header - fixed top header */

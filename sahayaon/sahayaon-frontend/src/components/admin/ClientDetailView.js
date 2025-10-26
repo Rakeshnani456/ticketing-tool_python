@@ -389,39 +389,63 @@ const ClientDetailView = ({ user }) => {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {clientUsers.map((user) => (
-                  <TableRow key={user.uid} hover>
+                {clientUsers.map((clientUser) => (
+                  <TableRow 
+                    key={clientUser.uid} 
+                    hover
+                    sx={{
+                      backgroundColor: user && (user.uid === clientUser.uid || user.email === clientUser.email) 
+                        ? 'rgba(76, 175, 80, 0.08)' 
+                        : 'transparent'
+                    }}
+                  >
                     <TableCell>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                         <Avatar sx={{ width: 32, height: 32, fontSize: '0.8rem' }}>
-                          {user.firstName?.charAt(0) || user.email?.charAt(0) || 'U'}
+                          {clientUser.firstName?.charAt(0) || clientUser.email?.charAt(0) || 'U'}
                         </Avatar>
-                        <Box>
-                          <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                            {user.firstName} {user.lastName}
-                          </Typography>
+                        <Box sx={{ flex: 1 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                              {clientUser.firstName} {clientUser.lastName}
+                            </Typography>
+                            {user && (user.uid === clientUser.uid || user.email === clientUser.email) && (
+                              <Chip
+                                label="You"
+                                size="small"
+                                sx={{
+                                  height: '18px',
+                                  fontSize: '10px',
+                                  fontWeight: 600,
+                                  backgroundColor: '#4CAF50',
+                                  color: 'white',
+                                  '& .MuiChip-label': { px: 1 }
+                                }}
+                              />
+                            )}
+                          </Box>
                           <Typography variant="caption" color="text.secondary">
-                            {user.designation || 'N/A'}
+                            {clientUser.designation || 'N/A'}
                           </Typography>
                         </Box>
                       </Box>
                     </TableCell>
                     <TableCell>
-                      <Typography variant="body2">{user.email}</Typography>
+                      <Typography variant="body2">{clientUser.email}</Typography>
                     </TableCell>
                     <TableCell>
-                      <Typography variant="body2">{user.employeeId || 'N/A'}</Typography>
+                      <Typography variant="body2">{clientUser.employeeId || 'N/A'}</Typography>
                     </TableCell>
                     <TableCell>
                       <Chip
-                        label={user.role === 'site_admin' ? 'Site Admin' : 'User'}
+                        label={clientUser.role === 'site_admin' ? 'Site Admin' : 'User'}
                         size="small"
-                        color={user.role === 'site_admin' ? 'primary' : 'default'}
-                        variant={user.role === 'site_admin' ? 'filled' : 'outlined'}
+                        color={clientUser.role === 'site_admin' ? 'primary' : 'default'}
+                        variant={clientUser.role === 'site_admin' ? 'filled' : 'outlined'}
                       />
                     </TableCell>
                     <TableCell>
-                      <Typography variant="body2">{user.contactNumber || 'N/A'}</Typography>
+                      <Typography variant="body2">{clientUser.contactNumber || 'N/A'}</Typography>
                     </TableCell>
                     <TableCell>
                       <Chip

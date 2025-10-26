@@ -159,6 +159,16 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
     const navigate = useNavigate();
     const location = useLocation();
     const db = useMemo(() => getFirestore(app), []);
+    
+    // Create stable reference for user's client name to prevent unnecessary re-renders
+    // Only recompute when role or the actual client name values change
+    const userClientName = useMemo(() => {
+        if (user?.role === 'site_admin') {
+            return user?.client_name || user?.companyName || '';
+        }
+        return null;
+    }, [user?.role, user?.client_name, user?.companyName]);
+    
     const [addUserModalOpen, setAddUserModalOpen] = useState(false);
     const [addUserData, setAddUserData] = useState(initialUserState);
     const theme = useTheme();
@@ -357,7 +367,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
         if (!user || !user.firebaseUser) return;
         
         const cacheKey = user.role === 'site_admin' ? 
-            `userManagement_cache_${user.role}_${user.companyName}` : 
+            `userManagement_cache_${user.role}_${userClientName}` : 
             `userManagement_cache_${user.role}`;
         const cacheTimeKey = `${cacheKey}_time`;
         
@@ -369,7 +379,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
             const cacheValidDuration = 10 * 60 * 1000; // 10 minutes - longer cache for better performance
             
             if (cacheAge < cacheValidDuration) {
-                console.log("Loading initial users from cache...");
+                console.log("✅ Loading initial users from cache, no spinner needed!");
                 try {
                     const cachedUsers = JSON.parse(cachedData);
                     // Only update if data is different to prevent unnecessary re-renders
@@ -387,9 +397,13 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                     localStorage.removeItem(cacheKey);
                     localStorage.removeItem(cacheTimeKey);
                 }
+            } else {
+                console.log("⏱️ Cache expired, will show spinner while fetching fresh data");
             }
+        } else {
+            console.log("📭 No cache available, will show spinner on first load");
         }
-    }, [user?.uid, user?.role, user?.companyName]);
+    }, [user?.uid, user?.role, userClientName]);
 
     // Calculate user statistics - memoized for performance
     const userStats = useMemo(() => {
@@ -450,13 +464,20 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                 let usersQuery;
                 if (user.role === 'site_admin') {
                     // For site_admin, filter by company (most efficient)
+                    // Use the stable userClientName reference
+                    if (!userClientName) {
+                        console.error("❌ Site admin has no client name, cannot create query");
+                        setError("Cannot load users: No company information available");
+                        setLoading(false);
+                        return;
+                    }
                     usersQuery = query(
                         usersRef,
-                        where('client_name', '==', user.companyName),
+                        where('client_name', '==', userClientName),
                         where('role', 'in', ['user', 'site_admin']),
                         orderBy('firstName', 'asc')
                     );
-                    console.log("🔍 Site admin query created:", { companyName: user.companyName });
+                    console.log("🔍 Site admin query created:", { clientName: userClientName });
                 } else {
                     // For admin and super_admin, filter by relevant roles only
                     // This reduces reads significantly compared to getting ALL users
@@ -514,13 +535,16 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                             setUsers(usersWithClientDetails);
                             previousUsersRef.current = usersWithClientDetails;
                             
-                            // Update cache with real-time data
+                            // Update cache with real-time data using consistent key format
                             const currentTime = Date.now();
-                            const cacheKey = `userManagement_cache_${user.role}`;
+                            const cacheKey = user.role === 'site_admin' ? 
+                                `userManagement_cache_${user.role}_${userClientName}` : 
+                                `userManagement_cache_${user.role}`;
                             const cacheTimeKey = `${cacheKey}_time`;
                             localStorage.setItem(cacheKey, JSON.stringify(usersWithClientDetails));
                             localStorage.setItem(cacheTimeKey, currentTime.toString());
                             setLastFetchTime(currentTime);
+                            console.log("💾 Cache saved with key:", cacheKey);
                             
                             // Set loading to false when we get data
                             console.log("✅ Firestore data received, setting loading to false");
@@ -581,7 +605,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                 websocketCleanup();
             }
         };
-    }, [user?.uid, user?.role, user?.companyName]); // Removed db dependency as it's stable
+    }, [user?.uid, user?.role, userClientName]); // Use stable userClientName to prevent unnecessary re-renders
 
     const handleAdd = () => {
         setAddMode(true);
@@ -2424,7 +2448,15 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                                                     </thead>
                                                     <tbody>
                         {users.map((u, i) => (
-                                                            <tr key={u.uid} className="user-row">
+                                                            <tr 
+                                                                key={u.uid} 
+                                                                className="user-row"
+                                                                style={{
+                                                                    backgroundColor: user && (user.uid === u.uid || user.email === u.email) 
+                                                                        ? 'rgba(76, 175, 80, 0.08)' 
+                                                                        : 'transparent'
+                                                                }}
+                                                            >
                                 {showCheckboxes && (
                                                                     <td style={{ width: '30px', minWidth: '30px', maxWidth: '30px' }}>
                                                                         <input
@@ -2445,19 +2477,37 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                                                                         onClick={() => handleViewUser(u)}
                                                                         style={{ cursor: 'pointer' }}
                                                                     >
-                                                                        <div className="user-name-primary" style={{ 
-                                                                            overflow: 'hidden', 
-                                                                            textOverflow: 'ellipsis', 
-                                                                            whiteSpace: 'nowrap' 
-                                                                        }}>
-                                            {u.firstName || (u.name ? u.name.split(' ')[0] : '')}
-                                                                        </div>
-                                                                        <div className="user-name-secondary" style={{ 
-                                                                            overflow: 'hidden', 
-                                                                            textOverflow: 'ellipsis', 
-                                                                            whiteSpace: 'nowrap' 
-                                                                        }}>
-                                            {u.lastName || (u.name ? u.name.split(' ').slice(1).join(' ') : '')}
+                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                                                                <div className="user-name-primary" style={{ 
+                                                                                    overflow: 'hidden', 
+                                                                                    textOverflow: 'ellipsis', 
+                                                                                    whiteSpace: 'nowrap' 
+                                                                                }}>
+                                                    {u.firstName || (u.name ? u.name.split(' ')[0] : '')}
+                                                                                </div>
+                                                                                <div className="user-name-secondary" style={{ 
+                                                                                    overflow: 'hidden', 
+                                                                                    textOverflow: 'ellipsis', 
+                                                                                    whiteSpace: 'nowrap' 
+                                                                                }}>
+                                                    {u.lastName || (u.name ? u.name.split(' ').slice(1).join(' ') : '')}
+                                                                                </div>
+                                                                            </div>
+                                                                            {user && (user.uid === u.uid || user.email === u.email) && (
+                                                                                <span style={{
+                                                                                    display: 'inline-block',
+                                                                                    fontSize: '10px',
+                                                                                    fontWeight: '600',
+                                                                                    padding: '2px 6px',
+                                                                                    borderRadius: '4px',
+                                                                                    backgroundColor: '#4CAF50',
+                                                                                    color: 'white',
+                                                                                    flexShrink: 0
+                                                                                }}>
+                                                                                    You
+                                                                                </span>
+                                                                            )}
                                                                         </div>
                                                                     </div>
                                                                 </td>

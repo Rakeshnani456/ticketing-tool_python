@@ -286,8 +286,8 @@ const TicketDetailsSection = ({
             <div className="mb-3 sm:mb-4 flex items-center gap-2">
                 <div className="flex items-center gap-2">
                     <div className="w-1 h-5 bg-gradient-to-b from-blue-600 to-blue-800 rounded-full"></div>
-                    <span className="text-xs sm:text-sm font-bold">Ticket Details</span>
-                    <Info className="w-4 h-4 ml-1" />
+                    <span className="text-xs sm:text-sm font-extrabold tracking-wide uppercase text-gray-900">Ticket Details</span>
+                    <Info className="w-4 h-4 ml-1 text-blue-600" />
                 </div>
                 
                 {/* Comments and Attachments Count Tags */}
@@ -329,21 +329,21 @@ const TicketDetailsSection = ({
                 <div className="flex flex-col gap-1.5 sm:gap-2 w-full min-w-0 max-w-full overflow-x-hidden">
                     {/* Ticket ID */}
                     <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2 w-full min-w-0 max-w-full overflow-x-hidden">
-                        <label className="text-xs font-bold text-gray-700 w-full sm:w-20 lg:w-24 shrink-0">Ticket ID:</label>
+                        <label className="text-xs font-semibold text-gray-900 w-full sm:w-20 lg:w-24 shrink-0 tracking-tight">Ticket ID:</label>
                         <FieldBox className="w-full flex-1 min-w-0 max-w-full overflow-x-hidden" isDisplayOnly={true}>
-                            <span className="text-xs font-medium text-blue-700 truncate flex-1 min-w-0 max-w-full">{ticket.display_id}</span>
+                            <span className="text-xs font-bold text-blue-700 truncate flex-1 min-w-0 max-w-full tracking-wide">{ticket.display_id}</span>
                         </FieldBox>
                     </div>
                     {/* Requested by */}
                     <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2 w-full min-w-0 max-w-full overflow-x-hidden">
-                                                    <label className="text-xs font-bold w-full sm:w-20 lg:w-24 shrink-0">Requested by:</label>
+                                                    <label className="text-xs font-semibold text-gray-900 w-full sm:w-20 lg:w-24 shrink-0 tracking-tight">Requested by:</label>
                                                     <FieldBox className="w-full flex-1 min-w-0 max-w-full overflow-x-hidden" isDisplayOnly={true}>
                             <span
-                                className="text-xs font-medium truncate flex-1 min-w-0 max-w-full cursor-pointer transition-colors"
+                                className="text-xs font-medium text-gray-800 truncate flex-1 min-w-0 max-w-full cursor-pointer transition-colors hover:text-blue-600"
                                 onMouseEnter={() => showProfilePopup({ email: ticket.reporter_email, fullName: ticket.reporter_name }, null)}
                                 onMouseLeave={() => { cancelShowProfilePopup(); hidePopup(); }}
                             >
-                                {ticket.reporter_email ? ticket.reporter_email : <span className="italic">Not specified</span>}
+                                {ticket.reporter_email ? ticket.reporter_email : <span className="italic text-gray-500">Not specified</span>}
                             </span>
                             <UserProfilePopup
                                 user={profilePopup.user}
@@ -360,9 +360,9 @@ const TicketDetailsSection = ({
                     </div>
                     {/* Asset ID */}
                     <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2 w-full min-w-0 max-w-full overflow-x-hidden">
-                        <label className="text-xs font-bold w-full sm:w-20 lg:w-24 shrink-0">Asset ID:</label>
+                        <label className="text-xs font-semibold text-gray-900 w-full sm:w-20 lg:w-24 shrink-0 tracking-tight">Asset ID:</label>
                         <FieldBox className="w-full flex-1 min-w-0 max-w-full overflow-x-hidden" isDisplayOnly={true}>
-                            <span className="text-xs font-medium truncate flex-1 min-w-0 max-w-full">{ticket.hostname_asset_id ? ticket.hostname_asset_id : <span className="italic">Not specified</span>}</span>
+                            <span className="text-xs font-medium text-gray-800 truncate flex-1 min-w-0 max-w-full">{ticket.hostname_asset_id ? ticket.hostname_asset_id : <span className="italic text-gray-500">Not specified</span>}</span>
                         </FieldBox>
                     </div>
                 </div>
@@ -371,14 +371,14 @@ const TicketDetailsSection = ({
                 <div className="flex flex-col gap-1.5 sm:gap-2 w-full min-w-0 max-w-full overflow-x-hidden">
                     {/* Requested for */}
                     <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2 w-full min-w-0 max-w-full overflow-x-hidden">
-                                                    <label className="text-xs font-bold w-full sm:w-20 lg:w-24 shrink-0">Requested for:</label>
+                                                    <label className="text-xs font-semibold text-gray-900 w-full sm:w-20 lg:w-24 shrink-0 tracking-tight">Requested for:</label>
                                                     <FieldBox className="w-full flex-1 min-w-0 max-w-full overflow-x-hidden" isDisplayOnly={true}>
                             <span
-                                className="text-xs font-medium truncate flex-1 min-w-0 max-w-full cursor-pointer transition-colors"
+                                className="text-xs font-medium text-gray-800 truncate flex-1 min-w-0 max-w-full cursor-pointer transition-colors hover:text-blue-600"
                                 onMouseEnter={() => showProfilePopup({ email: ticket.request_for_email, fullName: ticket.request_for_name }, null)}
                                 onMouseLeave={() => { cancelShowProfilePopup(); hidePopup(); }}
                             >
-                                {ticket.request_for_email ? ticket.request_for_email : <span className="italic">Not specified</span>}
+                                {ticket.request_for_email ? ticket.request_for_email : <span className="italic text-gray-500">Not specified</span>}
                             </span>
                             <UserProfilePopup
                                 user={profilePopup.user}
@@ -395,17 +395,17 @@ const TicketDetailsSection = ({
                     </div>
                     {/* Contact No */}
                     <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2 w-full min-w-0 max-w-full overflow-x-hidden">
-                        <label className="text-xs font-bold w-full sm:w-20 lg:w-24 shrink-0">Contact No:</label>
+                        <label className="text-xs font-semibold text-gray-900 w-full sm:w-20 lg:w-24 shrink-0 tracking-tight">Contact No:</label>
                         <FieldBox className="w-full flex-1 min-w-0 max-w-full overflow-x-hidden" isDisplayOnly={true}>
-                            <span className="text-xs font-medium truncate flex-1 min-w-0 max-w-full">{ticket.contact_number ? ticket.contact_number : <span className="italic">Not specified</span>}</span>
+                            <span className="text-xs font-medium text-gray-800 truncate flex-1 min-w-0 max-w-full">{ticket.contact_number ? ticket.contact_number : <span className="italic text-gray-500">Not specified</span>}</span>
                         </FieldBox>
                     </div>
                     {/* Created */}
                     <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2 w-full min-w-0 max-w-full overflow-x-hidden">
-                                                    <label className="text-xs font-bold w-full sm:w-20 lg:w-24 shrink-0">Created:</label>
+                                                    <label className="text-xs font-semibold text-gray-900 w-full sm:w-20 lg:w-24 shrink-0 tracking-tight">Created:</label>
                             <FieldBox className="w-full flex-1 min-w-0 max-w-full overflow-x-hidden" isDisplayOnly={true}>
-                                <Calendar className="w-3 h-3 mr-1.5 shrink-0" />
-                                <span className="text-xs font-medium truncate flex-1 min-w-0 max-w-full">{ticket.created_at ? new Date(ticket.created_at).toLocaleString() : <span className="italic">Not specified</span>}</span>
+                                <Calendar className="w-3 h-3 mr-1.5 shrink-0 text-gray-500" />
+                                <span className="text-xs font-medium text-gray-800 truncate flex-1 min-w-0 max-w-full">{ticket.created_at ? new Date(ticket.created_at).toLocaleString() : <span className="italic text-gray-500">Not specified</span>}</span>
                         </FieldBox>
                     </div>
                 </div>
@@ -413,40 +413,17 @@ const TicketDetailsSection = ({
 
             {/* Long Description */}
             <div className="mb-3 sm:mb-4 mt-3 sm:mt-4 w-full min-w-0 max-w-full overflow-x-hidden">
-                <label className="block text-xs font-bold mb-2">
+                <label className="block text-xs font-semibold text-gray-900 mb-2 tracking-tight uppercase">
                     Description:
                 </label>
                 <div className="border border-gray-200 px-3 py-2 bg-gradient-to-r from-gray-50 to-gray-100 rounded-md w-full min-w-0 max-w-full overflow-y-auto" style={{ height: '200px' }}>
-                    {isEditing && canEdit ? (
-                        <>
-                            <EditableTextarea
-                                id="long_description"
-                                value={editableFields.long_description}
-                                onChange={handleEditChange}
-                                onBlur={() => {
-                                    // trigger autosave via custom event the parent listens to (debounced save lives in progress section)
-                                    const evt = new CustomEvent('ticket-autosave');
-                                    window.dispatchEvent(evt);
-                                }}
-                                rows={10}
-                                disabled={!canEdit}
-                                className="w-full min-w-0 max-w-full text-xs bg-transparent border-none focus:outline-none resize-none"
-                                style={{ height: '180px', lineHeight: '1.4', wordWrap: 'break-word', overflowWrap: 'break-word', fontFamily: 'inherit' }}
-                                maxLength={1200}
-                            />
-                            <div className="text-xs text-gray-500 mt-2 text-right w-full font-medium">{editableFields.long_description.length}/1200 characters</div>
-                        </>
+                    {ticket.long_description ? (
+                        <span className="text-xs text-gray-800 whitespace-pre-wrap break-words w-full min-w-0 max-w-full font-normal" style={{ lineHeight: '1.6', wordWrap: 'break-word', overflowWrap: 'break-word', fontFamily: 'inherit' }}>
+                            {ticket.long_description}
+                        </span>
                     ) : (
-                        <>
-                            {ticket.long_description ? (
-                                <span className="text-xs whitespace-pre-wrap break-words w-full min-w-0 max-w-full" style={{ lineHeight: '1.4', wordWrap: 'break-word', overflowWrap: 'break-word', fontFamily: 'inherit' }}>
-                                    {ticket.long_description}
-                                </span>
-                            ) : (
-                                <span className="text-gray-500 text-[10px] col-span-full text-left py-2 font-medium" style={{ lineHeight: '1.4', wordWrap: 'break-word', overflowWrap: 'break-word', fontFamily: 'inherit' }}>No description provided.
-                                </span>
-                            )}
-                        </>
+                        <span className="text-gray-500 text-[10px] col-span-full text-left py-2 font-normal italic" style={{ lineHeight: '1.4', wordWrap: 'break-word', overflowWrap: 'break-word', fontFamily: 'inherit' }}>No description provided.
+                        </span>
                     )}
                 </div>
             </div>
@@ -456,7 +433,7 @@ const TicketDetailsSection = ({
                 <div className="flex flex-col sm:flex-row sm:items-center mb-2 sm:mb-3 justify-between gap-2 sm:gap-0 w-full min-w-0 max-w-full overflow-x-hidden">
                     <div className="flex items-center gap-2 py-1">
                         <div className="w-1 h-5 bg-gradient-to-b from-green-600 to-green-800 rounded-full"></div>
-                        <h3 className="text-xs font-bold text-gray-800 flex items-center">
+                        <h3 className="text-xs font-extrabold tracking-wide uppercase text-gray-900 flex items-center">
                             Attachments
                         </h3>
                         {unsupportedFileError && (
@@ -491,8 +468,8 @@ const TicketDetailsSection = ({
                     <div
                         className={`mb-3 border-2 border-dashed rounded-lg transition-all duration-200 cursor-pointer ${
                             isDragOver 
-                                ? 'border-green-400 bg-green-50 scale-105' 
-                                : 'border-gray-300 hover:border-green-400 hover:bg-gray-50'
+                                ? 'border-green-500 bg-green-50 scale-105' 
+                                : 'border-gray-300 hover:border-green-500 hover:bg-gray-50'
                         }`}
                         onDragOver={handleDragOver}
                         onDragLeave={handleDragLeave}
@@ -501,18 +478,18 @@ const TicketDetailsSection = ({
                             const input = document.getElementById('attachment-upload-btn');
                             if (input) input.click();
                         }}
-                        style={{ height: '60px' }} // Even smaller height as requested
+                        style={{ height: '100px' }}
                     >
                         <div className="flex flex-col items-center justify-center h-full p-4 text-center">
-                            <Upload className={`w-5 h-5 mb-1 transition-colors duration-200 ${
-                                isDragOver ? 'text-green-600' : 'text-gray-400'
+                            <Upload className={`w-7 h-7 mb-1.5 transition-colors duration-200 ${
+                                isDragOver ? 'text-green-600' : 'text-gray-600'
                             }`} />
-                            <p className={`text-xs font-medium transition-colors duration-200 ${
-                                isDragOver ? 'text-green-700' : 'text-gray-600'
+                            <p className={`text-sm font-bold tracking-wide transition-colors duration-200 ${
+                                isDragOver ? 'text-green-700' : 'text-gray-900'
                             }`}>
                                 {isDragOver ? 'Drop files here' : 'Drop files here or click to browse'}
                             </p>
-                            <p className="text-[10px] text-gray-500 mt-1">
+                            <p className="text-xs text-gray-600 mt-1 font-medium">
                                 png, jpg, pdf, word, excel, zip (max 10mb)
                             </p>
                         </div>
@@ -525,8 +502,8 @@ const TicketDetailsSection = ({
                         <div className="flex items-center justify-between mb-2">
                             <div className="flex items-center gap-2">
                                 <div className="w-2 h-2 bg-orange-500 rounded-full animate-pulse"></div>
-                                <h4 className="text-xs font-semibold text-orange-800">Files Ready for Upload</h4>
-                                <span className="px-2 py-0.5 bg-orange-100 text-orange-700 text-xs font-medium rounded-full">
+                                <h4 className="text-xs font-bold text-orange-900 tracking-wide">Files Ready for Upload</h4>
+                                <span className="px-2 py-0.5 bg-orange-100 text-orange-800 text-xs font-bold rounded-full">
                                     {selectedFiles.length} file{selectedFiles.length !== 1 ? 's' : ''}
                                 </span>
                                 <button
@@ -570,17 +547,17 @@ const TicketDetailsSection = ({
                                     <div className="flex items-center gap-2 flex-1 min-w-0">
                                         <FileIcon fileName={file.name} className="w-8 h-8 text-orange-600" />
                                         <div className="flex flex-col min-w-0 flex-1">
-                                            <span className="text-xs text-gray-800 truncate font-medium">
+                                            <span className="text-xs text-gray-900 truncate font-semibold">
                                                 {file.name}
                                             </span>
-                                            <span className="text-[10px] text-gray-500">
+                                            <span className="text-[10px] text-gray-600 font-medium">
                                                 {(file.size / 1024 / 1024).toFixed(2)} MB
                                             </span>
                                         </div>
                                     </div>
                                     <button
                                         onClick={() => removeSelectedFile(index)}
-                                        className="text-xs text-red-500 hover:text-red-700 hover:underline transition-all duration-200 flex-shrink-0 font-medium"
+                                        className="text-xs text-red-600 hover:text-red-700 hover:underline transition-all duration-200 flex-shrink-0 font-semibold"
                                         title="Remove file"
                                     >
                                         Remove
@@ -647,13 +624,13 @@ const TicketDetailsSection = ({
                                             <div className="flex items-start gap-2 flex-1 min-w-0">
                                                 <FileIcon fileName={attachment.fileName} className="w-3.5 h-3.5 text-gray-800 flex-shrink-0 mt-0.5" />
                                                 <div className="flex flex-col min-w-0 flex-1">
-                                                    <span className="text-xs text-black truncate font-medium mb-0.5">
+                                                    <span className="text-xs text-gray-900 truncate font-semibold mb-0.5">
                                                         {attachment.type === 'uploading' ? (
-                                                            <span className="text-yellow-700 font-medium">
+                                                            <span className="text-yellow-800 font-semibold">
                                                                 {attachment.fileName}
                                                             </span>
                                                         ) : attachment.type === 'transitioning' ? (
-                                                            <span className="text-green-700 font-medium">
+                                                            <span className="text-green-800 font-semibold">
                                                                 {attachment.fileName}
                                                             </span>
                                                         ) : (
@@ -662,7 +639,7 @@ const TicketDetailsSection = ({
                                                                     href={attachment.url}
                                                                     target="_blank"
                                                                     rel="noopener noreferrer"
-                                                                    className="text-black hover:text-gray-800 hover:underline font-medium"
+                                                                    className="text-gray-900 hover:text-blue-600 hover:underline font-semibold"
                                                                     title={attachment.fileName}
                                                                 >
                                                                     {attachment.fileName}
@@ -670,29 +647,29 @@ const TicketDetailsSection = ({
                                                             </div>
                                                         )}
                                                     </span>
-                                                    <span className="text-[10px] text-gray-400 font-normal">
+                                                    <span className="text-[10px] text-gray-500 font-medium">
                                                         {attachment.type === 'uploading' ? (
-                                                            <span className="text-yellow-600 font-normal">Uploading...</span>
+                                                            <span className="text-yellow-700 font-semibold">Uploading...</span>
                                                         ) : attachment.type === 'transitioning' ? (
-                                                            <span className="text-green-600 font-normal">Uploaded!</span>
+                                                            <span className="text-green-700 font-semibold">Uploaded!</span>
                                                         ) : attachment.added_at && !isNaN(new Date(attachment.added_at).getTime()) ? (
                                                             <div className="flex items-center gap-2">
-                                                                <span className="text-gray-400 font-normal">
+                                                                <span className="text-gray-500 font-medium">
                                                                     {new Date(attachment.added_at).toLocaleString()}
                                                                 </span>
                                                                 {/* Show "Latest" badge for the most recent file */}
                                                                 {index === 0 && attachment.type === 'existing' && (
-                                                                    <span className="px-1.5 py-0.5 bg-green-100 text-green-700 text-[8px] font-bold rounded-full">
+                                                                    <span className="px-1.5 py-0.5 bg-green-100 text-green-800 text-[8px] font-extrabold rounded-full uppercase tracking-wider">
                                                                         Latest
                                                                     </span>
                                                                 )}
                                                             </div>
                                                         ) : ticket.updated_at && !isNaN(new Date(ticket.updated_at).getTime()) ? (
-                                                            <span className="text-gray-400 font-normal">
+                                                            <span className="text-gray-500 font-medium">
                                                                 {new Date(ticket.updated_at).toLocaleString()}
                                                             </span>
                                                         ) : ticket.created_at && !isNaN(new Date(ticket.created_at).getTime()) ? (
-                                                            <span className="text-gray-400 font-normal">
+                                                            <span className="text-gray-500 font-medium">
                                                                 {new Date(ticket.created_at).toLocaleString()}
                                                             </span>
                                                         ) : 'Date not available'}
@@ -734,7 +711,7 @@ const TicketDetailsSection = ({
                                     <div className="mt-3 text-center">
                                         <button
                                             onClick={() => setShowAllAttachments(!showAllAttachments)}
-                                            className="text-[10px] text-orange-600 hover:text-orange-800 hover:underline font-medium"
+                                            className="text-[10px] text-orange-600 hover:text-orange-800 hover:underline font-bold tracking-wide"
                                         >
                                             {showAllAttachments 
                                                 ? 'Show Less' 
@@ -745,7 +722,7 @@ const TicketDetailsSection = ({
                                 )}
                             </>
                         ) : (
-                            <p className="text-gray-500 text-[10px] col-span-full text-left py-2 font-medium">No attachments yet.</p>
+                            <p className="text-gray-600 text-[12px] col-span-full text-left py-2 font-normal italic">No attachments yet.</p>
                         );
                     })()}
                 </div>

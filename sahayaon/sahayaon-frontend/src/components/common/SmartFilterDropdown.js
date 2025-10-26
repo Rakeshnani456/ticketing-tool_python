@@ -29,7 +29,8 @@ const SmartFilterDropdown = ({
     availableClients = [], 
     className = "",
     disabled = false,
-    showClearAll = true
+    showClearAll = true,
+    user = null  // Add user prop to check role
 }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [activeFilterType, setActiveFilterType] = useState(null);
@@ -39,68 +40,77 @@ const SmartFilterDropdown = ({
     const buttonRef = useRef(null);
 
     // Filter types configuration
-    const filterTypes = useMemo(() => [
-        {
-            id: 'status',
-            label: 'Status',
-            icon: CheckCircle,
-            options: [
-                { value: 'Open', label: 'Open', color: 'bg-green-100 text-green-800' },
-                { value: 'In Progress', label: 'In Progress', color: 'bg-yellow-100 text-yellow-800' },
-                { value: 'Hold', label: 'On Hold', color: 'bg-purple-100 text-purple-800' },
-                { value: 'Resolved', label: 'Resolved', color: 'bg-blue-100 text-blue-800' },
-                { value: 'Cancelled', label: 'Cancelled', color: 'bg-red-100 text-red-800' }
-            ]
-        },
-        {
-            id: 'priority',
-            label: 'Priority',
-            icon: AlertTriangle,
-            options: [
-                { value: 'Low', label: 'Low', color: 'bg-blue-100 text-blue-800' },
-                { value: 'Medium', label: 'Medium', color: 'bg-orange-100 text-orange-800' },
-                { value: 'High', label: 'High', color: 'bg-red-100 text-red-800' },
-                { value: 'Critical', label: 'Critical', color: 'bg-red-200 text-red-900 border border-red-500' }
-            ]
-        },
-        {
-            id: 'assigned',
-            label: 'Assigned To',
-            icon: User,
-            options: [
-                { value: 'unassigned', label: 'Unassigned', color: 'bg-gray-100 text-gray-800' },
-                { value: 'assigned_to_me', label: 'Assigned to Me', color: 'bg-blue-100 text-blue-800' },
-                ...availableEngineers.map(engineer => ({
-                    value: engineer.email,
-                    label: engineer.name || engineer.email.split('@')[0],
-                    color: 'bg-indigo-100 text-indigo-800'
+    const filterTypes = useMemo(() => {
+        const allFilterTypes = [
+            {
+                id: 'status',
+                label: 'Status',
+                icon: CheckCircle,
+                options: [
+                    { value: 'Open', label: 'Open', color: 'bg-green-100 text-green-800' },
+                    { value: 'In Progress', label: 'In Progress', color: 'bg-yellow-100 text-yellow-800' },
+                    { value: 'Hold', label: 'On Hold', color: 'bg-purple-100 text-purple-800' },
+                    { value: 'Resolved', label: 'Resolved', color: 'bg-blue-100 text-blue-800' },
+                    { value: 'Cancelled', label: 'Cancelled', color: 'bg-red-100 text-red-800' }
+                ]
+            },
+            {
+                id: 'priority',
+                label: 'Priority',
+                icon: AlertTriangle,
+                options: [
+                    { value: 'Low', label: 'Low', color: 'bg-blue-100 text-blue-800' },
+                    { value: 'Medium', label: 'Medium', color: 'bg-orange-100 text-orange-800' },
+                    { value: 'High', label: 'High', color: 'bg-red-100 text-red-800' },
+                    { value: 'Critical', label: 'Critical', color: 'bg-red-200 text-red-900 border border-red-500' }
+                ]
+            },
+            {
+                id: 'assigned',
+                label: 'Assigned To',
+                icon: User,
+                options: [
+                    { value: 'unassigned', label: 'Unassigned', color: 'bg-gray-100 text-gray-800' },
+                    { value: 'assigned_to_me', label: 'Assigned to Me', color: 'bg-blue-100 text-blue-800' },
+                    ...availableEngineers.map(engineer => ({
+                        value: engineer.email,
+                        label: engineer.name || engineer.email.split('@')[0],
+                        color: 'bg-indigo-100 text-indigo-800'
+                    }))
+                ]
+            },
+            {
+                id: 'client',
+                label: 'Client',
+                icon: Building2,
+                options: availableClients.map(client => ({
+                    value: client['Client name'] || client.companyName,
+                    label: client['Client name'] || client.companyName,
+                    color: 'bg-emerald-100 text-emerald-800'
                 }))
-            ]
-        },
-        {
-            id: 'client',
-            label: 'Client',
-            icon: Building2,
-            options: availableClients.map(client => ({
-                value: client['Client name'] || client.companyName,
-                label: client['Client name'] || client.companyName,
-                color: 'bg-emerald-100 text-emerald-800'
-            }))
-        },
-        {
-            id: 'created',
-            label: 'Created Date',
-            icon: Calendar,
-            options: [
-                { value: 'today', label: 'Today', color: 'bg-blue-100 text-blue-800' },
-                { value: 'yesterday', label: 'Yesterday', color: 'bg-gray-100 text-gray-800' },
-                { value: 'last_7_days', label: 'Last 7 days', color: 'bg-green-100 text-green-800' },
-                { value: 'last_30_days', label: 'Last 30 days', color: 'bg-yellow-100 text-yellow-800' },
-                { value: 'last_90_days', label: 'Last 90 days', color: 'bg-orange-100 text-orange-800' },
-                { value: 'this_year', label: 'This year', color: 'bg-purple-100 text-purple-800' }
-            ]
+            },
+            {
+                id: 'created',
+                label: 'Created Date',
+                icon: Calendar,
+                options: [
+                    { value: 'today', label: 'Today', color: 'bg-blue-100 text-blue-800' },
+                    { value: 'yesterday', label: 'Yesterday', color: 'bg-gray-100 text-gray-800' },
+                    { value: 'last_7_days', label: 'Last 7 days', color: 'bg-green-100 text-green-800' },
+                    { value: 'last_30_days', label: 'Last 30 days', color: 'bg-yellow-100 text-yellow-800' },
+                    { value: 'last_90_days', label: 'Last 90 days', color: 'bg-orange-100 text-orange-800' },
+                    { value: 'this_year', label: 'This year', color: 'bg-purple-100 text-purple-800' }
+                ]
+            }
+        ];
+        
+        // Hide client filter for site_admin users since they should only see their own client
+        if (user?.role === 'site_admin') {
+            return allFilterTypes.filter(type => type.id !== 'client');
         }
-    ], [availableEngineers, availableClients]);
+        
+        return allFilterTypes;
+    }, [availableEngineers, availableClients, user?.role]);
 
     // Calculate active filters count
     const activeFiltersCount = useMemo(() => {

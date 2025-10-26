@@ -682,7 +682,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
     const [changingStatusTickets, setChangingStatusTickets] = useState(new Set());
     
     // View mode state (list or kanban)
-    const [viewMode, setViewMode] = useState('kanban'); // 'list' or 'kanban' - default to kanban
+    const [viewMode, setViewMode] = useState('list'); // 'list' or 'kanban' - default to list
     
     // Sorting state
     const [sortField, setSortField] = useState('created_at'); // Default sort by created date
@@ -2969,6 +2969,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                             availableEngineers={availableEngineers}
                             availableClients={companies}
                             className="flex-shrink-0"
+                            user={user}
                         />
                         
                         {/* View Toggle Buttons */}
@@ -3136,6 +3137,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                         loading={loading}
                         showCheckboxes={showCheckboxes || assignMode}
                         selectedTickets={selectedTickets}
+                        startIndex={(currentPage - 1) * ticketsPerPage}
                         onTicketSelect={(ticketIds) => {
                                                                     if (assignMode) {
                                 // In assign mode, only allow selecting unassigned tickets

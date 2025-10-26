@@ -27,11 +27,19 @@ service cloud.firestore {
              get(/databases/$(database)/documents/users/$(getUserId())).data.role == 'super_admin';
     }
 
-    // Helper: site_admin can read tickets for their own company/client
+    // Helper: site_admin can read tickets for their own company/client  
     function isSiteAdminForTicket() {
+      let userDoc = get(/databases/$(database)/documents/users/$(getUserId()));
       return exists(/databases/$(database)/documents/users/$(getUserId())) &&
-        get(/databases/$(database)/documents/users/$(getUserId())).data.role == 'site_admin' &&
-        get(/databases/$(database)/documents/users/$(getUserId())).data.client_name == resource.data.client_name;
+        userDoc.data.role == 'site_admin' && 
+        (
+          // 1. Site admin created the ticket
+          resource.data.reporter_id == getUserId() ||
+          // 2. Client names match (both must be non-empty and matching)
+          (userDoc.data.get('client_name', '') != '' && 
+           resource.data.get('client_name', '') != '' &&
+           userDoc.data.client_name == resource.data.client_name)
+        );
     }
 
     match /tickets/{ticketId} {
@@ -48,9 +56,7 @@ service cloud.firestore {
         // Support/Admin/Super Admin can list all tickets
         hasSupportAdminOrSuperAdminRole() ||
         // Site admin can list tickets for their client
-        (exists(/databases/$(database)/documents/users/$(getUserId())) &&
-         get(/databases/$(database)/documents/users/$(getUserId())).data.role == 'site_admin' &&
-         get(/databases/$(database)/documents/users/$(getUserId())).data.client_name == resource.data.client_name)
+        isSiteAdminForTicket()
       );
 
       // Allow authenticated users to create tickets
@@ -60,7 +66,8 @@ service cloud.firestore {
       // Allow authenticated users to update tickets
       allow update: if isAuthenticated() && (
         resource.data.reporter_id == getUserId() ||
-        hasSupportAdminOrSuperAdminRole()
+        hasSupportAdminOrSuperAdminRole() ||
+        isSiteAdminForTicket()
       );
 
       // Deny delete by default, adjust if deletion functionality is needed
@@ -69,9 +76,12 @@ service cloud.firestore {
 
     // Helper: site_admin can read users from their own company/client
     function isSiteAdminForUser() {
+      let userDoc = get(/databases/$(database)/documents/users/$(getUserId()));
       return exists(/databases/$(database)/documents/users/$(getUserId())) &&
-        get(/databases/$(database)/documents/users/$(getUserId())).data.role == 'site_admin' &&
-        get(/databases/$(database)/documents/users/$(getUserId())).data.client_name == resource.data.client_name;
+        userDoc.data.role == 'site_admin' &&
+        userDoc.data.get('client_name', '') != '' &&
+        resource.data.get('client_name', '') != '' &&
+        userDoc.data.client_name == resource.data.client_name;
     }
 
     // Rules for the 'users' collection

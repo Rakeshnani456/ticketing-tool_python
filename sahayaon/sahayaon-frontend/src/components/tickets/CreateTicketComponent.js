@@ -379,8 +379,19 @@ const CreateTicketComponent = ({ user, onClose, showFlashMessage, onTicketCreate
             >
             <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-2"> {/* Reduced gap for more compact layout */}
 
-                {/* Section 1: Request for, Category, Priority */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"> {/* Responsive columns */}
+                {/* Section 1: Requested by, Request for, Category, Priority */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3"> {/* Responsive columns */}
+                    <FormInput
+                        id="reporter_email"
+                        label="Requested by *"
+                        type="email"
+                        value={user?.email || ''}
+                        onChange={() => {}} // No-op since it's read-only
+                        required
+                        placeholder="Your email"
+                        disabled={true}
+                        className="w-full text-xs bg-gray-50"
+                    />
                     <FormInput
                         id="request_for_email"
                         label="Request for *"

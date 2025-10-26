@@ -217,7 +217,8 @@ const ModernTicketGrid = ({
   changingStatusTickets = new Set(),
   assigningTickets = new Set(),
   availableEngineers = [],
-  engineersLoading = false
+  engineersLoading = false,
+  startIndex = 0 // Add startIndex prop for pagination support
 }) => {
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
   const [hoveredRow, setHoveredRow] = useState(null);
@@ -394,7 +395,7 @@ const ModernTicketGrid = ({
                     </TableCell>
                   )}
                   <TableCell className="w-12 text-center text-gray-500 font-semibold text-sm">
-                    {index + 1}
+                    {startIndex + index + 1}
                   </TableCell>
                   <TableCell 
                     className="ticket-id font-semibold text-gray-600 hover:text-gray-800 text-sm tracking-wide"

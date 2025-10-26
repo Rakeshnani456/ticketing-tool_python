@@ -1,12 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MessageSquare, Send, MoreVertical, Heart, Reply, Edit2, Trash2 } from 'lucide-react';
+import { MessageSquare, Send, Heart, Reply } from 'lucide-react';
 
 const EnhancedCommentsInterface = ({ 
     comments = [], 
     onAddComment, 
     onAddReply, 
-    onDeleteComment,
-    onEditComment,
     onLikeComment,
     loading = false,
     user = { name: 'Current User', id: 'user-1' },
@@ -15,9 +13,6 @@ const EnhancedCommentsInterface = ({
 }) => {
     const [replyingTo, setReplyingTo] = useState(null);
     const [replyText, setReplyText] = useState('');
-    const [editingComment, setEditingComment] = useState(null);
-    const [editText, setEditText] = useState('');
-    const [openMenus, setOpenMenus] = useState({});
     const [likedComments, setLikedComments] = useState({});
     const textareaRef = useRef(null);
 
@@ -53,33 +48,12 @@ const EnhancedCommentsInterface = ({
         }
     };
 
-    const handleEdit = async (commentId) => {
-        if (editText.trim()) {
-            await onEditComment?.(commentId, editText);
-            setEditingComment(null);
-            setEditText('');
-        }
-    };
-
     const handleLike = (commentId) => {
         setLikedComments(prev => ({
             ...prev,
             [commentId]: !prev[commentId]
         }));
         onLikeComment?.(commentId);
-    };
-
-    const toggleMenu = (commentId) => {
-        setOpenMenus(prev => ({
-            ...prev,
-            [commentId]: !prev[commentId]
-        }));
-    };
-
-    const startEdit = (comment) => {
-        setEditingComment(comment.id);
-        setEditText(comment.comment || comment.comment_text || comment.text);
-        setOpenMenus({});
     };
 
     const formatTimeAgo = (timestamp) => {
@@ -121,8 +95,17 @@ const EnhancedCommentsInterface = ({
     });
 
     return (
-        <div className="max-w-5xl mx-auto px-3 sm:px-4 py-3">
+        <div id="comments-interface" className="max-w-5xl mx-auto px-2 sm:px-3 py-2">
             <style>{`
+                /* Absolute override for profile icons */
+                #comments-interface .rounded-full {
+                    color: #ffffff !important;
+                }
+                
+                #comments-interface .rounded-full span {
+                    color: #ffffff !important;
+                }
+                
                 @keyframes slideIn {
                     from {
                         opacity: 0;
@@ -158,15 +141,54 @@ const EnhancedCommentsInterface = ({
                     0%, 100% { transform: scale(1); }
                     50% { transform: scale(1.3); }
                 }
+                
+                /* Force white text in profile icons and buttons with ultra high specificity */
+                div.rounded-full span.text-white,
+                div.rounded-full span,
+                div.bg-blue-500 span,
+                div.bg-purple-500 span,
+                div.bg-pink-500 span,
+                div.bg-green-500 span,
+                div.bg-yellow-500 span,
+                div.bg-red-500 span,
+                div.bg-indigo-500 span,
+                div.bg-teal-500 span {
+                    color: #ffffff !important;
+                    opacity: 1 !important;
+                }
+                
+                .text-white,
+                span.text-white {
+                    color: #ffffff !important;
+                    opacity: 1 !important;
+                }
+                
+                button.bg-indigo-600,
+                button.bg-indigo-600:hover,
+                button.bg-indigo-700,
+                button.bg-indigo-700:hover {
+                    color: #ffffff !important;
+                }
+                
+                button.bg-indigo-600 svg,
+                button.bg-indigo-600 span,
+                button.bg-indigo-700 svg,
+                button.bg-indigo-700 span,
+                button.bg-indigo-600:hover svg,
+                button.bg-indigo-600:hover span {
+                    color: #ffffff !important;
+                    fill: #ffffff !important;
+                    stroke: #ffffff !important;
+                }
             `}</style>
 
             {/* Header intentionally omitted to avoid duplication with parent tabs */}
 
             {/* Comment Input */}
-            <div className="mb-3">
-                <div className="flex gap-2">
-                    <div className={`w-9 h-9 rounded-full ${getAvatarColor(user.name)} flex items-center justify-center text-white antialiased font-bold text-[12px] sm:text-[12px] flex-shrink-0 ring-1 ring-white/80 shadow-sm`}>
-                        {getInitials(user.name)}
+            <div className="mb-2">
+                <div className="flex gap-1.5">
+                    <div className={`w-9 h-9 rounded-full ${getAvatarColor(user.name)} flex items-center justify-center antialiased font-bold text-[12px] sm:text-[12px] flex-shrink-0 ring-1 ring-white/80 shadow-sm`}>
+                        <span style={{ color: 'rgb(255, 255, 255)', fontWeight: 'bold' }}>{getInitials(user.name)}</span>
                     </div>
                     <div className="flex-1">
                         <textarea
@@ -177,36 +199,43 @@ const EnhancedCommentsInterface = ({
                                 adjustTextareaHeight(e.target);
                             }}
                             onKeyDown={(e) => {
-                                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                                if (e.key === 'Enter') {
+                                    // Shift+Enter creates a new line (default behavior)
+                                    if (e.shiftKey) {
+                                        // Allow default behavior for new line
+                                        return;
+                                    }
+                                    // Plain Enter submits the comment
+                                    e.preventDefault();
                                     handleSubmitComment(e);
                                 }
                             }}
                             placeholder="What are your thoughts?"
-                            className="w-full px-3 py-3 border border-slate-200 rounded-md focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none transition-all resize-none min-h-[120px] bg-white text-sm"
+                            className="w-full px-2.5 py-2 border border-slate-200 rounded-md focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none transition-all resize-none min-h-[100px] bg-white text-sm font-normal text-gray-900"
                             rows={1}
                         />
-                        <div className="flex items-center justify-between mt-2">
-                            <span className="text-[11px] text-slate-400">
-                                Tip: Press Cmd/Ctrl + Enter to submit
+                        <div className="flex items-center justify-between mt-1.5">
+                            <span className="text-[11px] text-gray-500 font-medium">
+                                Tip: Press Shift + Enter for new line
                             </span>
                             <button
                                 onClick={handleSubmitComment}
                                 disabled={!commentText.trim() || loading}
-                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition-colors ${
                                     commentText.trim() && !loading
-                                        ? 'bg-indigo-600 text-white hover:bg-indigo-700'
+                                        ? 'bg-indigo-600 hover:bg-indigo-700 !text-white'
                                         : 'bg-slate-200 text-slate-400 cursor-not-allowed'
                                 }`}
                             >
                                 {loading ? (
                                     <>
                                         <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                        <span className="loading-dots">Posting</span>
+                                        <span className="text-white font-bold">Posting</span>
                                     </>
                                 ) : (
                                     <>
-                                        <Send className="w-3.5 h-3.5" />
-                                        <span>Post</span>
+                                        <Send className={`w-3.5 h-3.5 ${commentText.trim() ? 'text-white' : ''}`} />
+                                        <span className={commentText.trim() ? 'text-white font-bold' : 'font-bold'}>Post</span>
                                     </>
                                 )}
                             </button>
@@ -220,138 +249,76 @@ const EnhancedCommentsInterface = ({
                 {sortedComments.length === 0 ? (
                     <div className="py-10 text-center">
                         <div className="w-14 h-14 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                            <MessageSquare className="w-7 h-7 text-slate-400" />
+                            <MessageSquare className="w-7 h-7 text-slate-600" />
                         </div>
-                        <p className="text-slate-500 text-base font-medium">No comments yet</p>
-                        <p className="text-slate-400 text-sm mt-1">Be the first to share your thoughts!</p>
+                        <p className="text-gray-900 text-base font-bold tracking-tight">No comments available</p>
+                        <p className="text-gray-600 text-sm mt-1 font-medium">Add a comment to provide updates or additional information</p>
                     </div>
                 ) : (
                     sortedComments.map((comment, index) => {
                         const commentId = comment.id || index;
-                        const isEditing = editingComment === commentId;
                         const isLiked = likedComments[commentId];
                         const likesCount = (comment.likes || 0) + (isLiked ? 1 : 0);
 
                         return (
-                            <div key={commentId} className="comment-item">
-                                <div className="flex gap-3 group">
-                                    <div className={`w-9 h-9 rounded-full ${getAvatarColor(comment.commenter_name || comment.commenter)} flex items-center justify-center text-white antialiased font-bold text-[12px] flex-shrink-0 ring-1 ring-white/80 shadow-sm`}>
-                                        {getInitials(comment.commenter_name || comment.commenter)}
+                            <div key={commentId} className="comment-item bg-white pb-3 border-b border-gray-100 last:border-b-0 transition-all duration-200">
+                                <div className="flex gap-2 group">
+                                    <div className={`w-9 h-9 rounded-full ${getAvatarColor(comment.commenter_name || comment.commenter)} flex items-center justify-center antialiased font-bold text-[12px] flex-shrink-0 ring-1 ring-white/80 shadow-sm`}>
+                                        <span style={{ color: 'rgb(255, 255, 255)', fontWeight: 'bold' }}>{getInitials(comment.commenter_name || comment.commenter)}</span>
                                     </div>
                                     
                                     <div className="flex-1 min-w-0">
-                                        <div className="bg-slate-50 rounded-lg px-3 py-2 relative">
-                                            <div className="flex items-start justify-between gap-2 mb-1.5">
-                                                <div>
-                                                    <span className="font-semibold text-slate-900 text-[13px]">
+                                        <div className="bg-slate-50 rounded-lg px-2.5 py-1.5 relative">
+                                            <div className="flex items-start justify-between gap-2 mb-1">
+                                                <div className="flex-1 min-w-0">
+                                                    <span className="font-bold text-gray-900 text-[13px] tracking-tight">
                                                         {comment.commenter_name || comment.commenter || 'Anonymous'}
                                                     </span>
-                                                    <span className="text-slate-500 text-xs ml-2">
+                                                    <span className="text-gray-600 text-xs ml-2 font-semibold">
                                                         {formatTimeAgo(comment.timestamp || comment.created_at)}
                                                     </span>
                                                 </div>
-                                                
-                                                <div className="relative">
-                                                    <button
-                                                        onClick={() => toggleMenu(commentId)}
-                                                        className="p-1 hover:bg-slate-200 rounded-md transition-colors opacity-0 group-hover:opacity-100"
-                                                    >
-                                                        <MoreVertical className="w-3.5 h-3.5 text-slate-400" />
-                                                    </button>
-                                                    
-                                                    {openMenus[commentId] && (
-                                                        <div className="absolute right-0 mt-1 w-40 bg-white rounded-xl shadow-xl border border-slate-200 py-1 z-10">
-                                                            <button
-                                                                onClick={() => startEdit(comment)}
-                                                                className="w-full px-4 py-2 text-left text-sm hover:bg-slate-50 flex items-center gap-2 text-slate-700"
-                                                            >
-                                                                <Edit2 className="w-3 h-3" />
-                                                                Edit
-                                                            </button>
-                                                            <button
-                                                                onClick={() => {
-                                                                    onDeleteComment?.(commentId);
-                                                                    setOpenMenus({});
-                                                                }}
-                                                                className="w-full px-4 py-2 text-left text-sm hover:bg-red-50 text-red-600 flex items-center gap-2"
-                                                            >
-                                                                <Trash2 className="w-3 h-3" />
-                                                                Delete
-                                                            </button>
-                                                        </div>
-                                                    )}
-                                                </div>
                                             </div>
                                             
-                                            {isEditing ? (
-                                                <div>
-                                                    <textarea
-                                                        value={editText}
-                                                        onChange={(e) => setEditText(e.target.value)}
-                                                        className="w-full px-3 py-2 border border-indigo-300 rounded-md focus:border-indigo-500 outline-none resize-none bg-white text-sm"
-                                                        rows={3}
-                                                    />
-                                                    <div className="flex gap-2 mt-2">
-                                                        <button
-                                                            onClick={() => handleEdit(commentId)}
-                                                            className="px-3 py-1.5 bg-indigo-600 text-white text-xs rounded-md hover:bg-indigo-700"
-                                                        >
-                                                            Save
-                                                        </button>
-                                                        <button
-                                                            onClick={() => {
-                                                                setEditingComment(null);
-                                                                setEditText('');
-                                                            }}
-                                                            className="px-3 py-1.5 bg-slate-200 text-slate-700 text-xs rounded-md hover:bg-slate-300"
-                                                        >
-                                                            Cancel
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            ) : (
-                                                <p className="text-slate-700 leading-relaxed text-sm">
-                                                    {comment.comment || comment.comment_text || comment.text}
-                                                </p>
-                                            )}
+                                            <p className="text-gray-900 leading-relaxed text-sm break-words font-normal">
+                                                {comment.comment || comment.comment_text || comment.text}
+                                            </p>
                                         </div>
                                         
-                                        {!isEditing && (
-                                            <div className="flex items-center gap-2.5 mt-1.5 ml-1">
+                                        <div className="flex items-center gap-2 mt-1 ml-0.5">
                                                 <button
                                                     onClick={() => handleLike(commentId)}
-                                                    className={`flex items-center gap-1.5 px-2 py-1 rounded-md transition-colors ${
+                                                    className={`flex items-center gap-1 px-1.5 py-0.5 rounded-md transition-colors ${
                                                         isLiked
                                                             ? 'bg-red-50 text-red-600'
-                                                            : 'text-slate-500 hover:bg-slate-100'
+                                                            : 'text-gray-700 hover:bg-slate-100'
                                                     }`}
                                                 >
                                                     <Heart
                                                         className={`w-3.5 h-3.5 ${isLiked ? 'fill-red-600 heart-bounce' : ''}`}
                                                     />
                                                     {likesCount > 0 && (
-                                                        <span className="text-xs font-medium">{likesCount}</span>
+                                                        <span className="text-xs font-bold">{likesCount}</span>
                                                     )}
                                                 </button>
                                                 
                                                 <button
                                                     onClick={() => setReplyingTo(replyingTo === commentId ? null : commentId)}
-                                                    className="flex items-center gap-1.5 px-2 py-1 text-slate-500 hover:bg-slate-100 rounded-md transition-colors"
+                                                    className="flex items-center gap-1 px-1.5 py-0.5 text-gray-700 hover:bg-slate-100 rounded-md transition-colors"
                                                 >
                                                     <Reply className="w-3.5 h-3.5" />
-                                                    <span className="text-xs font-medium">Reply</span>
+                                                    <span className="text-xs font-semibold">Reply</span>
                                                 </button>
-                                            </div>
-                                        )}
+                                        </div>
                                         
                                         {replyingTo === commentId && (
-                                            <div className="mt-2.5 flex gap-2">
+                                            <div className="mt-1.5 flex gap-1.5">
                                                 <input
                                                     type="text"
                                                     value={replyText}
                                                     onChange={(e) => setReplyText(e.target.value)}
                                                     placeholder="Write a reply..."
-                                                    className="flex-1 px-3 py-2 border border-slate-200 rounded-md focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none text-sm"
+                                                    className="flex-1 px-2.5 py-1.5 border border-slate-200 rounded-md focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none text-sm font-normal text-gray-900"
                                                     onKeyDown={(e) => {
                                                         if (e.key === 'Enter') {
                                                             handleReply(commentId);
@@ -361,7 +328,7 @@ const EnhancedCommentsInterface = ({
                                                 <button
                                                     onClick={() => handleReply(commentId)}
                                                     disabled={!replyText.trim()}
-                                                    className={`px-3.5 py-2 rounded-md text-xs font-medium ${
+                                                    className={`px-2.5 py-1.5 rounded-md text-xs font-bold ${
                                                         replyText.trim()
                                                             ? 'bg-indigo-600 text-white hover:bg-indigo-700'
                                                             : 'bg-slate-200 text-slate-400 cursor-not-allowed'
@@ -374,23 +341,23 @@ const EnhancedCommentsInterface = ({
                                         
                                         {/* Replies */}
                                         {comment.replies && comment.replies.length > 0 && (
-                                            <div className="mt-3 space-y-2 pl-3 border-l border-slate-200">
+                                            <div className="mt-2 space-y-1.5 pl-2.5 border-l border-slate-200">
                                                 {comment.replies.map((reply, ridx) => (
-                                                    <div key={reply.id || ridx} className="flex gap-2">
-                                                        <div className={`w-7 h-7 rounded-full ${getAvatarColor(reply.commenter)} flex items-center justify-center text-white antialiased text-[10px] font-bold flex-shrink-0 ring-1 ring-white/80`}>
-                                                            {getInitials(reply.commenter)}
+                                                    <div key={reply.id || ridx} className="flex gap-1.5">
+                                                        <div className={`w-7 h-7 rounded-full ${getAvatarColor(reply.commenter)} flex items-center justify-center antialiased text-[10px] font-bold flex-shrink-0 ring-1 ring-white/80`}>
+                                                            <span style={{ color: 'rgb(255, 255, 255)', fontWeight: 'bold' }}>{getInitials(reply.commenter)}</span>
                                                         </div>
                                                         <div className="flex-1">
-                                                            <div className="bg-white rounded-lg px-3 py-2 shadow-none border border-slate-100">
+                                                            <div className="bg-white rounded-lg px-2.5 py-1.5 shadow-none border border-slate-100">
                                                                 <div>
-                                                                    <span className="font-semibold text-[13px] text-slate-900">
+                                                                    <span className="font-bold text-[13px] text-gray-900 tracking-tight">
                                                                         {reply.commenter}
                                                                     </span>
-                                                                    <span className="text-slate-500 text-[11px] ml-2">
+                                                                    <span className="text-gray-600 text-[11px] ml-2 font-semibold">
                                                                         {formatTimeAgo(reply.timestamp)}
                                                                     </span>
                                                                 </div>
-                                                                <p className="text-sm text-slate-700 mt-1">
+                                                                <p className="text-sm text-gray-900 font-normal mt-1">
                                                                     {reply.text}
                                                                 </p>
                                                             </div>

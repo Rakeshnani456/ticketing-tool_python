@@ -359,6 +359,35 @@ const CreateTicketPage = ({ user, showFlashMessage, navigateTo }) => {
                 {/* Main Form */}
                 <div className="bg-white rounded-lg shadow-lg border border-orange-200">
                     <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 sm:space-y-5">
+                        {/* Requested by and Request for Row */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+                            <div>
+                                <FormInput
+                                    id="reporter_email"
+                                    label="Requested by *"
+                                    type="email"
+                                    value={user?.email || ''}
+                                    onChange={() => {}} // No-op since it's read-only
+                                    placeholder="Your email"
+                                    required
+                                    disabled={true}
+                                    className="bg-gray-50"
+                                />
+                            </div>
+                            <div>
+                                <FormInput
+                                    id="request_for_email"
+                                    label="Request for *"
+                                    type="email"
+                                    value={formData.request_for_email}
+                                    onChange={handleInputChange}
+                                    placeholder="e.g., user@company.com"
+                                    required
+                                    disabled={submissionStatus === 'success'}
+                                />
+                            </div>
+                        </div>
+
                         {/* Category and Priority Row */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                             <div>
