@@ -18,19 +18,19 @@
 
 /* Enhanced typography for ticket grid */
 .ticket-id {
-  font-weight: 600;
+  font-weight: 400;
   letter-spacing: 0.025em;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
 .ticket-summary {
-  font-weight: 500;
+  font-weight: 400;
   line-height: 1.5;
   letter-spacing: 0.01em;
 }
 
 .ticket-meta {
-  font-weight: 600;
+  font-weight: 400;
   letter-spacing: 0.01em;
 }
 
@@ -909,7 +909,7 @@ textarea.max-w-none.w-full::-webkit-scrollbar-corner {
 /* Main app header - fixed top header */
 header.fixed.top-0 {
   background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%) !important; /* Modern gradient header */
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
+  box-shadow: 0 1px 2px -1px rgba(0, 0, 0, 0.05), 0 1px 2px -1px rgba(0, 0, 0, 0.03) !important;
   border-bottom: 1px solid #e2e8f0 !important;
   backdrop-filter: blur(10px) !important;
   -webkit-backdrop-filter: blur(10px) !important;
@@ -1423,6 +1423,26 @@ body {
 
 .ticket-detail-container .ticket-progress-section button[class*="text-gray-600"] {
     color: #4b5563 !important; /* Ensure proper gray for cancel button */
+}
+
+/* Override for Close Ticket button in closure notes to ensure white text */
+div.bg-white.rounded-xl button[class*="bg-gradient-to-r"] span,
+div.bg-white.rounded-xl button[class*="bg-gradient-to-r"] svg,
+div.bg-white.rounded-xl button[class*="from-blue-600"] span,
+div.bg-white.rounded-xl button[class*="from-green-600"] span,
+div.bg-white.rounded-xl button[class*="from-red-600"] span {
+    color: #ffffff !important;
+    fill: #ffffff !important;
+    stroke: #ffffff !important;
+}
+
+/* Ensure all error messages in ticket components are red */
+.ticket-progress-section p.text-red-600,
+.ticket-detail-container p.text-red-600,
+.closure-notes-error,
+.assigned-to-error,
+.time-spent-error {
+    color: #dc2626 !important; /* Force red color for all error messages */
 }
 
 /* Main ticket details color variations */

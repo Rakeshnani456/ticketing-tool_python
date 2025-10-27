@@ -14,6 +14,7 @@ const UpdatesComponent = ({ user, navigateTo, darkMode = false }) => {
   const [filter, setFilter] = useState('all'); // 'all', 'unread', 'today', 'week'
   const [showRead, setShowRead] = useState(true);
   const [readUpdates, setReadUpdates] = useState(new Set());
+  const [userTickets, setUserTickets] = useState([]);
 
   // Theme classes
   const bgClass = darkMode ? 'bg-gray-900' : 'bg-white';
@@ -96,6 +97,39 @@ const UpdatesComponent = ({ user, navigateTo, darkMode = false }) => {
     }
   };
 
+  // Fetch user's tickets if user is a regular user
+  useEffect(() => {
+    const fetchUserTickets = async () => {
+      if (!user || user.role !== 'user') {
+        setUserTickets([]);
+        return;
+      }
+
+      try {
+        const db = getFirestore(dbClient);
+        const ticketsQuery = query(
+          collection(db, 'tickets'),
+          where('reporter_id', '==', user.uid)
+        );
+
+        const snapshot = await getDocs(ticketsQuery);
+        const ticketsData = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        
+        setUserTickets(ticketsData);
+      } catch (error) {
+        console.error('Error fetching user tickets:', error);
+        setUserTickets([]);
+      }
+    };
+
+    if (user) {
+      fetchUserTickets();
+    }
+  }, [user]);
+
   // Load updates from database
   useEffect(() => {
     const loadUpdates = async () => {
@@ -120,6 +154,26 @@ const UpdatesComponent = ({ user, navigateTo, darkMode = false }) => {
             orderBy('timestamp', 'desc'),
             limit(50)
           );
+        } else if (user?.role === 'user' && userTickets.length > 0) {
+          // Regular users see only updates from their own tickets
+          const ticketIds = userTickets.map(ticket => ticket.id);
+          
+          if (ticketIds.length <= 10) {
+            // Firestore 'in' query supports up to 10 items
+            updatesQuery = query(
+              collection(db, 'activities'),
+              where('ticket_id', 'in', ticketIds),
+              orderBy('timestamp', 'desc'),
+              limit(50)
+            );
+          } else {
+            // If more than 10 tickets, fetch all and filter client-side
+            updatesQuery = query(
+              collection(db, 'activities'),
+              orderBy('timestamp', 'desc'),
+              limit(200)
+            );
+          }
         } else {
           // Admin/Super admin sees all updates
           updatesQuery = query(
@@ -130,10 +184,18 @@ const UpdatesComponent = ({ user, navigateTo, darkMode = false }) => {
         }
 
         const snapshot = await getDocs(updatesQuery);
-        const updatesData = snapshot.docs.map(doc => ({
+        let updatesData = snapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data()
         }));
+
+        // Client-side filtering for users with more than 10 tickets
+        if (user?.role === 'user' && userTickets.length > 10) {
+          const ticketIds = userTickets.map(ticket => ticket.id);
+          updatesData = updatesData.filter(update => ticketIds.includes(update.ticket_id));
+          // Limit to 50 most recent after filtering
+          updatesData = updatesData.slice(0, 50);
+        }
 
         setUpdates(updatesData);
       } catch (error) {
@@ -146,7 +208,7 @@ const UpdatesComponent = ({ user, navigateTo, darkMode = false }) => {
     if (user) {
       loadUpdates();
     }
-  }, [user]);
+  }, [user, userTickets]);
 
   // Filter updates based on selected filter
   const filteredUpdates = useMemo(() => {
@@ -284,7 +346,7 @@ const UpdatesComponent = ({ user, navigateTo, darkMode = false }) => {
                 <div
                   key={update.id}
                   className={`p-4 ${hoverClass} transition-colors cursor-pointer ${
-                    !isRead ? 'bg-blue-50/50 dark:bg-blue-900/20 border-l-4 border-l-blue-500' : ''
+                    !isRead ? 'border-l-4 border-l-blue-500' : ''
                   }`}
                   onClick={() => markAsRead(update.id)}
                 >

@@ -16,6 +16,7 @@ import {
   RefreshCw,
   Eye,
   EyeOff,
+  Check,
   MoreHorizontal,
   Calendar,
   Tag,
@@ -26,6 +27,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import CustomDropdown from './CustomDropdown';
+import TooltipBubble from './TooltipBubble';
 import { collection, query, where, orderBy, limit, onSnapshot } from 'firebase/firestore';
 import { dbClient } from '../../config/firebase';
 
@@ -55,12 +57,28 @@ const UpdatesComponent = ({
     
     let activitiesQuery;
     try {
-      // Create query for recent activities
-      activitiesQuery = query(
-        collection(dbClient, 'activities'),
-        orderBy('timestamp', 'desc'),
-        limit(20)
-      );
+      // Create query for recent activities with role-based filtering
+      if (user?.role === 'user') {
+        // For regular users, skip the real-time listener since activities are filtered in DashboardComponent
+        // The DashboardComponent already fetches activities for user's tickets
+        console.log('🔄 Skipping real-time activities for user role - using DashboardComponent filtered activities');
+        return;
+      } else if (user?.role === 'site_admin' && user?.client_name) {
+        // Site admin sees only their company's updates
+        activitiesQuery = query(
+          collection(dbClient, 'activities'),
+          where('client_name', '==', user.client_name),
+          orderBy('timestamp', 'desc'),
+          limit(20)
+        );
+      } else {
+        // Support, admin, super_admin see all activities
+        activitiesQuery = query(
+          collection(dbClient, 'activities'),
+          orderBy('timestamp', 'desc'),
+          limit(20)
+        );
+      }
     } catch (error) {
       console.error('Error creating activities query:', error);
       return;
@@ -87,7 +105,7 @@ const UpdatesComponent = ({
       console.log('🔄 Cleaning up real-time activities listener');
       unsubscribe();
     };
-  }, [user?.uid]);
+  }, [user?.uid, user?.role, user?.client_name]);
 
   // Real-time tickets listener for recent tickets
   useEffect(() => {
@@ -101,13 +119,37 @@ const UpdatesComponent = ({
       const twoDaysAgo = new Date();
       twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
       
-      ticketsQuery = query(
-        collection(dbClient, 'tickets'),
-        where('created_at', '>=', twoDaysAgo),
-        where('status', 'in', ['Open', 'In Progress']),
-        orderBy('created_at', 'desc'),
-        limit(10)
-      );
+      // Add role-based filtering
+      if (user?.role === 'user') {
+        // For regular users, only show their own tickets
+        ticketsQuery = query(
+          collection(dbClient, 'tickets'),
+          where('reporter_id', '==', user.uid),
+          where('created_at', '>=', twoDaysAgo),
+          where('status', 'in', ['Open', 'In Progress']),
+          orderBy('created_at', 'desc'),
+          limit(10)
+        );
+      } else if (user?.role === 'site_admin' && user?.client_name) {
+        // Site admin sees only their company's tickets
+        ticketsQuery = query(
+          collection(dbClient, 'tickets'),
+          where('client_name', '==', user.client_name),
+          where('created_at', '>=', twoDaysAgo),
+          where('status', 'in', ['Open', 'In Progress']),
+          orderBy('created_at', 'desc'),
+          limit(10)
+        );
+      } else {
+        // Support, admin, super_admin see all tickets
+        ticketsQuery = query(
+          collection(dbClient, 'tickets'),
+          where('created_at', '>=', twoDaysAgo),
+          where('status', 'in', ['Open', 'In Progress']),
+          orderBy('created_at', 'desc'),
+          limit(10)
+        );
+      }
     } catch (error) {
       console.error('Error creating tickets query:', error);
       return;
@@ -134,7 +176,7 @@ const UpdatesComponent = ({
       console.log('🔄 Cleaning up real-time tickets listener');
       unsubscribe();
     };
-  }, [user?.uid]);
+  }, [user?.uid, user?.role, user?.client_name]);
 
   // Memoized update processing
   const processedUpdates = useMemo(() => {
@@ -514,12 +556,10 @@ const UpdatesComponent = ({
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -20 }}
                   transition={{ duration: 0.2, delay: index * 0.05 }}
-                  className={`rounded-lg border border-gray-200 ${
-                    !update.isRead ? 'bg-blue-50/50 shadow-sm' : 'bg-white shadow-sm'
-                  }`}
+                  className={`rounded-lg border border-gray-200 bg-white shadow-sm`}
                 >
                   <div className={`relative px-4 py-3.5 hover:bg-gray-50 hover:shadow-md transition-all duration-200 group border-l-4 rounded-lg ${
-                    !update.isRead ? 'border-l-blue-500 bg-blue-50/30' : 'border-l-gray-200'
+                    !update.isRead ? 'border-l-blue-500' : 'border-l-gray-200'
                   }`}>
                     <div className="flex gap-3 items-start">
                       {/* Left Column - Icon */}
@@ -643,32 +683,36 @@ const UpdatesComponent = ({
                     </div>
 
                     {/* Overlay Action Buttons - Positioned absolutely on hover */}
-                    <div className="absolute bottom-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                    <div className="absolute bottom-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                       {update.ticketId && (
-                        <button
-                          onClick={() => handleNavigateToTicket(update.ticketId)}
-                          className="flex items-center gap-1 bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded text-xs font-medium transition-all duration-200 shadow-lg"
-                        >
-                          <ExternalLink className="w-3 h-3" />
-                          <span>View Ticket</span>
-                        </button>
+                        <TooltipBubble title="View Ticket">
+                          <button
+                            onClick={() => handleNavigateToTicket(update.ticketId)}
+                            className="p-1.5 hover:bg-blue-100 rounded text-blue-600 transition-all duration-200"
+                          >
+                            <ExternalLink className="w-4 h-4" />
+                          </button>
+                        </TooltipBubble>
                       )}
                       
                       {!update.isRead ? (
-                        <button
-                          onClick={() => handleMarkAsRead(update)}
-                          className="bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded text-xs font-medium transition-all duration-200 shadow-lg"
-                        >
-                          Mark Read
-                        </button>
+                        <TooltipBubble title="Mark as Read">
+                          <button
+                            onClick={() => handleMarkAsRead(update)}
+                            className="p-1.5 hover:bg-green-100 rounded text-green-600 transition-all duration-200"
+                          >
+                            <Check className="w-4 h-4" />
+                          </button>
+                        </TooltipBubble>
                       ) : (
-                        <button
-                          onClick={() => handleMarkAsUnread(update)}
-                          className="bg-gray-600 hover:bg-gray-700 text-white px-2 py-1 rounded text-xs font-medium transition-all duration-200 shadow-lg flex items-center gap-1"
-                        >
-                          <EyeOff className="w-3 h-3" />
-                          <span>Mark Unread</span>
-                        </button>
+                        <TooltipBubble title="Mark as Unread">
+                          <button
+                            onClick={() => handleMarkAsUnread(update)}
+                            className="p-1.5 hover:bg-gray-100 rounded text-gray-600 transition-all duration-200"
+                          >
+                            <EyeOff className="w-4 h-4" />
+                          </button>
+                        </TooltipBubble>
                       )}
                     </div>
                   </div>

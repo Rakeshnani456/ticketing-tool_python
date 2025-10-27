@@ -71,7 +71,7 @@ const SmartFilterDropdown = ({
                 icon: User,
                 options: [
                     { value: 'unassigned', label: 'Unassigned', color: 'bg-gray-100 text-gray-800' },
-                    { value: 'assigned_to_me', label: 'Assigned to Me', color: 'bg-blue-100 text-blue-800' },
+                    { value: 'assigned_to_me', label: 'My Queue', color: 'bg-blue-100 text-blue-800' },
                     ...availableEngineers.map(engineer => ({
                         value: engineer.email,
                         label: engineer.name || engineer.email.split('@')[0],

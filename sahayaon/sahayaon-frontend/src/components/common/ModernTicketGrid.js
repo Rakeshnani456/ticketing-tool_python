@@ -394,11 +394,11 @@ const ModernTicketGrid = ({
                       />
                     </TableCell>
                   )}
-                  <TableCell className="w-12 text-center text-gray-500 font-semibold text-sm">
+                  <TableCell className="w-12 text-center text-gray-500 font-normal text-xs">
                     {startIndex + index + 1}
                   </TableCell>
                   <TableCell 
-                    className="ticket-id font-semibold text-gray-600 hover:text-gray-800 text-sm tracking-wide"
+                    className="ticket-id font-normal text-gray-700 hover:text-gray-900 text-xs tracking-wide"
                   >
                     <a
                       href={`/tickets/${ticket.id}`}
@@ -421,14 +421,14 @@ const ModernTicketGrid = ({
                     className="max-w-xs cursor-pointer"
                     onClick={() => onTicketClick?.(ticket)}
                   >
-                    <div className="ticket-summary line-clamp-2 text-gray-600 hover:text-gray-700 font-medium text-sm leading-relaxed">
+                    <div className="ticket-summary line-clamp-2 text-gray-800 hover:text-gray-900 font-normal text-xs leading-relaxed">
                       {ticket.short_description}
                     </div>
                   </TableCell>
                   <TableCell className="text-gray-500">
                     <div className="flex items-center gap-1.5">
                       <Calendar className="h-3.5 w-3.5 text-gray-400" />
-                      <span className="ticket-meta text-xs font-medium">
+                      <span className="ticket-meta text-xs font-normal text-gray-600">
                         {formatDate(ticket.created_at)}
                       </span>
                     </div>
@@ -471,21 +471,21 @@ const ModernTicketGrid = ({
                   <TableCell className="text-gray-500">
                     <div className="flex items-center gap-2">
                       <User className="h-4 w-4 text-gray-400" />
-                      <span className="ticket-meta truncate font-semibold text-sm">{ticket.reporter_email || ticket.requested_by || 'N/A'}</span>
+                      <span className="ticket-meta truncate font-normal text-xs text-gray-700">{ticket.reporter_email || ticket.requested_by || 'N/A'}</span>
                     </div>
                   </TableCell>
                   {(user?.role === 'super_admin' || user?.role === 'engineer') && (
                     <TableCell className="text-gray-500">
-                      <span className="ticket-meta font-semibold text-sm">{ticket.client_name || 'N/A'}</span>
+                      <span className="ticket-meta font-normal text-xs text-gray-600">{ticket.client_name || 'N/A'}</span>
                     </TableCell>
                   )}
                   <TableCell className="text-gray-500">
                     {(user?.role === 'support' || user?.role === 'admin' || user?.role === 'super_admin' || user?.role === 'engineer') ? (
                       <div className="min-w-[180px] max-w-[280px] w-full">
                         {engineersLoading && availableEngineers.length === 0 ? (
-                          <span className="text-sm text-gray-400 font-medium">Loading...</span>
+                          <span className="text-xs text-gray-400 font-normal">Loading...</span>
                         ) : assigningTickets.has(ticket.id) ? (
-                          <div className="flex items-center gap-1 text-sm text-blue-600 font-semibold">
+                          <div className="flex items-center gap-1 text-xs text-blue-600 font-normal">
                             <Loader2 className="w-4 h-4 animate-spin" />
                             <span>Assigning...</span>
                           </div>
@@ -499,7 +499,7 @@ const ModernTicketGrid = ({
                               onChange={(value) => onAssignmentChange?.(ticket.id, value)}
                               options={assignmentOptions}
                               placeholder={ticket.assigned_to_email || 'Unassigned'}
-                              className="text-sm w-full font-semibold"
+                              className="text-xs w-full font-normal"
                               disabled={['Cancelled'].includes(ticket.status)}
                               variant="minimal"
                             />
@@ -509,7 +509,7 @@ const ModernTicketGrid = ({
                     ) : (
                         <div className="flex items-center gap-2">
                         <User className="h-4 w-4 text-gray-400" />
-                        <span className="ticket-meta truncate font-semibold text-sm">{ticket.assigned_to_email || 'Unassigned'}</span>
+                        <span className="ticket-meta truncate font-normal text-xs text-gray-600">{ticket.assigned_to_email || 'Unassigned'}</span>
                       </div>
                     )}
                   </TableCell>

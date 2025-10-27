@@ -193,3 +193,4 @@ Then check:
 **Resolution**: Immediate client_name population + simplified Firebase rules
 
 
+

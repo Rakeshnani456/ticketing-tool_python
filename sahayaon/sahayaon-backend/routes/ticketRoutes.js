@@ -228,25 +228,52 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
         try {
             let activeTicketsQuery = ticketsCollection.where('status', 'in', ['Open', 'In Progress', 'Hold']);
             let totalTicketsQuery = ticketsCollection.where('status', 'in', ['Open', 'In Progress', 'Hold']);
+            let myTicketsQuery;
             let assignedToMeQuery;
 
-            // SIMPLIFIED: For ALL roles, "My Tickets" count = active tickets created by the user
+            // "My Tickets" count = active tickets created by the user
             // This matches what MyTicketsComponent actually displays
-            assignedToMeQuery = ticketsCollection
+            myTicketsQuery = ticketsCollection
                 .where('reporter_id', '==', authenticatedUid)
                 .where('status', 'in', ['Open', 'In Progress', 'Hold']);
 
-            const [activeSnapshot, assignedToMeSnapshot, totalSnapshot] = await Promise.all([
+            // "My Queue" count = active tickets assigned to the user (for support/engineer roles)
+            let assignedToMeSnapshot;
+            if (['support', 'engineer', 'senior_engineer', 'lead_engineer', 'principal_engineer', 'admin', 'super_admin', 'site_admin'].includes(authenticatedUserRole)) {
+                const userDoc = await usersCollection.where('uid', '==', authenticatedUid).limit(1).get();
+                const userEmail = userDoc.empty ? null : userDoc.docs[0].data().email;
+                
+                console.log(`[summary-counts] User: ${authenticatedUid}, Role: ${authenticatedUserRole}, Email: ${userEmail}`);
+                
+                if (userEmail) {
+                    const assignedToMeQuery = ticketsCollection
+                        .where('assigned_to_email', '==', userEmail)
+                        .where('status', 'in', ['Open', 'In Progress', 'Hold']);
+                    assignedToMeSnapshot = await assignedToMeQuery.get();
+                    console.log(`[summary-counts] Found ${assignedToMeSnapshot.size} tickets assigned to ${userEmail}`);
+                } else {
+                    assignedToMeSnapshot = { size: 0 };
+                    console.log(`[summary-counts] No email found for user ${authenticatedUid}`);
+                }
+            } else {
+                assignedToMeSnapshot = { size: 0 };
+                console.log(`[summary-counts] User role ${authenticatedUserRole} not eligible for My Queue`);
+            }
+
+            const [activeSnapshot, myTicketsSnapshot, totalSnapshot] = await Promise.all([
                 activeTicketsQuery.get(),
-                assignedToMeQuery.get(),
+                myTicketsQuery.get(),
                 totalTicketsQuery.get()
             ]);
 
             const counts = {
                 active_tickets: activeSnapshot.size,
-                assigned_to_me: assignedToMeSnapshot.size,
+                my_tickets: myTicketsSnapshot.size, // Tickets created by the user
+                assigned_to_me: assignedToMeSnapshot.size, // Tickets assigned to the user
                 total_tickets: totalSnapshot.size, // Now counts only active tickets
             };
+
+            console.log(`[summary-counts] Returning counts:`, counts);
 
             return res.status(200).json(counts);
 
@@ -656,23 +683,30 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                 };
                 updateData.status_history = admin.firestore.FieldValue.arrayUnion(statusHistoryEntry);
                 
-                // Log status change activity with enhanced context
-                const userDoc = await usersCollection.doc(authenticatedUid).get();
-                const userData = userDoc.exists ? userDoc.data() : {};
-                let userName = req.user.email;
-                if (userData.firstName || userData.lastName) {
-                    userName = `${userData.firstName || ''} ${userData.lastName || ''}`.trim();
-                } else if (userData.name) {
-                    userName = userData.name;
-                } else if (userData.client_name) {
-                    userName = userData.client_name;
-                }
-                await logStatusChange(db, ticketId, userName, ticketData.status, status, req.user.email, { ...ticketData, ticket_display_id: ticketData.display_id });
-                
-                // Log resolution activity if status is Resolved
-                if (status === 'Resolved') {
-                    await logTicketResolved(db, ticketId, userName, req.user.email, { ...ticketData, ticket_display_id: ticketData.display_id });
-                }
+                // Move status change logging to background
+                setImmediate(async () => {
+                    try {
+                        // Log status change activity with enhanced context
+                        const userDoc = await usersCollection.doc(authenticatedUid).get();
+                        const userData = userDoc.exists ? userDoc.data() : {};
+                        let userName = req.user.email;
+                        if (userData.firstName || userData.lastName) {
+                            userName = `${userData.firstName || ''} ${userData.lastName || ''}`.trim();
+                        } else if (userData.name) {
+                            userName = userData.name;
+                        } else if (userData.client_name) {
+                            userName = userData.client_name;
+                        }
+                        await logStatusChange(db, ticketId, userName, ticketData.status, status, req.user.email, { ...ticketData, ticket_display_id: ticketData.display_id });
+                        
+                        // Log resolution activity if status is Resolved
+                        if (status === 'Resolved') {
+                            await logTicketResolved(db, ticketId, userName, req.user.email, { ...ticketData, ticket_display_id: ticketData.display_id });
+                        }
+                    } catch (error) {
+                        console.error('Error in background status change logging:', error);
+                    }
+                });
 
                 // Handle resolved/cancelled specific logic
                 if (["Resolved", "Cancelled"].includes(status)) {
@@ -798,10 +832,13 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                 } else {
                     const userQuery = await usersCollection.where('email', '==', assigned_to_email).limit(1).get();
                     if (userQuery.empty) {
+                        console.log(`Assignment failed: User with email ${assigned_to_email} not found in database`);
                         return res.status(404).json({ error: 'Assigned user email not found.' });
                     }
                     const assignedUserDoc = userQuery.docs[0];
                     const assignedUserData = assignedUserDoc.data();
+                    
+                    console.log(`Assignment attempt: ${req.user.email} (${authenticatedUserRole}) trying to assign to ${assigned_to_email} (${assignedUserData.role})`);
                     
                     // Allow assignment based on user role
                     let canAssign = false;
@@ -814,6 +851,7 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                     }
                     
                     if (!canAssign) {
+                        console.log(`Assignment failed: User ${assigned_to_email} has role ${assignedUserData.role} which is not assignable by ${authenticatedUserRole}`);
                         if (authenticatedUserRole === 'site_admin') {
                             return res.status(400).json({ error: 'User cannot be assigned as they are not a support associate, admin, or site admin.' });
                         } else {
@@ -832,39 +870,53 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                     };
                     updateData.assigned_to_history = admin.firestore.FieldValue.arrayUnion(assignmentHistoryEntry);
                     
-                    // Log assignment activity with enhanced context
-                    const userDoc = await usersCollection.doc(authenticatedUid).get();
-                    const userData = userDoc.exists ? userDoc.data() : {};
-                    let userName = req.user.email;
-                    if (userData.firstName || userData.lastName) {
-                        userName = `${userData.firstName || ''} ${userData.lastName || ''}`.trim();
-                    } else if (userData.name) {
-                        userName = userData.name;
-                    } else if (userData.client_name) {
-                        userName = userData.client_name;
-                    }
-                    await logTicketAssigned(db, ticketId, userName, assigned_to_email, req.user.email, { ...ticketData, ticket_display_id: ticketData.display_id });
+                    // Move assignment logging to background
+                    setImmediate(async () => {
+                        try {
+                            // Log assignment activity with enhanced context
+                            const userDoc = await usersCollection.doc(authenticatedUid).get();
+                            const userData = userDoc.exists ? userDoc.data() : {};
+                            let userName = req.user.email;
+                            if (userData.firstName || userData.lastName) {
+                                userName = `${userData.firstName || ''} ${userData.lastName || ''}`.trim();
+                            } else if (userData.name) {
+                                userName = userData.name;
+                            } else if (userData.client_name) {
+                                userName = userData.client_name;
+                            }
+                            await logTicketAssigned(db, ticketId, userName, assigned_to_email, req.user.email, { ...ticketData, ticket_display_id: ticketData.display_id });
+                        } catch (error) {
+                            console.error('Error in background assignment logging:', error);
+                        }
+                    });
 
-                    if (assignedUserDoc.id !== authenticatedUid) {
-                        await notificationsCollection.add({
-                            userId: assignedUserDoc.id,
-                            message: `Ticket ${ticketData.display_id} - "${ticketData.short_description}" has been assigned to you.`,
-                            type: 'ticket_assigned',
-                            read: false,
-                            timestamp: admin.firestore.FieldValue.serverTimestamp(),
-                            ticketId: ticketId
-                        });
-                    }
-                    if (ticketData.assigned_to_id && ticketData.assigned_to_id !== assignedUserDoc.id) {
-                        await notificationsCollection.add({
-                            userId: ticketData.assigned_to_id,
-                            message: `Ticket ${ticketData.display_id} - "${ticketData.short_description}" has been reassigned from you.`,
-                            type: 'ticket_reassigned_from',
-                            read: false,
-                            timestamp: admin.firestore.FieldValue.serverTimestamp(),
-                            ticketId: ticketId
-                        });
-                    }
+                    // Move notification operations to background
+                    setImmediate(async () => {
+                        try {
+                            if (assignedUserDoc.id !== authenticatedUid) {
+                                await notificationsCollection.add({
+                                    userId: assignedUserDoc.id,
+                                    message: `Ticket ${ticketData.display_id} - "${ticketData.short_description}" has been assigned to you.`,
+                                    type: 'ticket_assigned',
+                                    read: false,
+                                    timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                                    ticketId: ticketId
+                                });
+                            }
+                            if (ticketData.assigned_to_id && ticketData.assigned_to_id !== assignedUserDoc.id) {
+                                await notificationsCollection.add({
+                                    userId: ticketData.assigned_to_id,
+                                    message: `Ticket ${ticketData.display_id} - "${ticketData.short_description}" has been reassigned from you.`,
+                                    type: 'ticket_reassigned_from',
+                                    read: false,
+                                    timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                                    ticketId: ticketId
+                                });
+                            }
+                        } catch (error) {
+                            console.error('Error in background notification operations:', error);
+                        }
+                    });
 
                     // Send assignment email
                     const reporterEmail = ticketData.reporter_email;
@@ -957,18 +1009,25 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                 };
                 updateData.priority_history = admin.firestore.FieldValue.arrayUnion(priorityHistoryEntry);
                 
-                // Log priority change activity with enhanced context
-                const userDoc = await usersCollection.doc(authenticatedUid).get();
-                const userData = userDoc.exists ? userDoc.data() : {};
-                let userName = req.user.email;
-                if (userData.firstName || userData.lastName) {
-                    userName = `${userData.firstName || ''} ${userData.lastName || ''}`.trim();
-                } else if (userData.name) {
-                    userName = userData.name;
-                } else if (userData.client_name) {
-                    userName = userData.client_name;
-                }
-                await logPriorityChange(db, ticketId, userName, ticketData.priority, priority, req.user.email, { ...ticketData, ticket_display_id: ticketData.display_id });
+                // Move priority change logging to background
+                setImmediate(async () => {
+                    try {
+                        // Log priority change activity with enhanced context
+                        const userDoc = await usersCollection.doc(authenticatedUid).get();
+                        const userData = userDoc.exists ? userDoc.data() : {};
+                        let userName = req.user.email;
+                        if (userData.firstName || userData.lastName) {
+                            userName = `${userData.firstName || ''} ${userData.lastName || ''}`.trim();
+                        } else if (userData.name) {
+                            userName = userData.name;
+                        } else if (userData.client_name) {
+                            userName = userData.client_name;
+                        }
+                        await logPriorityChange(db, ticketId, userName, ticketData.priority, priority, req.user.email, { ...ticketData, ticket_display_id: ticketData.display_id });
+                    } catch (error) {
+                        console.error('Error in background priority change logging:', error);
+                    }
+                });
             }
 
             // Category change
@@ -984,10 +1043,18 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
 
             await ticketsCollection.doc(ticketId).update(updateData);
             
-            // Trigger analytics update for real-time reports
-            await triggerAnalyticsUpdate('updated', { ...ticketData, ...updateData, id: ticketId });
+            // Return success immediately to user
+            res.status(200).json({ message: 'Ticket updated successfully!' });
             
-            return res.status(200).json({ message: 'Ticket updated successfully!' });
+            // Handle all background operations asynchronously
+            setImmediate(async () => {
+                try {
+                    // Trigger analytics update for real-time reports
+                    await triggerAnalyticsUpdate('updated', { ...ticketData, ...updateData, id: ticketId });
+                } catch (error) {
+                    console.error('Error in background analytics update:', error);
+                }
+            });
         } catch (error) {
             console.error(`Error updating ticket: ${error.message}`);
             return res.status(500).json({ error: `Error updating ticket: ${error.message}` });

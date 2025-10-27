@@ -13,7 +13,52 @@ class WebSocketServer {
             dashboard_data: 3 * 60 * 1000,  // 3 minutes
             notifications: 1 * 60 * 1000,   // 1 minute
         };
+        this.ticketUnsubscribe = null; // Store reference to ticket listener
         this.setupWebSocket();
+        this.setupRealtimeListeners();
+    }
+
+    /**
+     * Setup real-time listeners for tickets
+     */
+    setupRealtimeListeners() {
+        const db = admin.firestore();
+        const ticketsRef = db.collection('tickets');
+        
+        console.log('🎧 Setting up real-time ticket listeners...');
+        
+        // Listen to all ticket changes
+        this.ticketUnsubscribe = ticketsRef.onSnapshot(
+            (snapshot) => {
+                console.log('🔔 Ticket collection changed - broadcasting updates to all clients');
+                
+                // Clear cache to force fresh data fetch
+                this.cache.clear();
+                
+                // Notify all connected clients that ticket data has changed
+                this.clients.forEach((clientInfo, ws) => {
+                    if (ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({
+                            type: 'ticket_update',
+                            message: 'Ticket data has changed, please refresh'
+                        }));
+                    }
+                });
+            },
+            (error) => {
+                console.error('Error in real-time ticket listener:', error);
+            }
+        );
+    }
+
+    /**
+     * Cleanup real-time listeners
+     */
+    cleanup() {
+        if (this.ticketUnsubscribe) {
+            console.log('🧹 Cleaning up real-time ticket listeners');
+            this.ticketUnsubscribe();
+        }
     }
 
     setupWebSocket() {
@@ -257,26 +302,45 @@ class WebSocketServer {
         // Get tickets based on role
         let tickets = await this.getTicketsData(userId, userRole, clientName);
         
-        // For assigned_to_me count, we need to query tickets assigned to the user
-        // This is different from the main tickets list for regular users
-        let assignedToMeTickets = 0;
-        
-        // SIMPLIFIED: For ALL roles, "My Tickets" count = active tickets created by the user
-        // This matches what MyTicketsComponent actually displays
+        // "My Tickets" count = active tickets created by the user
         const myTicketsQuery = db.collection('tickets')
             .where('reporter_id', '==', userId)
             .where('status', 'in', ['Open', 'In Progress', 'Hold']);
         
         const myTicketsSnapshot = await myTicketsQuery.get();
-        assignedToMeTickets = myTicketsSnapshot.docs.length;
+        const myTickets = myTicketsSnapshot.docs.length;
+        
+        // "My Queue" count = active tickets assigned to the user (for support/engineer roles)
+        let assignedToMe = 0;
+        if (['support', 'engineer', 'senior_engineer', 'lead_engineer', 'principal_engineer', 'admin', 'super_admin', 'site_admin'].includes(userRole)) {
+            // Get user email
+            const userDoc = await db.collection('users').where('uid', '==', userId).limit(1).get();
+            const userEmail = userDoc.empty ? null : userDoc.docs[0].data().email;
+            
+            console.log(`[getTicketCountsData] User: ${userId}, Role: ${userRole}, Email: ${userEmail}`);
+            
+            if (userEmail) {
+                const assignedToMeQuery = db.collection('tickets')
+                    .where('assigned_to_email', '==', userEmail)
+                    .where('status', 'in', ['Open', 'In Progress', 'Hold']);
+                
+                const assignedToMeSnapshot = await assignedToMeQuery.get();
+                assignedToMe = assignedToMeSnapshot.docs.length;
+                
+                console.log(`[getTicketCountsData] Found ${assignedToMe} tickets assigned to ${userEmail}`);
+            } else {
+                console.log(`[getTicketCountsData] No email found for user ${userId}`);
+            }
+        }
         
         const totalTickets = tickets.length;
         const activeTickets = tickets.filter(t => ['Open', 'In Progress', 'Hold'].includes(t.status)).length;
 
         return {
-            total_tickets: activeTickets, // Changed to show only active tickets to match dashboard
+            total_tickets: activeTickets,
             active_tickets: activeTickets,
-            assigned_to_me: assignedToMeTickets
+            my_tickets: myTickets,
+            assigned_to_me: assignedToMe
         };
     }
 

@@ -111,7 +111,6 @@ import MyTicketsComponent from './components/tickets/MyTicketsComponent';
 import AllTicketsComponent from './components/tickets/AllTicketsComponent';
 import TicketDetailComponent from './components/tickets/TicketDetailComponent'; // TicketDetailComponent will use useParams
 import DashboardComponent from './components/DashboardComponent';
-import UserDashboardComponent from './components/UserDashboardComponent';
 import ProfileComponent from './components/ProfileComponent';
 import AccessDeniedComponent from './components/AccessDeniedComponent';
 import ChangePasswordComponent from './components/ChangePasswordComponent';
@@ -266,11 +265,17 @@ const AppContent = () => {
     const { data: ticketCountsData, loading: ticketCountsLoading, error: ticketCountsError } = useTicketCounts(currentUser?.uid, currentUser?.role, currentUser?.client_name);
     
     // Update ticket counts state when data changes
-    const [ticketCounts, setTicketCounts] = useState({ active_tickets: 0, assigned_to_me: 0, total_tickets: 0 });
+    const [ticketCounts, setTicketCounts] = useState({ active_tickets: 0, assigned_to_me: 0, total_tickets: 0, my_tickets: 0 });
     
     useEffect(() => {
         if (ticketCountsData) {
-            setTicketCounts(ticketCountsData);
+            console.log('[App] Received ticket counts data:', ticketCountsData);
+            // Ensure my_tickets field exists (for compatibility with old cached data)
+            setTicketCounts({
+                ...ticketCountsData,
+                my_tickets: ticketCountsData.my_tickets ?? ticketCountsData.assigned_to_me ?? 0,
+                assigned_to_me: ticketCountsData.assigned_to_me ?? 0
+            });
         }
     }, [ticketCountsData]);
 
@@ -563,7 +568,7 @@ const AppContent = () => {
                         // Note: React Router handles the initial page load based on URL.
                         // This `Maps` call ensures a default route upon successful login if the current path isn't ideal.
                         if (location.pathname === '/login' || location.pathname === '/register' || location.pathname === '/') {
-                             if (data.user.role === 'support' || data.user.role === 'admin' || data.user.role === 'super_admin' || data.user.role === 'site_admin' || data.user.role === 'engineer') {
+                             if (data.user.role === 'support' || data.user.role === 'admin' || data.user.role === 'super_admin' || data.user.role === 'site_admin') {
                                  navigate('/dashboard');
                              } else {
                                  navigate('/my-tickets');
@@ -676,7 +681,7 @@ const AppContent = () => {
         setCurrentUser(user);
         setIsAuthLoading(false);
         // Notifications are now handled by centralized data management
-        if (user.role === 'support' || user.role === 'admin' || user.role === 'super_admin' || user.role === 'site_admin' || user.role === 'engineer') {
+        if (user.role === 'support' || user.role === 'admin' || user.role === 'super_admin' || user.role === 'site_admin') {
             navigate('/dashboard'); // Use navigate hook
         } else {
             navigate('/my-tickets'); // Use navigate hook
@@ -1180,9 +1185,9 @@ const AppContent = () => {
                                             <LeftMenuTooltipBubble title="My Tickets">
                                                 <div className="flex items-center justify-center w-7 h-7 relative">
                                                     <CheckCircle2 size={23} className="flex-shrink-0" style={{ color: location.pathname === '/my-tickets' ? '#ffffff' : '#d1d5db' }} />
-                                                    {ticketCounts.assigned_to_me > 0 && (
+                                                    {ticketCounts.my_tickets > 0 && (
                                                         <span className="sidebar-count-badge text-xs font-medium">
-                                                            {ticketCounts.assigned_to_me}
+                                                            {ticketCounts.my_tickets}
                                                         </span>
                                                     )}
                                                 </div>
@@ -1193,7 +1198,30 @@ const AppContent = () => {
                                             </div>
                                         )}
                                         <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap" style={{ color: location.pathname === '/my-tickets' ? '#ffffff' : '#d1d5db' }}>
-                                            My Tickets {isSidebarExpanded && ticketCounts.assigned_to_me > 0 && (<span style={{ color: '#f97316' }}>({ticketCounts.assigned_to_me})</span>)}
+                                            My Tickets {isSidebarExpanded && ticketCounts.my_tickets > 0 && (<span style={{ color: '#f97316' }}>({ticketCounts.my_tickets})</span>)}
+                                        </motion.span>
+                                    </Link>
+
+                                    {/* My Queue - for support roles */}
+                                    <Link to="/assigned-to-me" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item transition-all duration-200 hover:bg-gray-700 hover:text-white ${location.pathname === '/assigned-to-me' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                        { !isSidebarExpanded ? (
+                                            <LeftMenuTooltipBubble title="My Queue">
+                                                <div className="flex items-center justify-center w-7 h-7 relative">
+                                                    <AssignedToMeIcon className="flex-shrink-0" style={{ color: location.pathname === '/assigned-to-me' ? '#ffffff' : '#d1d5db', width: '23px', height: '23px' }} />
+                                                    {ticketCounts.assigned_to_me > 0 && (
+                                                        <span className="sidebar-count-badge text-xs font-medium">
+                                                            {ticketCounts.assigned_to_me}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </LeftMenuTooltipBubble>
+                                        ) : (
+                                            <div className="flex items-center justify-center w-5 h-5 mr-2">
+                                                <AssignedToMeIcon className="flex-shrink-0" style={{ color: location.pathname === '/assigned-to-me' ? '#ffffff' : '#d1d5db', width: '19px', height: '19px' }} />
+                                            </div>
+                                        )}
+                                        <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap" style={{ color: location.pathname === '/assigned-to-me' ? '#ffffff' : '#d1d5db' }}>
+                                            My Queue {isSidebarExpanded && ticketCounts.assigned_to_me > 0 && (<span style={{ color: '#f97316' }}>({ticketCounts.assigned_to_me})</span>)}
                                         </motion.span>
                                     </Link>
 
@@ -1339,6 +1367,29 @@ const AppContent = () => {
                                             All Tickets {isSidebarExpanded && ticketCounts.total_tickets > 0 && (<span style={{ color: '#f97316' }}>({ticketCounts.total_tickets})</span>)}
                                         </span>
                                     </Link>
+
+                                    {/* My Queue */}
+                                    <Link to="/assigned-to-me" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item transition-all duration-200 hover:bg-gray-700 hover:text-white ${location.pathname === '/assigned-to-me' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                        { !isSidebarExpanded ? (
+                                            <LeftMenuTooltipBubble title="My Queue">
+                                                <div className="flex items-center justify-center w-7 h-7 relative">
+                                                    <AssignedToMeIcon className="flex-shrink-0" style={{ color: location.pathname === '/assigned-to-me' ? '#ffffff' : '#d1d5db', width: '23px', height: '23px' }} />
+                                                    {ticketCounts.assigned_to_me > 0 && (
+                                                        <span className="sidebar-count-badge text-xs font-medium">
+                                                            {ticketCounts.assigned_to_me}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </LeftMenuTooltipBubble>
+                                        ) : (
+                                            <div className="flex items-center justify-center w-5 h-5 mr-2">
+                                                <AssignedToMeIcon className="flex-shrink-0" style={{ color: location.pathname === '/assigned-to-me' ? '#ffffff' : '#d1d5db', width: '19px', height: '19px' }} />
+                                            </div>
+                                        )}
+                                        <span className={`whitespace-nowrap transition-all duration-200 ${isSidebarExpanded ? 'opacity-100 w-auto' : 'opacity-0 w-0'}`} style={{ color: location.pathname === '/assigned-to-me' ? '#ffffff' : '#d1d5db' }}>
+                                            My Queue {isSidebarExpanded && ticketCounts.assigned_to_me > 0 && (<span style={{ color: '#f97316' }}>({ticketCounts.assigned_to_me})</span>)}
+                                        </span>
+                                    </Link>
                                     
                                     {/* Personal Notes */}
                                     <Link to="/personal-notes" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item transition-all duration-200 hover:bg-gray-700 hover:text-white ${location.pathname === '/personal-notes' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
@@ -1418,9 +1469,9 @@ const AppContent = () => {
                                             <LeftMenuTooltipBubble title="My Tickets">
                                                 <div className="flex items-center justify-center w-7 h-7 relative">
                                                     <UserCheck size={23} className="flex-shrink-0" style={{ color: location.pathname === '/my-tickets' ? '#ffffff' : '#d1d5db' }} />
-                                                    {ticketCounts.assigned_to_me > 0 && (
+                                                    {ticketCounts.my_tickets > 0 && (
                                                         <span className="sidebar-count-badge text-xs font-medium">
-                                                            {ticketCounts.assigned_to_me}
+                                                            {ticketCounts.my_tickets}
                                                         </span>
                                                     )}
                                                 </div>
@@ -1431,10 +1482,32 @@ const AppContent = () => {
                                             </div>
                                         )}
                                         <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap" style={{ color: location.pathname === '/my-tickets' ? '#ffffff' : '#d1d5db' }}>
-                                            My Tickets {isSidebarExpanded && ticketCounts.assigned_to_me > 0 && (<span style={{ color: '#f97316' }}>({ticketCounts.assigned_to_me})</span>)}
+                                            My Tickets {isSidebarExpanded && ticketCounts.my_tickets > 0 && (<span style={{ color: '#f97316' }}>({ticketCounts.my_tickets})</span>)}
                                         </motion.span>
                                     </Link>
                                     
+                                    {/* My Queue - for site admin */}
+                                    <Link to="/assigned-to-me" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item transition-all duration-200 hover:bg-gray-700 hover:text-white ${location.pathname === '/assigned-to-me' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                        { !isSidebarExpanded ? (
+                                            <LeftMenuTooltipBubble title="My Queue">
+                                                <div className="flex items-center justify-center w-7 h-7 relative">
+                                                    <AssignedToMeIcon className="flex-shrink-0" style={{ color: location.pathname === '/assigned-to-me' ? '#ffffff' : '#d1d5db', width: '23px', height: '23px' }} />
+                                                    {ticketCounts.assigned_to_me > 0 && (
+                                                        <span className="sidebar-count-badge text-xs font-medium">
+                                                            {ticketCounts.assigned_to_me}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </LeftMenuTooltipBubble>
+                                        ) : (
+                                            <div className="flex items-center justify-center w-5 h-5 mr-2">
+                                                <AssignedToMeIcon className="flex-shrink-0" style={{ color: location.pathname === '/assigned-to-me' ? '#ffffff' : '#d1d5db', width: '19px', height: '19px' }} />
+                                            </div>
+                                        )}
+                                        <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap" style={{ color: location.pathname === '/assigned-to-me' ? '#ffffff' : '#d1d5db' }}>
+                                            My Queue {isSidebarExpanded && ticketCounts.assigned_to_me > 0 && (<span style={{ color: '#f97316' }}>({ticketCounts.assigned_to_me})</span>)}
+                                        </motion.span>
+                                    </Link>
                                     
                                     <Link to="/create-ticket" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item transition-all duration-200 hover:bg-green-50 hover:text-green-700 focus:outline-none ${location.pathname === '/create-ticket' ? 'bg-green-50 text-green-700 shadow-sm' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                         { !isSidebarExpanded ? (
@@ -1707,9 +1780,9 @@ const AppContent = () => {
                                             <LeftMenuTooltipBubble title="My Tickets">
                                                 <div className="flex items-center justify-center w-7 h-7 relative">
                                                     <UserCheck size={23} className="flex-shrink-0" style={{ color: location.pathname === '/my-tickets' ? '#ffffff' : '#d1d5db' }} />
-                                                    {ticketCounts.assigned_to_me > 0 && (
+                                                    {ticketCounts.my_tickets > 0 && (
                                                         <span className="sidebar-count-badge text-xs font-medium">
-                                                            {ticketCounts.assigned_to_me}
+                                                            {ticketCounts.my_tickets}
                                                         </span>
                                                     )}
                                                 </div>
@@ -1720,9 +1793,34 @@ const AppContent = () => {
                                             </div>
                                         )}
                                         <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap" style={{ color: location.pathname === '/my-tickets' ? '#ffffff' : '#d1d5db' }}>
-                                            My Tickets {isSidebarExpanded && ticketCounts.assigned_to_me > 0 && (<span style={{ color: '#f97316' }}>({ticketCounts.assigned_to_me})</span>)}
+                                            My Tickets {isSidebarExpanded && ticketCounts.my_tickets > 0 && (<span style={{ color: '#f97316' }}>({ticketCounts.my_tickets})</span>)}
                                         </motion.span>
                                     </Link>
+                                    
+                                    {/* My Queue - visible for support/admin roles */}
+                                    {(['admin', 'support', 'super_admin', 'site_admin', 'engineer', 'senior_engineer', 'lead_engineer', 'principal_engineer'].includes(currentUser.role)) && (
+                                        <Link to="/assigned-to-me" className={`group flex items-center px-3 py-2.5 text-sm font-semibold menu-item transition-all duration-200 hover:bg-gray-700 hover:text-white ${location.pathname === '/assigned-to-me' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                            { !isSidebarExpanded ? (
+                                                <LeftMenuTooltipBubble title="My Queue">
+                                                    <div className="flex items-center justify-center w-7 h-7 relative">
+                                                        <AssignedToMeIcon className="flex-shrink-0" style={{ color: location.pathname === '/assigned-to-me' ? '#ffffff' : '#d1d5db', width: '23px', height: '23px' }} />
+                                                        {ticketCounts.assigned_to_me > 0 && (
+                                                            <span className="sidebar-count-badge text-xs font-medium">
+                                                                {ticketCounts.assigned_to_me}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </LeftMenuTooltipBubble>
+                                            ) : (
+                                                <div className="flex items-center justify-center w-5 h-5 mr-2">
+                                                    <AssignedToMeIcon className="flex-shrink-0" style={{ color: location.pathname === '/assigned-to-me' ? '#ffffff' : '#d1d5db', width: '19px', height: '19px' }} />
+                                                </div>
+                                            )}
+                                            <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap" style={{ color: location.pathname === '/assigned-to-me' ? '#ffffff' : '#d1d5db' }}>
+                                                My Queue {isSidebarExpanded && ticketCounts.assigned_to_me > 0 && (<span style={{ color: '#f97316' }}>({ticketCounts.assigned_to_me})</span>)}
+                                            </motion.span>
+                                        </Link>
+                                    )}
                                     
                                     {/* Create Ticket - visible for all users */}
                                     <Link to="/create-ticket" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item transition-all duration-200 hover:bg-gray-700 hover:text-white ${location.pathname === '/create-ticket' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
@@ -1859,30 +1957,22 @@ const AppContent = () => {
                         {/* Protected Routes (require currentUser) */}
                         {currentUser ? (
                             <>
-                                {/* Default route for logged-in users, redirect based on role */}
+                                {/* Default route for logged-in users - all roles use DashboardComponent */}
                                 <Route path="/" element={
-                                    currentUser.role === 'user' ?
-                                        <UserDashboardComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} /> :
-                                    ['support', 'admin', 'site_admin', 'super_admin'].includes(currentUser.role) ?
-                                        <DashboardComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} /> :
-                                        <MyTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} isSidebarExpanded={isSidebarExpanded} />
+                                    <DashboardComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} />
                                 } />
 
                                 <Route path="/dashboard" element={
-                                    currentUser.role === 'user' ?
-                                        <UserDashboardComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} /> :
-                                    (['support', 'admin', 'site_admin', 'super_admin'].includes(currentUser.role)) ?
-                                        <DashboardComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} /> :
-                                        <AccessDeniedComponent />
+                                    <DashboardComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} />
                                 } />
                                 <Route path="/all-tickets" element={
-                                    (['support', 'admin', 'site_admin', 'super_admin', 'engineer'].includes(currentUser.role)) ?
+                                    (['support', 'admin', 'site_admin', 'super_admin'].includes(currentUser.role)) ?
                                         <AllTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} showFilters={true} /> :
                                         <AccessDeniedComponent />
                                 } />
                                 <Route path="/assigned-to-me" element={
-                                    (['engineer', 'support', 'admin', 'site_admin', 'super_admin'].includes(currentUser.role)) ?
-                                        <AllTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} initialFilterAssignment="assigned_to_me" showFilters={false} /> :
+                                    (['support', 'admin', 'site_admin', 'super_admin'].includes(currentUser.role)) ?
+                                        <AllTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} initialFilterAssignment="assigned_to_me" showFilters={true} /> :
                                         <AccessDeniedComponent />
                                 } />
                                 <Route path="/my-tickets" element={<MyTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} isSidebarExpanded={isSidebarExpanded} />} />

@@ -1,5 +1,5 @@
 import React from 'react';
-import { User, Calendar, Clock, Activity } from 'lucide-react';
+import { User, Calendar, Clock, Activity, AlertCircle, CheckCircle, Loader2, XCircle } from 'lucide-react';
 import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
 import UserProfilePopup from '../common/UserProfilePopup';
@@ -40,7 +40,12 @@ const TicketProgressSection = ({
     showProfilePopup,
     cancelShowProfilePopup,
     hidePopup,
-    popupHideTimeout
+    popupHideTimeout,
+    isHoldDisabled,
+    user,
+    attemptedHoldWithoutComment,
+    fieldUpdateStates,
+    handleFieldUpdate
 }) => {
     const priorities = [
         { value: 'Low', label: 'Low' },
@@ -130,21 +135,65 @@ const TicketProgressSection = ({
                         Status:
                     </label>
                     {isEditing && canEdit && !isTicketClosedOrResolved ? (
-                        <CustomDropdown
-                            value={editableFields.status}
-                            onChange={(value) => { handleButtonSelection('status', value); setTimeout(triggerAutosave, 0); }}
-                            options={statuses}
-                            placeholder="Select status..."
-                            className="w-full"
-                            size="sm"
-                            disabled={false}
-                            focusStyle="gray"
-                            customDisplay={editableFields.status ? (
-                                <span className={`text-[10px] font-semibold ${getStatusTextClass(editableFields.status)}`}>
-                                    {editableFields.status}
-                                </span>
-                            ) : null}
-                        />
+                        <>
+                            <div className="relative">
+                                <CustomDropdown
+                                    value={editableFields.status}
+                                    onChange={(value) => { 
+                                        handleFieldUpdate('status', value);
+                                    }}
+                                    options={statuses.map(s => ({
+                                        ...s,
+                                        disabled: user?.role === 'super_admin' && s.value === 'Hold' && isHoldDisabled
+                                    }))}
+                                    placeholder="Select status..."
+                                    className="w-full"
+                                    size="sm"
+                                    disabled={fieldUpdateStates.status?.loading}
+                                    focusStyle="gray"
+                                    customDisplay={editableFields.status ? (
+                                        <span className={`text-[10px] font-semibold ${getStatusTextClass(editableFields.status)}`}>
+                                            {editableFields.status}
+                                        </span>
+                                    ) : null}
+                                />
+                                {/* Visual feedback indicators */}
+                                {fieldUpdateStates.status?.loading && (
+                                    <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
+                                        <Loader2 className="w-3 h-3 text-blue-500 animate-spin" />
+                                    </div>
+                                )}
+                                {fieldUpdateStates.status?.success && (
+                                    <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
+                                        <CheckCircle className="w-3 h-3 text-green-500" />
+                                    </div>
+                                )}
+                                {fieldUpdateStates.status?.error && (
+                                    <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
+                                        <XCircle className="w-3 h-3 text-red-500" />
+                                    </div>
+                                )}
+                            </div>
+                            {user?.role === 'super_admin' && attemptedHoldWithoutComment && (
+                                <div className="mt-1.5 p-2 bg-amber-50 border border-amber-200 rounded-md text-xs text-amber-800 flex items-start gap-1.5">
+                                    <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                                    <span><strong>Hold requires a comment.</strong> Please add a comment in the Comments section before placing this ticket on Hold.</span>
+                                </div>
+                            )}
+                            {/* Success/Error message below field */}
+                            {fieldUpdateStates.status?.success && (
+                                <p className="text-xs mt-1 text-green-600 flex items-center gap-1">
+                                    <CheckCircle className="w-3 h-3" />
+                                    Status updated successfully
+                                </p>
+                            )}
+                            {fieldUpdateStates.status?.error && (
+                                <p className="text-xs mt-1 text-red-600 flex items-center gap-1">
+                                    <XCircle className="w-3 h-3" />
+                                    Failed to update status
+                                </p>
+                            )}
+                        </>
                     ) : (
                         <FieldBox isDisplayOnly={true} className="w-full min-w-0 max-w-full overflow-x-hidden">
                             <div className={`px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-lg text-[10px] font-semibold border ${getStatusClasses(ticket.status)}`}>
@@ -160,21 +209,41 @@ const TicketProgressSection = ({
                         Priority:
                     </label>
                     {isEditing && canEdit ? (
-                        <CustomDropdown
-                            value={editableFields.priority}
-                            onChange={(value) => { handleButtonSelection('priority', value); setTimeout(triggerAutosave, 0); }}
-                            options={priorities}
-                            placeholder="Select priority..."
-                            className="w-full"
-                            size="sm"
-                            disabled={false}
-                            focusStyle="gray"
-                            customDisplay={editableFields.priority ? (
-                                <span className={`text-[10px] font-semibold ${getPriorityTextClass(editableFields.priority)}`}>
-                                    {editableFields.priority}
-                                </span>
-                            ) : null}
-                        />
+                        <div className="relative">
+                            <CustomDropdown
+                                value={editableFields.priority}
+                                onChange={(value) => { 
+                                    handleFieldUpdate('priority', value);
+                                }}
+                                options={priorities}
+                                placeholder="Select priority..."
+                                className="w-full"
+                                size="sm"
+                                disabled={fieldUpdateStates.priority?.loading}
+                                focusStyle="gray"
+                                customDisplay={editableFields.priority ? (
+                                    <span className={`text-[10px] font-semibold ${getPriorityTextClass(editableFields.priority)}`}>
+                                        {editableFields.priority}
+                                    </span>
+                                ) : null}
+                            />
+                            {/* Visual feedback indicators */}
+                            {fieldUpdateStates.priority?.loading && (
+                                <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
+                                    <Loader2 className="w-3 h-3 text-blue-500 animate-spin" />
+                                </div>
+                            )}
+                            {fieldUpdateStates.priority?.success && (
+                                <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
+                                    <CheckCircle className="w-3 h-3 text-green-500" />
+                                </div>
+                            )}
+                            {fieldUpdateStates.priority?.error && (
+                                <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
+                                    <XCircle className="w-3 h-3 text-red-500" />
+                                </div>
+                            )}
+                        </div>
                     ) : (
                         <FieldBox isDisplayOnly={true} className="w-full min-w-0 max-w-full overflow-x-hidden">
                             <div className={`px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-lg text-[10px] font-semibold border ${getPriorityClasses(ticket.priority)}`}>
@@ -220,24 +289,57 @@ const TicketProgressSection = ({
                     </label>
                     {isEditing && canEdit && !isTicketClosedOrResolved ? (
                         <div className="w-full">
-                            <CustomDropdown
-                                value={editableFields.assigned_to_email || ''}
-                                onChange={(value) => { handleEditChange({ target: { id: 'assigned_to_email', value } }); setTimeout(triggerAutosave, 0); }}
-                                options={[
-                                    { value: '', label: 'Unassigned' },
-                                    ...supportUsers.map(u => ({
-                                        value: u.email,
-                                        label: u.name ? `${u.name} (${u.email})` : u.email
-                                    }))
-                                ]}
-                                placeholder="Select Assignee"
-                                className="w-full"
-                                disabled={!canEdit || isTicketClosedOrResolved || supportUsersLoading}
-                                size="sm"
-                                focusStyle="gray"
-                            />
+                            <div className="relative">
+                                <CustomDropdown
+                                    value={editableFields.assigned_to_email || ''}
+                                    onChange={(value) => { 
+                                        handleFieldUpdate('assigned_to_email', value);
+                                    }}
+                                    options={[
+                                        { value: '', label: 'Unassigned' },
+                                        ...supportUsers.map(u => ({
+                                            value: u.email,
+                                            label: u.name ? `${u.name} (${u.email})` : u.email
+                                        }))
+                                    ]}
+                                    placeholder="Select Assignee"
+                                    className="w-full"
+                                    disabled={!canEdit || isTicketClosedOrResolved || supportUsersLoading || fieldUpdateStates.assigned_to_email?.loading}
+                                    size="sm"
+                                    focusStyle="gray"
+                                />
+                                {/* Visual feedback indicators */}
+                                {fieldUpdateStates.assigned_to_email?.loading && (
+                                    <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
+                                        <Loader2 className="w-3 h-3 text-blue-500 animate-spin" />
+                                    </div>
+                                )}
+                                {fieldUpdateStates.assigned_to_email?.success && (
+                                    <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
+                                        <CheckCircle className="w-3 h-3 text-green-500" />
+                                    </div>
+                                )}
+                                {fieldUpdateStates.assigned_to_email?.error && (
+                                    <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
+                                        <XCircle className="w-3 h-3 text-red-500" />
+                                    </div>
+                                )}
+                            </div>
                             {assignedToErrorMessage && (
                                 <p className="text-xs mt-1 text-red-600">{assignedToErrorMessage}</p>
+                            )}
+                            {/* Success/Error message below field */}
+                            {fieldUpdateStates.assigned_to_email?.success && (
+                                <p className="text-xs mt-1 text-green-600 flex items-center gap-1">
+                                    <CheckCircle className="w-3 h-3" />
+                                    Assignment updated successfully
+                                </p>
+                            )}
+                            {fieldUpdateStates.assigned_to_email?.error && (
+                                <p className="text-xs mt-1 text-red-600 flex items-center gap-1">
+                                    <XCircle className="w-3 h-3" />
+                                    Failed to update assignment
+                                </p>
                             )}
                         </div>
                     ) : (

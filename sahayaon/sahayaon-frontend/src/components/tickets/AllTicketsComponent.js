@@ -831,6 +831,14 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
     const [companies, setCompanies] = useState([]); // New state for companies list
     const [loadingCompanies, setLoadingCompanies] = useState(false); // New state for companies loading
     
+    // Set initial smart filters based on initialFilterAssignment
+    const getInitialSmartFilters = () => {
+        if (initialFilterAssignment === 'assigned_to_me') {
+            return { assigned: ['assigned_to_me'] };
+        }
+        return {};
+    };
+    
     // Smart Filter Integration
     const {
         filters: smartFilters,
@@ -839,7 +847,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
         applyFilters: applySmartFilters,
         hasActiveFilters: hasSmartFilters,
         isInitialized: smartFiltersInitialized
-    } = useSmartFilters();
+    } = useSmartFilters(getInitialSmartFilters());
     
     // Ref to track if companies have been fetched to prevent duplicate API calls
     const companiesFetchedRef = useRef(false);
@@ -1250,14 +1258,14 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
             const usersRef = collection(db, 'users');
             
             // For site_admin users, show all available engineers (support, admin, site_admin)
-            // For other users, show only support engineers as before
+            // For other users, show support, admin, and super_admin users
             let engineersQuery;
             if (user && user.role === 'site_admin') {
                 // Site admin can see all engineers for assignment
                 engineersQuery = query(usersRef, where('role', 'in', ['support', 'admin', 'site_admin']));
             } else {
-                // Other users see support engineers and super admins
-                engineersQuery = query(usersRef, where('role', 'in', ['support', 'super_admin']));
+                // Other users see support, admin, and super_admin users
+                engineersQuery = query(usersRef, where('role', 'in', ['support', 'admin', 'super_admin']));
             }
             
             const snapshot = await getDocs(engineersQuery);
@@ -1955,7 +1963,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
 
     // Fetch engineers for assignment dropdowns - single useEffect with better caching
     useEffect(() => {
-        if (user?.role === 'support' || user?.role === 'admin' || user?.role === 'super_admin' || user?.role === 'engineer') {
+        if (user?.role === 'support' || user?.role === 'admin' || user?.role === 'super_admin') {
             // Check persistent cache first
             const cachedEngineers = getEngineersCache();
             if (cachedEngineers && cachedEngineers.length > 0) {
@@ -2035,25 +2043,60 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
         }
     }, []); // Only run once on mount
 
-    // Update local state when tickets data changes
+    // Ref to track previous tickets data for smart merging
+    const prevTicketsDataRef = useRef(null);
+    
+    // Update local state when tickets data changes - Smart update to prevent unnecessary reloads
     useEffect(() => {
         if (ticketsData) {
-            console.log('🔄 Loading tickets from API - ticketsData received:', ticketsData.length, 'tickets');
-            // Apply search filtering if needed
-            let filteredTickets = ticketsData;
+            // Only update if the data has actually changed significantly (not just assignment updates)
+            const prevData = prevTicketsDataRef.current;
             
-            if (searchKeyword && searchKeyword.toUpperCase().startsWith('TICKET-')) {
-                const exactId = searchKeyword.toUpperCase();
-                filteredTickets = ticketsData.filter(ticket => 
-                    ticket.display_id === exactId
-                );
+            // Check if it's a significant change (new tickets, different count, etc.)
+            const significantChange = !prevData || 
+                prevData.length !== ticketsData.length ||
+                JSON.stringify(prevData.map(t => t.id).sort()) !== JSON.stringify(ticketsData.map(t => t.id).sort());
+            
+            if (significantChange) {
+                console.log('🔄 Significant tickets data change detected, updating grid');
+                // Apply search filtering if needed
+                let filteredTickets = ticketsData;
+                
+                if (searchKeyword && searchKeyword.toUpperCase().startsWith('TICKET-')) {
+                    const exactId = searchKeyword.toUpperCase();
+                    filteredTickets = ticketsData.filter(ticket => 
+                        ticket.display_id === exactId
+                    );
+                }
+                
+                setAllTickets(filteredTickets);
+                setCachedData(filteredTickets); // Cache the data
+                setLoading(false);
+                setError(null);
+                setCacheStatus('fresh');
+            } else {
+                // For minor changes (like assignments), merge updates into existing state
+                // This prevents full grid reload while keeping data fresh
+                // Only update if ticketsData has any new tickets
+                const existingIds = new Set(prevData?.map(t => t.id) || []);
+                const newTickets = ticketsData.filter(t => !existingIds.has(t.id));
+                
+                if (newTickets.length > 0) {
+                    // If there are new tickets, do full update
+                    setAllTickets(ticketsData);
+                } else {
+                    // Just merge updates for existing tickets
+                    setAllTickets(prevTickets => {
+                        return prevTickets.map(prevTicket => {
+                            const updatedTicket = ticketsData.find(t => t.id === prevTicket.id);
+                            return updatedTicket || prevTicket;
+                        });
+                    });
+                }
             }
             
-            setAllTickets(filteredTickets);
-            setCachedData(filteredTickets); // Cache the data
-            setLoading(false);
-            setError(null);
-            setCacheStatus('fresh');
+            // Update ref to current data
+            prevTicketsDataRef.current = ticketsData;
         }
     }, [ticketsData, searchKeyword]);
 
@@ -2255,6 +2298,27 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
         return () => clearTimeout(timer);
     }, []); // Only run once on mount
 
+    // Effect to apply initial filter assignment when component mounts
+    useEffect(() => {
+        // Only apply initial filter if:
+        // 1. initialFilterAssignment is set
+        // 2. Smart filters are initialized
+        // 3. No filters are currently active (meaning no URL params were present)
+        if (initialFilterAssignment && smartFiltersInitialized) {
+            const urlParams = new URLSearchParams(window.location.search);
+            const hasURLFilters = Array.from(urlParams.keys()).some(key => key.startsWith('filter_'));
+            
+            // Only apply initial filter if there are no URL params (preserving user's explicit filter choices)
+            if (!hasURLFilters) {
+                if (initialFilterAssignment === 'assigned_to_me') {
+                    // Apply the assigned_to_me filter to smart filters
+                    handleSmartFiltersChange({ assigned: ['assigned_to_me'] });
+                } else if (initialFilterAssignment === 'unassigned') {
+                    handleSmartFiltersChange({ assigned: ['unassigned'] });
+                }
+            }
+        }
+    }, [initialFilterAssignment, smartFiltersInitialized, handleSmartFiltersChange]);
 
     // Effect hook to handle clicks outside the export popup to close it
     useEffect(() => {

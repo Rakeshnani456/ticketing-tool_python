@@ -234,7 +234,7 @@ const DisplaySettings = ({ isOpen, onClose }) => {
                                 >
                                     <option value="all">All Tickets</option>
                                     <option value="my-tickets">My Tickets</option>
-                                    <option value="assigned">Assigned to Me</option>
+                                    <option value="assigned">My Queue</option>
                                     <option value="open">Open Tickets</option>
                                     <option value="closed">Closed Tickets</option>
                                 </select>

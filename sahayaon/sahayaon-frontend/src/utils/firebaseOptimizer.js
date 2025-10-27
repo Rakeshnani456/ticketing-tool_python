@@ -385,22 +385,21 @@ export class DataManager {
     static handleTicketUpdate(data) {
         console.log('🎫 Processing ticket update from WebSocket:', data);
         
-        // Update cache with timestamp
-        const now = Date.now();
-        this.cache.set('tickets', { data: data.tickets, timestamp: now });
-        this.cache.set('ticket_counts', { data: data.counts, timestamp: now });
+        // Clear all ticket-related caches to force fresh data fetch
+        this.cache.clear();
+        FirebaseCache.clearCache();
         
-        // Notify subscribers
-        this.notifySubscribers('tickets', data.tickets);
-        this.notifySubscribers('ticket_counts', data.counts);
+        // Remove localStorage caches for tickets and ticket_counts
+        localStorage.removeItem('tickets_cache');
+        localStorage.removeItem('tickets_cache_time');
+        localStorage.removeItem('ticket_counts_cache');
+        localStorage.removeItem('ticket_counts_cache_time');
         
-        // Update localStorage cache
-        localStorage.setItem('tickets_cache', JSON.stringify(data.tickets));
-        localStorage.setItem('tickets_cache_time', now.toString());
-        localStorage.setItem('ticket_counts_cache', JSON.stringify(data.counts));
-        localStorage.setItem('ticket_counts_cache_time', now.toString());
+        // Notify subscribers that they need to refresh their data
+        this.notifySubscribers('tickets', null); // Pass null to indicate refresh needed
+        this.notifySubscribers('ticket_counts', null); // Pass null to indicate refresh needed
         
-        console.log('✅ Ticket data updated and cached');
+        console.log('✅ Ticket update processed - subscribers will refresh data');
     }
 
     /**

@@ -23,6 +23,7 @@ import {
 import CustomDropdown from './common/CustomDropdown';
 import CompactDropdown from './common/CompactDropdown';
 import UpdatesComponent from './common/UpdatesComponent';
+import StatusDistributionChart from './charts/StatusDistributionChart';
 import { collection, query, orderBy, limit, getFirestore, where, onSnapshot } from 'firebase/firestore';
 import { dbClient } from '../config/firebase';
 import { COLORS } from '../config/constants';
@@ -489,8 +490,39 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
           orderBy('timestamp', 'desc'),
           limit(50)
         );
+      } else if (user?.role === 'user') {
+        // For regular users, we need to filter by their tickets
+        // Get user's tickets from the current tickets state
+        const userTicketIds = tickets
+          .filter(ticket => ticket.reporter_id === user.uid)
+          .map(ticket => ticket.id);
+        
+        if (userTicketIds.length === 0) {
+          console.log('🔄 No tickets for user, fetching empty activities');
+          setActivities([]);
+          return;
+        }
+        
+        console.log('🔒 Filtering activities for regular user by tickets:', userTicketIds.length);
+        
+        if (userTicketIds.length <= 10) {
+          // Firestore 'in' query supports up to 10 items
+          activitiesQuery = query(
+            collection(dbClient, 'activities'),
+            where('ticket_id', 'in', userTicketIds),
+            orderBy('timestamp', 'desc'),
+            limit(50)
+          );
+        } else {
+          // If more than 10 tickets, fetch all and filter client-side
+          activitiesQuery = query(
+            collection(dbClient, 'activities'),
+            orderBy('timestamp', 'desc'),
+            limit(200)
+          );
+        }
       } else {
-        // For support/engineers, get all activities
+        // For support/engineers/admins, get all activities
         activitiesQuery = query(
           collection(dbClient, 'activities'),
           orderBy('timestamp', 'desc'),
@@ -505,11 +537,26 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
     const unsubscribe = onSnapshot(
       activitiesQuery,
       (snapshot) => {
-        const newActivities = [];
+        let newActivities = [];
         snapshot.forEach((doc) => {
           const activity = { id: doc.id, ...doc.data() };
           newActivities.push(activity);
         });
+        
+        // Client-side filtering for users with more than 10 tickets
+        if (user?.role === 'user') {
+          const userTicketIds = tickets
+            .filter(ticket => ticket.reporter_id === user.uid)
+            .map(ticket => ticket.id);
+          
+          if (userTicketIds.length > 10) {
+            newActivities = newActivities.filter(activity => 
+              userTicketIds.includes(activity.ticket_id)
+            );
+          }
+          // Limit to 50 most recent after filtering
+          newActivities = newActivities.slice(0, 50);
+        }
         
         console.log('🔄 Real-time activities update for dashboard:', newActivities.length, 'activities');
         setActivities(newActivities);
@@ -523,7 +570,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
       console.log('🔄 Cleaning up real-time activities listener for dashboard');
       unsubscribe();
     };
-  }, [user?.uid, user?.role, user?.client_name]);
+  }, [user?.uid, user?.role, user?.client_name, tickets]);
   
   // State for time period filter (Ticket Volume Trend)
   const [selectedTimePeriod, setSelectedTimePeriod] = useState('7');
@@ -626,14 +673,21 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
 
   // Basic ticket filtering - OPTIMIZED
   const filteredTickets = useMemo(() => {
+    // Filter for site_admin by company
     if (user?.role === 'site_admin' && user?.client_name) {
       return tickets.filter(ticket => {
         const ticketClientName = ticket.client_name || ticket.companyName;
         return ticketClientName === user.client_name || ticketClientName === user.companyName;
       });
     }
+    
+    // Filter for regular users - only show their own tickets
+    if (user?.role === 'user' && user?.uid) {
+      return tickets.filter(ticket => ticket.reporter_id === user.uid);
+    }
+    
     return tickets;
-  }, [tickets, user?.role, user?.client_name]);
+  }, [tickets, user?.role, user?.uid, user?.client_name]);
 
   // Basic metrics - OPTIMIZED
   const basicMetrics = useMemo(() => {
@@ -1101,9 +1155,25 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
       });
     }
     
-    // For other roles, return all activities
+    // For regular users, filter activities to only show their own tickets' activities
+    if (user?.role === 'user' && user?.uid) {
+      // Get user's ticket IDs
+      const userTicketIds = filteredTickets
+        .filter(ticket => ticket.reporter_id === user.uid)
+        .map(ticket => ticket.id);
+      
+      return activities.filter(activity => {
+        // Only show activities for tickets owned by the user
+        if (activity.ticket_id) {
+          return userTicketIds.includes(activity.ticket_id);
+        }
+        return false;
+      });
+    }
+    
+    // For other roles (admin, support), return all activities
     return activities;
-  }, [activities, user, companyUsers, tickets]);
+  }, [activities, user, companyUsers, tickets, filteredTickets]);
 
   // Status colors for charts
   const statusColors = {
@@ -1176,13 +1246,15 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
         </div>
         
         {/* Stats Overview */}
-        <div className={`grid grid-cols-1 md:grid-cols-${(user?.role === 'support') ? '4' : user?.role === 'admin' || user?.role === 'super_admin' || user?.role === 'site_admin' ? '4' : '3'} gap-3 mb-4`}>
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-3 mb-4">
+          {/* Stats Cards - Take 3 columns on the left */}
+          <div className="lg:col-span-3 grid grid-cols-2 gap-3">
                      {/* Total Active Tickets - All roles can see */}
            <a 
-             href="/all-tickets"
+             href={user?.role === 'user' ? "/my-tickets" : "/all-tickets"}
              onClick={(e) => {
                e.preventDefault();
-               navigateTo('/all-tickets');
+               navigateTo(user?.role === 'user' ? '/my-tickets' : '/all-tickets');
              }}
              className={`rounded-lg p-3 border cursor-pointer transition-all duration-200 hover:scale-100 transition duration-100 group relative shadow-sm block ${darkMode ? 'bg-gray-800/70 border-gray-400' : 'bg-white border-gray-300'}`}
            >
@@ -1192,7 +1264,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                   textShadow: '0.1px 0.1px 0.2px rgba(0,0,0,0.03)',
                   fontWeight: '400',
                   opacity: '0.7'
-                }}>Total Tickets</p>
+                }}>{user?.role === 'user' ? 'My Tickets' : 'Total Tickets'}</p>
                 <p className="text-2xl font-medium mt-1" style={{
                   textShadow: '0.2px 0.2px 0.4px rgba(0,0,0,0.05)',
                   fontWeight: '500',
@@ -1200,7 +1272,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                 }}>{processedDashboardData.totalActiveTickets}</p>
                 <div className="flex justify-end mt-1">
                   <p className="text-blue-500 text-xs font-normal">
-                    Active tickets
+                    {user?.role === 'user' ? 'All my tickets' : 'Active tickets'}
                   </p>
                 </div>
               </div>
@@ -1216,10 +1288,10 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
           
                      {/* Open Tickets - All roles can see */}
            <a 
-             href="/all-tickets?status=Open"
+             href={user?.role === 'user' ? "/my-tickets?status=Open" : "/all-tickets?status=Open"}
              onClick={(e) => {
                e.preventDefault();
-               navigateTo('/all-tickets?status=Open');
+               navigateTo(user?.role === 'user' ? '/my-tickets?status=Open' : '/all-tickets?status=Open');
              }}
              className={`rounded-lg p-3 border cursor-pointer transition-all duration-200 hover:scale-100 transition duration-100 group relative shadow-sm block ${darkMode ? 'bg-gray-800/70 border-gray-400' : 'bg-white border-gray-300'}`}
            >
@@ -1253,10 +1325,10 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
           
                      {/* In Progress - All roles can see */}
            <a 
-             href="/all-tickets?status=In Progress"
+             href={user?.role === 'user' ? "/my-tickets?status=In Progress" : "/all-tickets?status=In Progress"}
              onClick={(e) => {
                e.preventDefault();
-               navigateTo('/all-tickets?status=In Progress');
+               navigateTo(user?.role === 'user' ? '/my-tickets?status=In Progress' : '/all-tickets?status=In Progress');
              }}
              className={`rounded-lg p-3 border cursor-pointer transition-all duration-200 hover:scale-100 transition duration-100 group relative shadow-sm block ${darkMode ? 'bg-gray-800/70 border-gray-400' : 'bg-white border-gray-300'}`}
            >
@@ -1288,7 +1360,46 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
             </div>
           </a>
           
-                     {/* Assigned to Me - Support and Engineers */}
+                     {/* Resolved - For users only */}
+           {user?.role === 'user' && (
+             <a 
+               href="/my-tickets?status=Resolved"
+               onClick={(e) => {
+                 e.preventDefault();
+                 navigateTo('/my-tickets?status=Resolved');
+               }}
+               className={`rounded-lg p-3 border cursor-pointer transition-all duration-200 hover:scale-100 transition duration-100 group relative shadow-sm block ${darkMode ? 'bg-gray-800/70 border-gray-400' : 'bg-white border-gray-300'}`}
+             >
+              <div className="flex justify-between items-start">
+                <div className="flex-1">
+                  <p className="opacity-75 font-normal text-sm" style={{
+                    textShadow: '0.1px 0.1px 0.2px rgba(0,0,0,0.03)',
+                    fontWeight: '400',
+                    opacity: '0.7'
+                  }}>Resolved</p>
+                  <p className="text-2xl font-medium mt-1" style={{
+                    textShadow: '0.2px 0.2px 0.4px rgba(0,0,0,0.05)',
+                    fontWeight: '500',
+                    opacity: '0.8'
+                  }}>{processedDashboardData.statusCounts['Resolved'] || 0}</p>
+                  <div className="flex justify-end mt-1">
+                    <p className="text-green-500 text-xs font-normal">
+                      Completed
+                    </p>
+                  </div>
+                </div>
+                <div className="text-gray-600">
+                  <CheckCircle size={18} />
+                </div>
+              </div>
+              {/* Hover indicator */}
+              <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                <ExternalLink size={16} className="text-gray-500" />
+              </div>
+            </a>
+          )}
+          
+                     {/* My Queue - Support and Engineers */}
            {(user?.role === 'support' || user?.role === 'engineer' || user?.role === 'senior_engineer' || user?.role === 'lead_engineer' || user?.role === 'principal_engineer') && (
              <a 
                href="/assigned-to-me"
@@ -1304,7 +1415,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                     textShadow: '0.1px 0.1px 0.2px rgba(0,0,0,0.03)',
                     fontWeight: '400',
                     opacity: '0.7'
-                  }}>Assigned to Me</p>
+                  }}>My Queue</p>
                   <p className="text-2xl font-medium mt-1" style={{
                     textShadow: '0.2px 0.2px 0.4px rgba(0,0,0,0.05)',
                     fontWeight: '500',
@@ -1356,6 +1467,31 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
               </div>
             </div>
           )}
+          </div>
+
+          {/* Status Distribution Chart - Takes 2 columns on the right */}
+          <div className={`${cardClass} rounded-lg p-3 border shadow-xs lg:col-span-2`}>
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="text-sm font-medium text-gray-600" style={{
+                textShadow: '0.1px 0.1px 0.2px rgba(0,0,0,0.03)',
+                fontWeight: '500',
+                opacity: '0.8'
+              }}>Status Distribution</h3>
+            </div>
+            <div className="h-32">
+              <StatusDistributionChart 
+                data={{
+                  open: processedDashboardData.statusCounts['Open'] || 0,
+                  inProgress: processedDashboardData.statusCounts['In Progress'] || 0,
+                  resolved: processedDashboardData.statusCounts['Resolved'] || 0,
+                  completed: processedDashboardData.statusCounts['Completed'] || 0,
+                  assigned: processedDashboardData.assignedToMe || 0,
+                  total: processedDashboardData.totalActiveTickets
+                }}
+                darkMode={darkMode}
+              />
+            </div>
+          </div>
         </div>
 
 

@@ -60,6 +60,7 @@ const FlexibleHeader = ({
             '/my-tickets': 'My Tickets',
             '/create-ticket': 'Create Ticket',
             '/all-tickets': 'All Tickets',
+            '/assigned-to-me': 'My Queue',
             '/knowledge-base': 'Knowledge Base',
             '/admin': 'Admin Panel',
             '/user-management': 'Users',
@@ -95,7 +96,7 @@ const FlexibleHeader = ({
     const isAdminRole = ['admin', 'super_admin', 'site_admin'].includes(currentUser?.role);
 
     return (
-        <header className="fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-200 shadow-sm">
+        <header className="fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-200 shadow-xs">
             <div className="flex items-center justify-between h-11 px-4">
                 {/* Left Section: Logo */}
                 <div className="flex items-center flex-shrink-0">
@@ -131,9 +132,9 @@ const FlexibleHeader = ({
                     <TooltipBubble title="Create a new ticket">
                         <Link 
                             to="/create-ticket" 
-                            className={`flex items-center gap-1 px-2 py-1 rounded-md text-sm font-medium whitespace-nowrap text-orange-500 hover:bg-orange-50 hover:text-orange-600 transition-all duration-200 flex-shrink-0 focus:outline-none ${
+                            className={`flex items-center gap-1 px-2 py-1 rounded-md text-sm font-medium whitespace-nowrap text-orange-500 hover:bg-orange-50 hover:text-orange-600 transition-all duration-200 flex-shrink-0 focus:outline-none border border-orange-200 ${
                                 location.pathname === '/create-ticket' 
-                                    ? 'bg-orange-50 text-orange-600' 
+                                    ? 'bg-orange-50 text-orange-600 border-orange-300' 
                                     : 'bg-[#f8f9fa]'
                             }`}
                         >
@@ -147,7 +148,7 @@ const FlexibleHeader = ({
                         <AdvancedSearchComponent
                             onSearchSubmit={onSearchSubmit}
                             navigateTo={navigateTo}
-                            placeholder="Search tickets, users, or content..."
+                            placeholder="Search"
                             width="100%"
                         />
                     </div>

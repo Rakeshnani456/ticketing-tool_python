@@ -47,8 +47,7 @@ const getTicketCountsFallback = async (userId, options = {}) => {
         const totalTickets = tickets.length;
         const activeTickets = tickets.filter(t => ['Open', 'In Progress', 'Hold'].includes(t.status)).length;
         
-        // SIMPLIFIED: For ALL roles, "My Tickets" count = active tickets created by the user
-        // This matches what MyTicketsComponent actually displays
+        // "My Tickets" count = active tickets created by the user
         const ticketsRef = collection(dbClient, 'tickets');
         const myTicketsQuery = query(
             ticketsRef, 
@@ -56,12 +55,30 @@ const getTicketCountsFallback = async (userId, options = {}) => {
             where('status', 'in', ['Open', 'In Progress', 'Hold'])
         );
         const myTicketsSnapshot = await getDocs(myTicketsQuery);
-        const assignedToMeTickets = myTicketsSnapshot.docs.length;
+        const myTickets = myTicketsSnapshot.docs.length;
+
+        // "My Queue" count = active tickets assigned to the user (for support/engineer roles)
+        let assignedToMe = 0;
+        if (['support', 'engineer', 'senior_engineer', 'lead_engineer', 'principal_engineer', 'admin', 'super_admin', 'site_admin'].includes(userRole)) {
+            const userDoc = await getDocs(query(collection(dbClient, 'users'), where('uid', '==', userId)));
+            const userEmail = userDoc.empty ? null : userDoc.docs[0].data().email;
+            
+            if (userEmail) {
+                const assignedToMeQuery = query(
+                    ticketsRef,
+                    where('assigned_to_email', '==', userEmail),
+                    where('status', 'in', ['Open', 'In Progress', 'Hold'])
+                );
+                const assignedToMeSnapshot = await getDocs(assignedToMeQuery);
+                assignedToMe = assignedToMeSnapshot.docs.length;
+            }
+        }
 
         return {
             total_tickets: activeTickets,
             active_tickets: activeTickets,
-            assigned_to_me: assignedToMeTickets
+            my_tickets: myTickets,
+            assigned_to_me: assignedToMe
         };
     } catch (error) {
         console.error('Fallback ticket counts query failed:', error);
@@ -97,21 +114,7 @@ export const useDataManager = (dataType, userId, options = {}) => {
             return;
         }
 
-        // Clean up existing subscription
-        if (subscriptionIdRef.current) {
-            DataManager.unsubscribe(dataType, subscriptionIdRef.current);
-        }
-
-        // Subscribe to real-time updates (but don't force immediate fetch)
-        subscriptionIdRef.current = DataManager.subscribe(dataType, (newData) => {
-            if (isMountedRef.current) {
-                setData(newData);
-                setLoading(false);
-                setError(null);
-            }
-        }, { ...options, useCache: true }); // Use cache during WebSocket reconnections
-
-        // Try to get cached data first
+        // Define getInitialData function first
         const getInitialData = async () => {
             try {
                 const cachedData = await DataManager.getData(dataType, userId, options);
@@ -143,6 +146,27 @@ export const useDataManager = (dataType, userId, options = {}) => {
                 }
             }
         };
+
+        // Clean up existing subscription
+        if (subscriptionIdRef.current) {
+            DataManager.unsubscribe(dataType, subscriptionIdRef.current);
+        }
+
+        // Subscribe to real-time updates (but don't force immediate fetch)
+        subscriptionIdRef.current = DataManager.subscribe(dataType, (newData) => {
+            if (isMountedRef.current) {
+                // If null is passed, it means we need to refresh (e.g., ticket_update event)
+                if (newData === null) {
+                    console.log(`🔄 Refreshing ${dataType} data after ticket update`);
+                    // Trigger a fresh fetch
+                    getInitialData();
+                } else {
+                    setData(newData);
+                    setLoading(false);
+                    setError(null);
+                }
+            }
+        }, { ...options, useCache: true }); // Use cache during WebSocket reconnections
 
         getInitialData();
     }, [dataType, userId, options]); // Keep options but memoize them in the calling hooks

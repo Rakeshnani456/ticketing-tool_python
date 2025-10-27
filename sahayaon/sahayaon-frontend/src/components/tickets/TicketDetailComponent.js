@@ -45,6 +45,7 @@ import UserProfilePopup from '../common/UserProfilePopup';
 import Button from '@mui/material/Button';
 import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
+import ResolutionModal from '../common/ResolutionModal';
 
 
 // Import the new modular components
@@ -81,6 +82,13 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
     const commentsPerPage = 6;
     const [visibleCommentCount, setVisibleCommentCount] = useState(6);
     const [isAtBottom, setIsAtBottom] = useState(false);
+    
+    // Add state for field update feedback
+    const [fieldUpdateStates, setFieldUpdateStates] = useState({
+        assigned_to_email: { loading: false, success: false, error: false },
+        status: { loading: false, success: false, error: false },
+        priority: { loading: false, success: false, error: false }
+    });
 
     const commentsSectionRef = useRef(null);
     const closureNotesRef = useRef(null);
@@ -101,6 +109,7 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
         closed_by_email: '',
         category: '',
     });
+    const [attemptedHoldWithoutComment, setAttemptedHoldWithoutComment] = useState(false);
 
     const [assignedToHasError, setAssignedToHasError] = useState(false);
     const [timeSpentHasError, setTimeSpentHasError] = useState(false);
@@ -109,6 +118,13 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
     const [subjectExpanded, setSubjectExpanded] = useState(false);
     const [isSubjectTruncated, setIsSubjectTruncated] = useState(false);
     const subjectRef = useRef(null);
+    
+    // State for resolution modal
+    const [showResolutionModal, setShowResolutionModal] = useState(false);
+    const [pendingResolutionStatus, setPendingResolutionStatus] = useState(null);
+    const [modalTimeSpent, setModalTimeSpent] = useState('');
+    const [modalClosureNotes, setModalClosureNotes] = useState('');
+    const [isResolvingViaModal, setIsResolvingViaModal] = useState(false);
 
     // Add state and ref for the popup at the top of the component
     const [profilePopup, setProfilePopup] = useState({ visible: false, user: null, anchorRef: null });
@@ -148,8 +164,8 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
         }
     }, [ticket?.short_description, subjectExpanded]);
 
-    const isSupportUser = user?.role === 'support' || user?.role === 'admin' || user?.role === 'super_admin' || user?.role === 'site_admin' || user?.role === 'engineer';
-    const isEngineer = user?.role === 'support' || user?.role === 'super_admin' || user?.role === 'engineer';
+    const isSupportUser = user?.role === 'support' || user?.role === 'admin' || user?.role === 'super_admin' || user?.role === 'site_admin';
+    const isEngineer = user?.role === 'support' || user?.role === 'super_admin';
 
     const priorities = [
         { value: 'Low', label: 'Low' },
@@ -165,6 +181,15 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
         { value: 'Resolved', label: 'Resolved' },
         { value: 'Cancelled', label: 'Cancelled' },
     ];
+    
+    // Determine if Hold should be disabled (requires comment for engineers/super_admins)
+    const isHoldDisabled = useCallback(() => {
+        if (user?.role === 'super_admin') {
+            const hasComments = ticket?.comments && ticket.comments.length > 0;
+            return !hasComments;
+        }
+        return false;
+    }, [user, ticket]);
 
     const db = dbClient;
 
@@ -566,7 +591,18 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                 })
                 .then(res => res.json())
                 .then(data => {
-                    setSupportUsers(Array.isArray(data) ? data.filter(u => u.role === 'support' || u.role === 'super_admin') : []);
+                    // Filter users based on current user's role and assignment permissions
+                    let filteredUsers = [];
+                    if (Array.isArray(data)) {
+                        if (user?.role === 'site_admin') {
+                            // Site admin can assign to support, admin, and site_admin users
+                            filteredUsers = data.filter(u => ['support', 'admin', 'site_admin'].includes(u.role));
+                        } else {
+                            // Other users can assign to support, admin, and super_admin users
+                            filteredUsers = data.filter(u => ['support', 'admin', 'super_admin'].includes(u.role));
+                        }
+                    }
+                    setSupportUsers(filteredUsers);
                     setSupportUsersLoading(false);
                 })
                 .catch(() => {
@@ -598,6 +634,112 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
         }
     }, [saveButtonState]);
 
+    // Handle individual field updates with optimistic updates (like AllTicketsComponent)
+    const handleFieldUpdate = useCallback(async (fieldName, value) => {
+        if (!ticket || !canEdit) return;
+
+        // INTERCEPT: If trying to resolve ticket, show modal instead
+        if (fieldName === 'status' && value === 'Resolved') {
+            // Check if ticket is assigned
+            if (!ticket.assigned_to_email) {
+                showFlashMessage('Please assign this ticket before resolving it.', 'error');
+                return;
+            }
+            
+            // Don't update, show the resolution modal instead
+            setPendingResolutionStatus('Resolved');
+            setModalTimeSpent('');
+            setModalClosureNotes('');
+            setShowResolutionModal(true);
+            return;
+        }
+
+        // Set loading state
+        setFieldUpdateStates(prev => ({
+            ...prev,
+            [fieldName]: { loading: true, success: false, error: false }
+        }));
+
+        // Store original value for rollback
+        const originalValue = ticket[fieldName];
+
+        try {
+            // OPTIMISTIC UPDATE - Update UI immediately
+            setTicket(prev => prev ? ({ ...prev, [fieldName]: value, updated_at: new Date().toISOString() }) : prev);
+            setEditableFields(prev => ({ ...prev, [fieldName]: value }));
+
+            // Show success message immediately
+            if (fieldName === 'assigned_to_email') {
+                const assignedEngineer = supportUsers.find(u => u.email === value);
+                showFlashMessage(
+                    value 
+                        ? `Ticket assigned to ${assignedEngineer?.name || value}` 
+                        : 'Ticket unassigned successfully', 
+                    'success'
+                );
+            } else if (fieldName === 'status') {
+                showFlashMessage(`Status updated to ${value}`, 'success');
+            } else if (fieldName === 'priority') {
+                showFlashMessage(`Priority updated to ${value}`, 'success');
+            }
+
+            // Set success state
+            setFieldUpdateStates(prev => ({
+                ...prev,
+                [fieldName]: { loading: false, success: true, error: false }
+            }));
+
+            // Clear success state after animation
+            setTimeout(() => {
+                setFieldUpdateStates(prev => ({
+                    ...prev,
+                    [fieldName]: { loading: false, success: false, error: false }
+                }));
+            }, 2000);
+
+            // Update via API in background (user doesn't wait)
+            const idToken = await user.firebaseUser.getIdToken();
+            const response = await fetch(`${API_BASE_URL}/tickets/${ticketId}`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${idToken}`
+                },
+                body: JSON.stringify({
+                    [fieldName]: value
+                })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || `Failed to update ${fieldName}`);
+            }
+
+        } catch (error) {
+            console.error(`Error updating ${fieldName}:`, error);
+            
+            // ROLLBACK - Restore original state on error
+            setTicket(prev => prev ? ({ ...prev, [fieldName]: originalValue }) : prev);
+            setEditableFields(prev => ({ ...prev, [fieldName]: originalValue }));
+
+            // Set error state
+            setFieldUpdateStates(prev => ({
+                ...prev,
+                [fieldName]: { loading: false, success: false, error: true }
+            }));
+
+            showFlashMessage(`Failed to update ${fieldName}: ${error.message}`, 'error');
+
+            // Clear error state after animation
+            setTimeout(() => {
+                setFieldUpdateStates(prev => ({
+                    ...prev,
+                    [fieldName]: { loading: false, success: false, error: false }
+                }));
+            }, 3000);
+        }
+    }, [ticket, canEdit, supportUsers, user, ticketId, showFlashMessage]);
+
     const handleButtonSelection = useCallback((field, value) => {
         setEditableFields(prev => {
             let updated = { ...prev, [field]: value };
@@ -617,8 +759,23 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
             setClosureNotesErrorMessage('');
             setTimeSpentHasError(false);
             setTimeSpentErrorMessage('');
+            
+            // If changing to Hold and user is engineer/super_admin, require a comment
+            if (value === 'Hold' && user?.role === 'super_admin') {
+                const hasComments = ticket?.comments && ticket.comments.length > 0;
+                if (!hasComments) {
+                    // Revert the change silently and show warning
+                    setEditableFields(prev => ({ ...prev, status: ticket.status }));
+                    setAttemptedHoldWithoutComment(true);
+                    // Clear the warning after 5 seconds
+                    setTimeout(() => setAttemptedHoldWithoutComment(false), 5000);
+                    return;
+                } else {
+                    setAttemptedHoldWithoutComment(false);
+                }
+            }
         }
-    }, [saveButtonState, user]);
+    }, [saveButtonState, user, ticket, showFlashMessage]);
 
     const handleClosureNotesChange = useCallback((e) => {
         setClosureNotes(e.target.value);
@@ -666,6 +823,22 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
             const oldStatusWasTerminal = ['Resolved', 'Cancelled'].includes(ticket.status);
 
             let validationFailed = false;
+
+            // Validation for Hold status - require comment for engineers/super_admins
+            if (user?.role === 'super_admin' && payload.status === 'Hold' && ticket.status !== 'Hold') {
+                const hasComments = ticket?.comments && ticket.comments.length > 0;
+                if (!hasComments) {
+                    // Silently revert to prevent Hold status without comment
+                    if (actionType === 'close') setCloseButtonState('error');
+                    else setSaveButtonState('error');
+                    setUpdateLoading(false);
+                    setTimeout(() => {
+                        if (actionType === 'close') setCloseButtonState('default');
+                        else setSaveButtonState('save');
+                    }, 2000);
+                    return;
+                }
+            }
 
             if (isSupportUser && newStatusIsTerminalForClosure && !oldStatusWasTerminal) {
                 if (!payload.assigned_to_email) {
@@ -856,6 +1029,85 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
         setTimeSpentHasError(false);
         setClosureNotesHasError(false);
     }, [ticket]);
+
+    // Handler for closing the resolution modal
+    const handleModalClose = useCallback(() => {
+        setShowResolutionModal(false);
+        setPendingResolutionStatus(null);
+        setModalTimeSpent('');
+        setModalClosureNotes('');
+    }, []);
+
+    // Handler for confirming resolution via modal
+    const handleModalConfirm = useCallback(async () => {
+        if (!ticket || !canEdit) return;
+
+        // Validate modal inputs
+        if (!modalTimeSpent.trim() || !/^\d{1,4}$/.test(modalTimeSpent.trim())) {
+            return;
+        }
+        if (!modalClosureNotes.trim()) {
+            return;
+        }
+
+        setIsResolvingViaModal(true);
+
+        try {
+            const idToken = await user.firebaseUser.getIdToken();
+            const payload = {
+                ...editableFields,
+                status: 'Resolved',
+                time_spent: modalTimeSpent.trim(),
+                closure_notes: modalClosureNotes.trim(),
+                closed_by_email: user.email,
+                resolved_at: new Date().toISOString()
+            };
+
+            const response = await fetch(`${API_BASE_URL}/tickets/${ticketId}`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${idToken}`
+                },
+                body: JSON.stringify(payload)
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                // Close modal
+                setShowResolutionModal(false);
+                setPendingResolutionStatus(null);
+                setModalTimeSpent('');
+                setModalClosureNotes('');
+
+                // Update local state
+                setTicket(prev => prev ? ({ ...prev, ...payload }) : prev);
+                setEditableFields(prev => ({ ...prev, ...payload }));
+                setTimeSpent(modalTimeSpent.trim());
+                setClosureNotes(modalClosureNotes.trim());
+
+                // Show success message
+                showFlashMessage('Ticket resolved successfully!', 'success');
+
+                // Navigate after a short delay
+                setTimeout(() => {
+                    if (user.role === 'user') {
+                        navigateTo('/my-tickets');
+                    } else {
+                        navigateTo('/all-tickets');
+                    }
+                }, 1500);
+            } else {
+                showFlashMessage(data.error || 'Failed to resolve ticket.', 'error');
+                setIsResolvingViaModal(false);
+            }
+        } catch (error) {
+            console.error('Error resolving ticket:', error);
+            showFlashMessage('Network error while resolving ticket.', 'error');
+            setIsResolvingViaModal(false);
+        }
+    }, [ticket, canEdit, modalTimeSpent, modalClosureNotes, user, ticketId, showFlashMessage, navigateTo, editableFields]);
 
     const handleAddComment = async (e) => {
         e.preventDefault();
@@ -1164,6 +1416,11 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                             cancelShowProfilePopup={cancelShowProfilePopup}
                             hidePopup={hidePopup}
                             popupHideTimeout={popupHideTimeout}
+                            isHoldDisabled={isHoldDisabled()}
+                            user={user}
+                            attemptedHoldWithoutComment={attemptedHoldWithoutComment}
+                            fieldUpdateStates={fieldUpdateStates}
+                            handleFieldUpdate={handleFieldUpdate}
                         />
                     </div>
                 </div>
@@ -1205,6 +1462,20 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                 </div>
 
             </div>
+            
+            {/* Resolution Modal */}
+            <ResolutionModal
+                isOpen={showResolutionModal}
+                onClose={handleModalClose}
+                onConfirm={handleModalConfirm}
+                timeSpent={modalTimeSpent}
+                setTimeSpent={setModalTimeSpent}
+                closureNotes={modalClosureNotes}
+                setClosureNotes={setModalClosureNotes}
+                loading={isResolvingViaModal}
+                ticket={ticket}
+                user={user}
+            />
         </div>
     );
 };

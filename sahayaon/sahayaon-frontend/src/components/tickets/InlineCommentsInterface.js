@@ -95,7 +95,7 @@ const EnhancedCommentsInterface = ({
     });
 
     return (
-        <div id="comments-interface" className="max-w-5xl mx-auto px-2 sm:px-3 py-2">
+        <div id="comments-interface" className="w-full px-2 sm:px-3 py-2">
             <style>{`
                 /* Absolute override for profile icons */
                 #comments-interface .rounded-full {
