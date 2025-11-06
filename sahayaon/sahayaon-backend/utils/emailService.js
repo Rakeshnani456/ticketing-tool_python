@@ -23,10 +23,28 @@ class EmailService {
      */
     async sendWelcomeEmail(userData) {
         try {
+            // Validate required environment variables
+            if (!process.env.DISTRIBUTION_EMAIL) {
+                console.error(`[EmailService] DISTRIBUTION_EMAIL not configured - cannot send welcome email to ${userData.userEmail}`);
+                return false;
+            }
+
+            // Validate transporter
+            if (!this.transporter) {
+                console.error(`[EmailService] Email transporter not initialized - cannot send welcome email to ${userData.userEmail}`);
+                return false;
+            }
+
+            // Validate user data
+            if (!userData.userEmail) {
+                console.error(`[EmailService] Missing userEmail in userData`);
+                return false;
+            }
+
             const { subject, text, html } = getWelcomeEmailTemplate(userData);
             
             const mailOptions = {
-                from: 'process.env.DISTRIBUTION_EMAIL',
+                from: process.env.DISTRIBUTION_EMAIL,
                 to: userData.userEmail,
                 subject: subject,
                 text: text,
@@ -34,10 +52,18 @@ class EmailService {
             };
 
             await this.transporter.sendMail(mailOptions);
-            console.log(`Welcome email sent successfully to ${userData.userEmail}`);
+            console.log(`[EmailService] Welcome email sent successfully to ${userData.userEmail}`);
             return true;
         } catch (error) {
-            console.error(`Error sending welcome email to ${userData.userEmail}:`, error.message);
+            console.error(`[EmailService] Error sending welcome email to ${userData.userEmail}:`, error.message);
+            console.error(`[EmailService] Error details:`, error);
+            // Log more details for debugging
+            if (error.code) {
+                console.error(`[EmailService] Error code: ${error.code}`);
+            }
+            if (error.response) {
+                console.error(`[EmailService] SMTP response: ${error.response}`);
+            }
             return false;
         }
     }
@@ -55,7 +81,7 @@ class EmailService {
             const { subject, text, html } = getPasswordResetTemplate(userData);
             
             const mailOptions = {
-                from: 'process.env.DISTRIBUTION_EMAIL',
+                from: process.env.DISTRIBUTION_EMAIL,
                 to: userData.userEmail,
                 subject: subject,
                 text: text,
@@ -81,8 +107,8 @@ class EmailService {
             const { subject, text, html } = getTicketNotificationTemplate(ticketData);
             
             const mailOptions = {
-                from: 'process.env.DISTRIBUTION_EMAIL',
-                to: ticketData.toEmail || 'process.env.DISTRIBUTION_EMAIL',
+                from: process.env.DISTRIBUTION_EMAIL,
+                to: ticketData.toEmail || process.env.DISTRIBUTION_EMAIL,
                 cc: ticketData.ccEmail,
                 subject: subject,
                 text: text,
@@ -108,8 +134,8 @@ class EmailService {
             const { subject, text, html } = getTicketStatusUpdateTemplate(ticketData);
             
             const mailOptions = {
-                from: 'process.env.DISTRIBUTION_EMAIL',
-                to: ticketData.toEmail || 'process.env.DISTRIBUTION_EMAIL',
+                from: process.env.DISTRIBUTION_EMAIL,
+                to: ticketData.toEmail || process.env.DISTRIBUTION_EMAIL,
                 cc: ticketData.ccEmail,
                 subject: subject,
                 text: text,
@@ -138,8 +164,8 @@ class EmailService {
             const { subject, text, html } = template(ticketData);
             
             const mailOptions = {
-                from: 'process.env.DISTRIBUTION_EMAIL',
-                to: ticketData.toEmail || 'process.env.DISTRIBUTION_EMAIL',
+                from: process.env.DISTRIBUTION_EMAIL,
+                to: ticketData.toEmail || process.env.DISTRIBUTION_EMAIL,
                 cc: ticketData.ccEmail,
                 subject: subject,
                 text: text,
@@ -166,8 +192,8 @@ class EmailService {
             const { subject, text, html } = getUserTicketAssignmentTemplate(ticketData);
             
             const mailOptions = {
-                from: 'process.env.DISTRIBUTION_EMAIL',
-                to: ticketData.toEmail || 'process.env.DISTRIBUTION_EMAIL',
+                from: process.env.DISTRIBUTION_EMAIL,
+                to: ticketData.toEmail || process.env.DISTRIBUTION_EMAIL,
                 cc: ticketData.ccEmail,
                 subject: subject,
                 text: text,
@@ -247,7 +273,7 @@ class EmailService {
             const { subject, text, html } = getAttachmentUploadTemplate(attachmentData);
             
             const mailOptions = {
-                from: 'process.env.DISTRIBUTION_EMAIL',
+                from: process.env.DISTRIBUTION_EMAIL,
                 to: attachmentData.toEmail || 'process.env.DISTRIBUTION_EMAIL',
                 cc: attachmentData.ccEmail,
                 subject: subject,
@@ -277,7 +303,7 @@ class EmailService {
     async sendCustomEmail(emailData) {
         try {
             const mailOptions = {
-                from: 'process.env.DISTRIBUTION_EMAIL',
+                from: process.env.DISTRIBUTION_EMAIL,
                 to: emailData.to,
                 subject: emailData.subject,
                 text: emailData.text,
@@ -327,7 +353,7 @@ class EmailService {
             const { subject, text, html } = getPasswordSharingTemplate(userData);
             
             const mailOptions = {
-                from: 'process.env.DISTRIBUTION_EMAIL',
+                from: process.env.DISTRIBUTION_EMAIL,
                 to: userData.userEmail,
                 subject: subject,
                 text: text,

@@ -1,9 +1,9 @@
 Run App Local:
 
-cd ticketing_tool_backend
+cd sahayaon-backend
 node server.js
 
-cd it_ticketing_frontend
+cd sahayaon-frontend
 npm start
 
 -----------------------------------------

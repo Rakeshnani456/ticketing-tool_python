@@ -329,11 +329,8 @@ const ModernTicketGrid = ({
                   />
                 </TableHeader>
               )}
-              <TableHeader className="w-12 text-center">
-                #
-              </TableHeader>
               <TableHeader sortable sortDirection={sortConfig.key === 'display_id' ? sortConfig.direction : null} onSort={() => handleSort('display_id')} tooltipAlign="left">
-                Id
+                Ticket ID
               </TableHeader>
               <TableHeader sortable sortDirection={sortConfig.key === 'short_description' ? sortConfig.direction : null} onSort={() => handleSort('short_description')}>
                 Summary
@@ -348,7 +345,7 @@ const ModernTicketGrid = ({
                 Status
               </TableHeader>
               <TableHeader sortable sortDirection={sortConfig.key === 'reporter_email' ? sortConfig.direction : null} onSort={() => handleSort('reporter_email')}>
-                Reporter
+                Requested by
               </TableHeader>
               {(user?.role === 'super_admin' || user?.role === 'engineer') && (
                 <TableHeader sortable sortDirection={sortConfig.key === 'client_name' ? sortConfig.direction : null} onSort={() => handleSort('client_name')}>
@@ -394,9 +391,6 @@ const ModernTicketGrid = ({
                       />
                     </TableCell>
                   )}
-                  <TableCell className="w-12 text-center text-gray-500 font-normal text-xs">
-                    {startIndex + index + 1}
-                  </TableCell>
                   <TableCell 
                     className="ticket-id font-normal text-gray-700 hover:text-gray-900 text-xs tracking-wide"
                   >

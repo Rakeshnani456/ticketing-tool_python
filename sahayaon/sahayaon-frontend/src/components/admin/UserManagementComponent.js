@@ -643,10 +643,8 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
     };
 
     const checkDuplicateEmployeeId = (employeeId, excludeUid = null) => {
-        return users.some(user => 
-            user.employeeId === employeeId && 
-            (!excludeUid || user.uid !== excludeUid)
-        );
+        // Duplicates allowed: always return false
+        return false;
     };
 
     const handleAddSave = async (e) => {
@@ -675,10 +673,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
             }
         }
         
-        if (checkDuplicateEmployeeId(addRowData.employeeId)) {
-            setSnackbar({ open: true, message: 'Employee ID already exists. Please use a unique Employee ID.', severity: 'error' });
-            return;
-        }
+        // Allow duplicate Employee IDs per new policy
         
         try {
             const email = `${addRowData.emailPrefix.trim()}@${addRowData.domain.trim()}`;
@@ -740,10 +735,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
 
     const handleEditSave = async (uid) => {
         try {
-            if (checkDuplicateEmployeeId(editRowData.employeeId, uid)) {
-                setSnackbar({ open: true, message: 'Employee ID already exists. Please use a unique Employee ID.', severity: 'error' });
-                return;
-            }
+            // Allow duplicate Employee IDs per new policy
             
             const updatePayload = {
                 firstName: editRowData.firstName,
@@ -927,10 +919,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
         }
       }
       
-      if (checkDuplicateEmployeeId(addUserData.employeeId)) {
-        setAddUserError('Employee ID already exists. Please use a unique Employee ID.');
-        return;
-      }
+      // Allow duplicate Employee IDs per new policy
       
       try {
         const payload = {

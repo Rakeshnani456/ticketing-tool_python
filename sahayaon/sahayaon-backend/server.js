@@ -62,19 +62,66 @@ try {
     dbConnected = false;
 }
 
-// Office365 SMTP transporter for sending as process.env.DISTRIBUTION_EMAIL via testing@kriasol.com
-const transporter = nodemailer.createTransport({
-    host: 'smtp.office365.com',
-    port: 587,
-    secure: false, // use TLS
-    auth: {
-        user: process.env.EMAIL_USER, // Use process.env.EMAIL_USER in production
-        pass: process.env.EMAIL_PASS       // Use process.env.EMAIL_PASS in production
-    }
-});
+// Email transporter (configurable via env)
+const EMAIL_TRANSPORT = (process.env.EMAIL_TRANSPORT || 'SMTP').toUpperCase();
+let transporter;
+if (EMAIL_TRANSPORT === 'GMAIL') {
+    // Google (App Password required)
+    transporter = nodemailer.createTransport({
+        host: 'smtp.gmail.com',
+        port: 465,
+        secure: true,
+        auth: {
+            user: process.env.EMAIL_USER,
+            pass: process.env.EMAIL_PASS,
+        }
+    });
+    console.log('📧 Email transport: GMAIL (SMTP)');
+} else {
+    // Generic SMTP (default). For Office365, ensure SMTP AUTH is enabled in tenant.
+    const smtpHost = process.env.SMTP_HOST || 'smtp.office365.com';
+    const smtpPort = Number(process.env.SMTP_PORT || 587);
+    const smtpSecure = String(process.env.SMTP_SECURE || 'false').toLowerCase() === 'true';
+    transporter = nodemailer.createTransport({
+        host: smtpHost,
+        port: smtpPort,
+        secure: smtpSecure,
+        auth: {
+            user: process.env.EMAIL_USER,
+            pass: process.env.EMAIL_PASS,
+        }
+    });
+    console.log(`📧 Email transport: SMTP host=${smtpHost} port=${smtpPort} secure=${smtpSecure}`);
+}
 
 // Initialize email service
 const emailService = new EmailService(transporter);
+
+// Startup email service check (non-blocking)
+let emailServiceReady = false;
+(async () => {
+    try {
+        console.log('🔎 Verifying email service connectivity...');
+        // Log essential env presence (masked)
+        if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS || !process.env.DISTRIBUTION_EMAIL) {
+            console.warn('⚠️ Email env vars missing: EMAIL_USER/EMAIL_PASS/DISTRIBUTION_EMAIL');
+        } else {
+            console.log(`📧 Email user configured: ${process.env.EMAIL_USER}`);
+        }
+        await transporter.verify();
+        emailServiceReady = true;
+        console.log('✅ Email service verification successful');
+    } catch (err) {
+        emailServiceReady = false;
+        console.error(`❌ Email service verification failed: ${err.message}`);
+        if (EMAIL_TRANSPORT !== 'GMAIL') {
+            console.error('ℹ️ If you are using Office365, enable SMTP AUTH on the mailbox/tenant or switch to EMAIL_TRANSPORT=GMAIL or Graph.');
+        } else {
+            console.error('ℹ️ For Gmail, ensure you are using an App Password and IMAP/SMTP is enabled.');
+        }
+    }
+})();
+app.locals.emailServiceReady = () => emailServiceReady;
 
 // Initialize Email-to-Ticket Service
 const EmailToTicketService = require('./utils/emailToTicketService');
@@ -181,7 +228,8 @@ app.get('/health', (req, res) => {
     res.status(200).json({ 
         status: 'OK', 
         timestamp: new Date().toISOString(),
-        database: dbConnected ? 'connected' : 'disconnected'
+        database: dbConnected ? 'connected' : 'disconnected',
+        email: emailServiceReady ? 'ready' : 'error'
     });
 });
 

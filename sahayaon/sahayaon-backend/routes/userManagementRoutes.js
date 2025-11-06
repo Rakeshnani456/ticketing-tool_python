@@ -129,7 +129,10 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
 
     // POST /api/users - Create a new user (with Auth UID as Firestore doc ID)
     router.post('/', async (req, res) => {
-        const { role } = req.body;
+        const { role, email } = req.body;
+        try {
+            console.log(`[Users] Create request received | role=${role} email=${email}`);
+        } catch (_) {}
         if (!role) {
             return res.status(400).json({ error: 'Missing required field: role' });
         }
@@ -138,22 +141,7 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
             if (!firstName || !lastName || !email || !contactNumber || !managerEmail || !employmentType || !designation || !employeeId) {
                 return res.status(400).json({ error: 'Missing required fields for engineer: firstName, lastName, email, contactNumber, managerEmail, employmentType, designation, employeeId' });
             }
-            // Uniqueness checks
-            const queries = [
-                usersCollection.where('employeeId', '==', employeeId).limit(1).get(),
-                usersCollection.where('email', '==', email).limit(1).get(),
-                usersCollection.where('contactNumber', '==', contactNumber).limit(1).get(),
-            ];
-            const [empSnap, emailSnap, contactSnap] = await Promise.all(queries);
-            if (!empSnap.empty) {
-                return res.status(400).json({ error: 'Employee ID already exists.' });
-            }
-            if (!emailSnap.empty) {
-                return res.status(400).json({ error: 'Email already exists.' });
-            }
-            if (!contactSnap.empty) {
-                return res.status(400).json({ error: 'Contact Number already exists.' });
-            }
+            // Allow duplicates for employeeId/contactNumber/email at the database level
             const finalPassword = password && password.length >= 6 ? password : 'Welcome@123';
             try {
                 let userRecord;
@@ -182,6 +170,7 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
                 
                 // Send welcome email to the new user
                 if (emailService) {
+                    console.log(`[Users] Scheduling welcome email | email=${email}`);
                     const portalUrl = process.env.FRONTEND_URL || 'https://tt.kriasol.com/';
                     const emailData = {
                         userName: `${firstName} ${lastName}`,
@@ -192,14 +181,26 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
                         companyName: 'Sahayaon Technologies'
                     };
                     
+                    // Validate email data
+                    if (!emailData.userEmail || !emailData.tempPassword) {
+                        console.error(`[Users] Missing email data | email=${email} tempPassword=${!!emailData.tempPassword}`);
+                    }
+                    
                     // Send email asynchronously (don't block the response)
                     setImmediate(async () => {
                         try {
-                            await emailService.sendWelcomeEmail(emailData);
+                            const emailSent = await emailService.sendWelcomeEmail(emailData);
+                            if (emailSent) {
+                                console.log(`[Users] Welcome email sent successfully | email=${email}`);
+                            } else {
+                                console.error(`[Users] Welcome email failed (returned false) | email=${email}`);
+                            }
                         } catch (emailError) {
-                            console.error('Error sending welcome email:', emailError);
+                            console.error(`[Users] Error sending welcome email | email=${email} error=${emailError.message}`, emailError);
                         }
                     });
+                } else {
+                    console.warn(`[Users] Email service not available - welcome email not sent | email=${email}`);
                 }
                 
                 return res.status(201).json({ message: 'Engineer created in Auth and Firestore.' });
@@ -214,22 +215,7 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
                 return res.status(400).json({ error: 'Missing required fields for user: companyName, firstName, lastName, email, password, contactNumber, managerEmail, employmentType, designation, employeeId' });
             }
             
-            // Uniqueness checks for regular users
-            const queries = [
-                usersCollection.where('employeeId', '==', employeeId).limit(1).get(),
-                usersCollection.where('email', '==', email).limit(1).get(),
-                usersCollection.where('contactNumber', '==', contactNumber).limit(1).get(),
-            ];
-            const [empSnap, emailSnap, contactSnap] = await Promise.all(queries);
-            if (!empSnap.empty) {
-                return res.status(400).json({ error: 'Employee ID already exists.' });
-            }
-            if (!emailSnap.empty) {
-                return res.status(400).json({ error: 'Email already exists.' });
-            }
-            if (!contactSnap.empty) {
-                return res.status(400).json({ error: 'Contact Number already exists.' });
-            }
+            // Allow duplicates for employeeId/contactNumber/email at the database level
             
             try {
                 let userRecord;
@@ -258,6 +244,7 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
                 
                 // Send welcome email to the new user
                 if (emailService) {
+                    console.log(`[Users] Scheduling welcome email | email=${email}`);
                     const portalUrl = process.env.FRONTEND_URL || 'https://tt.kriasol.com/';
                     const emailData = {
                         userName: `${firstName} ${lastName}`,
@@ -268,14 +255,26 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
                         companyName: companyName
                     };
                     
+                    // Validate email data
+                    if (!emailData.userEmail || !emailData.tempPassword) {
+                        console.error(`[Users] Missing email data | email=${email} tempPassword=${!!emailData.tempPassword}`);
+                    }
+                    
                     // Send email asynchronously (don't block the response)
                     setImmediate(async () => {
                         try {
-                            await emailService.sendWelcomeEmail(emailData);
+                            const emailSent = await emailService.sendWelcomeEmail(emailData);
+                            if (emailSent) {
+                                console.log(`[Users] Welcome email sent successfully | email=${email}`);
+                            } else {
+                                console.error(`[Users] Welcome email failed (returned false) | email=${email}`);
+                            }
                         } catch (emailError) {
-                            console.error('Error sending welcome email:', emailError);
+                            console.error(`[Users] Error sending welcome email | email=${email} error=${emailError.message}`, emailError);
                         }
                     });
+                } else {
+                    console.warn(`[Users] Email service not available - welcome email not sent | email=${email}`);
                 }
                 
                 return res.status(201).json({ message: 'User created in Auth and Firestore.' });
@@ -290,22 +289,7 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
                 return res.status(400).json({ error: 'Missing required fields for site admin: companyName, firstName, lastName, email, password, contactNumber, managerEmail, employmentType, designation, employeeId' });
             }
             
-            // Uniqueness checks for site admin users
-            const queries = [
-                usersCollection.where('employeeId', '==', employeeId).limit(1).get(),
-                usersCollection.where('email', '==', email).limit(1).get(),
-                usersCollection.where('contactNumber', '==', contactNumber).limit(1).get(),
-            ];
-            const [empSnap, emailSnap, contactSnap] = await Promise.all(queries);
-            if (!empSnap.empty) {
-                return res.status(400).json({ error: 'Employee ID already exists.' });
-            }
-            if (!emailSnap.empty) {
-                return res.status(400).json({ error: 'Email already exists.' });
-            }
-            if (!contactSnap.empty) {
-                return res.status(400).json({ error: 'Contact number already exists.' });
-            }
+            // Allow duplicates for employeeId/contactNumber/email at the database level
 
             try {
                 // Create user in Firebase Auth
@@ -512,25 +496,7 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
                 continue;
             }
             
-            // Uniqueness checks for bulk import
-            const queries = [
-                usersCollection.where('employeeId', '==', employeeId).limit(1).get(),
-                usersCollection.where('email', '==', email).limit(1).get(),
-                usersCollection.where('contactNumber', '==', contactNumber).limit(1).get(),
-            ];
-            const [empSnap, emailSnap, contactSnap] = await Promise.all(queries);
-            if (!empSnap.empty) {
-                results.push({ email, success: false, error: 'Employee ID already exists.' });
-                continue;
-            }
-            if (!emailSnap.empty) {
-                results.push({ email, success: false, error: 'Email already exists.' });
-                continue;
-            }
-            if (!contactSnap.empty) {
-                results.push({ email, success: false, error: 'Contact Number already exists.' });
-                continue;
-            }
+            // Allow duplicates in bulk import
             
             try {
                 let userRecord;

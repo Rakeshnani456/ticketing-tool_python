@@ -60,7 +60,6 @@ const FlexibleHeader = ({
             '/my-tickets': 'My Tickets',
             '/create-ticket': 'Create Ticket',
             '/all-tickets': 'All Tickets',
-            '/assigned-to-me': 'My Queue',
             '/knowledge-base': 'Knowledge Base',
             '/admin': 'Admin Panel',
             '/user-management': 'Users',
