@@ -1234,10 +1234,11 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
         }
     }, [showDeleteConfirm]);
 
-    // Function to fetch companies for filtering (super_admin only)
+    // Function to fetch companies for filtering (super_admin, support, engineer)
     const fetchCompanies = useCallback(async () => {
-        // Only super_admin can access the companies endpoint
-        if (user?.role !== 'super_admin') {
+        // Allow super_admin, support, and engineer roles to access the companies endpoint
+        const allowedRoles = ['super_admin', 'support', 'engineer'];
+        if (!user?.role || !allowedRoles.includes(user.role)) {
             console.log('Companies filtering not available for role:', user?.role);
             return;
         }
@@ -1914,22 +1915,25 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
     // Get location for URL parameters
     const location = useLocation();
 
-    // Read URL parameters for initial filtering - only run once on mount
+    // Read URL parameters for initial filtering - updates when URL changes
     useEffect(() => {
         const urlParams = new URLSearchParams(location.search);
         const statusParam = urlParams.get('status');
         const assignmentParam = urlParams.get('assignment');
         
-        
+        // Apply status filter from URL
         if (statusParam) {
             setFilterStatus(statusParam);
             setFilterBy('status');
+        } else {
+            // Clear filter if status param is not in URL
+            setFilterStatus('');
         }
         
         if (assignmentParam) {
             setFilterAssignment(assignmentParam);
         }
-    }, []); // Only run once on mount, not on every location change
+    }, [location.search]); // Update when URL changes
 
     // Check and reset company filter if user doesn't have permission
     useEffect(() => {
@@ -1942,17 +1946,19 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
         }
     }, [user?.role, filterBy]);
 
-    // Fetch companies when filterBy changes to 'company' (if not already loaded) - super_admin only
+    // Fetch companies when filterBy changes to 'company' (if not already loaded) - super_admin, support, engineer
     useEffect(() => {
-        if (user?.role === 'super_admin' && filterBy === 'company' && companies.length === 0 && !loadingCompanies) {
+        const allowedRoles = ['super_admin', 'support', 'engineer'];
+        if (user?.role && allowedRoles.includes(user.role) && filterBy === 'company' && companies.length === 0 && !loadingCompanies) {
             fetchCompanies();
         }
     }, [filterBy, user?.role]); // Remove companies.length from dependencies to prevent unnecessary re-fetching
 
-    // Fetch companies when component mounts (only once) - super_admin only
+    // Fetch companies when component mounts (only once) - super_admin, support, engineer
     useEffect(() => {
-        // Only fetch if user is super_admin and companies haven't been loaded yet
-        if (user?.role === 'super_admin' && !companiesFetchedRef.current && !loadingCompanies) {
+        // Fetch if user is super_admin, support, or engineer and companies haven't been loaded yet
+        const allowedRoles = ['super_admin', 'support', 'engineer'];
+        if (user?.role && allowedRoles.includes(user.role) && !companiesFetchedRef.current && !loadingCompanies) {
             fetchCompanies();
         }
     }, [user?.role]); // Only run when user role changes

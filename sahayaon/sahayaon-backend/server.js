@@ -433,14 +433,14 @@ async function generateDisplayId() {
         if (!lastTicketQuery.empty) {
             const lastTicket = lastTicketQuery.docs[0].data();
             const lastDisplayId = lastTicket.display_id;
-            if (lastDisplayId && lastDisplayId.startsWith('INC')) {
-                const numPart = parseInt(lastDisplayId.substring(3));
+            if (lastDisplayId && lastDisplayId.startsWith('TT')) {
+                const numPart = parseInt(lastDisplayId.substring(2));
                 if (!isNaN(numPart)) {
                     nextIdNum = numPart + 1;
                 }
             }
         }
-        return `INC${String(nextIdNum).padStart(6, '0')}`;
+        return `TT${String(nextIdNum).padStart(6, '0')}`;
     } catch (error) {
         console.error('Error generating display ID:', error);
         throw new Error('Failed to generate ticket display ID');

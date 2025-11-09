@@ -33,21 +33,21 @@ const TicketDetailHeader = ({
                             <button
                                 onClick={handleBackClick}
                                 className="flex items-center justify-center 
-               w-12 h-8 sm:h-8 
+               w-10 h-7 sm:w-12 sm:h-8 
                border border-orange-400 hover:bg-orange-600
-               text-black text-sm hover:text-white
+               text-black text-xs sm:text-sm hover:text-white
                rounded-md shadow-md 
                transition-colors duration-150 
                "
                                 title="Back"
                             >
-                                <ArrowLeft className="w-4 h-4 sm:w-4.5 sm:h-4.5 hover:text-white" />
+                                <ArrowLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4 hover:text-white" />
                             </button>
                         </div>
                         {/* Subject line */}
-                        <div className="flex items-center min-w-0 bg-gray-50 rounded-md px-1.5 sm:px-2 py-1.5 border border-gray-200 flex-1 max-w-full overflow-hidden">
+                        <div className="flex items-center min-w-0 bg-gray-50 rounded-md px-1.5 sm:px-2 py-1 sm:py-1.5 border border-gray-200 flex-1 max-w-full overflow-hidden">
 
-                            <span className="text-base sm:text-lg lg:text-xl truncate font-medium min-w-0 flex-1 text-gray-900 tracking-tight" style={{ fontWeight: 500, color: '#111827' }}>
+                            <span className="text-sm sm:text-base md:text-lg lg:text-xl truncate font-medium min-w-0 flex-1 text-gray-900 tracking-tight" style={{ fontWeight: 500, color: '#111827' }}>
                                 {ticket.short_description || <span className="text-gray-500 italic font-normal">No subject provided</span>}
                             </span>
                         </div>
@@ -56,7 +56,7 @@ const TicketDetailHeader = ({
             </div>
             
             {/* Timeline Section below header - reduced width */}
-            <div className="w-4/5 mx-auto min-w-0 max-w-full overflow-x-hidden">
+            <div className="w-full sm:w-4/5 mx-auto min-w-0 max-w-full overflow-x-hidden px-1 sm:px-0">
                 <Timeline events={timelineEvents} />
             </div>
         </div>

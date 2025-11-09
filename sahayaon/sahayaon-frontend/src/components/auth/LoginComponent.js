@@ -426,8 +426,8 @@ const LoginComponent = ({ onLoginSuccess, navigateTo, showFlashMessage }) => {
                     backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23f3f4f6' fill-opacity='0.4'%3E%3Ccircle cx='30' cy='30' r='2'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
                     backgroundRepeat: 'repeat'
                 }}>
-                    <div className="relative z-10 flex flex-col justify-center items-center px-12 py-16 text-gray-800">
-                        <img src={require('../../assets/logo/logo.png')} alt="Company Logo" className="h-20 mb-8" />
+                    <div className="relative z-10 flex flex-col justify-center items-center px-12 py-16 text-gray-800 h-full w-full">
+                        <img src={require('../../assets/logo/Logo2.png')} alt="Company Logo" className="max-h-40 w-auto max-w-full object-contain" />
                     </div>
                     
                     {/* Footer copyright */}
@@ -442,8 +442,8 @@ const LoginComponent = ({ onLoginSuccess, navigateTo, showFlashMessage }) => {
                 <div className="w-full lg:w-1/2 xl:w-2/5 flex items-center justify-center p-4 overflow-y-auto">
                     <div className="w-full max-w-md">
                         {/* Mobile logo */}
-                        <div className="lg:hidden flex justify-center mb-4">
-                            <img src={require('../../assets/logo/logo.png')} alt="Company Logo" className="h-10" />
+                        <div className="lg:hidden flex justify-center items-center mb-6">
+                            <img src={require('../../assets/logo/Logo2.png')} alt="Company Logo" className="max-h-25 w-auto max-w-full object-contain" />
                         </div>
 
                         <div className="bg-white rounded-2xl border border-gray-100 p-6">

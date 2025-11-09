@@ -140,7 +140,21 @@ const CompactCreateTicketForm = ({
 
 
     return (
-        <div className="w-full max-w-6xl mx-auto p-5 bg-white">
+        <>
+            <style>{`
+                .compact-create-ticket-form-container {
+                    border: none !important;
+                    outline: none !important;
+                    box-shadow: none !important;
+                }
+                .compact-create-ticket-form-container:focus,
+                .compact-create-ticket-form-container:focus-within {
+                    outline: none !important;
+                    border: none !important;
+                    box-shadow: none !important;
+                }
+            `}</style>
+            <div className="compact-create-ticket-form-container w-full max-w-6xl mx-auto p-5 bg-white">
             {/* Header */}
             <div className="mb-4">
                 <h1 className="text-2xl font-bold text-gray-900 mb-1">Create New Ticket</h1>
@@ -369,6 +383,7 @@ const CompactCreateTicketForm = ({
                 </div>
             </form>
         </div>
+        </>
     );
 };
 

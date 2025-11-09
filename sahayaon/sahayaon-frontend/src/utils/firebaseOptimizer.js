@@ -389,11 +389,20 @@ export class DataManager {
         this.cache.clear();
         FirebaseCache.clearCache();
         
-        // Remove localStorage caches for tickets and ticket_counts
-        localStorage.removeItem('tickets_cache');
-        localStorage.removeItem('tickets_cache_time');
-        localStorage.removeItem('ticket_counts_cache');
-        localStorage.removeItem('ticket_counts_cache_time');
+        // Remove all localStorage caches for tickets and ticket_counts (including user-specific ones)
+        const keysToRemove = [];
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && (
+                key.includes('tickets_cache') || 
+                key.includes('ticket_counts_cache') ||
+                key.includes('ticket_detail_') ||
+                key.includes('dashboard_')
+            )) {
+                keysToRemove.push(key);
+            }
+        }
+        keysToRemove.forEach(key => localStorage.removeItem(key));
         
         // Notify subscribers that they need to refresh their data
         this.notifySubscribers('tickets', null); // Pass null to indicate refresh needed
@@ -451,7 +460,10 @@ export class DataManager {
      */
     static async getData(dataType, userId, options = {}) {
         const cacheKey = `${dataType}_${userId}`;
-        const cacheDuration = FirebaseCache.CACHE_DURATIONS[dataType.toUpperCase()] || 5 * 60 * 1000;
+        // Use shorter cache duration for ticket_counts to ensure real-time updates
+        const cacheDuration = dataType === 'ticket_counts' 
+            ? 30 * 1000  // 30 seconds for ticket counts
+            : (FirebaseCache.CACHE_DURATIONS[dataType.toUpperCase()] || 5 * 60 * 1000);
         
         // Check memory cache first
         if (this.cache.has(cacheKey)) {

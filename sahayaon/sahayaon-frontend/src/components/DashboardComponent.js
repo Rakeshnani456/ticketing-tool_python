@@ -205,6 +205,55 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
     }
   };
 
+  const markAllUpdatesAsRead = async (updates) => {
+    try {
+      const activityIds = [];
+      const ticketIds = [];
+      
+      // Separate updates by type
+      updates.forEach(update => {
+        if (update.type === 'activity') {
+          const activityId = update.id.replace('activity-', '');
+          if (!readActivities.has(activityId)) {
+            activityIds.push(activityId);
+          }
+        } else if (update.type === 'ticket') {
+          const ticketId = update.id.replace('ticket-', '');
+          if (!readTickets.has(ticketId)) {
+            ticketIds.push(ticketId);
+          }
+        }
+      });
+      
+      // Mark all at once using the batch update function
+      if (activityIds.length > 0 || ticketIds.length > 0) {
+        const updatedReadStates = await readStatesService.updateReadStates({
+          activities: [...Array.from(readActivities), ...activityIds],
+          tickets: [...Array.from(readTickets), ...ticketIds],
+          showReadActivities,
+          showReadTickets
+        });
+        
+        setReadActivities(new Set(updatedReadStates.activities || []));
+        setReadTickets(new Set(updatedReadStates.tickets || []));
+        
+        // Update localStorage
+        localStorage.setItem('dashboard_readActivities', JSON.stringify(Array.from(updatedReadStates.activities || [])));
+        localStorage.setItem('dashboard_readTickets', JSON.stringify(Array.from(updatedReadStates.tickets || [])));
+      }
+    } catch (error) {
+      console.error('Error marking all updates as read:', error);
+      // Fallback to individual updates
+      updates.forEach(update => {
+        if (update.type === 'activity') {
+          markActivityAsRead(update.id.replace('activity-', ''));
+        } else if (update.type === 'ticket') {
+          markTicketAsRead(update.id.replace('ticket-', ''));
+        }
+      });
+    }
+  };
+
   const clearReadActivities = async () => {
     try {
       const updatedReadStates = await readStatesService.updateReadStates({
@@ -1341,10 +1390,10 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
           
                      {/* In Progress - All roles can see */}
            <a 
-             href={user?.role === 'user' ? "/my-tickets?status=In Progress" : "/all-tickets?status=In Progress"}
+             href={user?.role === 'user' ? "/my-tickets?filter_status=In Progress" : "/all-tickets?filter_status=In Progress"}
              onClick={(e) => {
                e.preventDefault();
-               navigateTo(user?.role === 'user' ? '/my-tickets?status=In Progress' : '/all-tickets?status=In Progress');
+               navigateTo(user?.role === 'user' ? '/my-tickets?filter_status=In Progress' : '/all-tickets?filter_status=In Progress');
              }}
              className={`rounded-lg p-3 border cursor-pointer transition-all duration-200 hover:scale-100 transition duration-100 group relative shadow-sm block ${darkMode ? 'bg-gray-800/70 border-gray-400' : 'bg-white border-gray-300'}`}
            >
@@ -1527,6 +1576,9 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
               } else if (update.type === 'ticket') {
                 markTicketAsRead(update.id.replace('ticket-', ''));
               }
+            }}
+            onMarkAllAsRead={(updates) => {
+              markAllUpdatesAsRead(updates);
             }}
             onMarkAsUnread={(update) => {
               if (update.type === 'activity') {

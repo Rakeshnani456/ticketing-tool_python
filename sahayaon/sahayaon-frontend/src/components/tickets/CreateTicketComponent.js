@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { UploadCloud, X, AlertCircle, Send } from 'lucide-react';
+import { UploadCloud, X, AlertCircle, Send, Upload } from 'lucide-react';
 import CustomDropdown from '../common/CustomDropdown';
 
 // Import API Base URL from constants
@@ -400,12 +400,26 @@ const CreateTicketComponent = ({ user, onClose, showFlashMessage, onTicketCreate
     };
 
     return (
-        <div className="w-full min-h-[calc(100vh-48px)] bg-gray-50 flex items-start justify-center py-4">
-            <div className="w-full flex flex-col bg-white rounded-lg border border-gray-200 shadow-sm p-5">
+        <>
+            <style>{`
+                .create-ticket-form-container {
+                    border: none !important;
+                    outline: none !important;
+                    box-shadow: none !important;
+                }
+                .create-ticket-form-container:focus,
+                .create-ticket-form-container:focus-within {
+                    outline: none !important;
+                    border: none !important;
+                    box-shadow: none !important;
+                }
+            `}</style>
+            <div className="w-full min-h-[calc(100vh-48px)] bg-gray-50 flex items-start justify-center py-4">
+            <div className="create-ticket-form-container w-full flex flex-col bg-white rounded-lg p-5">
                 {/* Header */}
                 <div className="flex items-center justify-between mb-4 flex-shrink-0">
                     <div>
-                        <h1 className="text-xl font-semibold text-gray-900 tracking-wide">New Ticket</h1>
+                        <h1 className="text-xl font-semibold text-gray-900 tracking-wide">Create Ticket</h1>
                     </div>
                     <div className="text-sm text-gray-500" aria-hidden="true">* Required</div>
                 </div>
@@ -413,7 +427,7 @@ const CreateTicketComponent = ({ user, onClose, showFlashMessage, onTicketCreate
                 {/* Form Container */}
                 <form onSubmit={handleSubmit} className="flex flex-col space-y-5" noValidate>
                 {/* Small Fields Grid - 3 columns */}
-                <div className="border border-gray-200 rounded-lg p-4">
+                <div className="">
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                         {/* Requested by */}
                         <div className={`field flex flex-col ${errors.requestedBy ? 'invalid' : ''}`}>
@@ -559,7 +573,7 @@ const CreateTicketComponent = ({ user, onClose, showFlashMessage, onTicketCreate
                 </div>
 
                 {/* Subject - Full width row */}
-                <div className="border border-gray-200 rounded-lg p-4">
+                <div className="">
                     <div className="grid grid-cols-1">
                         <div className={`field flex flex-col ${errors.subject ? 'invalid' : ''}`}>
                             <label htmlFor="subject" className="block text-sm font-medium text-gray-700 mb-1.5">
@@ -594,7 +608,7 @@ const CreateTicketComponent = ({ user, onClose, showFlashMessage, onTicketCreate
                 </div>
 
                 {/* Description - Full width row */}
-                <div className="border border-gray-200 rounded-lg p-4">
+                <div className="">
                     <div className="grid grid-cols-1">
                         <div className="field flex flex-col">
                             <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1.5">
@@ -621,25 +635,38 @@ const CreateTicketComponent = ({ user, onClose, showFlashMessage, onTicketCreate
                 </div>
 
                 {/* Attachments - Full width row */}
-                <div className="border border-gray-200 rounded-lg p-4">
+                <div className="">
                     <div className="grid grid-cols-1">
                         <div className="field flex flex-col">
                             <label htmlFor="attachments" className="block text-sm font-medium text-gray-700 mb-1.5">
                                 Attachments (Optional)
                             </label>
-                            <div className="h-10 flex items-center border border-gray-300 rounded-lg overflow-hidden bg-white hover:border-gray-400 transition-colors">
-                                <input
-                                    ref={fileInputRef}
-                                    type="file"
-                                    id="attachments"
-                                    name="attachments"
-                                    multiple
-                                    onChange={handleFileChange}
+                            <input
+                                ref={fileInputRef}
+                                type="file"
+                                id="attachments"
+                                name="attachments"
+                                multiple
+                                onChange={handleFileChange}
+                                disabled={submissionStatus === 'success' || submissionStatus === 'creating'}
+                                className="hidden"
+                            />
+                            <div className="flex flex-col items-start gap-1.5">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        if (fileInputRef.current) fileInputRef.current.click();
+                                    }}
                                     disabled={submissionStatus === 'success' || submissionStatus === 'creating'}
-                                    className="w-full h-full px-3 text-sm outline-none file:mr-4 file:py-1.5 file:px-4 file:rounded-md file:border-0 file:text-xs file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 file:cursor-pointer cursor-pointer"
-                                />
+                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 hover:border-gray-400 transition-colors duration-200 disabled:opacity-60 disabled:cursor-not-allowed"
+                                >
+                                    <Upload className="w-3.5 h-3.5" />
+                                    <span>Upload Files</span>
+                                </button>
+                                <p className="text-[10px] sm:text-xs text-gray-500">
+                                    Supported: PNG, JPG, PDF, Word, Excel, ZIP (max 10MB)
+                                </p>
                             </div>
-                            <div className="text-xs text-gray-500 mt-1.5">You can attach multiple files</div>
 
                             {/* File upload area and selected files - Always visible when files are added */}
                             {attachmentFiles.length > 0 && (
@@ -704,6 +731,7 @@ const CreateTicketComponent = ({ user, onClose, showFlashMessage, onTicketCreate
                 </form>
             </div>
         </div>
+        </>
     );
 };
 

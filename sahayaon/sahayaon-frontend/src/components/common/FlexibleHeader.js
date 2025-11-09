@@ -4,7 +4,7 @@ import { Search, User, LogOut, ChevronDown, UserCircle } from 'lucide-react';
 import AdvancedSearchComponent from './AdvancedSearchComponent';
 
 // Import assets
-import KriasolLogo from '../../assets/logo/logo.png';
+import KriasolLogo from '../../assets/logo/Logo2.png';
 import phoneImg from '../../assets/icons/phone.png';
 import mailImg from '../../assets/icons/mail.png';
 
@@ -105,11 +105,11 @@ const FlexibleHeader = ({
                         <img 
                             src={KriasolLogo} 
                             alt="Sahayaon Logo" 
-                            className="h-5 w-auto transition-all duration-300 ease-in-out group-hover:scale-105"
+                            className="h-9 w-auto transition-all duration-300 ease-in-out group-hover:scale-105"
                             style={{
                                 objectFit: 'contain',
                                 display: 'block',
-                                maxHeight: '20px'
+                                maxHeight: '36px'
                             }}
                             onError={(e) => {
                                 console.error('Logo failed to load:', e);
@@ -128,6 +128,7 @@ const FlexibleHeader = ({
                     {/* Search Bar */}
                     <div className="flex-1 max-w-sm lg:max-w-md">
                         <AdvancedSearchComponent
+                            key={currentUser?.uid || 'no-user'} // Reset component when user changes
                             onSearchSubmit={onSearchSubmit}
                             navigateTo={navigateTo}
                             placeholder="Search tickets..."

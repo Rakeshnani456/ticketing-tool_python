@@ -38,11 +38,12 @@ const UpdatesComponent = ({
   darkMode = false,
   onNavigateTo,
   onMarkAsRead,
+  onMarkAllAsRead,
   onMarkAsUnread,
   readStates = { activities: new Set(), tickets: new Set() },
   showRead = true
 }) => {
-  const [filterType, setFilterType] = useState('all');
+  const [filterType, setFilterType] = useState('unread'); // Default to unread only
   const [sortBy, setSortBy] = useState('recent');
   const [expandedItems, setExpandedItems] = useState(new Set());
   const [isLoading, setIsLoading] = useState(false);
@@ -247,22 +248,22 @@ const UpdatesComponent = ({
     });
   }, [realTimeActivities, realTimeTickets, activities, tickets, readStates, sortBy]);
 
-  // Filter updates based on selected filter
+  // Filter updates based on selected filter - always filter out read updates
   const filteredUpdates = useMemo(() => {
-    if (filterType === 'all') return processedUpdates;
-    if (filterType === 'unread') return processedUpdates.filter(update => !update.isRead);
-    if (filterType === 'tickets') return processedUpdates.filter(update => update.type === 'ticket');
-    if (filterType === 'activities') return processedUpdates.filter(update => update.type === 'activity');
-    return processedUpdates;
+    // First, filter out all read updates
+    let unreadOnly = processedUpdates.filter(update => !update.isRead);
+    
+    // Then apply additional filters
+    if (filterType === 'unread') return unreadOnly;
+    if (filterType === 'tickets') return unreadOnly.filter(update => update.type === 'ticket');
+    if (filterType === 'activities') return unreadOnly.filter(update => update.type === 'activity');
+    return unreadOnly;
   }, [processedUpdates, filterType]);
 
-  // Show only unread if showRead is false
+  // Always show only unread updates
   const displayUpdates = useMemo(() => {
-    if (!showRead) {
-      return filteredUpdates.filter(update => !update.isRead);
-    }
-    return filteredUpdates;
-  }, [filteredUpdates, showRead]);
+    return filteredUpdates.filter(update => !update.isRead);
+  }, [filteredUpdates]);
 
   // Helper functions
   function getActivityCategory(type) {
@@ -473,6 +474,20 @@ const UpdatesComponent = ({
     }
   }
 
+  function handleMarkAllAsRead() {
+    if (onMarkAllAsRead && displayUpdates.length > 0) {
+      // Use batch mark all function if available
+      onMarkAllAsRead(displayUpdates);
+    } else if (onMarkAsRead && displayUpdates.length > 0) {
+      // Fallback to individual updates if batch function not available
+      displayUpdates.forEach(update => {
+        if (!update.isRead) {
+          onMarkAsRead(update);
+        }
+      });
+    }
+  }
+
   function handleMarkAsUnread(update) {
     if (onMarkAsUnread) {
       onMarkAsUnread(update);
@@ -512,13 +527,26 @@ const UpdatesComponent = ({
           </div>
           
           <div className="flex items-center gap-2">
+            {/* Mark All as Read Button */}
+            {displayUpdates.length > 0 && (
+              <TooltipBubble title="Mark all updates as read">
+                <button
+                  onClick={handleMarkAllAsRead}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 bg-white rounded-md hover:bg-gray-50 transition-colors duration-200 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 border-0"
+                  style={{ outline: 'none', border: 'none' }}
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  <span>Mark All Read</span>
+                </button>
+              </TooltipBubble>
+            )}
+
             {/* Filter Dropdown */}
             <CustomDropdown
               value={filterType}
               onChange={setFilterType}
               options={[
-                { value: "all", label: "All Updates" },
-                { value: "unread", label: "Unread Only" },
+                { value: "unread", label: "All Unread" },
                 { value: "tickets", label: "Tickets" },
                 { value: "activities", label: "Activities" }
               ]}
@@ -569,9 +597,6 @@ const UpdatesComponent = ({
                         <div className={`p-2 rounded-lg ${update.color.replace('text-', 'bg-').replace('-600', '-100')} shadow-sm`}>
                           <IconComponent className={`w-4 h-4 ${update.color}`} />
                         </div>
-                        {!update.isRead && (
-                          <div className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-gray-600 rounded-full border-2 border-white shadow-sm"></div>
-                        )}
                       </div>
 
                       {/* Main Content Area */}
@@ -602,12 +627,6 @@ const UpdatesComponent = ({
                                 {update.status}
                               </span>
                             )}
-                            {!update.isRead ? (
-                              <div className="flex items-center gap-1.5 px-2 py-0.5 bg-gray-100 rounded-md text-xs border border-gray-200">
-                                <div className="w-1.5 h-1.5 bg-gray-600 rounded-full"></div>
-                                <span className="font-medium text-gray-700">New</span>
-                              </div>
-                            ) : null}
                           </div>
                         </div>
 
@@ -692,25 +711,14 @@ const UpdatesComponent = ({
                         </TooltipBubble>
                       )}
                       
-                      {!update.isRead ? (
-                        <TooltipBubble title="Mark as Read">
-                          <button
-                            onClick={() => handleMarkAsRead(update)}
-                            className="p-1.5 hover:bg-green-100 rounded text-green-600 transition-all duration-200"
-                          >
-                            <Check className="w-4 h-4" />
-                          </button>
-                        </TooltipBubble>
-                      ) : (
-                        <TooltipBubble title="Mark as Unread">
-                          <button
-                            onClick={() => handleMarkAsUnread(update)}
-                            className="p-1.5 hover:bg-gray-100 rounded text-gray-600 transition-all duration-200"
-                          >
-                            <EyeOff className="w-4 h-4" />
-                          </button>
-                        </TooltipBubble>
-                      )}
+                      <TooltipBubble title="Mark as Read">
+                        <button
+                          onClick={() => handleMarkAsRead(update)}
+                          className="p-1.5 hover:bg-green-100 rounded text-green-600 transition-all duration-200"
+                        >
+                          <Check className="w-4 h-4" />
+                        </button>
+                      </TooltipBubble>
                     </div>
                   </div>
                 </motion.div>

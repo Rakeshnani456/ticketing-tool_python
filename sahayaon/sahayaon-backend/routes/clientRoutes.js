@@ -4,35 +4,48 @@ const router = express.Router();
 
 module.exports = (db, clientsCollection, usersCollection, verifyFirebaseToken) => {
 
-    // GET /api/clients - Get all clients (super_admin only)
+    // GET /api/clients - Get all clients (super_admin, support, engineer can access)
     router.get('/', verifyFirebaseToken, async (req, res) => {
         try {
             // Check if user has permission to access clients
-            if (req.user.role !== 'super_admin') {
+            const allowedRoles = ['super_admin', 'support', 'engineer'];
+            if (!allowedRoles.includes(req.user.role)) {
                 return res.status(403).json({ error: 'Insufficient permissions to access clients data' });
             }
 
             const clientsSnapshot = await clientsCollection.get();
+            const isSuperAdmin = req.user.role === 'super_admin';
+            
             const clients = clientsSnapshot.docs.map(doc => {
                 const data = doc.data();
-                return {
-                    id: doc.id,
-                    companyName: data.companyName || '',
-                    website: data.website || '',
-                    location: data.location || '',
-                    clientContactNumber: data.clientContactNumber || '',
-                    authFirstName: data.authFirstName || '',
-                    authLastName: data.authLastName || '',
-                    authContactNumber: data.authContactNumber || '',
-                    authOfficeEmail: data.authOfficeEmail || '',
-                    authPersonalEmail: data.authPersonalEmail || '',
-                    authDesignation: data.authDesignation || '',
-                    siteFirstName: data.siteFirstName || '',
-                    siteLastName: data.siteLastName || '',
-                    siteEmail: data.siteEmail || '',
-                    siteContactNumber: data.siteContactNumber || '',
-                    siteDesignation: data.siteDesignation || ''
-                };
+                // For super_admin, return full client data
+                if (isSuperAdmin) {
+                    return {
+                        id: doc.id,
+                        companyName: data.companyName || '',
+                        website: data.website || '',
+                        location: data.location || '',
+                        clientContactNumber: data.clientContactNumber || '',
+                        authFirstName: data.authFirstName || '',
+                        authLastName: data.authLastName || '',
+                        authContactNumber: data.authContactNumber || '',
+                        authOfficeEmail: data.authOfficeEmail || '',
+                        authPersonalEmail: data.authPersonalEmail || '',
+                        authDesignation: data.authDesignation || '',
+                        siteFirstName: data.siteFirstName || '',
+                        siteLastName: data.siteLastName || '',
+                        siteEmail: data.siteEmail || '',
+                        siteContactNumber: data.siteContactNumber || '',
+                        siteDesignation: data.siteDesignation || ''
+                    };
+                } else {
+                    // For support and engineer, return only companyName and id for filtering
+                    return {
+                        id: doc.id,
+                        companyName: data.companyName || '',
+                        'Client name': data.companyName || '' // Also include 'Client name' key for compatibility
+                    };
+                }
             });
             res.json(clients);
         } catch (err) {

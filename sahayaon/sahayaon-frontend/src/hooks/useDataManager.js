@@ -1,7 +1,7 @@
 // Custom hook for centralized data management with websockets and caching
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { DataManager } from '../utils/firebaseOptimizer';
-import { collection, query, where, orderBy, limit, getDocs } from 'firebase/firestore';
+import { collection, query, where, orderBy, limit, getDocs, onSnapshot } from 'firebase/firestore';
 import { dbClient } from '../config/firebase';
 
 /**
@@ -98,7 +98,8 @@ export const useDataManager = (dataType, userId, options = {}) => {
     const isMountedRef = useRef(true);
     const lastRefreshTimeRef = useRef(0);
     const refreshDebounceTimerRef = useRef(null);
-    const MIN_REFRESH_INTERVAL = 3000; // Minimum 3 seconds between refreshes from WebSocket updates
+    const MIN_REFRESH_INTERVAL = dataType === 'ticket_counts' ? 500 : 3000; // Faster refresh for ticket counts (500ms vs 3s)
+    const DEBOUNCE_DELAY = dataType === 'ticket_counts' ? 300 : 1500; // Faster debounce for ticket counts (300ms vs 1.5s)
 
     // Cleanup on unmount
     useEffect(() => {
@@ -182,7 +183,7 @@ export const useDataManager = (dataType, userId, options = {}) => {
                                 lastRefreshTimeRef.current = Date.now();
                                 getInitialData();
                             }
-                        }, 1500); // Wait 1.5 seconds to batch multiple updates
+                        }, DEBOUNCE_DELAY); // Use dynamic debounce delay
                     } else {
                         console.log(`⏸️ Skipping ${dataType} refresh - too soon (${Math.round(timeSinceLastRefresh / 1000)}s ago)`);
                     }
@@ -253,15 +254,210 @@ export const useTickets = (userId, userRole, clientName) => {
 };
 
 /**
- * Hook specifically for ticket counts
+ * Hook specifically for ticket counts - uses real-time Firestore snapshots only (no polling)
  */
 export const useTicketCounts = (userId, userRole, clientName) => {
-    const options = useMemo(() => ({
-        userRole,
-        clientName
-    }), [userRole, clientName]);
-    
-    return useDataManager('ticket_counts', userId, options);
+    const [counts, setCounts] = useState({ active_tickets: 0, assigned_to_me: 0, total_tickets: 0, my_tickets: 0 });
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const unsubscribesRef = useRef([]);
+    const snapshotDataRef = useRef({
+        active: null,
+        myTickets: null,
+        assignedToMe: null,
+        total: null
+    });
+    const isMountedRef = useRef(true);
+    const userEmailRef = useRef(null);
+
+    useEffect(() => {
+        isMountedRef.current = true;
+        return () => {
+            isMountedRef.current = false;
+            // Cleanup all listeners
+            unsubscribesRef.current.forEach(unsub => unsub());
+            unsubscribesRef.current = [];
+        };
+    }, []);
+
+    // Helper to update counts when any snapshot changes
+    const updateCounts = useCallback(() => {
+        if (!isMountedRef.current) return;
+        
+        const { active, myTickets, assignedToMe, total } = snapshotDataRef.current;
+        
+        if (active && myTickets && total) {
+            const newCounts = {
+                active_tickets: active.size,
+                my_tickets: myTickets.size,
+                assigned_to_me: (assignedToMe?.size || 0),
+                total_tickets: total.size
+            };
+            setCounts(newCounts);
+            setLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        if (!userId || !userRole) {
+            setLoading(false);
+            return;
+        }
+
+        setLoading(true);
+        setError(null);
+        
+        // Clear previous listeners
+        unsubscribesRef.current.forEach(unsub => unsub());
+        unsubscribesRef.current = [];
+        snapshotDataRef.current = {
+            active: null,
+            myTickets: null,
+            assignedToMe: null,
+            total: null
+        };
+
+        const ticketsRef = collection(dbClient, 'tickets');
+        const usersRef = collection(dbClient, 'users');
+
+        try {
+            // Get user email first (one-time fetch)
+            const userQuery = query(usersRef, where('uid', '==', userId));
+            getDocs(userQuery).then((userSnapshot) => {
+                if (!isMountedRef.current) return;
+                userEmailRef.current = userSnapshot.empty ? null : userSnapshot.docs[0]?.data()?.email;
+                
+                // Build queries based on role
+                let activeQuery, totalQuery;
+                
+                if (userRole === 'site_admin' && clientName) {
+                    activeQuery = query(
+                        ticketsRef,
+                        where('client_name', '==', clientName),
+                        where('status', 'in', ['Open', 'In Progress', 'Hold'])
+                    );
+                    totalQuery = activeQuery; // Same query for site_admin
+                } else {
+                    activeQuery = query(
+                        ticketsRef,
+                        where('status', 'in', ['Open', 'In Progress', 'Hold'])
+                    );
+                    totalQuery = activeQuery; // Same query for non-site_admin
+                }
+
+                const myTicketsQuery = query(
+                    ticketsRef,
+                    where('reporter_id', '==', userId),
+                    where('status', 'in', ['Open', 'In Progress', 'Hold'])
+                );
+
+                // Set up active tickets listener
+                const activeUnsub = onSnapshot(
+                    activeQuery,
+                    (snapshot) => {
+                        if (!isMountedRef.current) return;
+                        snapshotDataRef.current.active = snapshot;
+                        updateCounts();
+                    },
+                    (err) => {
+                        if (isMountedRef.current) {
+                            console.error('Error in active tickets snapshot:', err);
+                            setError(err.message);
+                            setLoading(false);
+                        }
+                    }
+                );
+
+                // Set up my tickets listener
+                const myTicketsUnsub = onSnapshot(
+                    myTicketsQuery,
+                    (snapshot) => {
+                        if (!isMountedRef.current) return;
+                        snapshotDataRef.current.myTickets = snapshot;
+                        updateCounts();
+                    },
+                    (err) => {
+                        if (isMountedRef.current) {
+                            console.error('Error in my tickets snapshot:', err);
+                            setError(err.message);
+                            setLoading(false);
+                        }
+                    }
+                );
+
+                // Set up total tickets listener (same as active for most roles)
+                const totalUnsub = onSnapshot(
+                    totalQuery,
+                    (snapshot) => {
+                        if (!isMountedRef.current) return;
+                        snapshotDataRef.current.total = snapshot;
+                        updateCounts();
+                    },
+                    (err) => {
+                        if (isMountedRef.current) {
+                            console.error('Error in total tickets snapshot:', err);
+                            setError(err.message);
+                            setLoading(false);
+                        }
+                    }
+                );
+
+                // Set up assigned to me listener (only for support roles)
+                if (['support', 'engineer', 'senior_engineer', 'lead_engineer', 'principal_engineer', 'admin', 'super_admin', 'site_admin'].includes(userRole) && userEmailRef.current) {
+                    const assignedToMeQuery = query(
+                        ticketsRef,
+                        where('assigned_to_email', '==', userEmailRef.current),
+                        where('status', 'in', ['Open', 'In Progress', 'Hold'])
+                    );
+                    
+                    const assignedUnsub = onSnapshot(
+                        assignedToMeQuery,
+                        (snapshot) => {
+                            if (!isMountedRef.current) return;
+                            snapshotDataRef.current.assignedToMe = snapshot;
+                            updateCounts();
+                        },
+                        (err) => {
+                            if (isMountedRef.current) {
+                                console.error('Error in assigned to me snapshot:', err);
+                                setError(err.message);
+                                setLoading(false);
+                            }
+                        }
+                    );
+                    unsubscribesRef.current.push(assignedUnsub);
+                } else {
+                    // No assigned tickets for this user
+                    snapshotDataRef.current.assignedToMe = { size: 0 };
+                }
+
+                unsubscribesRef.current.push(activeUnsub, myTicketsUnsub, totalUnsub);
+            }).catch((err) => {
+                if (isMountedRef.current) {
+                    console.error('Error fetching user email:', err);
+                    setError(err.message);
+                    setLoading(false);
+                }
+            });
+
+        } catch (err) {
+            if (isMountedRef.current) {
+                console.error('Error setting up ticket count listeners:', err);
+                setError(err.message);
+                setLoading(false);
+            }
+        }
+    }, [userId, userRole, clientName, updateCounts]);
+
+    return {
+        data: counts,
+        loading,
+        error,
+        refresh: () => {
+            // Real-time snapshots automatically update - no manual refresh needed
+            console.log('Real-time snapshots automatically update');
+        }
+    };
 };
 
 /**

@@ -549,10 +549,9 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
         return () => window.removeEventListener('ticket-autosave', handler);
     }, [canEdit, hasChanges]);
 
-    const editableInitRef = useRef(false);
-
+    // Initialize editableFields when ticket loads (for users who can edit)
     useEffect(() => {
-        if (isEditing && ticket && !editableInitRef.current) {
+        if (ticket && canEdit) {
             setEditableFields({
                 short_description: ticket.short_description || '',
                 long_description: ticket.long_description || '',
@@ -562,14 +561,8 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                 closed_by_email: ticket.closed_by_email || '',
                 category: ticket.category || '',
             });
-            setClosureNotes(ticket.closure_notes || '');
-            setTimeSpent(ticket.time_spent || '');
-            editableInitRef.current = true;
         }
-        if (!isEditing) {
-            editableInitRef.current = false;
-        }
-    }, [isEditing, ticket]);
+    }, [ticket, canEdit]);
 
     // Initialize time_spent and closure_notes when ticket loads (regardless of editing mode)
     useEffect(() => {
@@ -579,8 +572,9 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
         }
     }, [ticket]);
 
+    // Load support users when canEdit is true (not just when editing)
     useEffect(() => {
-        if (isEditing && (isSupportUser || isEngineer)) {
+        if (canEdit && (isSupportUser || isEngineer)) {
             setSupportUsersLoading(true);
             user.firebaseUser.getIdToken()
                 .then(idToken => {
@@ -612,7 +606,7 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                     setSupportUsersLoading(false);
                 });
         }
-    }, [isEditing, isSupportUser, isEngineer, user]);
+    }, [canEdit, isSupportUser, isEngineer, user]);
 
     // Disable auto-enable editing - now controlled by Update button
     // Only disable editing if ticket is closed/resolved
@@ -653,7 +647,7 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
 
     // Handle Confirm Update - batch save all pending changes
     const handleConfirmUpdate = useCallback(async () => {
-        if (!ticket || !canEdit || !isEditing) return;
+        if (!ticket || !canEdit) return;
 
         // Check if trying to resolve or cancel
         if (editableFields.status === 'Resolved') {
@@ -704,9 +698,8 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                 updates.assigned_to_email = editableFields.assigned_to_email || null;
             }
 
-            // If no changes, just exit edit mode
+            // If no changes, just return
             if (Object.keys(updates).length === 0) {
-                setIsEditing(false);
                 setUpdateModeLoading(false);
                 return;
             }
@@ -727,7 +720,8 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
             if (response.ok) {
                 // Update local state
                 setTicket(prev => prev ? ({ ...prev, ...updates, updated_at: new Date().toISOString() }) : prev);
-                setIsEditing(false);
+                // Update editableFields to match the saved values
+                setEditableFields(prev => ({ ...prev, ...updates }));
                 setPendingFieldUpdates({});
                 showFlashMessage('Ticket updated successfully!', 'success');
             } else {
@@ -739,11 +733,11 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
         } finally {
             setUpdateModeLoading(false);
         }
-    }, [ticket, canEdit, isEditing, editableFields, user, ticketId, showFlashMessage]);
+    }, [ticket, canEdit, editableFields, user, ticketId, showFlashMessage]);
 
-    // Handle individual field updates - only update local state when in edit mode (no auto-save)
+    // Handle individual field updates - update local state (no auto-save)
     const handleFieldUpdate = useCallback((fieldName, value) => {
-        if (!ticket || !canEdit || !isEditing) return;
+        if (!ticket || !canEdit) return;
 
         // INTERCEPT: If trying to resolve ticket, immediately open the resolution modal
         if (fieldName === 'status' && value === 'Resolved') {
@@ -765,7 +759,7 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
             return;
         }
 
-        // When in update mode, only update local state (no auto-save)
+        // Update local state (no auto-save)
         setEditableFields(prev => ({ ...prev, [fieldName]: value }));
         setPendingFieldUpdates(prev => ({ ...prev, [fieldName]: value }));
         
@@ -774,7 +768,7 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
             ...prev,
             [fieldName]: { loading: false, success: false, error: false }
         }));
-    }, [ticket, canEdit, isEditing, editableFields, showFlashMessage, user, timeSpent, closureNotes]);
+    }, [ticket, canEdit, editableFields, showFlashMessage, user, timeSpent, closureNotes]);
 
     const handleButtonSelection = useCallback((field, value) => {
         setEditableFields(prev => {
@@ -1048,7 +1042,6 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
         });
         setClosureNotes(ticket.closure_notes || '');
         setTimeSpent(ticket.time_spent || '');
-        setIsEditing(false);
         setSaveButtonState('save');
         setAssignedToErrorMessage('');
         setClosureNotesErrorMessage('');
@@ -1399,7 +1392,7 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                 />
 
                 {/* Main Content Area - Split into two columns for details and progress */}
-                <div className="grid grid-cols-1 lg:grid-cols-10 gap-6">
+                <div className="grid grid-cols-1 lg:grid-cols-10 gap-4 sm:gap-6">
                     {/* Left Column: Ticket Details and Descriptions */}
                     <div className="lg:col-span-7">
                         <TicketDetailsSection
@@ -1456,7 +1449,6 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                             attemptedHoldWithoutComment={attemptedHoldWithoutComment}
                             fieldUpdateStates={fieldUpdateStates}
                             handleFieldUpdate={handleFieldUpdate}
-                            onUpdateClick={handleUpdateClick}
                             onConfirmUpdate={handleConfirmUpdate}
                             updateModeLoading={updateModeLoading}
                         />
@@ -1464,7 +1456,7 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                 </div>
 
                 {/* Updates Section (Comments & Closure Tabs) */}
-                <div className="w-full mt-6">
+                <div className="w-full mt-4 sm:mt-6">
                     <TicketUpdatesSection
                         ticket={ticket}
                         activeTab={activeTab}

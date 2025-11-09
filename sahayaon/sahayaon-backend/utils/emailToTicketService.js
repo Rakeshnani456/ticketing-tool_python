@@ -441,7 +441,7 @@ class EmailToTicketService {
                 return nextNumber;
             });
             
-            const displayId = `INC${result.toString().padStart(6, '0')}`;
+            const displayId = `TT${result.toString().padStart(6, '0')}`;
             console.log(`🎫 Generated display ID: ${displayId}`);
             return displayId;
             
@@ -460,8 +460,8 @@ class EmailToTicketService {
                 const lastTicket = lastTicketQuery.docs[0].data();
                 const lastDisplayId = lastTicket.display_id;
                 
-                if (lastDisplayId && lastDisplayId.startsWith('INC')) {
-                    const numberPart = lastDisplayId.substring(3);
+                if (lastDisplayId && lastDisplayId.startsWith('TT')) {
+                    const numberPart = lastDisplayId.substring(2);
                     const lastNumber = parseInt(numberPart, 10);
                     if (!isNaN(lastNumber) && lastNumber > 0) {
                         nextNumber = lastNumber + 1;
@@ -473,7 +473,7 @@ class EmailToTicketService {
                 nextNumber = 1;
             }
             
-            const displayId = `INC${nextNumber.toString().padStart(6, '0')}`;
+            const displayId = `TT${nextNumber.toString().padStart(6, '0')}`;
             return displayId;
         }
     }

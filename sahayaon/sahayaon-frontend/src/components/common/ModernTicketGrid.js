@@ -354,7 +354,7 @@ const ModernTicketGrid = ({
               <TableHeader sortable sortDirection={sortConfig.key === 'reporter_email' ? sortConfig.direction : null} onSort={() => handleSort('reporter_email')}>
                 Requested by
               </TableHeader>
-              {(user?.role === 'super_admin' || user?.role === 'engineer') && (
+              {(user?.role === 'super_admin' || user?.role === 'engineer' || user?.role === 'support') && (
                 <TableHeader sortable sortDirection={sortConfig.key === 'client_name' ? sortConfig.direction : null} onSort={() => handleSort('client_name')}>
                   Client
                 </TableHeader>
@@ -442,7 +442,7 @@ const ModernTicketGrid = ({
                       <span className="ticket-meta truncate text-sm text-gray-800" style={{ fontWeight: 500 }}>{ticket.reporter_email || ticket.requested_by || 'N/A'}</span>
                     </div>
                   </TableCell>
-                  {(user?.role === 'super_admin' || user?.role === 'engineer') && (
+                  {(user?.role === 'super_admin' || user?.role === 'engineer' || user?.role === 'support') && (
                     <TableCell>
                       <span className="ticket-meta text-sm text-gray-800" style={{ fontWeight: 500 }}>{ticket.client_name || ''}</span>
                     </TableCell>

@@ -91,7 +91,7 @@ import cookieManager from './utils/cookieManager';
 import CookieConsentBanner from './components/common/CookieConsentBanner';
 
 // Import local logo image
-import KriasolLogo from './assets/logo/logo.png';
+import KriasolLogo from './assets/logo/Logo2.png';
 import FabLogo from './assets/logo/FabLogo.png';
 
 // SVG imports (ensure these paths are correct and icons exist)
@@ -263,7 +263,7 @@ const AppContent = () => {
     const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
     // State to control the visibility of the support dropdown menu
     const [isSupportMenuOpen, setIsSupportMenuOpen] = useState(false);
-    // Use centralized data management for ticket counts
+    // Use real-time Firestore snapshots for ticket counts (no polling, no manual refresh needed)
     const { data: ticketCountsData, loading: ticketCountsLoading, error: ticketCountsError } = useTicketCounts(currentUser?.uid, currentUser?.role, currentUser?.client_name);
     
     // Update ticket counts state when data changes
@@ -280,6 +280,11 @@ const AppContent = () => {
             });
         }
     }, [ticketCountsData]);
+
+    // Clear search keyword when user changes (logout/login)
+    useEffect(() => {
+        setSearchKeyword('');
+    }, [currentUser?.uid]);
 
     // NEW STATES FOR NOTIFICATIONS
     const [notifications, setNotifications] = useState([]);
@@ -712,9 +717,10 @@ const AppContent = () => {
         } finally {
             setIsProfileMenuOpen(false); // Close profile menu
             setIsNotificationMenuOpen(false); // Close notification menu
-                setTicketCounts({ active_tickets: 0, assigned_to_me: 0, total_tickets: 0 }); // Reset counts
-                setNotifications([]); // Clear notifications
-                setHasNewNotifications(false); // Clear new notification flag
+            setTicketCounts({ active_tickets: 0, assigned_to_me: 0, total_tickets: 0 }); // Reset counts
+            setNotifications([]); // Clear notifications
+            setHasNewNotifications(false); // Clear new notification flag
+            setSearchKeyword(''); // Clear search keyword on logout
         }
     };
 
@@ -772,11 +778,12 @@ const AppContent = () => {
 
     /**
      * Callback function for when a new ticket is successfully created.
-     * Triggers a refresh of ticket lists and counts, and new notification fetch.
+     * Ticket counts update automatically via real-time Firestore snapshots.
      * @returns {void}
      */
     const handleTicketCreated = () => {
         setTicketListRefreshKey(prev => prev + 1); // Refresh ticket lists
+        // Ticket counts update automatically via real-time Firestore snapshots - no manual refresh needed
         // Notifications are now handled by centralized data management
         // Invalidate AllTicketsComponent cache
         if (window.refreshAllTicketsCache) {
@@ -1376,21 +1383,23 @@ const AppContent = () => {
                                         <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate" style={{ color: location.pathname === '/engineer-management' ? '#ffffff' : '#d1d5db' }}>Engineers</motion.span>
                                     </Link>
 
-                                    {/* Personal Notes */}
-                                    <Link to="/personal-notes" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/personal-notes' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
-                                        { !isSidebarExpanded ? (
-                                            <LeftMenuTooltipBubble title="My Notes">
-                                                <div className="flex items-center justify-center w-7 h-7">
-                                                    <img src={writingIcon} alt="My Notes" className="w-6 h-6 flex-shrink-0" style={{ filter: location.pathname === '/personal-notes' ? 'brightness(0) invert(1)' : 'brightness(0) saturate(100%) invert(84%) sepia(8%) saturate(239%) hue-rotate(169deg) brightness(95%) contrast(88%)' }} />
+                                    {/* Personal Notes - hidden for site_admin */}
+                                    {currentUser.role !== 'site_admin' && (
+                                        <Link to="/personal-notes" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/personal-notes' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                            { !isSidebarExpanded ? (
+                                                <LeftMenuTooltipBubble title="My Notes">
+                                                    <div className="flex items-center justify-center w-7 h-7">
+                                                        <img src={writingIcon} alt="My Notes" className="w-6 h-6 flex-shrink-0" style={{ filter: location.pathname === '/personal-notes' ? 'brightness(0) invert(1)' : 'brightness(0) saturate(100%) invert(84%) sepia(8%) saturate(239%) hue-rotate(169deg) brightness(95%) contrast(88%)' }} />
+                                                    </div>
+                                                </LeftMenuTooltipBubble>
+                                            ) : (
+                                                <div className="flex items-center justify-center w-5 h-5 mr-3">
+                                                    <img src={writingIcon} alt="My Notes" className="w-5 h-5 flex-shrink-0" style={{ filter: location.pathname === '/personal-notes' ? 'brightness(0) invert(1)' : 'brightness(0) saturate(100%) invert(84%) sepia(8%) saturate(239%) hue-rotate(169deg) brightness(95%) contrast(88%)' }} />
                                                 </div>
-                                            </LeftMenuTooltipBubble>
-                                        ) : (
-                                            <div className="flex items-center justify-center w-5 h-5 mr-3">
-                                                <img src={writingIcon} alt="My Notes" className="w-5 h-5 flex-shrink-0" style={{ filter: location.pathname === '/personal-notes' ? 'brightness(0) invert(1)' : 'brightness(0) saturate(100%) invert(84%) sepia(8%) saturate(239%) hue-rotate(169deg) brightness(95%) contrast(88%)' }} />
-                                            </div>
-                                        )}
-                                        <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate" style={{ color: location.pathname === '/personal-notes' ? '#ffffff' : '#d1d5db' }}>My Notes</motion.span>
-                                    </Link>
+                                            )}
+                                            <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate" style={{ color: location.pathname === '/personal-notes' ? '#ffffff' : '#d1d5db' }}>My Notes</motion.span>
+                                        </Link>
+                                    )}
 
                                     {/* Settings - HIDDEN FOR NOW */}
                                     {/* <Link to="/settings" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/settings' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
@@ -1456,21 +1465,23 @@ const AppContent = () => {
                                         </span>
                                     </Link>
                                     
-                                    {/* Personal Notes */}
-                                    <Link to="/personal-notes" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/personal-notes' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
-                                        { !isSidebarExpanded ? (
-                                            <LeftMenuTooltipBubble title="My Notes">
-                                                <div className="flex items-center justify-center w-7 h-7">
-                                                    <img src={writingIcon} alt="My Notes" className="w-6 h-6 flex-shrink-0" style={{ filter: location.pathname === '/personal-notes' ? 'brightness(0) invert(1)' : 'brightness(0) saturate(100%) invert(84%) sepia(8%) saturate(239%) hue-rotate(169deg) brightness(95%) contrast(88%)' }} />
+                                    {/* Personal Notes - hidden for site_admin */}
+                                    {currentUser.role !== 'site_admin' && (
+                                        <Link to="/personal-notes" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/personal-notes' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                            { !isSidebarExpanded ? (
+                                                <LeftMenuTooltipBubble title="My Notes">
+                                                    <div className="flex items-center justify-center w-7 h-7">
+                                                        <img src={writingIcon} alt="My Notes" className="w-6 h-6 flex-shrink-0" style={{ filter: location.pathname === '/personal-notes' ? 'brightness(0) invert(1)' : 'brightness(0) saturate(100%) invert(84%) sepia(8%) saturate(239%) hue-rotate(169deg) brightness(95%) contrast(88%)' }} />
+                                                    </div>
+                                                </LeftMenuTooltipBubble>
+                                            ) : (
+                                                <div className="flex items-center justify-center w-5 h-5 mr-3">
+                                                    <img src={writingIcon} alt="My Notes" className="w-5 h-5 flex-shrink-0" style={{ filter: location.pathname === '/personal-notes' ? 'brightness(0) invert(1)' : 'brightness(0) saturate(100%) invert(84%) sepia(8%) saturate(239%) hue-rotate(169deg) brightness(95%) contrast(88%)' }} />
                                                 </div>
-                                            </LeftMenuTooltipBubble>
-                                        ) : (
-                                            <div className="flex items-center justify-center w-5 h-5 mr-3">
-                                                <img src={writingIcon} alt="My Notes" className="w-5 h-5 flex-shrink-0" style={{ filter: location.pathname === '/personal-notes' ? 'brightness(0) invert(1)' : 'brightness(0) saturate(100%) invert(84%) sepia(8%) saturate(239%) hue-rotate(169deg) brightness(95%) contrast(88%)' }} />
-                                            </div>
-                                        )}
-                                        <span className={`whitespace-nowrap overflow-hidden ${isSidebarExpanded ? 'opacity-100 w-auto' : 'opacity-0 w-0'}`} style={{ color: location.pathname === '/personal-notes' ? '#ffffff' : '#d1d5db' }}>My Notes</span>
-                                    </Link>
+                                            )}
+                                            <span className={`whitespace-nowrap overflow-hidden ${isSidebarExpanded ? 'opacity-100 w-auto' : 'opacity-0 w-0'}`} style={{ color: location.pathname === '/personal-notes' ? '#ffffff' : '#d1d5db' }}>My Notes</span>
+                                        </Link>
+                                    )}
 
                                     {/* Settings - HIDDEN FOR NOW */}
                                     {/* <Link to="/settings" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/settings' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
@@ -1585,21 +1596,23 @@ const AppContent = () => {
                                         <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate" style={{ color: (location.pathname === '/user-management' || location.pathname.startsWith('/user-management/')) ? '#ffffff' : '#d1d5db' }}>Users</motion.span>
                                     </Link>
                                     
-                                    {/* Personal Notes */}
-                                    <Link to="/personal-notes" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/personal-notes' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
-                                        { !isSidebarExpanded ? (
-                                            <LeftMenuTooltipBubble title="My Notes">
-                                                <div className="flex items-center justify-center w-7 h-7">
-                                                    <img src={writingIcon} alt="My Notes" className="w-6 h-6 flex-shrink-0" style={{ filter: location.pathname === '/personal-notes' ? 'brightness(0) invert(1)' : 'brightness(0) saturate(100%) invert(84%) sepia(8%) saturate(239%) hue-rotate(169deg) brightness(95%) contrast(88%)' }} />
+                                    {/* Personal Notes - hidden for site_admin */}
+                                    {currentUser.role !== 'site_admin' && (
+                                        <Link to="/personal-notes" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/personal-notes' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                            { !isSidebarExpanded ? (
+                                                <LeftMenuTooltipBubble title="My Notes">
+                                                    <div className="flex items-center justify-center w-7 h-7">
+                                                        <img src={writingIcon} alt="My Notes" className="w-6 h-6 flex-shrink-0" style={{ filter: location.pathname === '/personal-notes' ? 'brightness(0) invert(1)' : 'brightness(0) saturate(100%) invert(84%) sepia(8%) saturate(239%) hue-rotate(169deg) brightness(95%) contrast(88%)' }} />
+                                                    </div>
+                                                </LeftMenuTooltipBubble>
+                                            ) : (
+                                                <div className="flex items-center justify-center w-5 h-5 mr-3">
+                                                    <img src={writingIcon} alt="My Notes" className="w-5 h-5 flex-shrink-0" style={{ filter: location.pathname === '/personal-notes' ? 'brightness(0) invert(1)' : 'brightness(0) saturate(100%) invert(84%) sepia(8%) saturate(239%) hue-rotate(169deg) brightness(95%) contrast(88%)' }} />
                                                 </div>
-                                            </LeftMenuTooltipBubble>
-                                        ) : (
-                                            <div className="flex items-center justify-center w-5 h-5 mr-3">
-                                                <img src={writingIcon} alt="My Notes" className="w-5 h-5 flex-shrink-0" style={{ filter: location.pathname === '/personal-notes' ? 'brightness(0) invert(1)' : 'brightness(0) saturate(100%) invert(84%) sepia(8%) saturate(239%) hue-rotate(169deg) brightness(95%) contrast(88%)' }} />
-                                            </div>
-                                        )}
-                                        <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate" style={{ color: location.pathname === '/personal-notes' ? '#ffffff' : '#d1d5db' }}>My Notes</motion.span>
-                                    </Link>
+                                            )}
+                                            <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate" style={{ color: location.pathname === '/personal-notes' ? '#ffffff' : '#d1d5db' }}>My Notes</motion.span>
+                                        </Link>
+                                    )}
 
                                     {/* Settings - HIDDEN FOR NOW */}
                                     {/* <Link to="/settings" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/settings' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
@@ -1888,8 +1901,8 @@ const AppContent = () => {
                                         <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate" style={{ color: location.pathname === '/create-ticket' ? '#ffffff' : '#d1d5db' }}>Create Ticket</motion.span>
                                     </Link>
                                     
-                                    {/* Personal Notes - hidden for 'user' role */}
-                                    {currentUser.role !== 'user' && (
+                                    {/* Personal Notes - hidden for 'user' and 'site_admin' roles */}
+                                    {currentUser.role !== 'user' && currentUser.role !== 'site_admin' && (
                                         <Link to="/personal-notes" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/personal-notes' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                             { !isSidebarExpanded ? (
                                                 <LeftMenuTooltipBubble title="My Notes">

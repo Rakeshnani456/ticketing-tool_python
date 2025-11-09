@@ -1,7 +1,7 @@
 // src/components/tickets/TicketDetailsSection.js
 
 import React from 'react';
-import { User, Calendar, Info, Paperclip, Download, MessageSquare, Upload, AlertCircle, X } from 'lucide-react';
+import { User, Calendar, Paperclip, Download, MessageSquare, Upload, AlertCircle, X } from 'lucide-react';
 import UserProfilePopup from '../common/UserProfilePopup';
 
 // Import file icons
@@ -13,7 +13,7 @@ import TxtIcon from '../../assets/icons/TxtIcon.svg';
 import GenericFileIcon from '../../assets/icons/FileIcon.svg';
 
 const FieldBox = ({ children, className = "", isDisplayOnly = false, hasError = false }) => (
-    <div className={`FieldBox border px-3 py-2 h-9 flex items-center rounded-md transition-all duration-200
+    <div className={`FieldBox border px-2 sm:px-3 py-1.5 sm:py-2 h-auto min-h-[36px] sm:h-9 flex items-center rounded-md transition-all duration-200
         ${isDisplayOnly ? 'bg-gradient-to-r from-gray-50 to-gray-100 text-gray-800 cursor-text border-gray-200 overflow-hidden' : 'bg-white border-gray-300 hover:border-blue-400'}
         ${hasError ? 'border-red-500 ring-2 ring-red-200 bg-red-50' : ''}
         ${className}`}>
@@ -78,7 +78,6 @@ const TicketDetailsSection = ({
     onAttachmentsClick
 }) => {
     const [showAllAttachments, setShowAllAttachments] = React.useState(false);
-    const [isDragOver, setIsDragOver] = React.useState(false);
     const [unsupportedFileError, setUnsupportedFileError] = React.useState('');
     const [selectedFiles, setSelectedFiles] = React.useState([]);
     const [isUploading, setIsUploading] = React.useState(false);
@@ -93,18 +92,6 @@ const TicketDetailsSection = ({
     const handleAttachmentsClick = () => {
         const attachmentsSection = document.getElementById('attachments-section');
         if (attachmentsSection) attachmentsSection.scrollIntoView({ behavior: 'smooth' });
-    };
-
-    const handleDragOver = (e) => {
-        e.preventDefault();
-        if (canAddAttachments) {
-            setIsDragOver(true);
-        }
-    };
-
-    const handleDragLeave = (e) => {
-        e.preventDefault();
-        setIsDragOver(false);
     };
 
     const handleLocalFileChange = (e) => {
@@ -202,24 +189,6 @@ const TicketDetailsSection = ({
         e.target.value = '';
     };
 
-    const handleDrop = (e) => {
-        e.preventDefault();
-        setIsDragOver(false);
-        
-        if (!canAddAttachments) return;
-        
-        const files = Array.from(e.dataTransfer.files);
-        if (files.length > 0) {
-            // Create a synthetic event object to pass to handleLocalFileChange
-            const syntheticEvent = {
-                target: {
-                    files: files
-                }
-            };
-            handleLocalFileChange(syntheticEvent);
-        }
-    };
-
     const removeSelectedFile = (indexToRemove) => {
         setSelectedFiles(prev => prev.filter((_, index) => index !== indexToRemove));
     };
@@ -283,16 +252,14 @@ const TicketDetailsSection = ({
 
     return (
         <div className="bg-white p-3 sm:p-4 w-full min-w-0 max-w-full overflow-x-hidden">
-            <div className="mb-3 sm:mb-4 flex items-center gap-2">
-                <div className="flex items-center gap-2">
-                    <div className="w-1 h-5 bg-gradient-to-b from-blue-600 to-blue-800 rounded-full"></div>
-                    <span className="text-sm sm:text-base font-medium tracking-wide uppercase text-gray-900" style={{ fontWeight: 500, color: '#111827' }}>Ticket Details</span>
-                    <Info className="w-4 h-4 ml-1 text-blue-600" />
+            <div className="mb-2 sm:mb-3 md:mb-4 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-2 w-full min-w-0 max-w-full overflow-x-hidden">
+                <div className="flex items-center flex-shrink-0">
+                    <span className="text-xs sm:text-sm md:text-base font-medium tracking-wide uppercase text-gray-900" style={{ fontWeight: 500, color: '#111827' }}>Ticket Details</span>
                 </div>
                 
                 {/* Comments and Attachments Count Tags */}
                 {ticket && (
-                    <div className="flex items-center gap-1 sm:gap-2 text-[10px]">
+                    <div className="flex items-center gap-1 sm:gap-2 text-[9px] sm:text-[10px] flex-wrap">
                         <button
                             className="flex items-center gap-1 px-1 py-0.5 transition-all duration-200 justify-center min-w-0 flex-shrink-0 underline text-blue-400"
                             onClick={onCommentsClick}
@@ -329,17 +296,17 @@ const TicketDetailsSection = ({
                 <div className="flex flex-col gap-1.5 sm:gap-2 w-full min-w-0 max-w-full overflow-x-hidden">
                     {/* Ticket ID */}
                     <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2 w-full min-w-0 max-w-full overflow-x-hidden">
-                                                    <label className="text-sm font-medium text-gray-900 w-full sm:w-20 lg:w-24 shrink-0 tracking-tight" style={{ fontWeight: 500, color: '#111827' }}>Ticket ID:</label>
+                        <label className="text-xs sm:text-sm font-medium text-gray-900 w-full sm:w-20 lg:w-24 shrink-0 tracking-tight" style={{ fontWeight: 500, color: '#111827' }}>Ticket ID:</label>
                         <FieldBox className="w-full flex-1 min-w-0 max-w-full overflow-x-hidden" isDisplayOnly={true}>
-                            <span className="text-sm font-medium text-blue-700 truncate flex-1 min-w-0 max-w-full tracking-wide" style={{ fontWeight: 500, color: '#1e40af' }}>{ticket.display_id}</span>
+                            <span className="text-xs sm:text-sm font-medium text-blue-700 truncate flex-1 min-w-0 max-w-full tracking-wide" style={{ fontWeight: 500, color: '#1e40af' }}>{ticket.display_id}</span>
                         </FieldBox>
                     </div>
                     {/* Requested by */}
                     <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2 w-full min-w-0 max-w-full overflow-x-hidden">
-                                                    <label className="text-sm font-medium text-gray-900 w-full sm:w-20 lg:w-24 shrink-0 tracking-tight" style={{ fontWeight: 500, color: '#111827' }}>Requested by:</label>
-                                                    <FieldBox className="w-full flex-1 min-w-0 max-w-full overflow-x-hidden" isDisplayOnly={true}>
+                        <label className="text-xs sm:text-sm font-medium text-gray-900 w-full sm:w-20 lg:w-24 shrink-0 tracking-tight" style={{ fontWeight: 500, color: '#111827' }}>Requested by:</label>
+                        <FieldBox className="w-full flex-1 min-w-0 max-w-full overflow-x-hidden" isDisplayOnly={true}>
                             <span
-                                className="text-sm font-normal text-gray-800 truncate flex-1 min-w-0 max-w-full cursor-pointer transition-colors hover:text-blue-600"
+                                className="text-xs sm:text-sm font-normal text-gray-800 truncate flex-1 min-w-0 max-w-full cursor-pointer transition-colors hover:text-blue-600"
                                 onMouseEnter={() => showProfilePopup({ email: ticket.reporter_email, fullName: ticket.reporter_name }, null)}
                                 onMouseLeave={() => { cancelShowProfilePopup(); hidePopup(); }}
                             >
@@ -360,9 +327,9 @@ const TicketDetailsSection = ({
                     </div>
                     {/* Asset ID */}
                     <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2 w-full min-w-0 max-w-full overflow-x-hidden">
-                        <label className="text-sm font-medium text-gray-900 w-full sm:w-20 lg:w-24 shrink-0 tracking-tight" style={{ fontWeight: 500, color: '#111827' }}>Asset ID:</label>
+                        <label className="text-xs sm:text-sm font-medium text-gray-900 w-full sm:w-20 lg:w-24 shrink-0 tracking-tight" style={{ fontWeight: 500, color: '#111827' }}>Asset ID:</label>
                         <FieldBox className="w-full flex-1 min-w-0 max-w-full overflow-x-hidden" isDisplayOnly={true}>
-                            <span className="text-sm font-normal text-gray-800 truncate flex-1 min-w-0 max-w-full" style={{ fontWeight: 400, color: '#1f2937' }}>{ticket.hostname_asset_id ? ticket.hostname_asset_id : <span className="italic text-gray-500">Not specified</span>}</span>
+                            <span className="text-xs sm:text-sm font-normal text-gray-800 truncate flex-1 min-w-0 max-w-full" style={{ fontWeight: 400, color: '#1f2937' }}>{ticket.hostname_asset_id ? ticket.hostname_asset_id : <span className="italic text-gray-500">Not specified</span>}</span>
                         </FieldBox>
                     </div>
                 </div>
@@ -371,10 +338,10 @@ const TicketDetailsSection = ({
                 <div className="flex flex-col gap-1.5 sm:gap-2 w-full min-w-0 max-w-full overflow-x-hidden">
                     {/* Requested for */}
                     <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2 w-full min-w-0 max-w-full overflow-x-hidden">
-                                                    <label className="text-sm font-medium text-gray-900 w-full sm:w-20 lg:w-24 shrink-0 tracking-tight" style={{ fontWeight: 500, color: '#111827' }}>Requested for:</label>
-                                                    <FieldBox className="w-full flex-1 min-w-0 max-w-full overflow-x-hidden" isDisplayOnly={true}>
+                        <label className="text-xs sm:text-sm font-medium text-gray-900 w-full sm:w-20 lg:w-24 shrink-0 tracking-tight" style={{ fontWeight: 500, color: '#111827' }}>Requested for:</label>
+                        <FieldBox className="w-full flex-1 min-w-0 max-w-full overflow-x-hidden" isDisplayOnly={true}>
                             <span
-                                className="text-sm font-normal text-gray-800 truncate flex-1 min-w-0 max-w-full cursor-pointer transition-colors hover:text-blue-600"
+                                className="text-xs sm:text-sm font-normal text-gray-800 truncate flex-1 min-w-0 max-w-full cursor-pointer transition-colors hover:text-blue-600"
                                 onMouseEnter={() => showProfilePopup({ email: ticket.request_for_email, fullName: ticket.request_for_name }, null)}
                                 onMouseLeave={() => { cancelShowProfilePopup(); hidePopup(); }}
                             >
@@ -395,25 +362,25 @@ const TicketDetailsSection = ({
                     </div>
                     {/* Contact No */}
                     <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2 w-full min-w-0 max-w-full overflow-x-hidden">
-                        <label className="text-sm font-medium text-gray-900 w-full sm:w-20 lg:w-24 shrink-0 tracking-tight" style={{ fontWeight: 500, color: '#111827' }}>Contact No:</label>
+                        <label className="text-xs sm:text-sm font-medium text-gray-900 w-full sm:w-20 lg:w-24 shrink-0 tracking-tight" style={{ fontWeight: 500, color: '#111827' }}>Contact No:</label>
                         <FieldBox className="w-full flex-1 min-w-0 max-w-full overflow-x-hidden" isDisplayOnly={true}>
-                            <span className="text-sm font-normal text-gray-800 truncate flex-1 min-w-0 max-w-full" style={{ fontWeight: 400, color: '#1f2937' }}>{ticket.contact_number ? ticket.contact_number : <span className="italic text-gray-500">Not specified</span>}</span>
+                            <span className="text-xs sm:text-sm font-normal text-gray-800 truncate flex-1 min-w-0 max-w-full" style={{ fontWeight: 400, color: '#1f2937' }}>{ticket.contact_number ? ticket.contact_number : <span className="italic text-gray-500">Not specified</span>}</span>
                         </FieldBox>
                     </div>
                     {/* Created */}
                     <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2 w-full min-w-0 max-w-full overflow-x-hidden">
-                                                    <label className="text-sm font-medium text-gray-900 w-full sm:w-20 lg:w-24 shrink-0 tracking-tight" style={{ fontWeight: 500, color: '#111827' }}>Created:</label>
-                            <FieldBox className="w-full flex-1 min-w-0 max-w-full overflow-x-hidden" isDisplayOnly={true}>
-                                <Calendar className="w-4 h-4 mr-1.5 shrink-0 text-gray-500" />
-                                <span className="text-sm font-normal text-gray-800 truncate flex-1 min-w-0 max-w-full" style={{ fontWeight: 400, color: '#1f2937' }}>{ticket.created_at ? new Date(ticket.created_at).toLocaleString() : <span className="italic text-gray-500">Not specified</span>}</span>
+                        <label className="text-xs sm:text-sm font-medium text-gray-900 w-full sm:w-20 lg:w-24 shrink-0 tracking-tight" style={{ fontWeight: 500, color: '#111827' }}>Created:</label>
+                        <FieldBox className="w-full flex-1 min-w-0 max-w-full overflow-x-hidden" isDisplayOnly={true}>
+                            <Calendar className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-1.5 shrink-0 text-gray-500" />
+                            <span className="text-xs sm:text-sm font-normal text-gray-800 truncate flex-1 min-w-0 max-w-full" style={{ fontWeight: 400, color: '#1f2937' }}>{ticket.created_at ? new Date(ticket.created_at).toLocaleString() : <span className="italic text-gray-500">Not specified</span>}</span>
                         </FieldBox>
                     </div>
                 </div>
             </div>
 
             {/* Long Description */}
-            <div className="mb-3 sm:mb-4 mt-3 sm:mt-4 w-full min-w-0 max-w-full overflow-x-hidden">
-                <label className="block text-sm font-medium text-gray-900 mb-2 tracking-tight uppercase" style={{ fontWeight: 500, color: '#111827' }}>
+            <div className="mb-2 sm:mb-3 md:mb-4 mt-2 sm:mt-3 md:mt-4 w-full min-w-0 max-w-full overflow-x-hidden">
+                <label className="block text-xs sm:text-sm font-medium text-gray-900 mb-1.5 sm:mb-2 tracking-tight uppercase" style={{ fontWeight: 500, color: '#111827' }}>
                     Description:
                 </label>
                 <div className="border border-gray-200 px-3 py-2 bg-gradient-to-r from-gray-50 to-gray-100 rounded-md w-full min-w-0 max-w-full overflow-y-auto" style={{ height: '200px' }}>
@@ -431,9 +398,8 @@ const TicketDetailsSection = ({
             {/* Attachments section */}
             <div className="w-full min-w-0 max-w-full overflow-x-hidden">
                 <div className="flex flex-col sm:flex-row sm:items-center mb-2 sm:mb-3 justify-between gap-2 sm:gap-0 w-full min-w-0 max-w-full overflow-x-hidden">
-                    <div className="flex items-center gap-2 py-1">
-                        <div className="w-1 h-5 bg-gradient-to-b from-green-600 to-green-800 rounded-full"></div>
-                        <h3 className="text-sm font-medium tracking-wide uppercase text-gray-900 flex items-center" style={{ fontWeight: 500, color: '#111827' }}>
+                    <div className="flex items-center gap-1.5 sm:gap-2 py-1 flex-wrap min-w-0">
+                        <h3 className="text-xs sm:text-sm font-medium tracking-wide uppercase text-gray-900 flex items-center flex-shrink-0" style={{ fontWeight: 500, color: '#111827' }}>
                             Attachments
                         </h3>
                         {unsupportedFileError && (
@@ -463,36 +429,23 @@ const TicketDetailsSection = ({
                     />
                 </div>
 
-                {/* Drag and Drop Zone */}
+                {/* Upload Button */}
                 {canAddAttachments && (
-                    <div
-                        className={`mb-3 border-2 border-dashed rounded-lg transition-all duration-200 cursor-pointer ${
-                            isDragOver 
-                                ? 'border-green-500 bg-green-50 scale-105' 
-                                : 'border-gray-300 hover:border-green-500 hover:bg-gray-50'
-                        }`}
-                        onDragOver={handleDragOver}
-                        onDragLeave={handleDragLeave}
-                        onDrop={handleDrop}
-                        onClick={() => {
-                            const input = document.getElementById('attachment-upload-btn');
-                            if (input) input.click();
-                        }}
-                        style={{ height: '100px' }}
-                    >
-                        <div className="flex flex-col items-center justify-center h-full p-4 text-center">
-                            <Upload className={`w-7 h-7 mb-1.5 transition-colors duration-200 ${
-                                isDragOver ? 'text-green-600' : 'text-gray-600'
-                            }`} />
-                            <p className={`text-sm font-bold tracking-wide transition-colors duration-200 ${
-                                isDragOver ? 'text-green-700' : 'text-gray-900'
-                            }`}>
-                                {isDragOver ? 'Drop files here' : 'Drop files here or click to browse'}
-                            </p>
-                            <p className="text-xs text-gray-600 mt-1 font-medium">
-                                png, jpg, pdf, word, excel, zip (max 10mb)
-                            </p>
-                        </div>
+                    <div className="mb-3 flex flex-col items-start gap-1.5">
+                        <button
+                            type="button"
+                            onClick={() => {
+                                const input = document.getElementById('attachment-upload-btn');
+                                if (input) input.click();
+                            }}
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 hover:border-gray-400 transition-colors duration-200"
+                        >
+                            <Upload className="w-3.5 h-3.5" />
+                            <span>Upload Files</span>
+                        </button>
+                        <p className="text-[10px] sm:text-xs text-gray-500">
+                            Supported: PNG, JPG, PDF, Word, Excel, ZIP (max 10MB)
+                        </p>
                     </div>
                 )}
 

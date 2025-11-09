@@ -34,6 +34,9 @@ export const useSmartFilters = (initialFilters = {}) => {
                 } catch (e) {
                     urlFilters[filterType] = value;
                 }
+            } else if (key === 'status') {
+                // Support legacy ?status= parameter for backward compatibility
+                urlFilters.status = value.includes(',') ? value.split(',') : [value];
             }
         }
         

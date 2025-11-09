@@ -104,9 +104,9 @@ const SmartFilterDropdown = ({
             }
         ];
         
-        // Hide client filter for site_admin users since they should only see their own client
+        // Hide client and assigned filters for site_admin users since they should only see their own client
         if (user?.role === 'site_admin') {
-            return allFilterTypes.filter(type => type.id !== 'client');
+            return allFilterTypes.filter(type => type.id !== 'client' && type.id !== 'assigned');
         }
         
         return allFilterTypes;

@@ -75,7 +75,7 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
             });
             
             // Format as 6-digit number with leading zeros
-            const displayId = `INC${result.toString().padStart(6, '0')}`;
+            const displayId = `TT${result.toString().padStart(6, '0')}`;
             console.log('🎫 Generated sequential display ID:', displayId, 'from counter:', result);
             return displayId;
             
@@ -96,8 +96,8 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                     const lastDisplayId = lastTicket.display_id;
                     console.log('🔍 Fallback - Last ticket display_id:', lastDisplayId);
                     
-                    if (lastDisplayId && lastDisplayId.startsWith('INC')) {
-                        const numberPart = lastDisplayId.substring(3);
+                    if (lastDisplayId && lastDisplayId.startsWith('TT')) {
+                        const numberPart = lastDisplayId.substring(2);
                         const lastNumber = parseInt(numberPart, 10);
                         if (!isNaN(lastNumber) && lastNumber > 0) {
                             nextNumber = lastNumber + 1;
@@ -110,7 +110,7 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                     nextNumber = 1;
                 }
                 
-                const displayId = `INC${nextNumber.toString().padStart(6, '0')}`;
+                const displayId = `TT${nextNumber.toString().padStart(6, '0')}`;
                 console.log('🎫 Generated fallback display ID:', displayId);
                 return displayId;
                 
@@ -119,7 +119,7 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                 // Final fallback to timestamp
                 const timestamp = Date.now();
                 const fallbackNumber = parseInt(timestamp.toString().slice(-6), 10);
-                return `INC${fallbackNumber.toString().padStart(6, '0')}`;
+                return `TT${fallbackNumber.toString().padStart(6, '0')}`;
             }
         }
     }
@@ -150,8 +150,8 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                 const lastDisplayId = lastTicket.display_id;
                 console.log('🔍 Highest existing display_id:', lastDisplayId);
                 
-                if (lastDisplayId && lastDisplayId.startsWith('INC')) {
-                    const numberPart = lastDisplayId.substring(3);
+                if (lastDisplayId && lastDisplayId.startsWith('TT')) {
+                    const numberPart = lastDisplayId.substring(2);
                     const lastNumber = parseInt(numberPart, 10);
                     if (!isNaN(lastNumber) && lastNumber > 0) {
                         highestNumber = lastNumber;
@@ -1658,7 +1658,7 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
             }
 
             if (searchKeyword) {
-                const exactIdMatch = `INC${searchKeyword.toUpperCase().padStart(5, '0')}`;
+                const exactIdMatch = `TT${searchKeyword.toUpperCase().padStart(6, '0')}`;
                 const exactIdMatchQuery = ticketsCollection
                     .where('reporter_id', '==', userId)
                     .where('display_id', '==', exactIdMatch)
@@ -1710,7 +1710,7 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
             }
 
             if (searchKeyword) {
-                const exactIdMatch = `INC${searchKeyword.toUpperCase().padStart(5, '0')}`;
+                const exactIdMatch = `TT${searchKeyword.toUpperCase().padStart(6, '0')}`;
                 let exactIdMatchQuery = ticketsCollection.where('display_id', '==', exactIdMatch);
                 
                 // Apply company filtering for site admin users in exact match query
@@ -1863,7 +1863,7 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
             let ticketDoc = await ticketsCollection.doc(ticketId).get();
 
             // If not found by document ID, try to find by display_id
-            if (!ticketDoc.exists && ticketId.startsWith('INC')) {
+            if (!ticketDoc.exists && ticketId.startsWith('TT')) {
                 const displayIdQuery = await ticketsCollection.where('display_id', '==', ticketId).limit(1).get();
                 if (!displayIdQuery.empty) {
                     ticketDoc = displayIdQuery.docs[0];
