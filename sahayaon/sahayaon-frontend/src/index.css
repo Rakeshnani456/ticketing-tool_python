@@ -8,35 +8,92 @@
 }
 
 .modern-grid-hover {
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: none;
 }
 
 .modern-grid-hover:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  transform: none;
+  box-shadow: none;
+}
+
+/* Prevent scrollbar flicker in ticket grid - completely hide scrollbar by default */
+.modern-ticket-grid-container {
+  /* No overflow on container itself */
+  position: relative;
+}
+
+.modern-ticket-grid-scroll {
+  /* Completely hide scrollbar - no space reservation, no flicker */
+  scrollbar-width: none !important; /* Firefox - force hide */
+  -ms-overflow-style: none !important; /* IE and Edge - force hide */
+  /* Smooth scrolling */
+  -webkit-overflow-scrolling: touch;
+  /* Prevent scrollbar gutter from reserving space */
+  scrollbar-gutter: auto !important;
+  /* Ensure no reserved space for scrollbar */
+  padding-right: 0 !important;
+  margin-right: 0 !important;
+}
+
+/* Completely hide scrollbar in webkit browsers - force hide on all states */
+.modern-ticket-grid-scroll::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  background: transparent !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+}
+
+/* Only show scrollbar when actively hovering AND scrolling */
+.modern-ticket-grid-container:hover .modern-ticket-grid-scroll.scrolling {
+  scrollbar-width: thin; /* Firefox */
+  -ms-overflow-style: auto; /* IE and Edge */
+}
+
+.modern-ticket-grid-container:hover .modern-ticket-grid-scroll.scrolling::-webkit-scrollbar {
+  display: block;
+  height: 6px;
+  width: 6px;
+  visibility: visible;
+  opacity: 1;
+}
+
+.modern-ticket-grid-container:hover .modern-ticket-grid-scroll.scrolling::-webkit-scrollbar-track {
+  background: #f9fafb;
+  border-radius: 3px;
+}
+
+.modern-ticket-grid-container:hover .modern-ticket-grid-scroll.scrolling::-webkit-scrollbar-thumb {
+  background-color: rgba(156, 163, 175, 0.4);
+  border-radius: 3px;
+}
+
+.modern-ticket-grid-container:hover .modern-ticket-grid-scroll.scrolling::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(107, 114, 128, 0.6);
 }
 
 /* Enhanced typography for ticket grid */
 .ticket-id {
-  font-weight: 400;
+  font-weight: 500;
   letter-spacing: 0.025em;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
 .ticket-summary {
-  font-weight: 400;
+  font-weight: 500;
   line-height: 1.5;
   letter-spacing: 0.01em;
 }
 
 .ticket-meta {
-  font-weight: 400;
+  font-weight: 500;
   letter-spacing: 0.01em;
 }
 
 /* --- Global Scrollbar Styles (apply to all scrollable elements) --- */
-@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300;400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;500;600;700&display=swap');
 
 /* --- Theme Color Variables --- */
@@ -46,7 +103,27 @@
 
 /* --- Global Font Definitions --- */
 * {
-  font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+  font-family: 'Source Sans 3', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+  font-optical-sizing: auto;
+  font-weight: 400;
+  font-style: normal;
+}
+
+/* Fix for Lucide React icons - prevent white fill background */
+/* Lucide icons are stroke-based and should NOT have fill */
+/* They use stroke for outlines, not fill */
+svg[class*="lucide"] {
+  fill: none !important;
+}
+
+/* Ensure Lucide icon internal elements don't get filled */
+svg[class*="lucide"] path,
+svg[class*="lucide"] circle,
+svg[class*="lucide"] rect,
+svg[class*="lucide"] line,
+svg[class*="lucide"] polyline,
+svg[class*="lucide"] polygon {
+  fill: none !important;
 }
 
 /* Force white text in profile icons across the app */
@@ -89,32 +166,38 @@ button.bg-indigo-700 {
 }
 
 button.bg-blue-600 span,
-button.bg-blue-600 svg,
 button.bg-blue-700 span,
-button.bg-blue-700 svg,
 button.bg-green-600 span,
-button.bg-green-600 svg,
 button.bg-green-700 span,
-button.bg-green-700 svg,
 button.bg-red-600 span,
-button.bg-red-600 svg,
 button.bg-red-700 span,
-button.bg-red-700 svg,
 button.bg-indigo-600 span,
-button.bg-indigo-600 svg,
-button.bg-indigo-700 span,
-button.bg-indigo-700 svg {
+button.bg-indigo-700 span {
   color: #ffffff !important;
-  fill: #ffffff !important;
-  stroke: #ffffff !important;
 }
 
-/* Headings use Space Grotesk */
+/* For Lucide React icons (stroke-based), only set stroke and color, not fill */
+button.bg-blue-600 svg,
+button.bg-blue-700 svg,
+button.bg-green-600 svg,
+button.bg-green-700 svg,
+button.bg-red-600 svg,
+button.bg-red-700 svg,
+button.bg-indigo-600 svg,
+button.bg-indigo-700 svg {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+  fill: none !important; /* Lucide icons should have fill="none" */
+}
+
+/* Headings use Inter for better distinction */
 h1, h2, h3, h4, h5, h6,
 .heading,
 .title,
 .logo {
-  font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.02em;
 }
 
 /* Code elements use monospace */
@@ -193,12 +276,12 @@ code, pre, .code, .mono {
 
 /* Modern Grid Enhancements */
 .modern-grid-hover {
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: none;
 }
 
 .modern-grid-hover:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    transform: none;
+    box-shadow: none;
 }
 
 .modern-badge {
@@ -235,12 +318,12 @@ code, pre, .code, .mono {
 }
 
 .search-dropdown::-webkit-scrollbar-thumb {
-    background: #2b2b2b;
+    background: #cbd5e1;
     border-radius: 3px;
 }
 
 .search-dropdown::-webkit-scrollbar-thumb:hover {
-    background: #1f2937;
+    background: #94a3b8;
 }
 
 /* --- Knowledge Base Styles --- */
@@ -409,13 +492,13 @@ code, pre, .code, .mono {
 
 /* This targets the thumb (the draggable part) */
 ::-webkit-scrollbar-thumb {
-    background: #555555; /* Dark thumb */
+    background: rgba(92, 91, 91, 0.2); /* Very light, semi-transparent grey thumb */
     border-radius: 10px; /* Rounded corners for the thumb */
 }
 
 /* This targets the thumb on hover */
 ::-webkit-scrollbar-thumb:hover {
-    background: #1f2937; /* Darker on hover */
+    background: rgba(96, 96, 96, 0.4); /* Slightly more visible on hover, but still light */
 }
 
 /* IMPORTANT: These pseudo-elements remove the scrollbar buttons/arrows in WebKit */
@@ -434,7 +517,7 @@ code, pre, .code, .mono {
    'thin' is the most minimal width, and the color will be for the thumb and track. */
 html {
     scrollbar-width: thin; /* Make scrollbar explicitly thin */
-    scrollbar-color: #4e4e4e rgba(241, 241, 241, 0.05); /* dark thumb, subtle track */
+    scrollbar-color: rgba(128, 128, 128, 0.2) rgba(241, 241, 241, 0.05); /* thumb color track color */
 }
 
 /* --- Specific Styles for your TicketDetailComponent (Optional but Recommended for targeted control) --- */
@@ -459,11 +542,11 @@ html {
 }
 
 .FieldBox.overflow-y-auto::-webkit-scrollbar-thumb {
-    background: #505050;
+    background: rgba(128, 128, 128, 0.15);
 }
 
 .FieldBox.overflow-y-auto::-webkit-scrollbar-thumb:hover {
-    background: #1f2937;
+    background: rgba(96, 96, 96, 0.3);
 }
 
 .FieldBox.overflow-y-auto::-webkit-scrollbar-button {
@@ -494,11 +577,11 @@ textarea.max-w-none.w-full::-webkit-scrollbar-track {
 }
 
 textarea.max-w-none.w-full::-webkit-scrollbar-thumb {
-    background: #2b2b2b;
+    background: rgba(128, 128, 128, 0.15);
 }
 
 textarea.max-w-none.w-full::-webkit-scrollbar-thumb:hover {
-    background: #1f2937;
+    background: rgba(96, 96, 96, 0.3);
 }
 
 textarea.max-w-none.w-full::-webkit-scrollbar-button {
@@ -554,7 +637,7 @@ textarea.max-w-none.w-full::-webkit-scrollbar-corner {
   border-radius: 0;
   box-shadow: 0 10px 25px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
   transition: none; /* Instant navigation */
-  font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
   height: calc(100vh - 44px);
   overflow-y: auto;
   overflow-x: hidden;
@@ -570,17 +653,28 @@ textarea.max-w-none.w-full::-webkit-scrollbar-corner {
   animation: none !important;
 }
 
-/* Add subtle top border accent */
-.sidebar-glass::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: linear-gradient(90deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%);
-  opacity: 0.8;
+/* Aggressively prevent any scaling on hover - override Framer Motion inline styles */
+.sidebar-glass .menu-item,
+.sidebar-glass .menu-item:hover,
+.sidebar-glass .menu-item:active,
+.sidebar-glass .menu-item:focus {
+  transform: scale(1) !important;
+  transform-origin: center center !important;
+  will-change: auto !important;
 }
+
+/* Target Framer Motion elements specifically - they use inline styles with high specificity */
+.sidebar-glass .menu-item > *,
+.sidebar-glass .menu-item:hover > *,
+.sidebar-glass .menu-item > span,
+.sidebar-glass .menu-item:hover > span,
+.sidebar-glass .menu-item > div,
+.sidebar-glass .menu-item:hover > div {
+  transform: scale(1) translateZ(0) !important;
+  transform-origin: center center !important;
+  will-change: auto !important;
+}
+
 
 .sidebar-glass .menu-item {
   color: #d1d5db; /* Gray-300 text for better contrast */
@@ -590,7 +684,7 @@ textarea.max-w-none.w-full::-webkit-scrollbar-corner {
   transform: none !important; /* No transforms */
   animation: none !important; /* No animations */
   font-weight: 500;
-  font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
   padding: 0.875rem 1.25rem; /* Increased padding for better touch targets */
   margin: 0.125rem 0.75rem; /* Consistent margins for all states */
   font-size: 0.95rem; /* Slightly smaller for modern look */
@@ -609,7 +703,7 @@ textarea.max-w-none.w-full::-webkit-scrollbar-corner {
   left: 0;
   right: 0;
   bottom: 0;
-  background: linear-gradient(135deg, rgba(249, 115, 22, 0.1) 0%, rgba(251, 146, 60, 0.05) 100%);
+  background: rgba(75, 85, 99, 0.1);
   border-radius: 0; /* Remove rounded corners */
   opacity: 0;
   transition: none; /* Instant glow effect */
@@ -617,9 +711,9 @@ textarea.max-w-none.w-full::-webkit-scrollbar-corner {
 }
 
 .sidebar-glass .menu-item:hover {
-  background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%); /* Dark blue hover background matching active state */
+  background: rgba(69, 91, 85, 0.5); /* #455b55 with 50% opacity */
   color: #ffffff;
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(30, 58, 138, 0.2);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(69, 91, 85, 0.2);
   transform: none !important; /* Remove slide animation for instant response */
   transition: background 0.15s ease-in-out !important; /* Smooth background transition */
   animation: none !important; /* No animations */
@@ -629,23 +723,129 @@ textarea.max-w-none.w-full::-webkit-scrollbar-corner {
   opacity: 1;
 }
 
+/* Click/Active state for menu items */
+.sidebar-glass .menu-item:active {
+  background: #4b5563 !important; /* Grey for click */
+  color: #ffffff !important;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(75, 85, 99, 0.3) !important;
+  transform: none !important;
+  transition: background 0.1s ease-in-out !important;
+}
+
+.sidebar-glass .menu-item:active svg {
+  color: #ffffff !important;
+  stroke-width: 1.75 !important;
+}
+
+.sidebar-glass .menu-item:active span,
+.sidebar-glass .menu-item:active .motion.span {
+  color: #ffffff !important;
+  font-weight: 500 !important;
+}
+
 /* Hover state for icons */
 .sidebar-glass .menu-item:hover svg {
   color: #ffffff !important; /* White icons on hover */
   stroke-width: 1.75 !important;
+  transform: none !important; /* No scaling on hover */
+  scale: 1 !important; /* Prevent scaling */
 }
 
 /* Hover state for text */
 .sidebar-glass .menu-item:hover span {
   color: #ffffff !important; /* White text on hover */
   font-weight: 500 !important;
+  transform: none !important; /* No scaling on hover */
+  scale: 1 !important; /* Prevent scaling */
 }
 
+/* Prevent scaling on all child elements within menu items */
+.sidebar-glass .menu-item * {
+  transform: none !important;
+  transform-origin: center !important;
+  scale: 1 !important;
+  transition: none !important;
+  will-change: auto !important;
+}
+
+.sidebar-glass .menu-item:hover * {
+  transform: none !important;
+  transform-origin: center !important;
+  scale: 1 !important;
+}
+
+/* Prevent Framer Motion from applying any transforms on hover */
+.sidebar-glass .menu-item:hover [class*="motion"],
+.sidebar-glass .menu-item:hover span[style*="transform"],
+.sidebar-glass .menu-item:hover div[style*="transform"] {
+  transform: none !important;
+  scale: 1 !important;
+}
+
+/* Prevent scaling on icons and icon containers */
+.sidebar-glass .menu-item:hover div[class*="flex"],
+.sidebar-glass .menu-item:hover svg {
+  transform: scale(1) !important;
+  transform-origin: center !important;
+}
+
+/* Force no transform on motion.span elements - target Framer Motion's data attributes */
+.sidebar-glass .menu-item [data-framer-name],
+.sidebar-glass .menu-item span[style*="transform"],
+.sidebar-glass .menu-item:hover span[style*="transform"] {
+  transform: scale(1) !important;
+  transform-origin: center center !important;
+}
+
+/* Target all spans and divs within menu items - very aggressive override */
+.sidebar-glass .menu-item span,
+.sidebar-glass .menu-item div,
+.sidebar-glass .menu-item:hover span,
+.sidebar-glass .menu-item:hover div {
+  transform: scale(1) translateZ(0) !important;
+  transform-origin: center center !important;
+}
+
+/* Maximum specificity override for Framer Motion elements */
+.sidebar-glass .menu-item a span,
+.sidebar-glass .menu-item a:hover span,
+.sidebar-glass .menu-item a:focus span,
+.sidebar-glass .menu-item a:active span {
+  transform: scale(1) !important;
+  transform-origin: center center !important;
+  will-change: auto !important;
+}
+
+/* Override Framer Motion's inline styles - use attribute selector for maximum specificity */
+.sidebar-glass .menu-item [style*="transform"] {
+  transform: scale(1) !important;
+}
+
+.sidebar-glass .menu-item:hover [style*="transform"] {
+  transform: scale(1) !important;
+}
+
+/* Prevent any scale animations from Framer Motion */
+@keyframes none {
+  0%, 100% { transform: scale(1) !important; }
+}
+
+.sidebar-glass .menu-item * {
+  animation-name: none !important;
+}
+
+/* Additional override for group hover effects that might cause scaling */
+.sidebar-glass .menu-item.group:hover,
+.sidebar-glass .menu-item.group:hover * {
+  transform: scale(1) !important;
+}
+
+
 .sidebar-glass .menu-item.active, .sidebar-glass .menu-item[aria-current="page"] {
-  background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%) !important; /* Rich dark blue gradient for matte finish */
+  background: #455b55 !important; /* Dark green-grey for active state */
   color: #ffffff !important; /* Pure white text for active items */
   border-radius: 0 !important; /* Remove rounded corners */
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(30, 58, 138, 0.3) !important; /* Subtle inset shadow for depth with matte border */
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(69, 91, 85, 0.3) !important; /* Subtle inset shadow for depth with matte border */
   border: none !important; /* No border for active state */
   position: relative;
   z-index: 1;
@@ -677,9 +877,9 @@ textarea.max-w-none.w-full::-webkit-scrollbar-corner {
 .sidebar-glass .menu-item:focus-visible {
   outline: none;
   border-radius: 0;
-  box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.5) !important; /* Single clean focus ring */
+  box-shadow: inset 0 0 0 1px rgba(69, 91, 85, 0.5) !important; /* Single clean focus ring */
   border: none;
-  background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%) !important; /* Dark blue focus background */
+  background: #455b55 !important; /* Dark green-grey focus background */
   color: #ffffff !important; /* White text for focus */
 }
 
@@ -704,23 +904,23 @@ textarea.max-w-none.w-full::-webkit-scrollbar-corner {
 .sidebar-glass .menu-item[aria-current="page"]:focus {
   outline: none;
   border-radius: 0;
-  box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.5) !important; /* Single clean focus ring */
+  box-shadow: inset 0 0 0 1px rgba(69, 91, 85, 0.5) !important; /* Single clean focus ring */
   border: none;
-  background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%) !important; /* Dark blue focus background */
+  background: #455b55 !important; /* Dark green-grey focus background */
   color: #ffffff !important; /* White text */
 }
 
 .sidebar-glass .menu-item.active .sidebar-count-badge {
-  background: rgba(249, 115, 22, 0.15) !important; /* Subtle orange background */
-  color: #fb923c !important; /* Bright orange text for count badge */
-  box-shadow: 0 1px 3px rgba(249, 115, 22, 0.3);
-  border: 1px solid rgba(249, 115, 22, 0.4);
+  background: rgba(69, 91, 85, 0.15) !important; /* Subtle green-grey background */
+  color: #9ca3af !important; /* Grey text for count badge */
+  box-shadow: 0 1px 3px rgba(69, 91, 85, 0.3);
+  border: 1px solid rgba(69, 91, 85, 0.4);
   font-weight: 700 !important; /* Bold badge text */
 }
 
 .sidebar-glass .sidebar-count-badge {
   background: transparent !important; /* Remove background */
-  color: #f97316 !important; /* Orange text */
+  color: #9ca3af !important; /* Grey text */
   font-size: 0.7rem !important;
   font-weight: 600 !important;
   min-width: auto;
@@ -737,6 +937,32 @@ textarea.max-w-none.w-full::-webkit-scrollbar-corner {
   top: -0.5rem; /* Keep position for visibility */
   right: -0.25rem; /* Adjust right position */
   pointer-events: none; /* Prevent interference with clicks */
+}
+
+/* Orange count badges for "My Tickets" and "All Tickets" */
+.sidebar-glass .sidebar-count-badge-orange {
+  color: #f97316 !important; /* Orange color */
+  background: transparent !important; /* No background */
+  border: none !important; /* No border/outline */
+  border-radius: 0 !important;
+  padding: 0 !important;
+  font-weight: 700 !important;
+  box-shadow: none !important;
+  min-width: auto !important;
+  min-height: auto !important;
+  /* Position at top-right, away from icon - well within hover area */
+  top: -0.5rem !important; /* Position at top */
+  right: -0.5rem !important; /* Position at right edge, away from centered icon */
+  font-size: 0.75rem !important;
+  line-height: 1 !important;
+}
+
+/* Orange count badges when active (parent menu item is active) */
+.sidebar-glass .menu-item.active .sidebar-count-badge-orange,
+.sidebar-glass .menu-item[aria-current="page"] .sidebar-count-badge-orange {
+  color: #f97316 !important; /* Orange color */
+  background: transparent !important; /* No background */
+  border: none !important; /* No border */
 }
 
 .sidebar-glass .sidebar-section-header {
@@ -868,14 +1094,14 @@ textarea.max-w-none.w-full::-webkit-scrollbar-corner {
 
 /* Space Grotesk font for sidebar navigation links */
 .sidebar-glass .group.flex.items-center {
-  font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
   font-weight: 400;
   color: #ffffff;
 }
 
 /* Space Grotesk font for sidebar section headers - compact */
 .sidebar-glass .sidebar-section-header {
-  font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
   font-weight: 700;
   color: #6b7280;
   letter-spacing: 0.05em;
@@ -886,7 +1112,7 @@ textarea.max-w-none.w-full::-webkit-scrollbar-corner {
 
 /* Space Grotesk font for sidebar count badges */
 .sidebar-glass .sidebar-count-badge {
-  font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
   font-weight: 400;
 }
 
@@ -901,14 +1127,14 @@ textarea.max-w-none.w-full::-webkit-scrollbar-corner {
   white-space: nowrap;
 }
 
-/* Reduce spacing around icons when expanded */
-.sidebar-glass .menu-item .flex.items-center.justify-center.w-5.h-5.mr-2 {
-  margin-right: 0.375rem !important;
+/* Spacing around icons when expanded */
+.sidebar-glass .menu-item .flex.items-center.justify-center.w-5.h-5.mr-3 {
+  margin-right: 0.75rem !important;
 }
 
 /* Main app header - fixed top header */
 header.fixed.top-0 {
-  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%) !important; /* Modern gradient header */
+  background: #ffffff !important; /* Warm beige/cream color */
   box-shadow: 0 1px 2px -1px rgba(0, 0, 0, 0.05), 0 1px 2px -1px rgba(0, 0, 0, 0.03) !important;
   border-bottom: 1px solid #e2e8f0 !important;
   backdrop-filter: blur(10px) !important;
@@ -1427,13 +1653,20 @@ body {
 
 /* Override for Close Ticket button in closure notes to ensure white text */
 div.bg-white.rounded-xl button[class*="bg-gradient-to-r"] span,
-div.bg-white.rounded-xl button[class*="bg-gradient-to-r"] svg,
 div.bg-white.rounded-xl button[class*="from-blue-600"] span,
 div.bg-white.rounded-xl button[class*="from-green-600"] span,
 div.bg-white.rounded-xl button[class*="from-red-600"] span {
     color: #ffffff !important;
-    fill: #ffffff !important;
+}
+
+/* For Lucide React icons in closure notes buttons - use stroke only, not fill */
+div.bg-white.rounded-xl button[class*="bg-gradient-to-r"] svg,
+div.bg-white.rounded-xl button[class*="from-blue-600"] svg,
+div.bg-white.rounded-xl button[class*="from-green-600"] svg,
+div.bg-white.rounded-xl button[class*="from-red-600"] svg {
+    color: #ffffff !important;
     stroke: #ffffff !important;
+    fill: none !important; /* Lucide icons should have fill="none" */
 }
 
 /* Ensure all error messages in ticket components are red */
@@ -1831,12 +2064,12 @@ div.bg-white.rounded-xl button[class*="from-red-600"] span {
 }
 
 .comments-list::-webkit-scrollbar-thumb {
-    background: #2b2b2b;
+    background: #cbd5e1;
     border-radius: 2px;
 }
 
 .comments-list::-webkit-scrollbar-thumb:hover {
-    background: #1f2937;
+    background: #94a3b8;
 }
 
 /* Modern Comments Interface - Using Space Grotesk for headings and Manrope for body text */
@@ -1847,7 +2080,7 @@ div.bg-white.rounded-xl button[class*="from-red-600"] span {
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
     border: 1px solid #e5e7eb;
     overflow: hidden;
-    font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+    font-family: 'Source Sans 3', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
 }
 
 /* Comment Input Section */
@@ -1907,7 +2140,7 @@ div.bg-white.rounded-xl button[class*="from-red-600"] span {
     resize: vertical;
     outline: none;
     transition: all 0.2s;
-    font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+    font-family: 'Source Sans 3', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
     overflow-y: auto;
 }
 
@@ -1920,7 +2153,7 @@ div.bg-white.rounded-xl button[class*="from-red-600"] span {
 .comment-textarea::placeholder {
     color: #9ca3af;
     font-weight: 400;
-    font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+    font-family: 'Source Sans 3', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
     font-size: 13px !important;
 }
 
@@ -1946,7 +2179,7 @@ div.bg-white.rounded-xl button[class*="from-red-600"] span {
     border-radius: 4px;
     cursor: pointer;
     transition: all 0.2s;
-    font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+    font-family: 'Source Sans 3', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
 }
 
 .format-btn:hover {
@@ -2079,7 +2312,7 @@ div.bg-white.rounded-xl button[class*="from-red-600"] span {
     border-radius: 0;
     min-width: auto;
     text-align: left;
-    font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+    font-family: 'Source Sans 3', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
 }
 
 .sort-option {
@@ -2090,7 +2323,7 @@ div.bg-white.rounded-xl button[class*="from-red-600"] span {
     color: #6b7280;
     cursor: pointer;
     transition: color 0.2s;
-    font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+    font-family: 'Source Sans 3', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
 }
 
 .sort-option:hover {
@@ -2131,7 +2364,7 @@ div.bg-white.rounded-xl button[class*="from-red-600"] span {
     font-size: 14px;
     font-weight: 600;
     color: #6b7280;
-    font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+    font-family: 'Source Sans 3', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
     border: 1px solid #e5e7eb;
 }
 

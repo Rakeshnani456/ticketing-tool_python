@@ -125,19 +125,20 @@ const CreateClientPage = () => {
       <style jsx>{`
         .create-client-page {
           padding: 2rem;
-          background-color: #f8fafc;
+          background-color: white;
           min-height: 100vh;
           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
         }
         
         .page-header {
-          background: #283149;
-          color: white;
+          background: white;
+          color: #374151;
           padding: 1rem 2rem;
           margin: -2rem -2rem 1.5rem -2rem;
           display: flex;
           justify-content: space-between;
           align-items: center;
+          border-bottom: 1px solid #e5e7eb;
         }
         
         .page-header h1 {
@@ -147,9 +148,9 @@ const CreateClientPage = () => {
         }
         
         .back-btn {
-          background: rgba(255, 255, 255, 0.1);
-          border: 1px solid rgba(255, 255, 255, 0.2);
-          color: white;
+          background: white;
+          border: 1px solid #d1d5db;
+          color: #374151;
           padding: 0.375rem 0.75rem;
           border-radius: 0.25rem;
           cursor: pointer;
@@ -161,7 +162,8 @@ const CreateClientPage = () => {
         }
         
         .back-btn:hover {
-          background: rgba(255, 255, 255, 0.2);
+          background: #f9fafb;
+          border-color: #9ca3af;
         }
         
         .form-container {
@@ -178,7 +180,7 @@ const CreateClientPage = () => {
         }
         
         .section-header {
-          background: #f8fafc;
+          background: white;
           padding: 0.75rem 1.25rem;
           border-bottom: 1px solid #e5e7eb;
           display: flex;
@@ -305,7 +307,7 @@ const CreateClientPage = () => {
           align-items: center;
           gap: 0.75rem;
           padding: 1rem;
-          background: #f8fafc;
+          background: white;
           border-top: 1px solid #e5e7eb;
         }
         

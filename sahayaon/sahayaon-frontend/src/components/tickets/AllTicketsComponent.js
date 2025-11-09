@@ -2,9 +2,9 @@
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Loader2, XCircle, ListFilter, User, ChevronLeft, ChevronRight, ChevronDown, Plus, Search, Pin, PinOff, Edit3, Trash2, Save, X, FileText, Calendar, ExternalLink, Copy, Link, Eye, ArrowRight, RefreshCw, ArrowUpDown, ArrowUp, ArrowDown, List, LayoutGrid } from 'lucide-react';
+import { Loader2, XCircle, ListFilter, User, ChevronLeft, ChevronRight, ChevronDown, Plus, Search, Pin, PinOff, Edit3, Trash2, Save, X, FileText, Calendar, ExternalLink, Copy, Link, Eye, ArrowRight, RefreshCw, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import selectionIcon from '../../assets/icons/selection.png';
-import stickyNoteIcon from '../../assets/icons/sticky-note.png';
+import writingIcon from '../../assets/icons/writing.png';
 import { collection, query, where, orderBy, getFirestore, limit, getDocs, doc, updateDoc } from 'firebase/firestore';
 import ReactDOM, { createPortal } from 'react-dom';
 import { API_BASE_URL } from '../../config/constants';
@@ -13,7 +13,7 @@ import CustomDropdown from '../common/CustomDropdown';
 import CompactDropdown from '../common/CompactDropdown';
 import SelectButton from '../common/SelectButton';
 import ModernTicketGrid from '../common/ModernTicketGrid';
-import KanbanView from '../common/KanbanView';
+// KanbanView removed - only list view is supported
 import SmartFilterDropdown from '../common/SmartFilterDropdown';
 import { useTickets } from '../../hooks/useDataManager';
 import { useSmartFilters } from '../../hooks/useSmartFilters';
@@ -593,14 +593,14 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
         }
     };
     
-    const clearCache = () => {
+    const clearCache = useCallback(() => {
         try {
             localStorage.removeItem(CACHE_KEY);
             localStorage.removeItem(`${CACHE_KEY}_time`);
         } catch (error) {
             console.warn('Failed to clear cache:', error);
         }
-    };
+    }, [CACHE_KEY]);
     
     // Use centralized data manager for tickets
     const { data: ticketsData, loading: ticketsLoading, error: ticketsError, refresh: refreshTicketsData } = useTickets(
@@ -609,9 +609,51 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
         user?.client_name
     );
 
-    // Manual refresh function
+    // Ref to track last refresh time to prevent rapid consecutive refreshes
+    const lastRefreshTimeRef = useRef(0);
+    const MIN_REFRESH_INTERVAL = 5000; // Minimum 5 seconds between automatic refreshes
+    const refreshDebounceTimerRef = useRef(null);
+
+    // Debounced refresh function to prevent rapid consecutive refreshes
+    const debouncedRefresh = useCallback(() => {
+        // Clear any existing debounce timer
+        if (refreshDebounceTimerRef.current) {
+            clearTimeout(refreshDebounceTimerRef.current);
+        }
+
+        // Set a new debounce timer
+        refreshDebounceTimerRef.current = setTimeout(() => {
+            const now = Date.now();
+            const timeSinceLastRefresh = now - lastRefreshTimeRef.current;
+            
+            // Only refresh if enough time has passed since last refresh
+            if (timeSinceLastRefresh >= MIN_REFRESH_INTERVAL) {
+                console.log('🔄 Debounced refresh triggered');
+                lastRefreshTimeRef.current = now;
+                clearCache();
+                setLoading(true);
+                setCacheStatus('loading');
+                refreshTicketsData();
+                if (user?.uid) {
+                    localStorage.setItem(`last_tickets_refresh_${user.uid}`, now.toString());
+                }
+            } else {
+                console.log(`⏸️ Refresh skipped - only ${Math.round(timeSinceLastRefresh / 1000)}s since last refresh`);
+            }
+        }, 2000); // Wait 2 seconds after last update before refreshing
+    }, [refreshTicketsData, user?.uid, clearCache]);
+
+    // Manual refresh function (immediate, no debounce)
     const refreshTickets = useCallback(() => {
         console.log('🔄 Manual refresh triggered');
+        // Clear debounce timer if any
+        if (refreshDebounceTimerRef.current) {
+            clearTimeout(refreshDebounceTimerRef.current);
+            refreshDebounceTimerRef.current = null;
+        }
+        
+        const now = Date.now();
+        lastRefreshTimeRef.current = now;
         clearCache();
         setLoading(true);
         setCacheStatus('loading');
@@ -619,9 +661,9 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
         refreshTicketsData();
         // Update last refresh timestamp
         if (user?.uid) {
-            localStorage.setItem(`last_tickets_refresh_${user.uid}`, Date.now().toString());
+            localStorage.setItem(`last_tickets_refresh_${user.uid}`, now.toString());
         }
-    }, [refreshTicketsData, user?.uid]);
+    }, [refreshTicketsData, user?.uid, clearCache]);
     
     // Expose refresh function globally for cache invalidation
     useEffect(() => {
@@ -681,8 +723,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
     // State to track loading for individual ticket status changes
     const [changingStatusTickets, setChangingStatusTickets] = useState(new Set());
     
-    // View mode state (list or kanban)
-    const [viewMode, setViewMode] = useState('list'); // 'list' or 'kanban' - default to list
+    // View mode is always list (kanban view removed)
     
     // Sorting state
     const [sortField, setSortField] = useState('created_at'); // Default sort by created date
@@ -2126,19 +2167,29 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                 const now = Date.now();
                 const fiveMinutes = 5 * 60 * 1000;
                 
-                if (!lastRefresh || (now - parseInt(lastRefresh)) > fiveMinutes) {
+                // Check if enough time has passed since last refresh
+                const timeSinceLastRefresh = lastRefreshTimeRef.current > 0 
+                    ? now - lastRefreshTimeRef.current 
+                    : (lastRefresh ? now - parseInt(lastRefresh) : Infinity);
+                
+                if (!lastRefresh || timeSinceLastRefresh > fiveMinutes) {
                     console.log('🔄 Refreshing tickets on tab focus (data may be stale)');
+                    const refreshTime = Date.now();
+                    lastRefreshTimeRef.current = refreshTime;
                     refreshTicketsData();
-                    localStorage.setItem(`last_tickets_refresh_${user.uid}`, now.toString());
+                    localStorage.setItem(`last_tickets_refresh_${user.uid}`, refreshTime.toString());
+                } else {
+                    console.log(`⏸️ Skipping refresh on tab focus - data is fresh (${Math.round(timeSinceLastRefresh / 1000)}s ago)`);
                 }
             }
         };
 
-        // Listen for custom events that indicate data changes
+        // Listen for custom events that indicate data changes - use debounced refresh
         const handleDataChange = (event) => {
             if (event.detail?.type === 'ticket_created' || event.detail?.type === 'ticket_updated') {
-                console.log('🔄 Data change detected, refreshing tickets');
-                refreshTicketsData();
+                console.log('📢 Data change event detected, scheduling debounced refresh');
+                // Use debounced refresh to prevent rapid consecutive refreshes
+                debouncedRefresh();
             }
         };
 
@@ -2146,10 +2197,14 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
         document.addEventListener('ticketDataChanged', handleDataChange);
         
         return () => {
+            // Clear debounce timer on cleanup
+            if (refreshDebounceTimerRef.current) {
+                clearTimeout(refreshDebounceTimerRef.current);
+            }
             document.removeEventListener('visibilitychange', handleVisibilityChange);
             document.removeEventListener('ticketDataChanged', handleDataChange);
         };
-    }, [user?.uid, refreshTicketsData]);
+    }, [user?.uid, refreshTicketsData, debouncedRefresh]);
 
     // Handle loading and error states
     useEffect(() => {
@@ -2965,15 +3020,44 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                         </h2>
                         {displayedTickets.length > 0 && (
                             <span className="text-xs text-gray-600 font-medium">
-                                {viewMode === 'kanban' 
-                                    ? <>Showing <span className="text-blue-600 font-semibold">{displayedTickets.length}</span> Tickets</>
-                                    : <>Showing <span className="text-blue-600 font-semibold">{((currentPage - 1) * ticketsPerPage) + 1}-{Math.min(currentPage * ticketsPerPage, displayedTickets.length)}</span> of <span className="text-blue-600 font-semibold">{displayedTickets.length}</span> Tickets</>
-                                }
+                                <>Showing <span className="text-blue-600 font-semibold">{((currentPage - 1) * ticketsPerPage) + 1}-{Math.min(currentPage * ticketsPerPage, displayedTickets.length)}</span> of <span className="text-blue-600 font-semibold">{displayedTickets.length}</span> Tickets</>
                             </span>
                         )}
                     </div>
                     
                     <div className="flex items-center gap-2">
+                        {/* Select Tickets Button */}
+                        {!assignMode && (
+                            <button
+                                onClick={() => {
+                                    if (showCheckboxes && selectedTickets.length > 0) {
+                                        // Cancel: clear selections and hide checkboxes
+                                        setSelectedTickets([]);
+                                        setShowCheckboxes(false);
+                                    } else {
+                                        // Toggle selection mode
+                                        setShowCheckboxes(!showCheckboxes);
+                                        if (!showCheckboxes) {
+                                            setSelectedTickets([]); // Clear selections when enabling
+                                        }
+                                    }
+                                }}
+                                disabled={loading}
+                                className={`group relative inline-flex items-center justify-center px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed border ${
+                                    showCheckboxes && selectedTickets.length > 0
+                                        ? 'text-white bg-red-600 hover:bg-red-700 border-red-600'
+                                        : showCheckboxes
+                                        ? 'text-white bg-blue-600 hover:bg-blue-700 border-blue-600'
+                                        : 'text-gray-700 bg-white hover:bg-gray-50 border-gray-300'
+                                }`}
+                                title={showCheckboxes && selectedTickets.length > 0 ? 'Cancel and unselect all tickets' : showCheckboxes ? 'Cancel selection mode' : 'Select tickets to export'}
+                            >
+                                <svg className="w-3 h-3 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                {showCheckboxes && selectedTickets.length > 0 ? 'Cancel Select' : showCheckboxes ? 'Cancel Select' : 'Select Tickets'}
+                            </button>
+                        )}
                         <button
                             onClick={async () => {
                                 if (!assignMode && selectedTickets.length > 0) {
@@ -2984,14 +3068,14 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                             }}
                             disabled={loading}
                             ref={exportButtonRef}
-                            className={`group relative inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded-md transition-all duration-200 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none ${
+                            className={`group relative inline-flex items-center justify-center px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed border ${
                                 !assignMode && selectedTickets.length > 0
-                                    ? 'text-white bg-green-600 hover:bg-green-700'
-                                    : 'text-green-700 bg-[#f8f9fa] hover:bg-green-50'
+                                    ? 'text-white bg-green-600 hover:bg-green-700 border-green-600'
+                                    : 'text-gray-700 bg-white hover:bg-gray-50 border-gray-300'
                             }`}
                             title={!assignMode && selectedTickets.length > 0 ? 'Export selected tickets' : 'Export tickets with filters'}
                         >
-                            <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <svg className="w-3 h-3 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V4" />
                             </svg>
                             {!assignMode && selectedTickets.length > 0 ? `Export Selected (${selectedTickets.length})` : 'Export Tickets'}
@@ -3036,33 +3120,6 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                             user={user}
                         />
                         
-                        {/* View Toggle Buttons */}
-                        <div className="flex items-center gap-1 border border-gray-300 rounded-md overflow-hidden h-8">
-                            <button
-                                onClick={() => setViewMode('list')}
-                                className={`px-3 h-full text-xs font-medium transition-all duration-200 flex items-center gap-1.5 ${
-                                    viewMode === 'list' 
-                                        ? 'bg-blue-600 text-white' 
-                                        : 'bg-white text-gray-700 hover:bg-gray-50'
-                                }`}
-                                title="List View"
-                            >
-                                <List size={14} />
-                                <span>List</span>
-                            </button>
-                            <button
-                                onClick={() => setViewMode('kanban')}
-                                className={`px-3 h-full text-xs font-medium transition-all duration-200 flex items-center gap-1.5 ${
-                                    viewMode === 'kanban' 
-                                        ? 'bg-blue-600 text-white' 
-                                        : 'bg-white text-gray-700 hover:bg-gray-50'
-                                }`}
-                                title="Kanban View"
-                            >
-                                <LayoutGrid size={14} />
-                                <span>Kanban</span>
-                            </button>
-                        </div>
                     </div>
                     
                     <div className="flex items-center gap-2 ml-auto">
@@ -3070,18 +3127,15 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                 <button 
                             onClick={refreshTickets}
                             disabled={loading}
-                            className="inline-flex items-center justify-center px-3 h-8 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 hover:border-gray-400 transition-all duration-200 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed !outline-none focus-visible:outline-none active:outline-none"
+                            className="inline-flex items-center justify-center px-3 h-8 text-xs font-medium text-gray-700 bg-white rounded-md hover:bg-gray-50 transition-all duration-200 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed outline-none focus:outline-none"
                             title="Refresh tickets data"
-                            style={{ outline: 'none !important', boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05) !important' }}
-                            onFocus={(e) => { e.target.style.outline = 'none'; e.target.style.boxShadow = '0 1px 2px 0 rgba(0, 0, 0, 0.05)'; }}
-                            onBlur={(e) => { e.target.style.outline = 'none'; e.target.style.boxShadow = '0 1px 2px 0 rgba(0, 0, 0, 0.05)'; }}
                                 >
                             <RefreshCw className={`w-3 h-3 mr-1 ${loading ? 'animate-spin' : ''}`} />
                             Refresh
                                 </button>
                         
-                        {/* Only show pagination in list view */}
-                        {viewMode === 'list' && renderPagination()}
+                        {/* Pagination */}
+                        {renderPagination()}
                         <div className="flex items-center gap-2 ml-3">
                             {/* Action Buttons: Assign, Select, Notes (copy logic from original) */}
                             {/* Copy from original code, lines 1291-1357 */}
@@ -3117,17 +3171,6 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                 </button>
                                 </>
                             ) : !canAssign && assignMode ? null : null}
-                            
-                            <NotesTooltipBubble title="Open your personal notes">
-                                <img 
-                                    src={stickyNoteIcon} 
-                                    alt="My Notes" 
-                                    onClick={() => setShowNotesPanel(!showNotesPanel)}
-                                    className={`w-6 h-6 cursor-pointer hover:opacity-80 transition-opacity duration-200 ${
-                                        showNotesPanel ? 'opacity-100' : 'opacity-70'
-                                    }`}
-                                />
-                            </NotesTooltipBubble>
                         </div>
                     </div>
                     {(assignMode || showCheckboxes || selectedTickets.length > 0) && (
@@ -3177,25 +3220,12 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                             {activeSearchKeyword ? `No tickets found matching "${activeSearchKeyword}".` : "No tickets found matching the criteria."}
                         </p>
                     )
-                ) : viewMode === 'kanban' ? (
-                    <KanbanView
-                        tickets={displayedTickets}
-                        onTicketClick={(ticket) => navigateTo('/tickets', ticket.id)}
-                        onStatusChange={handleTicketStatusChange}
-                        onAssignmentChange={handleTicketAssignment}
-                        onPeek={handlePeekTicket}
-                        user={user}
-                        loading={loading}
-                        availableEngineers={availableEngineers}
-                        changingStatusTickets={changingStatusTickets}
-                        assigningTickets={assigningTickets}
-                    />
                 ) : (
                     <ModernTicketGrid
                         tickets={paginatedTickets}
                         onTicketClick={(ticket) => navigateTo('/tickets', ticket.id)}
-                        onStatusChange={handleTicketStatusChange}
-                        onAssignmentChange={handleTicketAssignment}
+                        onStatusChange={null}
+                        onAssignmentChange={null}
                         onPeek={handlePeekTicket}
                         user={user}
                         loading={loading}
@@ -3221,8 +3251,8 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                     />
                 )}
                 
-                {/* Bottom Pagination - Only show in list view */}
-                {displayedTickets.length > 0 && viewMode === 'list' && (
+                {/* Bottom Pagination */}
+                {displayedTickets.length > 0 && (
                     <div className="flex justify-center items-center mt-4 mb-2 px-4">
                         {renderPagination()}
                     </div>
@@ -3496,7 +3526,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                     </div>
                                 ) : (pinnedNotes.length === 0 && unpinnedNotes.length === 0) ? (
                                     <div className="text-center py-8">
-                                        <FileText className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                                        <img src={writingIcon} alt="No notes" className="w-8 h-8 mx-auto mb-2 opacity-30" />
                                         <p className="text-sm text-gray-500">No notes found</p>
                                     </div>
                                 ) : (
@@ -3613,7 +3643,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                             <div>
                                                 <div className="flex items-center justify-center gap-2 mb-3 px-1">
                                                     <div className="flex-1 h-px bg-gray-200"></div>
-                                                    <FileText className="w-4 h-4 text-gray-500" />
+                                                    <img src={writingIcon} alt="Other Notes" className="w-4 h-4 opacity-60" />
                                                     <h3 className="text-sm font-semibold text-gray-700">Other Notes</h3>
                                                     <div className="flex-1 h-px bg-gray-200"></div>
                                                 </div>

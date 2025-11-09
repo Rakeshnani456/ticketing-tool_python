@@ -1,5 +1,4 @@
 import React, { useState, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ChevronDown, 
   ChevronUp, 
@@ -7,7 +6,6 @@ import {
   Edit, 
   Trash2,
   User,
-  Calendar,
   AlertCircle,
   CheckCircle,
   Clock,
@@ -15,11 +13,9 @@ import {
   ArrowUp,
   ArrowDown,
   ChevronsUpDown,
-  Minus,
-  Loader2
+  Minus
 } from 'lucide-react';
 import { clsx } from 'clsx';
-import CustomDropdown from './CustomDropdown';
 
 // Modern status badge component
 const StatusBadge = ({ status, size = 'sm' }) => {
@@ -133,11 +129,12 @@ const PriorityBadge = ({ priority, size = 'sm' }) => {
 const TableCell = ({ children, className, onClick, ...props }) => (
   <td 
     className={clsx(
-      'px-3 py-2 text-sm text-gray-600 border-b border-r border-gray-200 modern-table-cell',
+      'px-3 py-4 text-sm text-gray-800 border-b border-r border-gray-200 modern-table-cell',
       'hover:bg-gray-50 transition-colors duration-150',
       onClick && 'cursor-pointer',
       className
     )}
+    style={{ fontWeight: 500 }}
     onClick={onClick}
     {...props}
   >
@@ -149,16 +146,17 @@ const TableCell = ({ children, className, onClick, ...props }) => (
 const TableHeader = ({ children, className, sortable, sortDirection, onSort, tooltipAlign = 'right', ...props }) => (
   <th 
     className={clsx(
-      'px-3 py-2 text-left text-xs font-bold text-gray-700 tracking-wider relative group',
+      'px-3 py-2 text-left text-sm text-gray-900 tracking-wider relative group',
       'border-b border-r border-gray-200 bg-gray-50',
       sortable && 'cursor-pointer hover:bg-gray-100 transition-colors duration-150',
       className
     )}
+    style={{ fontWeight: 400 }}
     onClick={sortable ? onSort : undefined}
     {...props}
   >
-    <div className="flex items-center pr-7">
-      <span className="truncate">{children}</span>
+    <div className="flex items-center pr-7" style={{ fontWeight: 400 }}>
+      <span className="truncate" style={{ fontWeight: 400 }}>{children}</span>
     </div>
     {sortable && (
       <div className="absolute inset-y-0 right-2 flex flex-col items-center justify-center z-20">
@@ -223,23 +221,6 @@ const ModernTicketGrid = ({
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
   const [hoveredRow, setHoveredRow] = useState(null);
 
-  // Status options for dropdown
-  const statusOptions = [
-    { value: 'Open', label: 'Open' },
-    { value: 'In Progress', label: 'In Progress' },
-    { value: 'Hold', label: 'Hold' },
-    { value: 'Cancelled', label: 'Cancelled' }
-  ];
-
-  // Assignment options
-  const assignmentOptions = [
-    { value: 'unassigned', label: 'Unassigned' },
-    ...availableEngineers.map(engineer => ({
-      value: engineer.email,
-      label: engineer.name || engineer.email
-    }))
-  ];
-
   // Sort tickets based on current sort configuration
   const sortedTickets = useMemo(() => {
     if (!sortConfig.key) return tickets;
@@ -249,7 +230,7 @@ const ModernTicketGrid = ({
       let bValue = b[sortConfig.key];
 
       // Handle different data types
-      if (sortConfig.key === 'created_at') {
+      if (sortConfig.key === 'created_at' || sortConfig.key === 'updated_at') {
         aValue = new Date(aValue);
         bValue = new Date(bValue);
       }
@@ -274,10 +255,13 @@ const ModernTicketGrid = ({
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
+    return date.toLocaleString('en-US', {
       day: '2-digit',
       month: 'short',
-      year: 'numeric'
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
     });
   };
 
@@ -308,9 +292,32 @@ const ModernTicketGrid = ({
   }
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-visible">
-      <div className="overflow-x-auto overflow-visible relative z-10">
-        <table className="w-full border-collapse">
+    <div className="bg-white rounded-lg border border-gray-200 shadow-sm modern-ticket-grid-container">
+      <div 
+        className="relative z-10 modern-ticket-grid-scroll"
+        style={{ 
+          overflowX: 'auto',
+          overflowY: 'hidden',
+          WebkitOverflowScrolling: 'touch'
+        }}
+        onScroll={(e) => {
+          // Add scrolling class when user scrolls to show scrollbar
+          if (e.target.scrollLeft > 0 || e.target.scrollWidth > e.target.clientWidth) {
+            e.target.classList.add('scrolling');
+          }
+        }}
+        onMouseEnter={(e) => {
+          // Check if content overflows and add scrolling class
+          if (e.target.scrollWidth > e.target.clientWidth) {
+            e.target.classList.add('scrolling');
+          }
+        }}
+        onMouseLeave={(e) => {
+          // Remove scrolling class when mouse leaves
+          e.target.classList.remove('scrolling');
+        }}
+      >
+        <table className="border-collapse" style={{ width: '100%', tableLayout: 'auto' }}>
           <thead>
             <tr>
               {showCheckboxes && (
@@ -355,20 +362,17 @@ const ModernTicketGrid = ({
               <TableHeader sortable sortDirection={sortConfig.key === 'assigned_to' ? sortConfig.direction : null} onSort={() => handleSort('assigned_to')}>
                 Assignee
               </TableHeader>
-              <TableHeader className="w-16">Actions</TableHeader>
+              <TableHeader sortable sortDirection={sortConfig.key === 'updated_at' ? sortConfig.direction : null} onSort={() => handleSort('updated_at')}>
+                Last Updated
+              </TableHeader>
             </tr>
           </thead>
           <tbody>
-            <AnimatePresence>
               {sortedTickets.map((ticket, index) => (
-                <motion.tr
+                <tr
                   key={ticket.id}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  transition={{ duration: 0.2, delay: index * 0.02 }}
                   className={clsx(
-                    'group hover:bg-gray-50 transition-all duration-200 modern-grid-hover',
+                    'group hover:bg-gray-50 modern-grid-hover',
                     'border-b border-gray-200',
                     selectedTickets.includes(ticket.id) && 'bg-blue-50'
                   )}
@@ -392,11 +396,13 @@ const ModernTicketGrid = ({
                     </TableCell>
                   )}
                   <TableCell 
-                    className="ticket-id font-normal text-gray-700 hover:text-gray-900 text-xs tracking-wide"
+                    className="ticket-id text-sm tracking-wide"
+                    style={{ fontWeight: 500 }}
                   >
                     <a
                       href={`/tickets/${ticket.id}`}
-                      className="text-inherit hover:underline cursor-pointer"
+                      className="text-blue-700 hover:text-blue-800 hover:underline cursor-pointer"
+                      style={{ fontWeight: 500 }}
                       title="Open ticket details"
                       onClick={(e) => {
                         if (e.ctrlKey || e.metaKey) {
@@ -415,114 +421,45 @@ const ModernTicketGrid = ({
                     className="max-w-xs cursor-pointer"
                     onClick={() => onTicketClick?.(ticket)}
                   >
-                    <div className="ticket-summary line-clamp-2 text-gray-800 hover:text-gray-900 font-normal text-xs leading-relaxed">
+                    <div className="ticket-summary line-clamp-2 text-gray-900 hover:text-gray-950 text-sm leading-relaxed" style={{ fontWeight: 500 }}>
                       {ticket.short_description}
                     </div>
                   </TableCell>
-                  <TableCell className="text-gray-500">
-                    <div className="flex items-center gap-1.5">
-                      <Calendar className="h-3.5 w-3.5 text-gray-400" />
-                      <span className="ticket-meta text-xs font-normal text-gray-600">
-                        {formatDate(ticket.created_at)}
-                      </span>
-                    </div>
+                  <TableCell className="whitespace-nowrap">
+                    <span className="ticket-meta text-sm text-gray-700" style={{ fontWeight: 500 }}>
+                      {formatDate(ticket.created_at)}
+                    </span>
                   </TableCell>
                   <TableCell>
                     <PriorityBadge priority={ticket.priority} />
                   </TableCell>
                   <TableCell>
-                    {(user?.role === 'support' || user?.role === 'admin' || user?.role === 'super_admin' || user?.role === 'engineer') ? (
-                      <div className="w-full">
-                        {changingStatusTickets.has(ticket.id) ? (
-                          <div className="flex items-center gap-1 text-sm text-blue-600">
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                            <span>Updating...</span>
-                          </div>
-                        ) : (
-                          <div 
-                            className="custom-dropdown"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <CustomDropdown
-                              value={ticket.status}
-                              onChange={(value) => onStatusChange?.(ticket.id, value)}
-                              options={statusOptions}
-                              placeholder={ticket.status}
-                              className="text-sm w-full"
-                              disabled={['Cancelled'].includes(ticket.status)}
-                              variant="minimal"
-                              customDisplay={(
-                                <StatusBadge status={ticket.status} />
-                              )}
-                            />
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <StatusBadge status={ticket.status} />
-                    )}
+                    <StatusBadge status={ticket.status} />
                   </TableCell>
-                  <TableCell className="text-gray-500">
+                  <TableCell>
                     <div className="flex items-center gap-2">
-                      <User className="h-4 w-4 text-gray-400" />
-                      <span className="ticket-meta truncate font-normal text-xs text-gray-700">{ticket.reporter_email || ticket.requested_by || 'N/A'}</span>
+                      <User className="h-4 w-4 text-gray-500" />
+                      <span className="ticket-meta truncate text-sm text-gray-800" style={{ fontWeight: 500 }}>{ticket.reporter_email || ticket.requested_by || 'N/A'}</span>
                     </div>
                   </TableCell>
                   {(user?.role === 'super_admin' || user?.role === 'engineer') && (
-                    <TableCell className="text-gray-500">
-                      <span className="ticket-meta font-normal text-xs text-gray-600">{ticket.client_name || 'N/A'}</span>
+                    <TableCell>
+                      <span className="ticket-meta text-sm text-gray-800" style={{ fontWeight: 500 }}>{ticket.client_name || ''}</span>
                     </TableCell>
                   )}
-                  <TableCell className="text-gray-500">
-                    {(user?.role === 'support' || user?.role === 'admin' || user?.role === 'super_admin' || user?.role === 'engineer') ? (
-                      <div className="min-w-[180px] max-w-[280px] w-full">
-                        {engineersLoading && availableEngineers.length === 0 ? (
-                          <span className="text-xs text-gray-400 font-normal">Loading...</span>
-                        ) : assigningTickets.has(ticket.id) ? (
-                          <div className="flex items-center gap-1 text-xs text-blue-600 font-normal">
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                            <span>Assigning...</span>
-                          </div>
-                        ) : (
-                          <div 
-                            className="custom-dropdown"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <CustomDropdown
-                              value={ticket.assigned_to_email || 'unassigned'}
-                              onChange={(value) => onAssignmentChange?.(ticket.id, value)}
-                              options={assignmentOptions}
-                              placeholder={ticket.assigned_to_email || 'Unassigned'}
-                              className="text-xs w-full font-normal"
-                              disabled={['Cancelled'].includes(ticket.status)}
-                              variant="minimal"
-                            />
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                        <div className="flex items-center gap-2">
-                        <User className="h-4 w-4 text-gray-400" />
-                        <span className="ticket-meta truncate font-normal text-xs text-gray-600">{ticket.assigned_to_email || 'Unassigned'}</span>
-                      </div>
-                    )}
-                  </TableCell>
-                  <TableCell className="w-16">
-                    <div className="flex items-center gap-1">
-                      <motion.button
-                        whileHover={{ scale: 1.1 }}
-                        whileTap={{ scale: 0.95 }}
-                        className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors duration-150"
-                        onClick={() => onPeek?.(ticket)}
-                        title="Quick view"
-                      >
-                        <Eye className="h-4 w-4" />
-                      </motion.button>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <User className="h-4 w-4 text-gray-500" />
+                      <span className="ticket-meta truncate text-sm text-gray-800" style={{ fontWeight: 500 }}>{ticket.assigned_to_email || 'Unassigned'}</span>
                     </div>
                   </TableCell>
-                </motion.tr>
+                  <TableCell className="whitespace-nowrap">
+                    <span className="ticket-meta text-sm text-gray-700" style={{ fontWeight: 500 }}>
+                      {formatDate(ticket.updated_at)}
+                    </span>
+                  </TableCell>
+                </tr>
               ))}
-            </AnimatePresence>
           </tbody>
         </table>
       </div>

@@ -141,7 +141,7 @@ const TicketUpdatesSection = ({
                         {(user?.role === 'super_admin' || user?.role === 'admin' || user?.role === 'support') ? (
                             <div className="space-y-6">
                                 <div>
-                                    <label className="block text-sm font-bold text-gray-900 mb-2 tracking-tight">
+                                    <label className="block text-sm font-bold text-gray-900 mb-2 tracking-tight" style={{ fontWeight: 700, color: '#111827' }}>
                                         Closure Notes
                                     </label>
                                     <p className="text-xs text-gray-600 mb-3 font-medium">
@@ -178,12 +178,12 @@ const TicketUpdatesSection = ({
                                         <div className="flex items-start gap-3">
                                             <CheckCircle2 className="w-6 h-6 text-green-600 flex-shrink-0 mt-0.5" />
                                             <div className="flex-1">
-                                                <h3 className="text-base font-bold text-gray-900 mb-2 tracking-tight">
+                                                <h3 className="text-base font-bold text-gray-900 mb-2 tracking-tight" style={{ fontWeight: 700, color: '#111827' }}>
                                                     Ticket Closed
                                                 </h3>
                                                 <div className="bg-white rounded-md p-3 text-left">
-                                                    <p className="text-xs font-bold text-gray-900 mb-2 uppercase tracking-wide">Resolution Summary:</p>
-                                                    <p className="text-sm text-gray-800 font-normal whitespace-pre-wrap leading-relaxed">{closureNotes}</p>
+                                                    <p className="text-xs font-bold text-gray-900 mb-2 uppercase tracking-wide" style={{ fontWeight: 700, color: '#111827' }}>Resolution Summary:</p>
+                                                    <p className="text-sm text-gray-800 font-normal whitespace-pre-wrap leading-relaxed" style={{ fontWeight: 500, color: '#1f2937' }}>{closureNotes}</p>
                                                 </div>
                                             </div>
                                         </div>
@@ -192,10 +192,10 @@ const TicketUpdatesSection = ({
                                     // Show "being reviewed" message when ticket is not yet closed or has no closure notes
                                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
                                         <CheckCircle2 className="w-12 h-12 text-blue-500 mx-auto mb-3" />
-                                        <h3 className="text-base font-bold text-gray-900 mb-2 tracking-tight">
+                                        <h3 className="text-base font-bold text-gray-900 mb-2 tracking-tight" style={{ fontWeight: 700, color: '#111827' }}>
                                             Ticket Closure Information
                                         </h3>
-                                        <p className="text-sm text-gray-700 font-medium">
+                                        <p className="text-sm text-gray-700 font-medium" style={{ fontWeight: 500, color: '#374151' }}>
                                             {/* Show contextual message based on ticket ownership */}
                                             {ticket?.created_by === user?.email || ticket?.reporter_email === user?.email ? (
                                                 "This ticket is being reviewed by our support team. You will be notified once it's closed with the resolution details."

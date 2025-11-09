@@ -1,12 +1,12 @@
 import React from 'react';
-import { User, Calendar, Clock, Activity, AlertCircle, CheckCircle, Loader2, XCircle } from 'lucide-react';
+import { User, Calendar, Clock, Activity, AlertCircle, CheckCircle, Loader2, XCircle, Edit3, X, Save } from 'lucide-react';
 import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
 import UserProfilePopup from '../common/UserProfilePopup';
 import CustomDropdown from '../common/CustomDropdown';
 
 const FieldBox = ({ children, className = "", isDisplayOnly = false, hasError = false }) => (
-    <div className={`FieldBox border px-3 py-1.5 h-8 flex items-center rounded-md shadow-sm transition-all duration-200
+    <div className={`FieldBox border px-3 py-2 h-9 flex items-center rounded-md shadow-sm transition-all duration-200
         ${isDisplayOnly ? 'bg-gradient-to-r from-gray-50 to-gray-100 text-gray-800 cursor-text border-gray-200 overflow-hidden' : 'bg-white border-gray-300 hover:border-blue-400'}
         ${hasError ? 'border-red-500 ring-2 ring-red-200 bg-red-50' : ''}
         ${className}`}>
@@ -45,7 +45,10 @@ const TicketProgressSection = ({
     user,
     attemptedHoldWithoutComment,
     fieldUpdateStates,
-    handleFieldUpdate
+    handleFieldUpdate,
+    onUpdateClick,
+    onConfirmUpdate,
+    updateModeLoading
 }) => {
     const priorities = [
         { value: 'Low', label: 'Low' },
@@ -115,23 +118,70 @@ const TicketProgressSection = ({
         }, 250);
     }, [handleUpdateTicket]);
 
+    // Check if user can update (superadmin or support/engineer)
+    const canUpdate = user?.role === 'super_admin' || user?.role === 'support';
+    
     return (
         <div className="bg-white p-3 sm:p-4 h-fit w-full min-w-0 max-w-full overflow-x-hidden overflow-y-auto ticket-progress-section">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-2 sm:mb-3 gap-2 sm:gap-0 w-full min-w-0 max-w-full overflow-x-hidden">
                 <div className="flex items-center gap-2">
                     <div className="w-1 h-5 bg-gradient-to-b from-purple-600 to-purple-800 rounded-full"></div>
-                    <h3 className="text-xs sm:text-sm font-extrabold tracking-wide uppercase text-gray-900 flex items-center">
+                    <h3 className="text-sm sm:text-base font-medium tracking-wide uppercase text-gray-900 flex items-center" style={{ fontWeight: 500, color: '#111827' }}>
                         Workflow
                     </h3>
                     <Activity width={16} height={16} className="text-purple-600" />
                 </div>
-                {/* Controls removed – autosave on change */}
+                {/* Update button - only visible to superadmin and support/engineers */}
+                {canUpdate && !isTicketClosedOrResolved && (
+                    <div className="flex items-center gap-2">
+                        {!isEditing ? (
+                            <button
+                                onClick={onUpdateClick}
+                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors duration-200 shadow-sm"
+                                title="Update ticket workflow"
+                            >
+                                <Edit3 className="w-3.5 h-3.5" />
+                                Update
+                            </button>
+                        ) : (
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={onConfirmUpdate}
+                                    disabled={updateModeLoading}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors duration-200 shadow-sm disabled:bg-gray-400 disabled:cursor-not-allowed"
+                                    title="Confirm updates"
+                                >
+                                    {updateModeLoading ? (
+                                        <>
+                                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                            Saving...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Save className="w-3.5 h-3.5" />
+                                            Confirm
+                                        </>
+                                    )}
+                                </button>
+                                <button
+                                    onClick={handleCancelEdit}
+                                    disabled={updateModeLoading}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-gray-500 text-white rounded-md hover:bg-gray-600 transition-colors duration-200 shadow-sm disabled:bg-gray-400 disabled:cursor-not-allowed"
+                                    title="Cancel updates"
+                                >
+                                    <X className="w-3.5 h-3.5" />
+                                    Cancel
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                )}
             </div>
 
             <div className="space-y-2 sm:space-y-2.5 w-full min-w-0 max-w-full overflow-x-hidden">
                 {/* Status */}
                 <div className="w-full min-w-0 max-w-full overflow-x-hidden">
-                    <label className="block text-xs font-semibold text-gray-900 mb-2 tracking-tight">
+                    <label className="block text-sm font-medium text-gray-900 mb-2 tracking-tight" style={{ fontWeight: 500, color: '#111827' }}>
                         Status:
                     </label>
                     {isEditing && canEdit && !isTicketClosedOrResolved ? (
@@ -149,30 +199,13 @@ const TicketProgressSection = ({
                                     placeholder="Select status..."
                                     className="w-full"
                                     size="sm"
-                                    disabled={fieldUpdateStates.status?.loading}
                                     focusStyle="gray"
                                     customDisplay={editableFields.status ? (
-                                        <span className={`text-[10px] font-semibold ${getStatusTextClass(editableFields.status)}`}>
+                                        <span className={`text-xs font-medium ${getStatusTextClass(editableFields.status)}`}>
                                             {editableFields.status}
                                         </span>
                                     ) : null}
                                 />
-                                {/* Visual feedback indicators */}
-                                {fieldUpdateStates.status?.loading && (
-                                    <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
-                                        <Loader2 className="w-3 h-3 text-blue-500 animate-spin" />
-                                    </div>
-                                )}
-                                {fieldUpdateStates.status?.success && (
-                                    <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
-                                        <CheckCircle className="w-3 h-3 text-green-500" />
-                                    </div>
-                                )}
-                                {fieldUpdateStates.status?.error && (
-                                    <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
-                                        <XCircle className="w-3 h-3 text-red-500" />
-                                    </div>
-                                )}
                             </div>
                             {user?.role === 'super_admin' && attemptedHoldWithoutComment && (
                                 <div className="mt-1.5 p-2 bg-amber-50 border border-amber-200 rounded-md text-xs text-amber-800 flex items-start gap-1.5">
@@ -180,23 +213,10 @@ const TicketProgressSection = ({
                                     <span><strong>Hold requires a comment.</strong> Please add a comment in the Comments section before placing this ticket on Hold.</span>
                                 </div>
                             )}
-                            {/* Success/Error message below field */}
-                            {fieldUpdateStates.status?.success && (
-                                <p className="text-xs mt-1 text-green-600 flex items-center gap-1">
-                                    <CheckCircle className="w-3 h-3" />
-                                    Status updated successfully
-                                </p>
-                            )}
-                            {fieldUpdateStates.status?.error && (
-                                <p className="text-xs mt-1 text-red-600 flex items-center gap-1">
-                                    <XCircle className="w-3 h-3" />
-                                    Failed to update status
-                                </p>
-                            )}
                         </>
                     ) : (
                         <FieldBox isDisplayOnly={true} className="w-full min-w-0 max-w-full overflow-x-hidden">
-                            <div className={`px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-lg text-[10px] font-semibold border ${getStatusClasses(ticket.status)}`}>
+                            <div className={`px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-lg text-xs font-medium border ${getStatusClasses(ticket.status)}`}>
                                 {ticket.status}
                             </div>
                         </FieldBox>
@@ -205,7 +225,7 @@ const TicketProgressSection = ({
 
                 {/* Priority */}
                 <div className="w-full min-w-0 max-w-full overflow-x-hidden">
-                    <label className="block text-xs font-semibold text-gray-900 mb-2 tracking-tight">
+                    <label className="block text-sm font-medium text-gray-900 mb-2 tracking-tight" style={{ fontWeight: 500, color: '#111827' }}>
                         Priority:
                     </label>
                     {isEditing && canEdit ? (
@@ -219,34 +239,17 @@ const TicketProgressSection = ({
                                 placeholder="Select priority..."
                                 className="w-full"
                                 size="sm"
-                                disabled={fieldUpdateStates.priority?.loading}
                                 focusStyle="gray"
                                 customDisplay={editableFields.priority ? (
-                                    <span className={`text-[10px] font-semibold ${getPriorityTextClass(editableFields.priority)}`}>
+                                    <span className={`text-xs font-medium ${getPriorityTextClass(editableFields.priority)}`}>
                                         {editableFields.priority}
                                     </span>
                                 ) : null}
                             />
-                            {/* Visual feedback indicators */}
-                            {fieldUpdateStates.priority?.loading && (
-                                <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
-                                    <Loader2 className="w-3 h-3 text-blue-500 animate-spin" />
-                                </div>
-                            )}
-                            {fieldUpdateStates.priority?.success && (
-                                <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
-                                    <CheckCircle className="w-3 h-3 text-green-500" />
-                                </div>
-                            )}
-                            {fieldUpdateStates.priority?.error && (
-                                <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
-                                    <XCircle className="w-3 h-3 text-red-500" />
-                                </div>
-                            )}
                         </div>
                     ) : (
                         <FieldBox isDisplayOnly={true} className="w-full min-w-0 max-w-full overflow-x-hidden">
-                            <div className={`px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-lg text-[10px] font-semibold border ${getPriorityClasses(ticket.priority)}`}>
+                            <div className={`px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-lg text-xs font-medium border ${getPriorityClasses(ticket.priority)}`}>
                                 {ticket.priority}
                             </div>
                         </FieldBox>
@@ -255,7 +258,7 @@ const TicketProgressSection = ({
 
                 {/* Category */}
                 <div className="w-full min-w-0 max-w-full overflow-x-hidden">
-                    <label className="block text-xs font-semibold text-gray-900 mb-1.5 tracking-tight">
+                        <label className="block text-sm font-medium text-gray-900 mb-1.5 tracking-tight" style={{ fontWeight: 500, color: '#111827' }}>
                         Category:
                     </label>
                     {isEditing && canEdit ? (
@@ -275,7 +278,7 @@ const TicketProgressSection = ({
                         />
                     ) : (
                         <FieldBox isDisplayOnly={true} className="w-full min-w-0 max-w-full overflow-x-hidden">
-                            <span className="text-xs font-medium text-gray-800 truncate flex-1 min-w-0 max-w-full">
+                            <span className="text-sm font-normal text-gray-800 truncate flex-1 min-w-0 max-w-full" style={{ fontWeight: 400, color: '#1f2937' }}>
                                 {ticket.category || 'N/A'}
                             </span>
                         </FieldBox>
@@ -284,7 +287,7 @@ const TicketProgressSection = ({
 
                 {/* Assigned to */}
                 <div className="w-full min-w-0 max-w-full overflow-x-hidden">
-                    <label className="block text-xs font-semibold text-gray-900 mb-1.5 tracking-tight">
+                        <label className="block text-sm font-medium text-gray-900 mb-1.5 tracking-tight" style={{ fontWeight: 500, color: '#111827' }}>
                         Assigned to:
                     </label>
                     {isEditing && canEdit && !isTicketClosedOrResolved ? (
@@ -304,49 +307,20 @@ const TicketProgressSection = ({
                                     ]}
                                     placeholder="Select Assignee"
                                     className="w-full"
-                                    disabled={!canEdit || isTicketClosedOrResolved || supportUsersLoading || fieldUpdateStates.assigned_to_email?.loading}
+                                    disabled={!canEdit || isTicketClosedOrResolved || supportUsersLoading}
                                     size="sm"
                                     focusStyle="gray"
                                 />
-                                {/* Visual feedback indicators */}
-                                {fieldUpdateStates.assigned_to_email?.loading && (
-                                    <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
-                                        <Loader2 className="w-3 h-3 text-blue-500 animate-spin" />
-                                    </div>
-                                )}
-                                {fieldUpdateStates.assigned_to_email?.success && (
-                                    <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
-                                        <CheckCircle className="w-3 h-3 text-green-500" />
-                                    </div>
-                                )}
-                                {fieldUpdateStates.assigned_to_email?.error && (
-                                    <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
-                                        <XCircle className="w-3 h-3 text-red-500" />
-                                    </div>
-                                )}
                             </div>
                             {assignedToErrorMessage && (
                                 <p className="text-xs mt-1 text-red-600">{assignedToErrorMessage}</p>
                             )}
-                            {/* Success/Error message below field */}
-                            {fieldUpdateStates.assigned_to_email?.success && (
-                                <p className="text-xs mt-1 text-green-600 flex items-center gap-1">
-                                    <CheckCircle className="w-3 h-3" />
-                                    Assignment updated successfully
-                                </p>
-                            )}
-                            {fieldUpdateStates.assigned_to_email?.error && (
-                                <p className="text-xs mt-1 text-red-600 flex items-center gap-1">
-                                    <XCircle className="w-3 h-3" />
-                                    Failed to update assignment
-                                </p>
-                            )}
                         </div>
                     ) : (
                         <FieldBox isDisplayOnly={true} className="w-full min-w-0 max-w-full overflow-x-hidden">
-                            <User className="w-3 h-3 text-gray-500 mr-1.5 shrink-0" />
+                            <User className="w-4 h-4 text-gray-500 mr-1.5 shrink-0" />
                             <span
-                                className="text-xs font-medium text-gray-800 truncate flex-1 min-w-0 max-w-full cursor-pointer hover:text-blue-600 transition-colors"
+                                className="text-sm font-normal text-gray-800 truncate flex-1 min-w-0 max-w-full cursor-pointer hover:text-blue-600 transition-colors"
                                 onMouseEnter={() => {
                                     if (ticket.assigned_to_email) {
                                         showProfilePopup({ email: ticket.assigned_to_email, fullName: ticket.assigned_to_name }, null);
@@ -379,13 +353,13 @@ const TicketProgressSection = ({
                 {/* Closed By (Always rendered for support, but only if resolved/cancelled) */}
                 {isSupportUser && (
                     <div className="w-full min-w-0 max-w-full overflow-x-hidden">
-                        <label className="block text-xs font-semibold text-gray-900 mb-1.5 tracking-tight">
+                        <label className="block text-sm font-medium text-gray-900 mb-1.5 tracking-tight" style={{ fontWeight: 500, color: '#111827' }}>
                             Closed by:
                         </label>
                         <FieldBox className="w-full min-w-0 max-w-full overflow-x-hidden" isDisplayOnly={true}>
-                            <User className="w-3 h-3 text-gray-500 mr-1.5 shrink-0" />
+                            <User className="w-4 h-4 text-gray-500 mr-1.5 shrink-0" />
                             <span
-                                className="text-xs font-medium text-gray-800 truncate flex-1 min-w-0 max-w-full cursor-pointer hover:text-blue-600 transition-colors"
+                                className="text-sm font-normal text-gray-800 truncate flex-1 min-w-0 max-w-full cursor-pointer hover:text-blue-600 transition-colors"
                                 onMouseEnter={() => showProfilePopup({ email: (isEditing ? editableFields.closed_by_email : ticket.closed_by_email), fullName: null }, null)}
                                 onMouseLeave={() => { cancelShowProfilePopup(); hidePopup(); }}
                             >
@@ -417,12 +391,12 @@ const TicketProgressSection = ({
                 {((isEditing ? editableFields.status : ticket.status) === 'Resolved' ||
                   (isEditing ? editableFields.status : ticket.status) === 'Cancelled') && (
                     <div className="w-full min-w-0 max-w-full overflow-x-hidden">
-                        <label className="block text-xs font-semibold text-gray-900 mb-1.5 tracking-tight">
+                        <label className="block text-sm font-medium text-gray-900 mb-1.5 tracking-tight" style={{ fontWeight: 500, color: '#111827' }}>
                             Resolved Date:
                         </label>
                         <FieldBox className="w-full min-w-0 max-w-full overflow-x-hidden" isDisplayOnly={true}>
-                            <Calendar className="w-3 h-3 text-gray-500 mr-1.5 shrink-0" />
-                            <span className="text-xs font-medium text-gray-800 text-wrap overflow-hidden flex-1 min-w-0 max-w-full">
+                            <Calendar className="w-4 h-4 text-gray-500 mr-1.5 shrink-0" />
+                            <span className="text-sm font-normal text-gray-800 text-wrap overflow-hidden flex-1 min-w-0 max-w-full" style={{ fontWeight: 400, color: '#1f2937' }}>
                                 {(isEditing && editableFields.resolved_at
                                     ? new Date(editableFields.resolved_at).toLocaleString()
                                     : ticket.resolved_at
@@ -436,33 +410,33 @@ const TicketProgressSection = ({
                 {/* Time Spent - Only for Engineers and when status is Resolved or closing or already resolved/cancelled */}
                 {(isSupportUser || canEdit) && (
                     <div className="w-full min-w-0 max-w-full overflow-x-hidden">
-                        <label className="text-xs font-semibold text-gray-900 mb-1.5 tracking-tight">
-                            Time Spent <span className="text-xs font-normal text-gray-600">(minutes)</span>:
+                        <label className="text-sm font-medium text-gray-900 mb-1.5 tracking-tight" style={{ fontWeight: 500, color: '#111827' }}>
+                            Time Spent <span className="text-sm font-normal text-gray-600">(minutes)</span>:
                         </label>
                         {(isEditing && (editableFields.status === 'Resolved' || editableFields.status === 'Cancelled')) || isTicketClosedOrResolved ? (
                             <>
                                 <FieldBox hasError={timeSpentHasError} className={`w-full min-w-0 max-w-full overflow-x-hidden`}>
-                                    <Clock className="w-3 h-3 text-gray-500 mr-1.5 shrink-0" />
+                                    <Clock className="w-4 h-4 text-gray-500 mr-1.5 shrink-0" />
                                     <input
                                         id="time_spent"
                                         type="text"
                                         value={timeSpent}
                                         onChange={handleTimeSpentChange}
-                                        className="FieldBox border border-blue-300 px-2 py-1 min-h-[28px] flex items-center bg-white rounded w-full min-w-0 max-w-full text-xs focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-transparent"
+                                        className="FieldBox border border-blue-300 px-2 py-1 min-h-[28px] flex items-center bg-white rounded w-full min-w-0 max-w-full text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-transparent"
                                         disabled={!canEdit || isTicketClosedOrResolved}
                                         placeholder="in minutes (e.g., 45)"
                                         style={{ minWidth: 0, maxWidth: '100%' }}
                                     />
-                                    <span className="ml-1.5 text-xs shrink-0">minutes</span>
+                                    <span className="ml-1.5 text-sm shrink-0">minutes</span>
                                 </FieldBox>
                                 {timeSpentErrorMessage && (
-                                    <p className="text-xs mt-1">{timeSpentErrorMessage}</p>
+                                    <p className="text-sm mt-1">{timeSpentErrorMessage}</p>
                                 )}
                             </>
                         ) : (
                             <FieldBox className="w-full min-w-0 max-w-full overflow-x-hidden" isDisplayOnly={true}>
-                                <Clock className="w-3 h-3 text-gray-500 mr-1.5 shrink-0" />
-                                <span className="text-xs font-medium text-gray-800 truncate flex-1 min-w-0 max-w-full">
+                                <Clock className="w-4 h-4 text-gray-500 mr-1.5 shrink-0" />
+                                <span className="text-sm font-normal text-gray-800 truncate flex-1 min-w-0 max-w-full" style={{ fontWeight: 400, color: '#1f2937' }}>
                                     {ticket.time_spent ? `${ticket.time_spent} minutes` : <span className="italic text-gray-500">N/A</span>}
                                 </span>
                             </FieldBox>

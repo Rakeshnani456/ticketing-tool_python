@@ -25,6 +25,7 @@
     "animate.css": "^4.1.1",
     "antd": "^5.26.3",
     "autoprefixer": "^10.4.21",
+    "caniuse-lite": "^1.0.30001754",
     "chart.js": "^4.5.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

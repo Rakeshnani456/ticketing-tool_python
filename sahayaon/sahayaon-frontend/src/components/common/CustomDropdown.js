@@ -162,11 +162,11 @@ const CustomDropdown = ({
     };
 
     // Compute size classes
-    const sizeTextClass = size === 'sm' ? 'text-xs' : 'text-sm';
-    // Match FieldBox (h-8, px-3 py-1.5) for sm
-    const sizePadDefault = size === 'sm' ? 'px-3 py-1.5' : 'px-3 py-3';
+    const sizeTextClass = size === 'sm' ? 'text-sm' : 'text-sm';
+    // Match FieldBox (h-10, px-3 py-2) for sm to match other inputs
+    const sizePadDefault = size === 'sm' ? 'px-3 py-2' : 'px-3 py-3';
     const sizePadMinimal = size === 'sm' ? 'px-2 py-1' : 'px-2 py-2';
-    const buttonHeightClass = size === 'sm' ? 'h-8' : 'min-h-[40px]';
+    const buttonHeightClass = size === 'sm' ? 'h-10' : 'min-h-[40px]';
 
     return (
         <>
@@ -263,7 +263,7 @@ const CustomDropdown = ({
                                         : 'border-gray-300 bg-white hover:border-gray-400'
                             }`
                     }`}
-                    style={{ fontFamily: 'Arial, sans-serif', fontWeight: 400, fontOpticalSizing: 'auto', fontStyle: 'normal' }}
+                    style={{ fontFamily: "'Source Sans 3', sans-serif", fontWeight: 400, fontOpticalSizing: 'auto', fontStyle: 'normal' }}
                 >
                     <div className="flex items-center gap-2 min-w-0 flex-1 text-left">
                         <div 
@@ -280,7 +280,7 @@ const CustomDropdown = ({
                         </div>
                     </div>
                     <svg 
-                        className={`w-3 h-3 text-gray-400 transition-transform duration-200 flex-shrink-0 ${
+                        className={`w-3 h-3 text-blue-500 transition-transform duration-200 flex-shrink-0 ${
                             isOpen ? 'rotate-180' : ''
                         }`} 
                         viewBox="0 0 12 12" 
@@ -324,7 +324,7 @@ const CustomDropdown = ({
                                     option.value === value ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-800'
                                 }`}
                                 style={{ 
-                                    fontFamily: 'Arial, sans-serif', 
+                                    fontFamily: "'Source Sans 3', sans-serif", 
                                     fontWeight: 400, 
                                     fontOpticalSizing: 'auto', 
                                     fontStyle: 'normal',

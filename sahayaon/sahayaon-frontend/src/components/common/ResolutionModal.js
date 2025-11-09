@@ -1,6 +1,7 @@
 // ResolutionModal.js - Modal for capturing time spent and closure notes before resolving a ticket
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { XCircle, Clock, FileText, AlertCircle, Loader2, Ticket, User } from 'lucide-react';
 
 const ResolutionModal = ({
@@ -19,6 +20,120 @@ const ResolutionModal = ({
         timeSpent: '',
         closureNotes: ''
     });
+    const timeSpentInputRef = useRef(null);
+    const modalRef = useRef(null);
+    const closeButtonRef = useRef(null);
+    const confirmButtonRef = useRef(null);
+
+    // Lock body scroll and prevent background interaction when modal is open
+    useEffect(() => {
+        if (isOpen) {
+            // Add class to body to style header/sidebar
+            document.body.classList.add('resolution-modal-open');
+            
+            // Prevent body scroll
+            const originalStyle = window.getComputedStyle(document.body).overflow;
+            document.body.style.overflow = 'hidden';
+            
+            // Prevent scrolling on iOS
+            const originalPosition = document.body.style.position;
+            const originalTop = document.body.style.top;
+            const scrollY = window.scrollY;
+            document.body.style.position = 'fixed';
+            document.body.style.top = `-${scrollY}px`;
+            document.body.style.width = '100%';
+            
+            // Disable pointer events on header and sidebar
+            const header = document.querySelector('header');
+            const sidebar = document.querySelector('.sidebar-glass');
+            
+            if (header) {
+                header.style.pointerEvents = 'none';
+                header.style.opacity = '0.3';
+                header.style.transition = 'opacity 0.2s ease';
+            }
+            
+            if (sidebar) {
+                sidebar.style.pointerEvents = 'none';
+                sidebar.style.opacity = '0.3';
+                sidebar.style.transition = 'opacity 0.2s ease';
+            }
+            
+            // Auto-focus time spent input when modal opens
+            setTimeout(() => {
+                if (timeSpentInputRef.current) {
+                    timeSpentInputRef.current.focus();
+                }
+            }, 100);
+
+            // Handle ESC key - only allow closing if not loading
+            const handleEscape = (e) => {
+                if (e.key === 'Escape' && !loading) {
+                    onClose();
+                }
+            };
+            
+            document.addEventListener('keydown', handleEscape);
+
+            // Focus trap - keep focus within modal
+            const handleTabKey = (e) => {
+                if (e.key !== 'Tab') return;
+                
+                if (!modalRef.current) return;
+                
+                const focusableElements = modalRef.current.querySelectorAll(
+                    'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+                );
+                const firstElement = focusableElements[0];
+                const lastElement = focusableElements[focusableElements.length - 1];
+                
+                if (e.shiftKey) {
+                    // Shift + Tab
+                    if (document.activeElement === firstElement) {
+                        e.preventDefault();
+                        lastElement.focus();
+                    }
+                } else {
+                    // Tab
+                    if (document.activeElement === lastElement) {
+                        e.preventDefault();
+                        firstElement.focus();
+                    }
+                }
+            };
+            
+            document.addEventListener('keydown', handleTabKey);
+
+            return () => {
+                // Remove class from body
+                document.body.classList.remove('resolution-modal-open');
+                
+                // Restore header and sidebar - query again in cleanup
+                const headerEl = document.querySelector('header');
+                const sidebarEl = document.querySelector('.sidebar-glass');
+                
+                if (headerEl) {
+                    headerEl.style.pointerEvents = '';
+                    headerEl.style.opacity = '';
+                    headerEl.style.transition = '';
+                }
+                
+                if (sidebarEl) {
+                    sidebarEl.style.pointerEvents = '';
+                    sidebarEl.style.opacity = '';
+                    sidebarEl.style.transition = '';
+                }
+                
+                document.body.style.overflow = originalStyle;
+                document.body.style.position = originalPosition;
+                document.body.style.top = originalTop;
+                document.body.style.width = '';
+                window.scrollTo(0, scrollY);
+                document.removeEventListener('keydown', handleEscape);
+                document.removeEventListener('keydown', handleTabKey);
+            };
+        }
+    }, [isOpen, loading, onClose]);
 
     const validateAndConfirm = () => {
         const newErrors = {
@@ -62,16 +177,68 @@ const ResolutionModal = ({
 
     if (!isOpen) return null;
 
-    return (
-        <div className="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', paddingTop: '60px' }}>
-            {/* Background overlay */}
+    // Render modal using portal to document.body to ensure it's above everything
+    const modalContent = (
+        <div 
+            className="fixed inset-0 overflow-y-auto" 
+            aria-labelledby="modal-title" 
+            role="dialog" 
+            aria-modal="true" 
+            style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center', 
+                paddingTop: '60px',
+                zIndex: 99999,
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                width: '100vw',
+                height: '100vh'
+            }}
+        >
+            {/* Background overlay - covers entire viewport including header and sidebar */}
             <div 
-                className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" 
-                onClick={onClose}
+                className="fixed inset-0 bg-gray-900 transition-opacity"
+                style={{ 
+                    pointerEvents: 'auto',
+                    zIndex: 99998,
+                    opacity: 0.92,
+                    backdropFilter: 'blur(8px)',
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    width: '100vw',
+                    height: '100vh',
+                    margin: 0,
+                    padding: 0
+                }}
+                onClick={(e) => {
+                    // Prevent closing on backdrop click - user must use cancel button
+                    e.stopPropagation();
+                    e.preventDefault();
+                }}
+                onMouseDown={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                }}
             ></div>
 
             {/* Modal panel - Centered */}
-            <div className="relative inline-block align-middle bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all max-w-2xl w-full mx-4 max-h-[calc(90vh-60px)] overflow-y-auto">
+            <div 
+                ref={modalRef}
+                className="relative inline-block align-middle bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all max-w-2xl w-full mx-4 max-h-[calc(90vh-60px)] overflow-y-auto"
+                style={{ 
+                    zIndex: 99999,
+                    position: 'relative',
+                    pointerEvents: 'auto' // Enable pointer events on modal itself
+                }}
+                onClick={(e) => e.stopPropagation()}
+            >
                     {/* Header */}
                     <div className="bg-gradient-to-r from-emerald-50 via-green-50 to-teal-50 px-4 py-3 border-b border-green-300">
                         <div className="flex items-center justify-between">
@@ -80,9 +247,11 @@ const ResolutionModal = ({
                                 Resolve Ticket
                             </h3>
                             <button
+                                ref={closeButtonRef}
                                 onClick={onClose}
                                 className="text-gray-400 hover:text-gray-600 transition-colors"
                                 disabled={loading}
+                                aria-label="Close modal"
                             >
                                 <XCircle className="w-4 h-4" />
                             </button>
@@ -152,6 +321,7 @@ const ResolutionModal = ({
                                     Time Spent (minutes) <span className="text-red-500">*</span>
                                 </label>
                                 <input
+                                    ref={timeSpentInputRef}
                                     type="text"
                                     value={timeSpent}
                                     onChange={handleTimeSpentChange}
@@ -162,6 +332,7 @@ const ResolutionModal = ({
                                             ? 'border-red-500 bg-red-50' 
                                             : 'border-gray-300 bg-white hover:border-gray-400'
                                     } ${loading ? 'bg-gray-50 cursor-not-allowed' : ''}`}
+                                    autoFocus
                                 />
                                 {errors.timeSpent && (
                                     <p className="mt-1 text-xs text-red-600 flex items-center gap-1">
@@ -215,6 +386,7 @@ const ResolutionModal = ({
                             Cancel
                         </button>
                         <button
+                            ref={confirmButtonRef}
                             onClick={validateAndConfirm}
                             disabled={loading}
                             className="px-3 py-1.5 text-xs font-semibold text-white bg-gradient-to-r from-green-600 to-green-700 rounded-md hover:from-green-700 hover:to-green-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
@@ -226,6 +398,9 @@ const ResolutionModal = ({
             </div>
         </div>
     );
+
+    // Use portal to render at document.body level to ensure highest stacking context
+    return createPortal(modalContent, document.body);
 };
 
 export default ResolutionModal;

@@ -6,6 +6,7 @@ import { collection, query, onSnapshot, where, orderBy, getFirestore, limit } fr
 
 // Import common UI components
 import LinkButton from '../common/LinkButton';
+import ModernTicketGrid from '../common/ModernTicketGrid';
 
 // Import Firebase client (now including dbClient)
 import { app, dbClient } from '../../config/firebase'; // Import 'app' and 'dbClient'
@@ -28,6 +29,10 @@ const MyTicketsComponent = ({ user, navigateTo, showFlashMessage, searchKeyword,
     const ticketsPerPage = 30;
     const totalPages = Math.ceil(tickets.length / ticketsPerPage);
     const paginatedTickets = tickets.slice((currentPage - 1) * ticketsPerPage, currentPage * ticketsPerPage);
+    
+    // Selection and export state
+    const [showCheckboxes, setShowCheckboxes] = useState(false);
+    const [selectedTickets, setSelectedTickets] = useState([]);
 
     // Initialize Firestore DB client.
     const db = dbClient; // Use the already initialized dbClient
@@ -176,6 +181,83 @@ const MyTicketsComponent = ({ user, navigateTo, showFlashMessage, searchKeyword,
 
     useEffect(() => { setCurrentPage(1); }, [tickets]);
 
+    // Export selected tickets
+    const exportSelectedTickets = async () => {
+        if (selectedTickets.length === 0) {
+            showFlashMessage('Please select tickets to export', 'error');
+            return;
+        }
+        
+        setLoading(true);
+        try {
+            const selectedTicketData = tickets.filter(ticket => 
+                selectedTickets.includes(ticket.id)
+            );
+
+            // Create CSV content
+            const headers = [
+                'Ticket ID',
+                'Short Description',
+                'Created Date',
+                'Priority',
+                'Status',
+                'Assigned To',
+                'Reporter Email',
+                'Request For Email',
+                'Created At'
+            ];
+
+            const csvRows = [headers.join(',')];
+
+            selectedTicketData.forEach(ticket => {
+                const row = [
+                    ticket.display_id || '',
+                    `"${(ticket.short_description || '').replace(/"/g, '""')}"`,
+                    ticket.created_at ? new Date(ticket.created_at).toLocaleString() : '',
+                    ticket.priority || '',
+                    ticket.status || '',
+                    ticket.assigned_to_email || 'Unassigned',
+                    ticket.reporter_email || '',
+                    ticket.request_for_email || '',
+                    ticket.created_at ? new Date(ticket.created_at).toLocaleString() : ''
+                ];
+                csvRows.push(row.join(','));
+            });
+
+            const csvContent = csvRows.join('\n');
+            
+            // Download the CSV file
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            const exportDate = new Date().toISOString().slice(0, 10);
+            const fileName = `my_tickets_export_${exportDate}.csv`;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            window.URL.revokeObjectURL(url);
+            
+            showFlashMessage(`Exported ${selectedTickets.length} ticket(s) successfully`, 'success');
+            
+            // Clear selected tickets after successful export
+            setSelectedTickets([]);
+            setShowCheckboxes(false);
+            
+        } catch (error) {
+            console.error('Export selected tickets error:', error);
+            showFlashMessage('Error exporting selected tickets', 'error');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Handle peek ticket
+    const handlePeekTicket = (ticket) => {
+        navigateTo('/tickets', ticket.id);
+    };
+
     function renderPagination() {
       if (totalPages <= 1) return null;
       const pages = [];
@@ -198,48 +280,83 @@ const MyTicketsComponent = ({ user, navigateTo, showFlashMessage, searchKeyword,
       );
     }
 
-    /**
-     * Determines CSS classes for a ticket's status badge.
-     * @param {string} status - The status of the ticket (e.g., 'Open', 'In Progress').
-     * @returns {string} Tailwind CSS classes for status styling.
-     */
-    const getStatusClasses = (status) => {
-        switch (status) {
-            case 'Open': return 'bg-green-100 text-green-800';
-            case 'In Progress': return 'bg-yellow-100 text-yellow-800';
-            case 'Hold': return 'bg-purple-100 text-purple-800';
-            case 'Closed': case 'Resolved': return 'bg-gray-100 text-gray-800';
-            default: return 'bg-blue-100 text-blue-800';
-        }
-    };
-
-    /**
-     * Determines CSS classes for a ticket's priority badge.
-     * @param {string} priority - The priority of the ticket (e.g., 'Low', 'High').
-     * @returns {string} Tailwind CSS classes for priority styling.
-     */
-    const getPriorityClasses = (priority) => {
-        switch (priority) {
-            case 'Low': return 'bg-blue-100 text-blue-800';
-            case 'Medium': return 'bg-orange-100 text-orange-800';
-            case 'High': return 'bg-red-100 text-red-800';
-            case 'Critical': return 'bg-red-200 text-red-900 border border-red-500';
-            default: return 'bg-purple-100 text-purple-800';
-        }
-    };
-
     // Conditional rendering for error states only
     if (error) return <div className="text-center text-red-600 mt-8 text-base flex items-center justify-center space-x-2"><XCircle size={20} /> <span>Error: {error}</span></div>;
 
     return (
         <div className="p-4 bg-white flex-1 overflow-auto">
-            {/* Header layout: title on the left, pagination on the far right */}
-            <div className="flex items-center mb-4 gap-2 flex-wrap">
-                <h2 className="text-xl font-extrabold text-gray-800 mr-2">
+            {/* Header layout: title on the left, create button and pagination on the right */}
+            <div className="flex items-center justify-between mb-4 gap-4 flex-wrap">
+                <h2 className="text-xl font-extrabold text-gray-800">
                     {searchKeyword ? `Search Results for "${searchKeyword}" (including resolved and cancelled tickets)` : 'My Tickets'}
+                    <span className="ml-2 text-base font-normal text-gray-600">
+                        - Showing {paginatedTickets.length} of {tickets.length} ticket{tickets.length !== 1 ? 's' : ''}
+                    </span>
                 </h2>
-                <div className="relative flex flex-col items-end ml-auto">
-                    {renderPagination()}
+                <div className="flex items-center gap-3 ml-auto">
+                    {/* Select Tickets Button */}
+                    {tickets.length > 0 && (
+                        <button
+                            onClick={() => {
+                                if (showCheckboxes && selectedTickets.length > 0) {
+                                    // Cancel: clear selections and hide checkboxes
+                                    setSelectedTickets([]);
+                                    setShowCheckboxes(false);
+                                } else {
+                                    // Toggle selection mode
+                                    setShowCheckboxes(!showCheckboxes);
+                                    if (!showCheckboxes) {
+                                        setSelectedTickets([]); // Clear selections when enabling
+                                    }
+                                }
+                            }}
+                            disabled={loading}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md transition-colors duration-200 border ${
+                                showCheckboxes && selectedTickets.length > 0
+                                    ? 'bg-red-600 text-white hover:bg-red-700 border-red-600'
+                                    : showCheckboxes
+                                    ? 'bg-blue-600 text-white hover:bg-blue-700 border-blue-600'
+                                    : 'text-gray-700 bg-white hover:bg-gray-50 border-gray-300'
+                            }`}
+                            title={showCheckboxes && selectedTickets.length > 0 ? 'Cancel and unselect all tickets' : showCheckboxes ? 'Cancel selection mode' : 'Select tickets to export'}
+                        >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            {showCheckboxes && selectedTickets.length > 0 ? 'Cancel Select' : showCheckboxes ? 'Cancel Select' : 'Select Tickets'}
+                        </button>
+                    )}
+                    {/* Export Selected Button */}
+                    {tickets.length > 0 && showCheckboxes && selectedTickets.length > 0 && (
+                        <button
+                            onClick={exportSelectedTickets}
+                            disabled={loading}
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md transition-colors duration-200 disabled:opacity-50 border bg-green-600 text-white hover:bg-green-700 border-green-600"
+                            title="Export selected tickets"
+                        >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v2a2 0 002 2h12a2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V4" />
+                            </svg>
+                            Export Selected ({selectedTickets.length})
+                        </button>
+                    )}
+                    {/* Create Ticket Button - Top Right - only show when there are tickets */}
+                    {tickets.length > 0 && (
+                        <button
+                            onClick={() => navigateTo('/create-ticket')}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-600 text-white text-xs font-semibold rounded-md hover:bg-orange-700 transition-colors duration-200 shadow-sm"
+                            title="Create a new ticket"
+                        >
+                            <PlusCircle size={14} className="flex-shrink-0" />
+                            <span>Create Ticket</span>
+                        </button>
+                    )}
+                    {/* Pagination */}
+                    {tickets.length > 0 && (
+                        <div className="relative flex flex-col items-end">
+                            {renderPagination()}
+                        </div>
+                    )}
                 </div>
             </div>
             {tickets.length === 0 ? (
@@ -270,76 +387,30 @@ const MyTicketsComponent = ({ user, navigateTo, showFlashMessage, searchKeyword,
                     )}
                 </div>
             ) : (
-                // Table to display tickets
-                <div className="w-full max-w-full overflow-x-auto border border-gray-200 bg-white">
-                    <table className="w-full min-w-0 bg-white text-xs">
-                        <thead className="hidden sm:table-header-group bg-gray-100 border-b border-gray-200">
-                            <tr>
-                                <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">#</th>
-                                <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">Ticket ID</th>
-                                <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">Short Description</th>
-                                <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">Category</th>
-                                <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">Priority</th>
-                                <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">Status</th>
-                                <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">Assigned To</th>
-                                <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-normal break-words">Last Updated</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-200">
-                            {paginatedTickets.map((ticket, index) => (
-                                <tr key={ticket.id} className="block sm:table-row bg-white border-b border-gray-200 hover:bg-gray-50 transition-colors duration-150 text-xs">
-                                    <td className="block sm:table-cell px-2 py-4 text-xs text-gray-800 whitespace-normal break-words border-r border-gray-200">
-                                        <span className="block sm:hidden font-semibold text-gray-600">#:</span>
-                                        {(currentPage - 1) * ticketsPerPage + index + 1}
-                                    </td>
-                                    <td className="block sm:table-cell px-2 py-4 text-xs text-blue-700 hover:underline font-medium cursor-pointer whitespace-normal break-words border-r border-gray-200">
-                                        <span className="block sm:hidden font-semibold text-gray-600">Ticket ID:</span>
-                                        <a
-                                            href={`/tickets/${ticket.id}`}
-                                            onClick={(e) => {
-                                                e.preventDefault();
-                                                navigateTo('/tickets', ticket.id);
-                                            }}
-                                        >
-                                            {ticket.display_id}
-                                        </a>
-                                    </td>
-                                    <td className="block sm:table-cell px-2 py-4 text-xs text-gray-800 max-w-xs truncate whitespace-normal break-words border-r border-gray-200" title={ticket.short_description}>
-                                        <span className="block sm:hidden font-semibold text-gray-600">Short Description:</span>
-                                        {ticket.short_description}
-                                    </td>
-                                    <td className="block sm:table-cell px-2 py-4 text-xs text-gray-800 whitespace-normal break-words border-r border-gray-200">
-                                        <span className="block sm:hidden font-semibold text-gray-600">Category:</span>
-                                        {ticket.category}
-                                    </td>
-                                    <td className="block sm:table-cell px-2 py-4 text-xs text-gray-800 whitespace-normal break-words border-r border-gray-200">
-                                        <span className="block sm:hidden font-semibold text-gray-600">Priority:</span>
-                                        <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getPriorityClasses(ticket.priority)}`}>{ticket.priority}</span>
-                                    </td>
-                                    <td className="block sm:table-cell px-2 py-4 whitespace-normal break-words text-xs text-gray-800 border-r border-gray-200">
-                                        <span className="block sm:hidden font-semibold text-gray-600">Status:</span>
-                                        <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getStatusClasses(ticket.status)}`}>{ticket.status}</span>
-                                    </td>
-                                    <td className="block sm:table-cell px-2 py-4 whitespace-normal break-words text-xs text-gray-800 border-r border-gray-200">
-                                        <span className="block sm:hidden font-semibold text-gray-600">Assigned To:</span>
-                                        {ticket.assigned_to_email || 'Unassigned'}
-                                    </td>
-                                    <td className="block sm:table-cell px-2 py-4 whitespace-normal break-words text-xs text-gray-800">
-                                        <span className="block sm:hidden font-semibold text-gray-600">Last Updated:</span>
-                                        {ticket.updated_at ? new Date(ticket.updated_at).toLocaleDateString('en-US', { 
-                                            month: 'short', 
-                                            day: '2-digit', 
-                                            year: 'numeric',
-                                            hour: '2-digit',
-                                            minute: '2-digit',
-                                            hour12: true 
-                                        }) : 'N/A'}
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
+                <>
+                    {/* Selection info bar */}
+                    {showCheckboxes && selectedTickets.length > 0 && (
+                        <div className="mb-4 px-3 py-2 text-sm rounded-md border text-blue-900 bg-blue-50 border-blue-400">
+                            <span>{`${selectedTickets.length} ${selectedTickets.length === 1 ? 'ticket' : 'tickets'} selected.`}</span>
+                        </div>
+                    )}
+                    {/* Modern Ticket Grid */}
+                    <ModernTicketGrid
+                        tickets={paginatedTickets}
+                        onTicketClick={(ticket) => navigateTo('/tickets', ticket.id)}
+                        onStatusChange={null}
+                        onAssignmentChange={null}
+                        onPeek={handlePeekTicket}
+                        user={user}
+                        loading={loading}
+                        showCheckboxes={showCheckboxes}
+                        selectedTickets={selectedTickets}
+                        startIndex={(currentPage - 1) * ticketsPerPage}
+                        onTicketSelect={(ticketIds) => {
+                            setSelectedTickets(ticketIds);
+                        }}
+                    />
+                </>
             )}
         </div>
     );

@@ -343,7 +343,7 @@ const InitialPasswordChangeComponent = ({ navigateTo, showFlashMessage }) => {
                 {/* Footer copyright */}
                 <div className="absolute bottom-6 left-6 right-6">
                     <div className="text-center">
-                        <p className="text-xs text-gray-600">Copyright © 2024 KriaSol Technologies LLP. All Rights Reserved.</p>
+                        <p className="text-xs text-gray-600">© 2025 Kriasol Technologies LLP. All rights reserved.</p>
                     </div>
                 </div>
             </div>

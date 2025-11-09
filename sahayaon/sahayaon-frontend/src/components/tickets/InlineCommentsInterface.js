@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { MessageSquare, Send, Heart, Reply } from 'lucide-react';
+import React, { useRef, useEffect } from 'react';
+import { MessageSquare, Send } from 'lucide-react';
 
 const EnhancedCommentsInterface = ({ 
     comments = [], 
@@ -11,9 +11,6 @@ const EnhancedCommentsInterface = ({
     commentText,
     setCommentText
 }) => {
-    const [replyingTo, setReplyingTo] = useState(null);
-    const [replyText, setReplyText] = useState('');
-    const [likedComments, setLikedComments] = useState({});
     const textareaRef = useRef(null);
 
     // Auto-resize textarea
@@ -40,21 +37,6 @@ const EnhancedCommentsInterface = ({
         }
     };
 
-    const handleReply = async (commentId) => {
-        if (replyText.trim()) {
-            await onAddReply?.(commentId, replyText);
-            setReplyText('');
-            setReplyingTo(null);
-        }
-    };
-
-    const handleLike = (commentId) => {
-        setLikedComments(prev => ({
-            ...prev,
-            [commentId]: !prev[commentId]
-        }));
-        onLikeComment?.(commentId);
-    };
 
     const formatTimeAgo = (timestamp) => {
         const now = new Date();
@@ -133,14 +115,6 @@ const EnhancedCommentsInterface = ({
                     80%, 100% { content: '...'; }
                 }
 
-                .heart-bounce {
-                    animation: heartBounce 0.3s ease-in-out;
-                }
-
-                @keyframes heartBounce {
-                    0%, 100% { transform: scale(1); }
-                    50% { transform: scale(1.3); }
-                }
                 
                 /* Force white text in profile icons and buttons with ultra high specificity */
                 div.rounded-full span.text-white,
@@ -216,7 +190,7 @@ const EnhancedCommentsInterface = ({
                         />
                         <div className="flex items-center justify-between mt-1.5">
                             <span className="text-[11px] text-gray-500 font-medium">
-                                Tip: Press Shift + Enter for new line
+                                Tip: Press Shift + Enter for new line and Enter to submit comment
                             </span>
                             <button
                                 onClick={handleSubmitComment}
@@ -257,8 +231,6 @@ const EnhancedCommentsInterface = ({
                 ) : (
                     sortedComments.map((comment, index) => {
                         const commentId = comment.id || index;
-                        const isLiked = likedComments[commentId];
-                        const likesCount = (comment.likes || 0) + (isLiked ? 1 : 0);
 
                         return (
                             <div key={commentId} className="comment-item bg-white pb-3 border-b border-gray-100 last:border-b-0 transition-all duration-200">
@@ -285,60 +257,6 @@ const EnhancedCommentsInterface = ({
                                             </p>
                                         </div>
                                         
-                                        <div className="flex items-center gap-2 mt-1 ml-0.5">
-                                                <button
-                                                    onClick={() => handleLike(commentId)}
-                                                    className={`flex items-center gap-1 px-1.5 py-0.5 rounded-md transition-colors ${
-                                                        isLiked
-                                                            ? 'bg-red-50 text-red-600'
-                                                            : 'text-gray-700 hover:bg-slate-100'
-                                                    }`}
-                                                >
-                                                    <Heart
-                                                        className={`w-3.5 h-3.5 ${isLiked ? 'fill-red-600 heart-bounce' : ''}`}
-                                                    />
-                                                    {likesCount > 0 && (
-                                                        <span className="text-xs font-bold">{likesCount}</span>
-                                                    )}
-                                                </button>
-                                                
-                                                <button
-                                                    onClick={() => setReplyingTo(replyingTo === commentId ? null : commentId)}
-                                                    className="flex items-center gap-1 px-1.5 py-0.5 text-gray-700 hover:bg-slate-100 rounded-md transition-colors"
-                                                >
-                                                    <Reply className="w-3.5 h-3.5" />
-                                                    <span className="text-xs font-semibold">Reply</span>
-                                                </button>
-                                        </div>
-                                        
-                                        {replyingTo === commentId && (
-                                            <div className="mt-1.5 flex gap-1.5">
-                                                <input
-                                                    type="text"
-                                                    value={replyText}
-                                                    onChange={(e) => setReplyText(e.target.value)}
-                                                    placeholder="Write a reply..."
-                                                    className="flex-1 px-2.5 py-1.5 border border-slate-200 rounded-md focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none text-sm font-normal text-gray-900"
-                                                    onKeyDown={(e) => {
-                                                        if (e.key === 'Enter') {
-                                                            handleReply(commentId);
-                                                        }
-                                                    }}
-                                                />
-                                                <button
-                                                    onClick={() => handleReply(commentId)}
-                                                    disabled={!replyText.trim()}
-                                                    className={`px-2.5 py-1.5 rounded-md text-xs font-bold ${
-                                                        replyText.trim()
-                                                            ? 'bg-indigo-600 text-white hover:bg-indigo-700'
-                                                            : 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                                                    }`}
-                                                >
-                                                    Reply
-                                                </button>
-                                            </div>
-                                        )}
-                                        
                                         {/* Replies */}
                                         {comment.replies && comment.replies.length > 0 && (
                                             <div className="mt-2 space-y-1.5 pl-2.5 border-l border-slate-200">
@@ -361,12 +279,6 @@ const EnhancedCommentsInterface = ({
                                                                     {reply.text}
                                                                 </p>
                                                             </div>
-                                                            {reply.likes > 0 && (
-                                                                <div className="flex items-center gap-1 mt-1.5 ml-2 text-slate-400">
-                                                                    <Heart className="w-3 h-3 fill-slate-400" />
-                                                                    <span className="text-[11px]">{reply.likes}</span>
-                                                                </div>
-                                                            )}
                                                         </div>
                                                     </div>
                                                 ))}

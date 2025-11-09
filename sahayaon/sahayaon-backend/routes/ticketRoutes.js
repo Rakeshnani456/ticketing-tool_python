@@ -672,6 +672,31 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                 });
             }
 
+            // Handle resolved/cancelled specific logic - ALWAYS set these when status is Resolved/Cancelled
+            // Move this BEFORE status change check to ensure fields are set
+            if (status && ["Resolved", "Cancelled"].includes(status)) {
+                // Always set resolved_at and closed_by_email when resolving/cancelling
+                // Only skip if ticket is already resolved/cancelled AND fields are already set AND status isn't changing
+                const isChangingStatus = status !== ticketData.status;
+                const isAlreadyResolvedOrCancelled = ["Resolved", "Cancelled"].includes(ticketData.status);
+                
+                // Set these fields if:
+                // 1. Status is changing to Resolved/Cancelled, OR
+                // 2. Status is Resolved/Cancelled and fields are not already set
+                if (isChangingStatus || !isAlreadyResolvedOrCancelled || !ticketData.resolved_at || !ticketData.closed_by_email) {
+                    updateData.resolved_at = admin.firestore.FieldValue.serverTimestamp();
+                    updateData.closed_by_email = req.user.email;
+                }
+                
+                if ((time_spent === undefined || time_spent === null || time_spent === "") && ticketData.created_at && ticketData.created_at.toDate) {
+                    const createdAt = ticketData.created_at.toDate();
+                    const resolvedAt = new Date();
+                    const timeDiffMillis = resolvedAt.getTime() - createdAt.getTime();
+                    const timeSpentMinutes = Math.round(timeDiffMillis / (1000 * 60));
+                    updateData.time_spent_minutes = timeSpentMinutes;
+                }
+            }
+
             // Status change logic
             if (status && status !== ticketData.status) {
                 updateData.status = status;
@@ -707,19 +732,6 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                         console.error('Error in background status change logging:', error);
                     }
                 });
-
-                // Handle resolved/cancelled specific logic
-                if (["Resolved", "Cancelled"].includes(status)) {
-                    updateData.resolved_at = admin.firestore.FieldValue.serverTimestamp();
-                    updateData.closed_by_email = req.user.email;
-                    if ((time_spent === undefined || time_spent === null || time_spent === "") && ticketData.created_at && ticketData.created_at.toDate) {
-                        const createdAt = ticketData.created_at.toDate();
-                        const resolvedAt = new Date();
-                        const timeDiffMillis = resolvedAt.getTime() - createdAt.getTime();
-                        const timeSpentMinutes = Math.round(timeDiffMillis / (1000 * 60));
-                        updateData.time_spent_minutes = timeSpentMinutes;
-                    }
-                }
 
                 // Send status change email for all status changes
                 const ticketReporterEmail = ticketData.reporter_email;

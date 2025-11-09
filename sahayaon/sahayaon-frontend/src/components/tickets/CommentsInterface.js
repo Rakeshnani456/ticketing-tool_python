@@ -9,8 +9,6 @@ const CommentsInterface = ({
     user 
 }) => {
     const [newComment, setNewComment] = useState('');
-    const [replyText, setReplyText] = useState('');
-    const [replyingTo, setReplyingTo] = useState(null);
     const [isOpen, setIsOpen] = useState(true);
 
     const handleSubmitComment = (e) => {
@@ -21,19 +19,6 @@ const CommentsInterface = ({
         }
     };
 
-    const handleSubmitReply = (e) => {
-        e.preventDefault();
-        if (replyText.trim() && replyingTo) {
-            onAddReply(replyingTo.id, replyText.trim());
-            setReplyText('');
-            setReplyingTo(null);
-        }
-    };
-
-    const handleReplyClick = (comment) => {
-        setReplyingTo(comment);
-        setReplyText('');
-    };
 
     const formatTimeAgo = (timestamp) => {
         const now = new Date();
@@ -116,51 +101,6 @@ const CommentsInterface = ({
                                 <p className="comment-text">
                                     {comment.comment || comment.comment_text || comment.text}
                                 </p>
-                                
-                                <div className="comment-actions">
-                                    <button
-                                        onClick={() => handleReplyClick(comment)}
-                                        className="comment-reply-btn"
-                                    >
-                                        REPLY
-                                    </button>
-                                    <div className="comment-meta">
-                                        <button className="comment-smile-btn">
-                                            <Smile className="w-4 h-4" />
-                                        </button>
-                                        <span className="comment-id">
-                                            #{comment.id || index + 1}
-                                        </span>
-                                    </div>
-                                </div>
-
-                                {/* Reply Input */}
-                                {replyingTo && replyingTo.id === comment.id && (
-                                    <div className="reply-input-container">
-                                        <div className="reply-input-form">
-                                            <input
-                                                type="text"
-                                                value={replyText}
-                                                onChange={(e) => setReplyText(e.target.value)}
-                                                placeholder="Enter your comment"
-                                                className="reply-input"
-                                                autoFocus
-                                            />
-                                            <button className="reply-smile-btn">
-                                                <Smile className="w-4 h-4" />
-                                            </button>
-                                            <button
-                                                onClick={handleSubmitReply}
-                                                disabled={!replyText.trim() || loading}
-                                                className={`reply-send-btn ${
-                                                    replyText.trim() ? 'active' : 'inactive'
-                                                }`}
-                                            >
-                                                Send
-                                            </button>
-                                        </div>
-                                    </div>
-                                )}
                             </div>
                         </div>
                     ))

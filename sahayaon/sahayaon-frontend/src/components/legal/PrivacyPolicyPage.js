@@ -153,7 +153,7 @@ const PrivacyPolicyPage = () => {
             </div>
 
             <div className="privacy-footer">
-                <p>© {new Date().getFullYear()} Sahayaon. All rights reserved.</p>
+                <p>© 2025 Kriasol Technologies LLP. All rights reserved.</p>
             </div>
         </div>
     );

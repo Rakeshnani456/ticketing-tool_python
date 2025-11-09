@@ -1,12 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { Search, Plus, User, Key, LogOut, ChevronDown } from 'lucide-react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Search, User, LogOut, ChevronDown, UserCircle } from 'lucide-react';
 import AdvancedSearchComponent from './AdvancedSearchComponent';
-import TooltipBubble from './TooltipBubble';
 
 // Import assets
 import KriasolLogo from '../../assets/logo/logo.png';
-import plusImg from '../../assets/icons/plus.png';
 import phoneImg from '../../assets/icons/phone.png';
 import mailImg from '../../assets/icons/mail.png';
 
@@ -17,7 +15,7 @@ const FlexibleHeader = ({
     searchWidths,
     ticketDisplayId,
     ticketDisplayIdLoading,
-    onSignOut 
+    onSignOut
 }) => {
     const location = useLocation();
     const [isSupportMenuOpen, setIsSupportMenuOpen] = useState(false);
@@ -95,14 +93,14 @@ const FlexibleHeader = ({
     const isAdminRole = ['admin', 'super_admin', 'site_admin'].includes(currentUser?.role);
 
     return (
-        <header className="fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-200 shadow-xs">
-            <div className="flex items-center justify-between h-11 px-4">
+        <header className="fixed top-0 left-0 right-0 z-50 border-b border-gray-200 shadow-sm" style={{ backgroundColor: '#f0eeed' }}>
+            <div className="flex items-center justify-between h-12 px-4 md:px-6">
                 {/* Left Section: Logo */}
                 <div className="flex items-center flex-shrink-0">
                     {/* Logo */}
                     <Link 
                         to={currentUser ? (isAdminRole ? '/dashboard' : '/my-tickets') : '/login'} 
-                        className="flex items-center group"
+                        className="flex items-center group flex-shrink-0"
                     >
                         <img 
                             src={KriasolLogo} 
@@ -125,36 +123,21 @@ const FlexibleHeader = ({
                     </Link>
                 </div>
 
-                {/* Center Section: Create Button + Search Bar */}
-                <div className="flex-1 max-w-2xl mx-2 md:mx-4 hidden md:flex items-center gap-2">
-                    {/* Create Button */}
-                    <TooltipBubble title="Create a new ticket">
-                        <Link 
-                            to="/create-ticket" 
-                            className={`flex items-center gap-1 px-2 py-1 rounded-md text-sm font-medium whitespace-nowrap text-orange-500 hover:bg-orange-50 hover:text-orange-600 transition-all duration-200 flex-shrink-0 focus:outline-none border border-orange-200 ${
-                                location.pathname === '/create-ticket' 
-                                    ? 'bg-orange-50 text-orange-600 border-orange-300' 
-                                    : 'bg-[#f8f9fa]'
-                            }`}
-                        >
-                            <img src={plusImg} alt="Create" className="w-3 h-3 object-contain" />
-                            <span className="hidden sm:inline">Create</span>
-                        </Link>
-                    </TooltipBubble>
-
+                {/* Center Section: Search Bar */}
+                <div className="flex-1 max-w-2xl mx-4 hidden md:flex items-center gap-3">
                     {/* Search Bar */}
                     <div className="flex-1 max-w-sm lg:max-w-md">
                         <AdvancedSearchComponent
                             onSearchSubmit={onSearchSubmit}
                             navigateTo={navigateTo}
-                            placeholder="Search"
+                            placeholder="Search tickets..."
                             width="100%"
                         />
                     </div>
                 </div>
 
-                {/* Mobile Search Button */}
-                <div className="md:hidden flex items-center">
+                {/* Mobile: Search Button */}
+                <div className="md:hidden flex items-center gap-2">
                     <button
                         onClick={() => {
                             const searchTerm = prompt("Search");
@@ -162,54 +145,51 @@ const FlexibleHeader = ({
                                 onSearchSubmit(searchTerm);
                             }
                         }}
-                        className="flex items-center justify-center w-8 h-8 rounded-md text-gray-600 hover:text-gray-800 hover:bg-gray-100 transition-all duration-200"
+                        className="flex items-center justify-center w-9 h-9 rounded-md text-gray-600 hover:text-gray-800 hover:bg-gray-100 transition-all duration-200"
                     >
                         <Search className="w-5 h-5" />
                     </button>
                 </div>
 
                 {/* Right Section: Support + Profile */}
-                <div className="flex items-center gap-2 flex-shrink-0">
+                <div className="flex items-center gap-3 flex-shrink-0">
                     {/* Support Button */}
                     <div className="relative" ref={supportMenuRef}>
                         <button
                             onClick={() => setIsSupportMenuOpen(!isSupportMenuOpen)}
-                            className="flex items-center gap-1 px-2 py-1 rounded-md text-sm font-medium whitespace-nowrap bg-[#f8f9fa] text-blue-600 hover:bg-blue-50 hover:text-blue-700 transition-all duration-200 flex-shrink-0 focus:outline-none"
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium whitespace-nowrap bg-gray-50 text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-all duration-200 flex-shrink-0 focus:outline-none"
                         >
                             <span className="hidden sm:inline">Support</span>
-                            <svg 
-                                className={`w-3 h-3 transition-transform duration-200 ${isSupportMenuOpen ? 'rotate-180' : ''}`} 
-                                fill="none" 
-                                stroke="currentColor" 
-                                viewBox="0 0 24 24"
-                            >
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                            </svg>
+                            <ChevronDown 
+                                className={`w-4 h-4 transition-transform duration-200 ${isSupportMenuOpen ? 'rotate-180' : ''}`}
+                            />
                         </button>
                         
                         {isSupportMenuOpen && (
-                            <div className="absolute right-0 top-full mt-2 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-64">
+                            <div className="absolute right-0 top-full mt-2 bg-white border border-gray-200 rounded-md shadow-lg z-50 min-w-72 overflow-hidden">
+                                <div className="px-4 py-3 border-b border-gray-200">
+                                    <h3 className="text-sm font-semibold text-gray-900">Contact Support</h3>
+                                </div>
                                 <div className="px-4 py-3">
-                                    <h3 className="text-sm font-semibold text-gray-800 mb-3">Contact Support</h3>
                                     <div className="space-y-3">
-                                        <div className="flex items-center gap-3">
-                                            <img src={mailImg} alt="Email" className="w-4 h-4 object-contain" />
-                                            <a 
-                                                href="mailto:HelloIT@kriasol.com" 
-                                                className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
-                                            >
+                                        <a 
+                                            href="mailto:HelloIT@kriasol.com" 
+                                            className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 transition-colors group"
+                                        >
+                                            <img src={mailImg} alt="Email" className="w-5 h-5 object-contain opacity-70 group-hover:opacity-100" />
+                                            <span className="text-sm font-medium text-gray-700 group-hover:text-gray-900">
                                                 HelloIT@kriasol.com
-                                            </a>
-                                        </div>
-                                        <div className="flex items-center gap-3">
-                                            <img src={phoneImg} alt="Phone" className="w-4 h-4 object-contain" />
-                                            <a 
-                                                href="tel:9391930393" 
-                                                className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
-                                            >
+                                            </span>
+                                        </a>
+                                        <a 
+                                            href="tel:9391930393" 
+                                            className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 transition-colors group"
+                                        >
+                                            <img src={phoneImg} alt="Phone" className="w-5 h-5 object-contain opacity-70 group-hover:opacity-100" />
+                                            <span className="text-sm font-medium text-gray-700 group-hover:text-gray-900">
                                                 +91 9391930393
-                                            </a>
-                                        </div>
+                                            </span>
+                                        </a>
                                     </div>
                                 </div>
                             </div>
@@ -220,55 +200,33 @@ const FlexibleHeader = ({
                     <div className="relative" ref={profileMenuRef}>
                         <button
                             onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
-                            className="flex items-center gap-2 px-2 py-1 rounded-lg bg-white hover:bg-gray-50 transition-all duration-200 focus:outline-none"
+                            className="flex items-center justify-center p-1 text-gray-600 hover:text-gray-900 transition-colors duration-200 focus:outline-none"
                         >
-                            <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-white text-gray-700 font-semibold text-base border border-gray-300 hover:border-blue-500 transition-all duration-200">
-                                {(currentUser?.firstName?.charAt(0) || currentUser?.fullName?.charAt(0) || currentUser?.email?.charAt(0))?.toUpperCase()}
-                            </div>
-                            <div className="hidden lg:flex flex-col items-start">
-                                <span className="text-xs font-medium text-gray-700 leading-tight">
-                                    {currentUser?.firstName || currentUser?.fullName?.split(' ')[0] || currentUser?.email?.split('@')[0]}
-                                </span>
-                                <span className="text-xs text-gray-500 capitalize leading-tight">
-                                    {currentUser?.role?.replace('_', ' ')}
-                                </span>
-                            </div>
+                            <UserCircle className="w-7 h-7" strokeWidth={1.5} />
                         </button>
                         
                         {isProfileMenuOpen && (
-                            <div className="absolute right-0 top-full mt-2 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-56">
-                                <div className="px-4 py-3">
+                            <div className="absolute right-0 top-full mt-2 bg-white border border-gray-200 rounded-md shadow-lg z-50 min-w-64 overflow-hidden">
+                                <div className="px-4 py-3 border-b border-gray-200">
                                     <div className="flex items-center gap-3">
-                                        <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center text-gray-700 font-semibold text-sm border border-gray-200">
+                                        <div className="w-10 h-10 bg-gray-100 rounded-md flex items-center justify-center text-gray-700 font-semibold text-base">
                                             {(currentUser?.firstName?.charAt(0) || currentUser?.fullName?.charAt(0) || currentUser?.email?.charAt(0))?.toUpperCase()}
                                         </div>
-                                        <div className="min-w-0">
-                                            <p className="text-sm font-semibold text-gray-800 truncate">
+                                        <div className="min-w-0 flex-1">
+                                            <p className="text-sm font-semibold text-gray-900 truncate">
                                                 {currentUser?.fullName || currentUser?.email}
-                                            </p>
-                                            <p className="text-xs text-gray-500 capitalize truncate">
-                                                {currentUser?.role?.replace('_', ' ')}
                                             </p>
                                         </div>
                                     </div>
                                 </div>
-                                <div className="w-full h-px bg-gray-200"></div>
-                                <div className="py-1">
+                                <div className="py-1.5">
                                     <Link
                                         to="/profile"
-                                        className="w-full flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-all duration-200"
+                                        className="w-full flex items-center px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-all duration-200"
                                         onClick={() => setIsProfileMenuOpen(false)}
                                     >
                                         <User className="w-4 h-4 mr-3 text-gray-500" />
                                         View Profile
-                                    </Link>
-                                    <Link
-                                        to="/change-password"
-                                        className="w-full flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-all duration-200"
-                                        onClick={() => setIsProfileMenuOpen(false)}
-                                    >
-                                        <Key className="w-4 h-4 mr-3 text-gray-500" />
-                                        Change Password
                                     </Link>
                                     <div className="w-full h-px bg-gray-200 my-1"></div>
                                     <button
@@ -276,7 +234,7 @@ const FlexibleHeader = ({
                                             setIsProfileMenuOpen(false);
                                             onSignOut();
                                         }}
-                                        className="w-full flex items-center px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-all duration-200"
+                                        className="w-full flex items-center px-4 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50 transition-all duration-200"
                                     >
                                         <LogOut className="w-4 h-4 mr-3" />
                                         Sign Out

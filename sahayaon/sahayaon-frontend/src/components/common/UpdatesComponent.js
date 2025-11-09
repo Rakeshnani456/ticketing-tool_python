@@ -556,19 +556,21 @@ const UpdatesComponent = ({
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -20 }}
                   transition={{ duration: 0.2, delay: index * 0.05 }}
-                  className={`rounded-lg border border-gray-200 bg-white shadow-sm`}
+                  className={`rounded-lg border transition-all duration-200 ${
+                    !update.isRead 
+                      ? 'border-gray-200 bg-gradient-to-r from-gray-50/80 to-white shadow-sm' 
+                      : 'border-gray-200 bg-white'
+                  } hover:shadow-md hover:border-gray-300`}
                 >
-                  <div className={`relative px-4 py-3.5 hover:bg-gray-50 hover:shadow-md transition-all duration-200 group border-l-4 rounded-lg ${
-                    !update.isRead ? 'border-l-blue-500' : 'border-l-gray-200'
-                  }`}>
+                  <div className="relative px-4 py-3.5 group">
                     <div className="flex gap-3 items-start">
                       {/* Left Column - Icon */}
-                      <div className="flex flex-col items-center flex-shrink-0">
+                      <div className="flex flex-col items-center flex-shrink-0 relative">
                         <div className={`p-2 rounded-lg ${update.color.replace('text-', 'bg-').replace('-600', '-100')} shadow-sm`}>
                           <IconComponent className={`w-4 h-4 ${update.color}`} />
                         </div>
                         {!update.isRead && (
-                          <div className="mt-1 w-1.5 h-1.5 bg-blue-500 rounded-full"></div>
+                          <div className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-gray-600 rounded-full border-2 border-white shadow-sm"></div>
                         )}
                       </div>
 
@@ -601,16 +603,11 @@ const UpdatesComponent = ({
                               </span>
                             )}
                             {!update.isRead ? (
-                              <div className="flex items-center gap-1 px-1.5 py-0.5 bg-blue-100 rounded text-xs">
-                                <div className="w-1 h-1 bg-blue-600 rounded-full"></div>
-                                <span className="font-medium text-blue-800">Unread</span>
+                              <div className="flex items-center gap-1.5 px-2 py-0.5 bg-gray-100 rounded-md text-xs border border-gray-200">
+                                <div className="w-1.5 h-1.5 bg-gray-600 rounded-full"></div>
+                                <span className="font-medium text-gray-700">New</span>
                               </div>
-                            ) : (
-                              <div className="flex items-center gap-1 px-1.5 py-0.5 bg-gray-100 rounded text-xs">
-                                <div className="w-1 h-1 bg-gray-400 rounded-full"></div>
-                                <span className="font-medium text-gray-600">Read</span>
-                              </div>
-                            )}
+                            ) : null}
                           </div>
                         </div>
 

@@ -427,13 +427,13 @@ const LoginComponent = ({ onLoginSuccess, navigateTo, showFlashMessage }) => {
                     backgroundRepeat: 'repeat'
                 }}>
                     <div className="relative z-10 flex flex-col justify-center items-center px-12 py-16 text-gray-800">
-                        <img src={require('../../assets/logo/logo_final.png')} alt="Company Logo" className="h-20 mb-8" />
+                        <img src={require('../../assets/logo/logo.png')} alt="Company Logo" className="h-20 mb-8" />
                     </div>
                     
                     {/* Footer copyright */}
                     <div className="absolute bottom-6 left-6 right-6">
                         <div className="text-center">
-                            <p className="text-xs text-gray-600">Copyright © 2024 KriaSol Technologies LLP. All Rights Reserved.</p>
+                            <p className="text-xs text-gray-600">© 2025 Kriasol Technologies LLP. All rights reserved.</p>
                         </div>
                     </div>
                 </div>
@@ -443,7 +443,7 @@ const LoginComponent = ({ onLoginSuccess, navigateTo, showFlashMessage }) => {
                     <div className="w-full max-w-md">
                         {/* Mobile logo */}
                         <div className="lg:hidden flex justify-center mb-4">
-                            <img src={require('../../assets/logo/logo_final.png')} alt="Company Logo" className="h-10" />
+                            <img src={require('../../assets/logo/logo.png')} alt="Company Logo" className="h-10" />
                         </div>
 
                         <div className="bg-white rounded-2xl border border-gray-100 p-6">

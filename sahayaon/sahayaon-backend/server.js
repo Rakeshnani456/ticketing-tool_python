@@ -479,7 +479,7 @@ app.use('/admin-management', adminManagementRouter(db, usersCollection, authenti
 app.use('/analytics', analyticsRoutes(db, admin, authenticateToken, checkRole));
 app.use('/api/knowledge-base', knowledgeBaseRoutes(db, admin, authenticateToken, checkRole));
 app.use('/api/personal-notes', personalNotesRoutes(db, admin, usersCollection, authenticateToken, checkRole, jsonSerializableNotification));
-app.use('/api/search', searchRoutes);
+app.use('/api/search', searchRoutes(authenticateToken));
 app.use('/api/read-states', readStatesRoutes(db, admin, usersCollection, authenticateToken));
 app.use('/api/gdpr', gdprRoutes(db, admin, authenticateToken));
 

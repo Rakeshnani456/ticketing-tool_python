@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo, memo } from 'react';
 import CustomDropdown from '../common/CustomDropdown';
 import CustomButton from '../common/CustomButton';
-import ClientActionDropdown from '../common/ClientActionDropdown';
 import TooltipBubble from '../common/TooltipBubble';
 import {
     Button, Chip, TextField, Box, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
@@ -125,12 +124,15 @@ const EMPLOYMENT_TYPES = [
 ];
 
 function generatePassword(length = 12) {
+  const prefix = 'Sahayaon#';
   const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  let password = '';
-  for (let i = 0; i < length; i++) {
-    password += chars.charAt(Math.floor(Math.random() * chars.length));
+  let randomText = '';
+  // Generate random text (subtract prefix length from total length)
+  const randomLength = length - prefix.length;
+  for (let i = 0; i < randomLength; i++) {
+    randomText += chars.charAt(Math.floor(Math.random() * chars.length));
   }
-  return password;
+  return prefix + randomText;
 }
 
 const USER_TEMPLATE_HEADERS = [
@@ -228,6 +230,10 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
     const [bulkActionModalOpen, setBulkActionModalOpen] = useState(false);
     const [showCheckboxes, setShowCheckboxes] = useState(false);
     const [selectedClientForAction, setSelectedClientForAction] = useState(null);
+    const [importClientModalOpen, setImportClientModalOpen] = useState(false);
+    const [exportClientModalOpen, setExportClientModalOpen] = useState(false);
+    const [selectedImportClient, setSelectedImportClient] = useState('');
+    const [selectedExportClients, setSelectedExportClients] = useState([]);
 
     const handleToggleClientCollapse = (client) => {
       setCollapsedClients(prev => ({ ...prev, [client]: !prev[client] }));
@@ -874,12 +880,15 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
       navigate('/user-management/create-user');
     };
 
-    // Update addUserData when selectedClientForAction changes
+    // Update addUserData when selectedClientForAction changes and generate password when modal opens
     useEffect(() => {
-        if (selectedClientForAction && addUserModalOpen) {
+        if (addUserModalOpen) {
+            // Generate password when modal opens
+            const generatedPassword = generatePassword();
             setAddUserData(prev => ({
                 ...prev,
-                companyName: selectedClientForAction
+                password: generatedPassword,
+                ...(selectedClientForAction && { companyName: selectedClientForAction })
             }));
         }
     }, [selectedClientForAction, addUserModalOpen]);
@@ -1549,6 +1558,137 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
         }
     };
 
+    // Get unique client names
+    const uniqueClients = useMemo(() => {
+        const clientSet = new Set();
+        users.forEach(user => {
+            const clientName = user.clientname || user.client_name || user.companyName;
+            if (clientName) {
+                // For site_admin, only include their own company
+                if (user.role === 'site_admin') {
+                    if (user.client_name || user.companyName) {
+                        clientSet.add(user.client_name || user.companyName);
+                    }
+                } else {
+                    // For other roles, include all clients
+                    clientSet.add(clientName);
+                }
+            }
+        });
+        // If user is site_admin and they have a company, use that
+        if (user?.role === 'site_admin' && user?.companyName) {
+            return [user.companyName];
+        }
+        return Array.from(clientSet).sort();
+    }, [users, user]);
+
+    // Handle open import modal with client selection
+    const handleOpenImportModal = () => {
+        setSelectedImportClient('');
+        setImportClientModalOpen(true);
+    };
+
+    // Handle open export modal with client selection
+    const handleOpenExportModal = () => {
+        setSelectedExportClients([]);
+        setExportClientModalOpen(true);
+    };
+
+    // Handle Escape key and body scroll lock for modals
+    useEffect(() => {
+        const handleEscape = (e) => {
+            if (e.key === 'Escape') {
+                if (importClientModalOpen) {
+                    setImportClientModalOpen(false);
+                }
+                if (exportClientModalOpen) {
+                    setExportClientModalOpen(false);
+                }
+            }
+        };
+        
+        if (importClientModalOpen || exportClientModalOpen) {
+            document.addEventListener('keydown', handleEscape);
+            document.body.style.overflow = 'hidden';
+        }
+        
+        return () => {
+            document.removeEventListener('keydown', handleEscape);
+            if (!importClientModalOpen && !exportClientModalOpen) {
+                document.body.style.overflow = '';
+            }
+        };
+    }, [importClientModalOpen, exportClientModalOpen]);
+
+    // Handle import with selected client
+    const handleImportWithClient = () => {
+        if (!selectedImportClient) {
+            showFlashMessage('Please select a client for import.', 'warning');
+            return;
+        }
+        setImportClientModalOpen(false);
+        navigate(`/user-management/import?client=${encodeURIComponent(selectedImportClient)}`);
+    };
+
+    // Handle export with selected clients
+    const handleExportWithClients = async () => {
+        if (selectedExportClients.length === 0) {
+            showFlashMessage('Please select at least one client for export.', 'warning');
+            return;
+        }
+
+        try {
+            // Filter users for selected clients
+            const clientsToExport = selectedExportClients;
+            const usersToExport = users.filter(user => {
+                const userClient = user.clientname || user.client_name || user.companyName;
+                return clientsToExport.includes(userClient) && user.role !== 'site_admin';
+            });
+
+            if (usersToExport.length === 0) {
+                showFlashMessage('No users found for selected clients.', 'warning');
+                return;
+            }
+
+            // Create CSV content
+            const headers = ['Email', 'First Name', 'Last Name', 'Employee ID', 'Contact Number', 'Role', 'Company Name', 'Active'];
+            const csvContent = [
+                headers.join(','),
+                ...usersToExport.map(user => [
+                    user.email || '',
+                    user.firstName || '',
+                    user.lastName || '',
+                    user.employeeId || '',
+                    user.contactNumber || '',
+                    user.role || '',
+                    user.clientname || user.client_name || user.companyName || '',
+                    user.active !== false ? 'Yes' : 'No'
+                ].join(','))
+            ].join('\n');
+
+            // Download CSV
+            const blob = new Blob([csvContent], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            const clientNames = selectedExportClients.length === 1 
+                ? selectedExportClients[0] 
+                : `${selectedExportClients.length}_clients`;
+            link.href = url;
+            link.download = `${clientNames}_users_${new Date().toISOString().split('T')[0]}.csv`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+
+            showFlashMessage(`Exported ${usersToExport.length} users from ${selectedExportClients.length} client(s)`, 'success');
+            setExportClientModalOpen(false);
+            setSelectedExportClients([]);
+        } catch (error) {
+            console.error('Export failed:', error);
+            showFlashMessage('Export failed. Please try again.', 'error');
+        }
+    };
+
     return (
         <div className="user-management-container">
             <style>
@@ -1882,6 +2022,115 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                         </Typography>
                     </Box>
                     
+                    {/* Action Buttons */}
+                    <div style={{ 
+                        display: 'flex', 
+                        gap: '8px',
+                        flexWrap: 'wrap',
+                        alignItems: 'center',
+                        marginTop: '0'
+                    }}
+                    >
+                        <button
+                            onClick={openAddUserModal}
+                            style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                padding: '6px 12px',
+                                fontSize: '0.75rem',
+                                fontWeight: '500',
+                                color: 'white',
+                                backgroundColor: '#3b82f6',
+                                border: '1px solid #3b82f6',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
+                                height: '28px',
+                                transition: 'all 0.2s ease'
+                            }}
+                            onMouseEnter={(e) => {
+                                e.target.style.backgroundColor = '#2563eb';
+                                e.target.style.borderColor = '#2563eb';
+                            }}
+                            onMouseLeave={(e) => {
+                                e.target.style.backgroundColor = '#3b82f6';
+                                e.target.style.borderColor = '#3b82f6';
+                            }}
+                        >
+                            <AddIcon style={{ fontSize: '14px', width: '14px', height: '14px' }} />
+                            Add
+                        </button>
+                        <button
+                            onClick={handleOpenImportModal}
+                            disabled={uniqueClients.length === 0}
+                            style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                padding: '6px 12px',
+                                fontSize: '0.75rem',
+                                fontWeight: '500',
+                                color: '#374151',
+                                backgroundColor: 'white',
+                                border: '1px solid #d1d5db',
+                                borderRadius: '4px',
+                                cursor: uniqueClients.length === 0 ? 'not-allowed' : 'pointer',
+                                height: '28px',
+                                opacity: uniqueClients.length === 0 ? 0.5 : 1,
+                                transition: 'all 0.2s ease'
+                            }}
+                            onMouseEnter={(e) => {
+                                if (uniqueClients.length > 0) {
+                                    e.target.style.backgroundColor = '#f9fafb';
+                                    e.target.style.borderColor = '#9ca3af';
+                                }
+                            }}
+                            onMouseLeave={(e) => {
+                                if (uniqueClients.length > 0) {
+                                    e.target.style.backgroundColor = 'white';
+                                    e.target.style.borderColor = '#d1d5db';
+                                }
+                            }}
+                        >
+                            <UploadIcon style={{ fontSize: '14px', width: '14px', height: '14px' }} />
+                            Import
+                        </button>
+                        <button
+                            onClick={handleOpenExportModal}
+                            disabled={uniqueClients.length === 0}
+                            style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                padding: '6px 12px',
+                                fontSize: '0.75rem',
+                                fontWeight: '500',
+                                color: '#374151',
+                                backgroundColor: 'white',
+                                border: '1px solid #d1d5db',
+                                borderRadius: '4px',
+                                cursor: uniqueClients.length === 0 ? 'not-allowed' : 'pointer',
+                                height: '28px',
+                                opacity: uniqueClients.length === 0 ? 0.5 : 1,
+                                transition: 'all 0.2s ease'
+                            }}
+                            onMouseEnter={(e) => {
+                                if (uniqueClients.length > 0) {
+                                    e.target.style.backgroundColor = '#f9fafb';
+                                    e.target.style.borderColor = '#9ca3af';
+                                }
+                            }}
+                            onMouseLeave={(e) => {
+                                if (uniqueClients.length > 0) {
+                                    e.target.style.backgroundColor = 'white';
+                                    e.target.style.borderColor = '#d1d5db';
+                                }
+                            }}
+                        >
+                            <DownloadIcon style={{ fontSize: '14px', width: '14px', height: '14px' }} />
+                            Export
+                        </button>
+                    </div>
                 </Box>
                 
                 {/* Stats Cards */}
@@ -2367,23 +2616,6 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                                                 <span className="user-count">{users.length} users</span>
                                             </div>
                                             <div className="client-actions">
-                                                <ClientActionDropdown
-                                                    clientName={clientName}
-                                                    onAddUser={() => handleClientAddUser(clientName)}
-                                                    onImportUsers={() => handleClientImportUsers(clientName)}
-                                                    onExportUsers={() => handleClientExportUsers(clientName)}
-                                                />
-      <div
-          onClick={() => handleToggleActionsColumn(clientName)}
-          className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors duration-150 cursor-pointer border ${
-              showActionsColumn[clientName]
-                  ? 'text-red-700 bg-white hover:bg-red-50 border-red-300'
-                  : 'text-gray-700 bg-white hover:bg-gray-50 border-gray-300'
-          }`}
-      >
-          <AdminIcon sx={{ fontSize: '14px', color: 'inherit' }} />
-          {showActionsColumn[clientName] ? 'Cancel' : 'Manage'}
-      </div>
                                                 <div className="client-toggle" onClick={() => handleToggleClientCollapse(clientName)}>
                                                     {collapsedClients[clientName] ? <ExpandMoreIcon /> : <ExpandLessIcon />}
                                                 </div>
@@ -3841,6 +4073,437 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                     </DialogActions>
                 </Dialog>
                 
+                {/* Import Client Selection Modal */}
+                {importClientModalOpen && (
+                    <div
+                        style={{
+                            position: 'fixed',
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            zIndex: 1300,
+                            padding: '20px'
+                        }}
+                        onClick={(e) => {
+                            if (e.target === e.currentTarget) {
+                                setImportClientModalOpen(false);
+                            }
+                        }}
+                    >
+                        <div
+                            style={{
+                                backgroundColor: 'white',
+                                borderRadius: '8px',
+                                width: '100%',
+                                maxWidth: '500px',
+                                maxHeight: '90vh',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                boxShadow: '0 8px 30px rgba(0,0,0,0.2)',
+                                overflow: 'hidden'
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            {/* Header */}
+                            <div
+                                style={{
+                                    background: 'linear-gradient(135deg, #f59e0b 0%, #f97316 100%)',
+                                    minHeight: '60px',
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                    color: 'white',
+                                    padding: '16px 24px'
+                                }}
+                            >
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                    <UploadIcon style={{ fontSize: '20px', width: '20px', height: '20px' }} />
+                                    <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 600 }}>
+                                        Select Client for Import
+                                    </h3>
+                                </div>
+                                <button
+                                    onClick={() => setImportClientModalOpen(false)}
+                                    style={{
+                                        background: 'none',
+                                        border: 'none',
+                                        color: 'white',
+                                        cursor: 'pointer',
+                                        padding: '4px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        borderRadius: '4px',
+                                        transition: 'background-color 0.2s'
+                                    }}
+                                    onMouseEnter={(e) => {
+                                        e.target.style.backgroundColor = 'rgba(255,255,255,0.1)';
+                                    }}
+                                    onMouseLeave={(e) => {
+                                        e.target.style.backgroundColor = 'transparent';
+                                    }}
+                                >
+                                    <CloseIcon style={{ fontSize: '20px', width: '20px', height: '20px' }} />
+                                </button>
+                            </div>
+                            {/* Content */}
+                            <div
+                                style={{
+                                    padding: '24px',
+                                    backgroundColor: '#f8f9fa',
+                                    flex: 1,
+                                    overflowY: 'auto'
+                                }}
+                            >
+                                <div
+                                    style={{
+                                        backgroundColor: 'white',
+                                        padding: '20px',
+                                        border: '1px solid #e0e0e0',
+                                        borderRadius: '12px'
+                                    }}
+                                >
+                                    <p style={{ marginBottom: '16px', color: '#666', fontSize: '0.875rem', marginTop: 0 }}>
+                                        Please select a client to import users for:
+                                    </p>
+                                    <select
+                                        value={selectedImportClient}
+                                        onChange={(e) => setSelectedImportClient(e.target.value)}
+                                        style={{
+                                            width: '100%',
+                                            padding: '8px 12px',
+                                            fontSize: '0.875rem',
+                                            border: '1px solid #d1d5db',
+                                            borderRadius: '4px',
+                                            backgroundColor: 'white',
+                                            color: '#374151',
+                                            cursor: 'pointer',
+                                            outline: 'none'
+                                        }}
+                                        onFocus={(e) => {
+                                            e.target.style.borderColor = '#3b82f6';
+                                            e.target.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.1)';
+                                        }}
+                                        onBlur={(e) => {
+                                            e.target.style.borderColor = '#d1d5db';
+                                            e.target.style.boxShadow = 'none';
+                                        }}
+                                    >
+                                        <option value="">Select Client</option>
+                                        {uniqueClients.map((clientName) => (
+                                            <option key={clientName} value={clientName}>
+                                                {clientName}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+                            {/* Footer */}
+                            <div
+                                style={{
+                                    padding: '16px 24px',
+                                    backgroundColor: '#f8f9fa',
+                                    borderTop: '1px solid #e0e0e0',
+                                    display: 'flex',
+                                    gap: '8px',
+                                    justifyContent: 'flex-end'
+                                }}
+                            >
+                                <button
+                                    onClick={() => setImportClientModalOpen(false)}
+                                    style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '6px',
+                                        padding: '6px 16px',
+                                        fontSize: '0.875rem',
+                                        fontWeight: '500',
+                                        color: '#374151',
+                                        backgroundColor: 'white',
+                                        border: '1px solid #d1d5db',
+                                        borderRadius: '4px',
+                                        cursor: 'pointer',
+                                        height: '32px',
+                                        transition: 'all 0.2s ease'
+                                    }}
+                                    onMouseEnter={(e) => {
+                                        e.target.style.backgroundColor = '#f9fafb';
+                                        e.target.style.borderColor = '#9ca3af';
+                                    }}
+                                    onMouseLeave={(e) => {
+                                        e.target.style.backgroundColor = 'white';
+                                        e.target.style.borderColor = '#d1d5db';
+                                    }}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleImportWithClient}
+                                    disabled={!selectedImportClient}
+                                    style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '6px',
+                                        padding: '6px 16px',
+                                        fontSize: '0.875rem',
+                                        fontWeight: '500',
+                                        color: 'white',
+                                        backgroundColor: !selectedImportClient ? '#9ca3af' : '#f59e0b',
+                                        border: `1px solid ${!selectedImportClient ? '#9ca3af' : '#f59e0b'}`,
+                                        borderRadius: '4px',
+                                        cursor: !selectedImportClient ? 'not-allowed' : 'pointer',
+                                        height: '32px',
+                                        opacity: !selectedImportClient ? 0.6 : 1,
+                                        transition: 'all 0.2s ease'
+                                    }}
+                                    onMouseEnter={(e) => {
+                                        if (selectedImportClient) {
+                                            e.target.style.backgroundColor = '#f97316';
+                                            e.target.style.borderColor = '#f97316';
+                                        }
+                                    }}
+                                    onMouseLeave={(e) => {
+                                        if (selectedImportClient) {
+                                            e.target.style.backgroundColor = '#f59e0b';
+                                            e.target.style.borderColor = '#f59e0b';
+                                        }
+                                    }}
+                                >
+                                    <UploadIcon style={{ fontSize: '16px', width: '16px', height: '16px' }} />
+                                    Import Users
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Export Client Selection Modal */}
+                {exportClientModalOpen && (
+                    <div
+                        style={{
+                            position: 'fixed',
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            zIndex: 1300,
+                            padding: '20px'
+                        }}
+                        onClick={(e) => {
+                            if (e.target === e.currentTarget) {
+                                setExportClientModalOpen(false);
+                            }
+                        }}
+                    >
+                        <div
+                            style={{
+                                backgroundColor: 'white',
+                                borderRadius: '8px',
+                                width: '100%',
+                                maxWidth: '500px',
+                                maxHeight: '90vh',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                boxShadow: '0 8px 30px rgba(0,0,0,0.2)',
+                                overflow: 'hidden'
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            {/* Header */}
+                            <div
+                                style={{
+                                    background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                                    minHeight: '60px',
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                    color: 'white',
+                                    padding: '16px 24px'
+                                }}
+                            >
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                    <DownloadIcon style={{ fontSize: '20px', width: '20px', height: '20px' }} />
+                                    <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 600 }}>
+                                        Select Clients for Export
+                                    </h3>
+                                </div>
+                                <button
+                                    onClick={() => setExportClientModalOpen(false)}
+                                    style={{
+                                        background: 'none',
+                                        border: 'none',
+                                        color: 'white',
+                                        cursor: 'pointer',
+                                        padding: '4px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        borderRadius: '4px',
+                                        transition: 'background-color 0.2s'
+                                    }}
+                                    onMouseEnter={(e) => {
+                                        e.target.style.backgroundColor = 'rgba(255,255,255,0.1)';
+                                    }}
+                                    onMouseLeave={(e) => {
+                                        e.target.style.backgroundColor = 'transparent';
+                                    }}
+                                >
+                                    <CloseIcon style={{ fontSize: '20px', width: '20px', height: '20px' }} />
+                                </button>
+                            </div>
+                            {/* Content */}
+                            <div
+                                style={{
+                                    padding: '24px',
+                                    backgroundColor: '#f8f9fa',
+                                    flex: 1,
+                                    overflowY: 'auto'
+                                }}
+                            >
+                                <div
+                                    style={{
+                                        backgroundColor: 'white',
+                                        padding: '20px',
+                                        border: '1px solid #e0e0e0',
+                                        borderRadius: '12px'
+                                    }}
+                                >
+                                    <p style={{ marginBottom: '16px', color: '#666', fontSize: '0.875rem', marginTop: 0 }}>
+                                        Select one or more clients to export users from:
+                                    </p>
+                                    <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                                        {uniqueClients.map((clientName) => (
+                                            <label
+                                                key={clientName}
+                                                style={{
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    padding: '8px 0',
+                                                    cursor: 'pointer',
+                                                    fontSize: '0.875rem',
+                                                    color: '#374151'
+                                                }}
+                                            >
+                                                <input
+                                                    type="checkbox"
+                                                    checked={selectedExportClients.includes(clientName)}
+                                                    onChange={(e) => {
+                                                        if (e.target.checked) {
+                                                            setSelectedExportClients([...selectedExportClients, clientName]);
+                                                        } else {
+                                                            setSelectedExportClients(selectedExportClients.filter(c => c !== clientName));
+                                                        }
+                                                    }}
+                                                    style={{
+                                                        width: '16px',
+                                                        height: '16px',
+                                                        marginRight: '8px',
+                                                        cursor: 'pointer',
+                                                        accentColor: '#10b981'
+                                                    }}
+                                                />
+                                                {clientName}
+                                            </label>
+                                        ))}
+                                    </div>
+                                    {selectedExportClients.length > 0 && (
+                                        <p style={{ marginTop: '16px', color: '#10b981', fontSize: '0.75rem', marginBottom: 0 }}>
+                                            {selectedExportClients.length} client(s) selected
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+                            {/* Footer */}
+                            <div
+                                style={{
+                                    padding: '16px 24px',
+                                    backgroundColor: '#f8f9fa',
+                                    borderTop: '1px solid #e0e0e0',
+                                    display: 'flex',
+                                    gap: '8px',
+                                    justifyContent: 'flex-end'
+                                }}
+                            >
+                                <button
+                                    onClick={() => {
+                                        setExportClientModalOpen(false);
+                                        setSelectedExportClients([]);
+                                    }}
+                                    style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '6px',
+                                        padding: '6px 16px',
+                                        fontSize: '0.875rem',
+                                        fontWeight: '500',
+                                        color: '#374151',
+                                        backgroundColor: 'white',
+                                        border: '1px solid #d1d5db',
+                                        borderRadius: '4px',
+                                        cursor: 'pointer',
+                                        height: '32px',
+                                        transition: 'all 0.2s ease'
+                                    }}
+                                    onMouseEnter={(e) => {
+                                        e.target.style.backgroundColor = '#f9fafb';
+                                        e.target.style.borderColor = '#9ca3af';
+                                    }}
+                                    onMouseLeave={(e) => {
+                                        e.target.style.backgroundColor = 'white';
+                                        e.target.style.borderColor = '#d1d5db';
+                                    }}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleExportWithClients}
+                                    disabled={selectedExportClients.length === 0}
+                                    style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '6px',
+                                        padding: '6px 16px',
+                                        fontSize: '0.875rem',
+                                        fontWeight: '500',
+                                        color: 'white',
+                                        backgroundColor: selectedExportClients.length === 0 ? '#9ca3af' : '#10b981',
+                                        border: `1px solid ${selectedExportClients.length === 0 ? '#9ca3af' : '#10b981'}`,
+                                        borderRadius: '4px',
+                                        cursor: selectedExportClients.length === 0 ? 'not-allowed' : 'pointer',
+                                        height: '32px',
+                                        opacity: selectedExportClients.length === 0 ? 0.6 : 1,
+                                        transition: 'all 0.2s ease'
+                                    }}
+                                    onMouseEnter={(e) => {
+                                        if (selectedExportClients.length > 0) {
+                                            e.target.style.backgroundColor = '#059669';
+                                            e.target.style.borderColor = '#059669';
+                                        }
+                                    }}
+                                    onMouseLeave={(e) => {
+                                        if (selectedExportClients.length > 0) {
+                                            e.target.style.backgroundColor = '#10b981';
+                                            e.target.style.borderColor = '#10b981';
+                                        }
+                                    }}
+                                >
+                                    <DownloadIcon style={{ fontSize: '16px', width: '16px', height: '16px' }} />
+                                    Export Users ({selectedExportClients.length > 0 ? selectedExportClients.length : 0})
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 {/* Custom Close Confirmation Dialog */}
                 <Dialog 
                     open={showCloseConfirmation} 

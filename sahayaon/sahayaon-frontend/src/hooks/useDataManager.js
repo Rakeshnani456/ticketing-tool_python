@@ -96,6 +96,9 @@ export const useDataManager = (dataType, userId, options = {}) => {
     const [error, setError] = useState(null);
     const subscriptionIdRef = useRef(null);
     const isMountedRef = useRef(true);
+    const lastRefreshTimeRef = useRef(0);
+    const refreshDebounceTimerRef = useRef(null);
+    const MIN_REFRESH_INTERVAL = 3000; // Minimum 3 seconds between refreshes from WebSocket updates
 
     // Cleanup on unmount
     useEffect(() => {
@@ -103,6 +106,10 @@ export const useDataManager = (dataType, userId, options = {}) => {
             isMountedRef.current = false;
             if (subscriptionIdRef.current) {
                 DataManager.unsubscribe(dataType, subscriptionIdRef.current);
+            }
+            // Clear debounce timer on unmount
+            if (refreshDebounceTimerRef.current) {
+                clearTimeout(refreshDebounceTimerRef.current);
             }
         };
     }, [dataType]);
@@ -157,10 +164,34 @@ export const useDataManager = (dataType, userId, options = {}) => {
             if (isMountedRef.current) {
                 // If null is passed, it means we need to refresh (e.g., ticket_update event)
                 if (newData === null) {
-                    console.log(`🔄 Refreshing ${dataType} data after ticket update`);
-                    // Trigger a fresh fetch
-                    getInitialData();
+                    // Debounce and throttle refreshes to prevent rapid consecutive reloads
+                    const now = Date.now();
+                    const timeSinceLastRefresh = now - lastRefreshTimeRef.current;
+                    
+                    // Clear any existing debounce timer
+                    if (refreshDebounceTimerRef.current) {
+                        clearTimeout(refreshDebounceTimerRef.current);
+                    }
+                    
+                    // Only schedule refresh if enough time has passed since last refresh
+                    if (timeSinceLastRefresh >= MIN_REFRESH_INTERVAL) {
+                        // Schedule refresh with a small delay to batch multiple rapid updates
+                        refreshDebounceTimerRef.current = setTimeout(() => {
+                            if (isMountedRef.current) {
+                                console.log(`🔄 Refreshing ${dataType} data after ticket update (debounced)`);
+                                lastRefreshTimeRef.current = Date.now();
+                                getInitialData();
+                            }
+                        }, 1500); // Wait 1.5 seconds to batch multiple updates
+                    } else {
+                        console.log(`⏸️ Skipping ${dataType} refresh - too soon (${Math.round(timeSinceLastRefresh / 1000)}s ago)`);
+                    }
                 } else {
+                    // Clear debounce timer if we're getting actual data
+                    if (refreshDebounceTimerRef.current) {
+                        clearTimeout(refreshDebounceTimerRef.current);
+                        refreshDebounceTimerRef.current = null;
+                    }
                     setData(newData);
                     setLoading(false);
                     setError(null);

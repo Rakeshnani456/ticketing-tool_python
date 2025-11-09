@@ -3,14 +3,13 @@
 
 .ticket-detail-container {
     font-size: 110% !important;
-    color: #4a5568 !important; /* Softer gray instead of black */
-    font-weight: 400 !important; /* Normal weight instead of bold */
+    color: #1f2937 !important; /* Darker, more readable text */
+    font-weight: 500 !important; /* Medium weight for better readability */
 }
 
 .ticket-detail-container * {
     font-size: inherit;
-    color: inherit;
-    font-weight: inherit;
+    /* Don't force color and weight on all elements - let components control their own styling */
 }
 
 /* Specific font size adjustments for ticket detail components */
@@ -190,57 +189,88 @@
 .ticket-detail-container h4,
 .ticket-detail-container h5,
 .ticket-detail-container h6 {
-    color: #374151 !important; /* Darker gray for headings to stand out */
-    font-weight: 500 !important; /* Medium weight instead of bold */
+    color: #111827 !important; /* Very dark for headings to stand out */
+    font-weight: 700 !important; /* Bold weight for headings */
 }
 
 .ticket-detail-container p {
-    color: #4a5568 !important; /* Medium gray for paragraphs */
-    font-weight: 400 !important; /* Normal weight */
+    color: #374151 !important; /* Dark gray for paragraphs - more readable */
+    font-weight: 500 !important; /* Medium weight for better readability */
 }
 
 .ticket-detail-container span {
-    color: #6b7280 !important; /* Lighter gray for spans */
-    font-weight: 400 !important; /* Normal weight */
+    color: inherit !important; /* Inherit from parent - don't force light gray */
+    font-weight: inherit !important; /* Inherit from parent */
 }
 
 .ticket-detail-container div {
-    color: #4a5568 !important; /* Base gray for divs */
-    font-weight: 400 !important; /* Normal weight */
+    color: inherit !important; /* Inherit from parent */
+    font-weight: inherit !important; /* Inherit from parent */
 }
 
-/* Specific color variations for different content types */
+/* Specific color variations for different content types - Enhanced for better contrast */
 .ticket-detail-container .text-black {
-    color: #374151 !important; /* Dark gray instead of black */
+    color: #111827 !important; /* True dark for important text */
+    font-weight: 600 !important;
+}
+
+.ticket-detail-container .text-gray-900 {
+    color: #111827 !important; /* Very dark gray */
+    font-weight: 600 !important;
 }
 
 .ticket-detail-container .text-gray-800 {
-    color: #4a5568 !important; /* Medium gray */
+    color: #1f2937 !important; /* Dark gray - more readable */
+    font-weight: 500 !important;
 }
 
 .ticket-detail-container .text-gray-700 {
-    color: #6b7280 !important; /* Lighter gray */
+    color: #374151 !important; /* Medium-dark gray */
+    font-weight: 500 !important;
 }
 
 .ticket-detail-container .text-gray-600 {
-    color: #9ca3af !important; /* Light gray */
+    color: #4b5563 !important; /* Medium gray - still readable */
+    font-weight: 500 !important;
 }
 
 .ticket-detail-container .text-gray-500 {
-    color: #d1d5db !important; /* Very light gray */
+    color: #6b7280 !important; /* Lighter gray for secondary text */
+    font-weight: 400 !important;
 }
 
-/* Font weight variations */
-.ticket-detail-container .font-semibold {
-    font-weight: 500 !important; /* Medium instead of semibold */
-}
-
-.ticket-detail-container .font-medium {
-    font-weight: 400 !important; /* Normal instead of medium */
+/* Font weight variations - Enhanced for better readability */
+.ticket-detail-container .font-extrabold {
+    font-weight: 800 !important; /* Extra bold */
 }
 
 .ticket-detail-container .font-bold {
-    font-weight: 500 !important; /* Medium instead of bold */
+    font-weight: 700 !important; /* True bold */
+}
+
+.ticket-detail-container .font-semibold {
+    font-weight: 600 !important; /* Semi-bold */
+}
+
+.ticket-detail-container .font-medium {
+    font-weight: 500 !important; /* Medium weight */
+}
+
+.ticket-detail-container .font-normal {
+    font-weight: 400 !important; /* Normal weight */
+}
+
+/* Label styling - Make labels stand out */
+.ticket-detail-container label {
+    color: #111827 !important; /* Very dark for labels */
+    font-weight: 600 !important; /* Semi-bold for labels */
+}
+
+/* Field values - Make values readable */
+.ticket-detail-container .FieldBox span,
+.ticket-detail-container .FieldBox {
+    color: #1f2937 !important; /* Dark for field values */
+    font-weight: 500 !important; /* Medium weight */
 }
 
 /* Additional color variations for ticket details */
@@ -305,4 +335,85 @@
 
 .ticket-detail-container .ticket-progress-section button.text-gray-600 {
     color: #4b5563 !important; /* Force proper gray for cancel button */
+}
+
+/* Enhanced text styling for ticket detail sections */
+
+/* Section headers - Make them bold and colorful */
+.ticket-detail-container h3[class*="font-extrabold"] {
+    color: #111827 !important;
+    font-weight: 800 !important;
+    letter-spacing: 0.05em !important;
+}
+
+/* Ticket ID - Make it stand out */
+.ticket-detail-container .text-blue-700 {
+    color: #1e40af !important; /* Rich blue */
+    font-weight: 700 !important; /* Bold */
+}
+
+/* Email addresses - Make them more visible */
+.ticket-detail-container span[class*="text-gray-800"]:hover {
+    color: #2563eb !important; /* Blue on hover */
+    font-weight: 600 !important;
+}
+
+/* Description text - Better readability */
+.ticket-detail-container textarea,
+.ticket-detail-container .whitespace-pre-wrap {
+    color: #1f2937 !important; /* Dark text */
+    font-weight: 500 !important; /* Medium weight */
+    line-height: 1.6 !important;
+}
+
+/* Comments and updates - Enhanced styling */
+.ticket-detail-container .comment-item,
+.ticket-detail-container .comment-text {
+    color: #374151 !important; /* Dark gray */
+    font-weight: 500 !important; /* Medium weight */
+    line-height: 1.5 !important;
+}
+
+/* Status and priority badges - Enhanced */
+.ticket-detail-container [class*="status-"],
+.ticket-detail-container [class*="priority-"] {
+    font-weight: 600 !important; /* Semi-bold */
+}
+
+/* Attachment file names - More visible */
+.ticket-detail-container a[href*="attachments"],
+.ticket-detail-container .attachment-name {
+    color: #1e40af !important; /* Blue for links */
+    font-weight: 600 !important; /* Semi-bold */
+}
+
+/* Tab navigation - Enhanced */
+.ticket-detail-container button[class*="border-b-3"] {
+    font-weight: 700 !important; /* Bold for active tabs */
+}
+
+.ticket-detail-container button[class*="border-b-3"]:not([class*="border-blue-600"]) {
+    font-weight: 600 !important; /* Semi-bold for inactive tabs */
+}
+
+/* Time and date stamps - Slightly lighter but still readable */
+.ticket-detail-container .text-gray-500[class*="text-xs"],
+.ticket-detail-container .text-gray-500[class*="text-[10px]"] {
+    color: #6b7280 !important; /* Medium gray */
+    font-weight: 500 !important; /* Medium weight */
+}
+
+/* Important information - Make it stand out */
+.ticket-detail-container .text-blue-600,
+.ticket-detail-container .text-green-600,
+.ticket-detail-container .text-orange-600,
+.ticket-detail-container .text-red-600 {
+    font-weight: 600 !important; /* Semi-bold for colored text */
+}
+
+/* Placeholder text - Keep it subtle */
+.ticket-detail-container ::placeholder,
+.ticket-detail-container .italic.text-gray-500 {
+    color: #9ca3af !important; /* Light gray for placeholders */
+    font-weight: 400 !important; /* Normal weight */
 }

@@ -142,12 +142,14 @@ module.exports = (db, admin, usersCollection, verifyFirebaseToken) => {
     });
 
     // @route GET /profile/:userId
-    // @desc Get user profile details (email, role).
+    // @desc Get user profile details (all available fields).
     // @access Private (requires token, self-access or admin role)
+    // @query includeManager - Set to 'true' to include manager details (optional, defaults to false for faster response)
     router.get('/profile/:userId', verifyFirebaseToken, async (req, res) => {
         const requestedUid = req.params.userId;
         const authenticatedUid = req.user.uid;
         const authenticatedUserRole = req.user.role;
+        const includeManager = req.query.includeManager === 'true';
 
         if (requestedUid !== authenticatedUid && authenticatedUserRole !== 'admin') {
             return res.status(403).json({ error: 'Unauthorized: You can only view your own profile unless you are an admin.' });
@@ -165,13 +167,68 @@ module.exports = (db, admin, usersCollection, verifyFirebaseToken) => {
             } else if (profileData.name) {
                 fullName = profileData.name;
             }
-            return res.status(200).json({
+            
+            // Prepare base response
+            const response = {
                 uid: requestedUid,
                 fullName,
-                employeeid: profileData.employeeid || '',
-                email: profileData.email,
-                role: profileData.role
-            });
+                firstName: profileData.firstName || '',
+                lastName: profileData.lastName || '',
+                email: profileData.email || '',
+                mobile: profileData.contactNumber || '',
+                role: profileData.role || '',
+                organization: profileData.companyName || profileData.client_name || '',
+                employeeId: profileData.employeeId || profileData.employeeid || '',
+                assetId: profileData.asset_id || '',
+                designation: profileData.designation || '',
+                employmentType: profileData.employmentType || '',
+                managerEmail: profileData.managerEmail || ''
+            };
+            
+            // Get manager info only if requested (for faster initial load)
+            if (includeManager && profileData.managerEmail) {
+                try {
+                    // Use a timeout to prevent hanging on slow queries
+                    const managerQueryPromise = usersCollection.where('email', '==', profileData.managerEmail).limit(1).get();
+                    const timeoutPromise = new Promise((_, reject) => 
+                        setTimeout(() => reject(new Error('Manager query timeout')), 3000)
+                    );
+                    
+                    const managerQuery = await Promise.race([managerQueryPromise, timeoutPromise]);
+                    
+                    if (!managerQuery.empty) {
+                        const managerData = managerQuery.docs[0].data();
+                        if (managerData.firstName || managerData.lastName) {
+                            response.managerName = `${managerData.firstName || ''} ${managerData.lastName || ''}`.trim();
+                        } else if (managerData.name) {
+                            response.managerName = managerData.name;
+                        }
+                        response.managerRole = managerData.role || '';
+                        response.managerContactNumber = managerData.contactNumber || '';
+                        response.managerEmployeeId = managerData.employeeId || managerData.employeeid || '';
+                    } else {
+                        response.managerName = '';
+                        response.managerRole = '';
+                        response.managerContactNumber = '';
+                        response.managerEmployeeId = '';
+                    }
+                } catch (managerErr) {
+                    console.error(`Error fetching manager info: ${managerErr.message}`);
+                    // Return manager email but empty other fields if lookup fails
+                    response.managerName = '';
+                    response.managerRole = '';
+                    response.managerContactNumber = '';
+                    response.managerEmployeeId = '';
+                }
+            } else {
+                // If manager not requested, just return empty manager fields
+                response.managerName = '';
+                response.managerRole = '';
+                response.managerContactNumber = '';
+                response.managerEmployeeId = '';
+            }
+            
+            return res.status(200).json(response);
         } catch (error) {
             console.error(`Error fetching user profile for ${requestedUid}: ${error.message}`);
             return res.status(500).json({ error: `Failed to fetch user profile: ${error.message}` });

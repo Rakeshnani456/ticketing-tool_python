@@ -125,6 +125,8 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
     const [modalTimeSpent, setModalTimeSpent] = useState('');
     const [modalClosureNotes, setModalClosureNotes] = useState('');
     const [isResolvingViaModal, setIsResolvingViaModal] = useState(false);
+    const [updateModeLoading, setUpdateModeLoading] = useState(false);
+    const [pendingFieldUpdates, setPendingFieldUpdates] = useState({});
 
     // Add state and ref for the popup at the top of the component
     const [profilePopup, setProfilePopup] = useState({ visible: false, user: null, anchorRef: null });
@@ -612,15 +614,13 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
         }
     }, [isEditing, isSupportUser, isEngineer, user]);
 
-    // Auto-enable editing for authorized roles when possible
+    // Disable auto-enable editing - now controlled by Update button
+    // Only disable editing if ticket is closed/resolved
     useEffect(() => {
-        if (ticket && canEdit) {
-            setIsEditing(true);
-        }
         if (isTicketClosedOrResolved) {
             setIsEditing(false);
         }
-    }, [ticket, canEdit, isTicketClosedOrResolved]);
+    }, [isTicketClosedOrResolved]);
 
     const handleEditChange = useCallback((e) => {
         const { id, value } = e.target;
@@ -634,70 +634,84 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
         }
     }, [saveButtonState]);
 
-    // Handle individual field updates with optimistic updates (like AllTicketsComponent)
-    const handleFieldUpdate = useCallback(async (fieldName, value) => {
+    // Handle Update button click - enables editing mode
+    const handleUpdateClick = useCallback(() => {
         if (!ticket || !canEdit) return;
+        setIsEditing(true);
+        // Initialize editable fields with current ticket values
+        setEditableFields({
+            short_description: ticket.short_description || '',
+            long_description: ticket.long_description || '',
+            priority: ticket.priority || '',
+            status: ticket.status || '',
+            assigned_to_email: ticket.assigned_to_email || '',
+            closed_by_email: ticket.closed_by_email || '',
+            category: ticket.category || '',
+        });
+        setPendingFieldUpdates({});
+    }, [ticket, canEdit]);
 
-        // INTERCEPT: If trying to resolve ticket, show modal instead
-        if (fieldName === 'status' && value === 'Resolved') {
+    // Handle Confirm Update - batch save all pending changes
+    const handleConfirmUpdate = useCallback(async () => {
+        if (!ticket || !canEdit || !isEditing) return;
+
+        // Check if trying to resolve or cancel
+        if (editableFields.status === 'Resolved') {
             // Check if ticket is assigned
-            if (!ticket.assigned_to_email) {
+            if (!editableFields.assigned_to_email) {
                 showFlashMessage('Please assign this ticket before resolving it.', 'error');
+                // Restore original status
+                setEditableFields(prev => ({ ...prev, status: ticket.status }));
                 return;
             }
             
-            // Don't update, show the resolution modal instead
+            // Show resolution modal instead - use current timeSpent state value, not ticket.time_spent
             setPendingResolutionStatus('Resolved');
-            setModalTimeSpent('');
-            setModalClosureNotes('');
+            setModalTimeSpent(timeSpent || ticket.time_spent || '');
+            setModalClosureNotes(closureNotes || ticket.closure_notes || '');
             setShowResolutionModal(true);
             return;
         }
 
-        // Set loading state
-        setFieldUpdateStates(prev => ({
-            ...prev,
-            [fieldName]: { loading: true, success: false, error: false }
-        }));
+        // Handle cancellation - just update directly (no modal needed)
+        if (editableFields.status === 'Cancelled') {
+            // Check if ticket is assigned
+            if (!editableFields.assigned_to_email) {
+                showFlashMessage('Please assign this ticket before cancelling it.', 'error');
+                // Restore original status
+                setEditableFields(prev => ({ ...prev, status: ticket.status }));
+                return;
+            }
+        }
 
-        // Store original value for rollback
-        const originalValue = ticket[fieldName];
+        setUpdateModeLoading(true);
 
         try {
-            // OPTIMISTIC UPDATE - Update UI immediately
-            setTicket(prev => prev ? ({ ...prev, [fieldName]: value, updated_at: new Date().toISOString() }) : prev);
-            setEditableFields(prev => ({ ...prev, [fieldName]: value }));
-
-            // Show success message immediately
-            if (fieldName === 'assigned_to_email') {
-                const assignedEngineer = supportUsers.find(u => u.email === value);
-                showFlashMessage(
-                    value 
-                        ? `Ticket assigned to ${assignedEngineer?.name || value}` 
-                        : 'Ticket unassigned successfully', 
-                    'success'
-                );
-            } else if (fieldName === 'status') {
-                showFlashMessage(`Status updated to ${value}`, 'success');
-            } else if (fieldName === 'priority') {
-                showFlashMessage(`Priority updated to ${value}`, 'success');
+            // Build update payload with only changed fields
+            const updates = {};
+            if (editableFields.status !== ticket.status) {
+                updates.status = editableFields.status;
+                // If cancelling, set closed_by_email and resolved_at
+                if (editableFields.status === 'Cancelled') {
+                    updates.closed_by_email = user.email;
+                    updates.resolved_at = new Date().toISOString();
+                }
+            }
+            if (editableFields.priority !== ticket.priority) {
+                updates.priority = editableFields.priority;
+            }
+            if (editableFields.assigned_to_email !== (ticket.assigned_to_email || '')) {
+                updates.assigned_to_email = editableFields.assigned_to_email || null;
             }
 
-            // Set success state
-            setFieldUpdateStates(prev => ({
-                ...prev,
-                [fieldName]: { loading: false, success: true, error: false }
-            }));
+            // If no changes, just exit edit mode
+            if (Object.keys(updates).length === 0) {
+                setIsEditing(false);
+                setUpdateModeLoading(false);
+                return;
+            }
 
-            // Clear success state after animation
-            setTimeout(() => {
-                setFieldUpdateStates(prev => ({
-                    ...prev,
-                    [fieldName]: { loading: false, success: false, error: false }
-                }));
-            }, 2000);
-
-            // Update via API in background (user doesn't wait)
+            // Send batch update
             const idToken = await user.firebaseUser.getIdToken();
             const response = await fetch(`${API_BASE_URL}/tickets/${ticketId}`, {
                 method: 'PATCH',
@@ -705,40 +719,62 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${idToken}`
                 },
-                body: JSON.stringify({
-                    [fieldName]: value
-                })
+                body: JSON.stringify(updates)
             });
 
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || `Failed to update ${fieldName}`);
+            const data = await response.json();
+
+            if (response.ok) {
+                // Update local state
+                setTicket(prev => prev ? ({ ...prev, ...updates, updated_at: new Date().toISOString() }) : prev);
+                setIsEditing(false);
+                setPendingFieldUpdates({});
+                showFlashMessage('Ticket updated successfully!', 'success');
+            } else {
+                showFlashMessage(data.error || 'Failed to update ticket.', 'error');
             }
-
         } catch (error) {
-            console.error(`Error updating ${fieldName}:`, error);
-            
-            // ROLLBACK - Restore original state on error
-            setTicket(prev => prev ? ({ ...prev, [fieldName]: originalValue }) : prev);
-            setEditableFields(prev => ({ ...prev, [fieldName]: originalValue }));
-
-            // Set error state
-            setFieldUpdateStates(prev => ({
-                ...prev,
-                [fieldName]: { loading: false, success: false, error: true }
-            }));
-
-            showFlashMessage(`Failed to update ${fieldName}: ${error.message}`, 'error');
-
-            // Clear error state after animation
-            setTimeout(() => {
-                setFieldUpdateStates(prev => ({
-                    ...prev,
-                    [fieldName]: { loading: false, success: false, error: false }
-                }));
-            }, 3000);
+            console.error('Error updating ticket:', error);
+            showFlashMessage('Network error while updating ticket.', 'error');
+        } finally {
+            setUpdateModeLoading(false);
         }
-    }, [ticket, canEdit, supportUsers, user, ticketId, showFlashMessage]);
+    }, [ticket, canEdit, isEditing, editableFields, user, ticketId, showFlashMessage]);
+
+    // Handle individual field updates - only update local state when in edit mode (no auto-save)
+    const handleFieldUpdate = useCallback((fieldName, value) => {
+        if (!ticket || !canEdit || !isEditing) return;
+
+        // INTERCEPT: If trying to resolve ticket, immediately open the resolution modal
+        if (fieldName === 'status' && value === 'Resolved') {
+            // Check if ticket is assigned
+            if (!editableFields.assigned_to_email && !ticket.assigned_to_email) {
+                showFlashMessage('Please assign this ticket before resolving it.', 'error');
+                return;
+            }
+            
+            // Update local state first
+            setEditableFields(prev => ({ ...prev, [fieldName]: value, closed_by_email: user?.email || '' }));
+            setPendingFieldUpdates(prev => ({ ...prev, [fieldName]: value }));
+            
+            // Immediately open the resolution modal
+            setPendingResolutionStatus('Resolved');
+            setModalTimeSpent(timeSpent || ticket.time_spent || '');
+            setModalClosureNotes(closureNotes || ticket.closure_notes || '');
+            setShowResolutionModal(true);
+            return;
+        }
+
+        // When in update mode, only update local state (no auto-save)
+        setEditableFields(prev => ({ ...prev, [fieldName]: value }));
+        setPendingFieldUpdates(prev => ({ ...prev, [fieldName]: value }));
+        
+        // Update field update states for visual feedback (but don't save yet)
+        setFieldUpdateStates(prev => ({
+            ...prev,
+            [fieldName]: { loading: false, success: false, error: false }
+        }));
+    }, [ticket, canEdit, isEditing, editableFields, showFlashMessage, user, timeSpent, closureNotes]);
 
     const handleButtonSelection = useCallback((field, value) => {
         setEditableFields(prev => {
@@ -935,26 +971,16 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                     
                     showFlashMessage('Ticket resolved successfully!', 'success');
                     
-                    setTimeout(() => {
-                        if (user.role === 'user') {
-                            navigateTo('/my-tickets');
-                        } else {
-                            navigateTo('/all-tickets');
-                        }
-                    }, 2000);
+                    // Do NOT auto-redirect - user stays on the ticket detail page
+                    // They can use the back button to return to the page they came from
                 } else {
                     setSaveButtonState('success');
                     
                     if (payload.status === 'Resolved' && !oldStatusWasTerminal) {
                         showFlashMessage('Ticket resolved successfully!', 'success');
                         
-                        setTimeout(() => {
-                            if (user.role === 'user') {
-                                navigateTo('/my-tickets');
-                            } else {
-                                navigateTo('/all-tickets');
-                            }
-                        }, 2000);
+                        // Do NOT auto-redirect - user stays on the ticket detail page
+                        // They can use the back button to return to the page they came from
                     }
                 }
                 setError(null);
@@ -1009,6 +1035,8 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
     };
 
     const handleCancelEdit = useCallback(() => {
+        if (!ticket) return;
+        // Reset editable fields to original ticket values
         setEditableFields({
             short_description: ticket.short_description || '',
             long_description: ticket.long_description || '',
@@ -1028,15 +1056,26 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
         setAssignedToHasError(false);
         setTimeSpentHasError(false);
         setClosureNotesHasError(false);
+        setPendingFieldUpdates({});
+        // Reset field update states
+        setFieldUpdateStates({
+            assigned_to_email: { loading: false, success: false, error: false },
+            status: { loading: false, success: false, error: false },
+            priority: { loading: false, success: false, error: false }
+        });
     }, [ticket]);
 
     // Handler for closing the resolution modal
     const handleModalClose = useCallback(() => {
+        // Restore original status if modal is cancelled
+        if (pendingResolutionStatus && ticket) {
+            setEditableFields(prev => ({ ...prev, status: ticket.status, closed_by_email: ticket.closed_by_email || '' }));
+        }
         setShowResolutionModal(false);
         setPendingResolutionStatus(null);
         setModalTimeSpent('');
         setModalClosureNotes('');
-    }, []);
+    }, [pendingResolutionStatus, ticket]);
 
     // Handler for confirming resolution via modal
     const handleModalConfirm = useCallback(async () => {
@@ -1086,18 +1125,14 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                 setEditableFields(prev => ({ ...prev, ...payload }));
                 setTimeSpent(modalTimeSpent.trim());
                 setClosureNotes(modalClosureNotes.trim());
+                setIsEditing(false); // Exit editing mode after resolving
+                setPendingFieldUpdates({});
 
                 // Show success message
                 showFlashMessage('Ticket resolved successfully!', 'success');
 
-                // Navigate after a short delay
-                setTimeout(() => {
-                    if (user.role === 'user') {
-                        navigateTo('/my-tickets');
-                    } else {
-                        navigateTo('/all-tickets');
-                    }
-                }, 1500);
+                // Do NOT auto-redirect - user stays on the ticket detail page
+                // They can use the back button to return to the page they came from
             } else {
                 showFlashMessage(data.error || 'Failed to resolve ticket.', 'error');
                 setIsResolvingViaModal(false);
@@ -1421,6 +1456,9 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                             attemptedHoldWithoutComment={attemptedHoldWithoutComment}
                             fieldUpdateStates={fieldUpdateStates}
                             handleFieldUpdate={handleFieldUpdate}
+                            onUpdateClick={handleUpdateClick}
+                            onConfirmUpdate={handleConfirmUpdate}
+                            updateModeLoading={updateModeLoading}
                         />
                     </div>
                 </div>

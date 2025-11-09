@@ -377,6 +377,12 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
   // State for company filter (for Super Admin and Engineer)
   const [selectedCompany, setSelectedCompany] = useState('');
   const [availableCompanies, setAvailableCompanies] = useState([]);
+  
+  // State for Resolution Time Analytics filters (declare early to avoid initialization errors)
+  const [resolutionTimePeriod, setResolutionTimePeriod] = useState('7');
+  const [resolutionTimeStartDate, setResolutionTimeStartDate] = useState('');
+  const [resolutionTimeEndDate, setResolutionTimeEndDate] = useState('');
+  const [resolutionTimeCompany, setResolutionTimeCompany] = useState('');
 
   // Use centralized data management
   const { data: dashboardData, loading: dashboardLoading, error: dashboardError } = useDashboardData(
@@ -419,6 +425,16 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
       setAvailableCompanies(uniqueCompanies);
     }
   }, [tickets]);
+  
+  // Set default resolution time company when companies are available
+  useEffect(() => {
+    if (availableCompanies.length > 0 && !resolutionTimeCompany) {
+      setResolutionTimeCompany(availableCompanies[0]);
+    } else if (availableCompanies.length > 0 && resolutionTimeCompany && !availableCompanies.includes(resolutionTimeCompany)) {
+      // If current company is not in available companies, reset to first
+      setResolutionTimeCompany(availableCompanies[0]);
+    }
+  }, [availableCompanies, resolutionTimeCompany]);
 
   // Additional real-time listener for tickets to ensure cards update immediately
   useEffect(() => {
@@ -460,6 +476,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
         if (uniqueCompanies.length > 0) {
           console.log('🔄 Updated companies from real-time data:', uniqueCompanies);
           setAvailableCompanies(uniqueCompanies);
+          
         }
       },
       (error) => {
@@ -577,12 +594,6 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
   
-  // State for Resolution Time Analytics filters (separate from Ticket Volume Trend)
-  const [resolutionTimePeriod, setResolutionTimePeriod] = useState('7');
-  const [resolutionTimeStartDate, setResolutionTimeStartDate] = useState('');
-  const [resolutionTimeEndDate, setResolutionTimeEndDate] = useState('');
-  const [resolutionTimeCompany, setResolutionTimeCompany] = useState('All');
-  
   // Clear filters function for Ticket Volume Trend
   const clearFilters = () => {
     setSelectedTimePeriod('7');
@@ -594,7 +605,12 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
   // Clear filters function for Resolution Time Analytics
   const clearResolutionTimeFilters = () => {
     setResolutionTimePeriod('7');
-    setResolutionTimeCompany('All');
+    // Set to first available company instead of 'All'
+    if (availableCompanies.length > 0) {
+      setResolutionTimeCompany(availableCompanies[0]);
+    } else {
+      setResolutionTimeCompany('');
+    }
     setResolutionTimeStartDate('');
     setResolutionTimeEndDate('');
   };
@@ -747,7 +763,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
       );
       
       // Apply company filter for Resolution Time Analytics
-      if (resolutionTimeCompany && resolutionTimeCompany !== 'All') {
+      if (resolutionTimeCompany) {
         resolvedTickets = resolvedTickets.filter(ticket => {
           const ticketClient = ticket.client_name || ticket.companyName;
           return ticketClient === resolutionTimeCompany;
@@ -1537,139 +1553,6 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
           />
         </div>
 
-        {/* Recent Tickets Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-4">
-          <div 
-            className={`${cardClass} rounded-lg p-2 border lg:col-span-2 theme-elevation-shadow`}
-            style={{ 
-              fontFamily: 'Arial, sans-serif'
-            }}
-          >
-            <div className="flex justify-between items-center mb-2">
-              <div className="flex items-center gap-3">
-                <h2 className="text-l font-normal text-gray-500" style={{
-                  textShadow: '0.1px 0.1px 0.2px rgba(0,0,0,0.03)',
-                  fontWeight: '400',
-                  opacity: '0.7'
-                }}>Recent Tickets</h2>
-                <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
-                  {processedDashboardData.recentTickets.length} tickets
-                </span>
-              </div>
-            </div>
-            
-            <div className="space-y-1 max-h-64 overflow-y-auto">
-              {processedDashboardData.recentTickets.length > 0 ? (
-                processedDashboardData.recentTickets.map((ticket, index) => {
-                  const getPriorityColor = (priority) => {
-                    switch (priority) {
-                      case 'Critical': return 'bg-red-100 text-red-800 border-red-200';
-                      case 'High': return 'bg-orange-100 text-orange-800 border-orange-200';
-                      case 'Medium': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-                      case 'Low': return 'bg-green-100 text-green-800 border-green-200';
-                      default: return 'bg-gray-100 text-gray-800 border-gray-200';
-                    }
-                  };
-
-                  const getStatusColor = (status) => {
-                    switch (status) {
-                      case 'Open': return 'bg-orange-100 text-orange-800 border-orange-200';
-                      case 'In Progress': return 'bg-blue-100 text-blue-800 border-blue-200';
-                      case 'Resolved': return 'bg-green-100 text-green-800 border-green-200';
-                      case 'Hold': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-                      default: return 'bg-gray-100 text-gray-800 border-gray-200';
-                    }
-                  };
-
-                  return (
-                    <div key={ticket.id} className="bg-white border border-gray-200 rounded-lg p-2 hover:shadow-md transition-all duration-200">
-                      <div className="flex justify-between items-start mb-1">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-0.5">
-                            <span className="font-normal text-gray-700 text-sm" style={{
-                              textShadow: '0.1px 0.1px 0.2px rgba(0,0,0,0.03)',
-                              fontWeight: '400',
-                              opacity: '0.8'
-                            }}>
-                                {(() => {
-                                  if (ticket.reporter_firstName || ticket.reporter_lastName) {
-                                    return `${ticket.reporter_firstName || ''} ${ticket.reporter_lastName || ''}`.trim();
-                                  }
-                                  return ticket.reporter_name || ticket.reporter || ticket.user_name || 'Unknown User';
-                                })()}
-                              </span>
-                            <span className="text-gray-400">•</span>
-                              <a
-                                href={`/tickets/${ticket.id}`}
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  navigateTo(`/tickets/${ticket.id}`);
-                                }}
-                              className="font-normal text-blue-600 hover:text-blue-800 hover:underline text-sm transition-colors" style={{
-                                textShadow: '0.1px 0.1px 0.2px rgba(0,0,0,0.03)',
-                                fontWeight: '400',
-                                opacity: '0.8'
-                              }}
-                              >
-                                {ticket.display_id || ticket.ticket_id || ticket.id}
-                              </a>
-                          </div>
-                          
-                          <p className="text-xs text-gray-700 mb-1 line-clamp-1">
-                                {ticket.short_description || ticket.subject || ticket.title || 'No description'}
-                          </p>
-                        </div>
-                            </div>
-                            
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-1">
-                          <span className={`px-1.5 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(ticket.status)}`}>
-                                {ticket.status}
-                              </span>
-                          <span className={`px-1.5 py-0.5 rounded-full text-xs font-medium border ${getPriorityColor(ticket.priority)}`}>
-                                {ticket.priority}
-                              </span>
-                            </div>
-                            
-                        <div className="text-xs text-gray-500">
-                          {(() => {
-                            let safeCreatedAt = ticket.created_at;
-                            
-                            if (!(safeCreatedAt instanceof Date)) {
-                              if (safeCreatedAt && typeof safeCreatedAt === 'object' && safeCreatedAt.toDate) {
-                                safeCreatedAt = safeCreatedAt.toDate();
-                              } else if (safeCreatedAt && typeof safeCreatedAt === 'string') {
-                                safeCreatedAt = new Date(safeCreatedAt);
-                              } else if (safeCreatedAt && typeof safeCreatedAt === 'number') {
-                                safeCreatedAt = new Date(safeCreatedAt);
-                              } else {
-                                return 'Invalid date';
-                              }
-                            }
-                            
-                            if (isNaN(safeCreatedAt.getTime())) {
-                              return 'Invalid date';
-                            }
-                            
-                            return `${safeCreatedAt.getDate().toString().padStart(2, '0')}-${safeCreatedAt.toLocaleDateString('en-US', { month: 'short' })}-${safeCreatedAt.getFullYear()}`;
-                          })()}
-                        </div>
-                        </div>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <div className="text-center py-4">
-                    <div className="w-12 h-12 mx-auto mb-2 bg-gray-100 rounded-full flex items-center justify-center">
-                      <FileText className="w-6 h-6 text-gray-400" />
-                    </div>
-                    <p className="text-sm text-gray-500">No recent tickets found</p>
-                    <p className="text-xs text-gray-400 mt-0.5">New tickets will appear here</p>
-                  </div>
-                )}
-            </div>
-          </div>
-        </div>
 
         {/* Status Distribution & Team Performance - Hidden */}
         {/* 
@@ -1939,22 +1822,19 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
                   <div className="flex items-center gap-2">
                     <label className="text-xs font-medium text-gray-600">Client:</label>
                     <CompactDropdown
-                      value={resolutionTimeCompany}
+                      value={resolutionTimeCompany || (availableCompanies.length > 0 ? availableCompanies[0] : '')}
                       onChange={setResolutionTimeCompany}
-                      options={[
-                        { value: "All", label: "All" },
-                        ...availableCompanies.map(company => ({
-                          value: company,
-                          label: company
-                        }))
-                      ]}
+                      options={availableCompanies.map(company => ({
+                        value: company,
+                        label: company
+                      }))}
                       className="min-w-[120px]"
                     />
                     <span className="text-xs text-gray-400">({availableCompanies.length} companies)</span>
                   </div>
                   )}
                   {/* Clear Filters Button - Only show when filters are changed from defaults */}
-                  {(resolutionTimePeriod !== '7' || resolutionTimeCompany !== 'All' || resolutionTimeStartDate || resolutionTimeEndDate) && (
+                  {(resolutionTimePeriod !== '7' || resolutionTimeCompany !== (availableCompanies.length > 0 ? availableCompanies[0] : '') || resolutionTimeStartDate || resolutionTimeEndDate) && (
                     <button
                       onClick={clearResolutionTimeFilters}
                       className={`px-3 py-1 rounded text-xs font-medium transition-colors ${

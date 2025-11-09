@@ -165,12 +165,15 @@ const ClientImportPage = () => {
     };
 
     const generatePassword = () => {
-        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*';
-        let password = '';
-        for (let i = 0; i < 12; i++) {
-            password += chars.charAt(Math.floor(Math.random() * chars.length));
+        const prefix = 'Sahayaon#';
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+        let randomText = '';
+        // Generate random text (subtract prefix length from total length, aiming for ~12 total chars)
+        const randomLength = 12 - prefix.length;
+        for (let i = 0; i < randomLength; i++) {
+            randomText += chars.charAt(Math.floor(Math.random() * chars.length));
         }
-        return password;
+        return prefix + randomText;
     };
 
     const handleConfirmImport = async () => {

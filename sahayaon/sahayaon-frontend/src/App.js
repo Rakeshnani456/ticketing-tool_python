@@ -41,6 +41,7 @@ import {
     Handshake,
     Settings,
 } from 'lucide-react';
+import writingIcon from './assets/icons/writing.png';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AiOutlineEye } from 'react-icons/ai'; // Or choose another icon library like 'fa' for Font Awesome
 import { X } from 'lucide-react'; // Assuming you have lucide-react for X (for closing flash messages)
@@ -109,6 +110,7 @@ import CreateTicketComponent from './components/tickets/CreateTicketComponent';
 import CreateTicketPage from './components/tickets/CreateTicketPage';
 import MyTicketsComponent from './components/tickets/MyTicketsComponent';
 import AllTicketsComponent from './components/tickets/AllTicketsComponent';
+import MyQueueComponent from './components/tickets/MyQueueComponent';
 import TicketDetailComponent from './components/tickets/TicketDetailComponent'; // TicketDetailComponent will use useParams
 import DashboardComponent from './components/DashboardComponent';
 import ProfileComponent from './components/ProfileComponent';
@@ -285,6 +287,7 @@ const AppContent = () => {
     const [isNotificationMenuOpen, setIsNotificationMenuOpen] = useState(false);
     const notificationMenuRef = useRef(null); // Ref for the notification menu
 
+
     // UPDATED STATES AND REFS FOR SIDEBAR MENU (NOW ALWAYS VISIBLE, ONLY EXPANDS/COLLAPSES)
     // isSidebarExpanded: controls if the sidebar is expanded (with text) or collapsed (icons only)
     const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
@@ -407,6 +410,7 @@ const AppContent = () => {
             opacity: 1,
             width: "auto",
             x: 0,
+            scale: 1, // Explicitly prevent scaling
             transition: {
                 delay: 0.1,
                 duration: 0.2,
@@ -417,6 +421,7 @@ const AppContent = () => {
             opacity: 0,
             width: 0,
             x: -10,
+            scale: 1, // Explicitly prevent scaling
             transition: {
                 duration: 0.15,
                 ease: "easeIn"
@@ -1050,6 +1055,64 @@ const AppContent = () => {
         };
     }
 
+    // Force prevent scaling on sidebar menu items - only prevent scale, allow other transforms
+    useEffect(() => {
+        const preventMenuScaling = (e) => {
+            if (!e) return;
+            const target = e.target;
+            const menuItem = target.closest('.menu-item');
+            if (!menuItem) return;
+
+            // Get all children of the menu item
+            const children = menuItem.querySelectorAll('*');
+            children.forEach(element => {
+                const inlineStyle = element.style.transform;
+                const computedStyle = window.getComputedStyle(element);
+                const computedTransform = computedStyle.transform;
+
+                // Only modify if there's a scale transform that's not scale(1)
+                if (inlineStyle && inlineStyle.includes('scale') && !inlineStyle.includes('scale(1)')) {
+                    // Preserve other transforms, only fix scale
+                    const newTransform = inlineStyle.replace(/scale\([^)]+\)/g, 'scale(1)');
+                    element.style.setProperty('transform', newTransform, 'important');
+                } else if (computedTransform && computedTransform.includes('scale')) {
+                    // Check computed style for scale
+                    const matrixMatch = computedTransform.match(/matrix\(([^)]+)\)/);
+                    if (matrixMatch) {
+                        const values = matrixMatch[1].split(',').map(v => parseFloat(v.trim()));
+                        // matrix(a, b, c, d, tx, ty) - a and d are scaleX and scaleY
+                        if (Math.abs(values[0] - 1) > 0.01 || Math.abs(values[3] - 1) > 0.01) {
+                            // Scale is not 1, force it to 1 while preserving translation
+                            const newTransform = `matrix(1, 0, 0, 1, ${values[4] || 0}, ${values[5] || 0})`;
+                            element.style.setProperty('transform', newTransform, 'important');
+                        }
+                    }
+                }
+                // Always ensure transform-origin is center
+                element.style.setProperty('transform-origin', 'center center', 'important');
+            });
+        };
+
+        // Run on hover over menu items
+        const handleMouseEnter = (e) => {
+            requestAnimationFrame(() => preventMenuScaling(e));
+        };
+
+        const sidebar = document.querySelector('.sidebar-glass');
+        if (sidebar) {
+            // Use event delegation on the sidebar
+            sidebar.addEventListener('mouseenter', handleMouseEnter, true);
+            sidebar.addEventListener('mouseover', handleMouseEnter, true);
+        }
+
+        return () => {
+            if (sidebar) {
+                sidebar.removeEventListener('mouseenter', handleMouseEnter, true);
+                sidebar.removeEventListener('mouseover', handleMouseEnter, true);
+            }
+        };
+    }, [location.pathname]); // Re-run when route changes
+
     
 
     return (
@@ -1074,7 +1137,9 @@ const AppContent = () => {
                             <>
                                 <CheckCircle className="text-green-600 mx-auto mb-4" size={48} />
                                 <h2 className="text-xl font-bold text-green-800 mb-3">Ticket Created Successfully!</h2>
-                                <p className="mb-6 text-base">Your ticket <span className="font-mono font-semibold text-blue-700">{createdTicketInfo?.display_id}</span> has been submitted successfully!</p>
+                                <p className="mb-6 text-base">
+                                    Ticket <span className="font-mono font-semibold text-blue-700">{createdTicketInfo?.display_id}</span> has been created successfully.
+                                </p>
                                 <div className="flex flex-col sm:flex-row gap-3 justify-center">
                                     <button
                                         className="px-6 py-2 bg-green-600 text-white rounded-md text-base font-semibold hover:bg-green-700 transition w-full sm:w-auto"
@@ -1118,10 +1183,10 @@ const AppContent = () => {
                     variants={sidebarVariants}
                     className="sidebar-glass fixed left-0 flex flex-col flex-shrink-0 overflow-y-auto h-screen z-50 border-r border-gray-700"
                     style={{ 
-                        backgroundColor: '#111827',
+                        backgroundColor: '#182c25',
                         color: '#d1d5db',
-                        top: '44px', 
-                        height: 'calc(100vh - 44px)'
+                        top: '48px', 
+                        height: 'calc(100vh - 48px)'
                     }}
                 >
 
@@ -1143,7 +1208,7 @@ const AppContent = () => {
                                     )}
 
                                     {/* Dashboard Button */}
-                                    <Link to="/dashboard" className={`menu-item group flex items-center px-3 py-2.5 text-sm font-semibold transition-all duration-200 hover:bg-gray-700 hover:text-white ${location.pathname === '/dashboard' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                    <Link to="/dashboard" className={`menu-item group flex items-center px-3 py-2.5 text-sm font-semibold hover:bg-gray-700 hover:text-white ${location.pathname === '/dashboard' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                         { !isSidebarExpanded ? (
                                             <LeftMenuTooltipBubble title="Dashboard">
                                                 <div className="flex items-center justify-center w-7 h-7">
@@ -1151,27 +1216,27 @@ const AppContent = () => {
                                                 </div>
                                             </LeftMenuTooltipBubble>
                                         ) : (
-                                            <div className="flex items-center justify-center w-5 h-5 mr-2">
+                                            <div className="flex items-center justify-center w-5 h-5 mr-3">
                                                 <Home size={19} className="flex-shrink-0" style={{ color: location.pathname === '/dashboard' ? '#ffffff' : '#d1d5db' }} />
                                             </div>
                                         )}
                                         <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate" style={{ color: location.pathname === '/dashboard' ? '#ffffff' : '#d1d5db' }}>Dashboard</motion.span>
                                     </Link>
                                     
-                                    <Link to="/all-tickets" className={`menu-item group flex items-center px-3 py-2.5 text-sm font-semibold transition-all duration-200 hover:bg-gray-700 hover:text-white ${location.pathname === '/all-tickets' || location.pathname.startsWith('/tickets/') ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                    <Link to="/all-tickets" className={`menu-item group flex items-center px-3 py-2.5 text-sm font-semibold hover:bg-gray-700 hover:text-white ${location.pathname === '/all-tickets' || location.pathname.startsWith('/tickets/') ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                         { !isSidebarExpanded ? (
                                             <LeftMenuTooltipBubble title="All Tickets">
                                                 <div className="flex items-center justify-center w-7 h-7 relative">
                                                     <FileText size={23} className="flex-shrink-0" style={{ color: location.pathname === '/all-tickets' || location.pathname.startsWith('/tickets/') ? '#ffffff' : '#d1d5db' }} />
                                                     {ticketCounts.total_tickets > 0 && (
-                                                        <span className="sidebar-count-badge text-xs font-medium">
+                                                        <span className="sidebar-count-badge sidebar-count-badge-orange text-xs font-medium">
                                                             {ticketCounts.total_tickets}
                                                         </span>
                                                     )}
                                                 </div>
                                             </LeftMenuTooltipBubble>
                                         ) : (
-                                            <div className="flex items-center justify-center w-5 h-5 mr-2">
+                                            <div className="flex items-center justify-center w-5 h-5 mr-3">
                                                 <FileText size={19} className="flex-shrink-0" style={{ color: location.pathname === '/all-tickets' || location.pathname.startsWith('/tickets/') ? '#ffffff' : '#d1d5db' }} />
                                             </div>
                                         )}
@@ -1180,20 +1245,20 @@ const AppContent = () => {
                                         </motion.span>
                                     </Link>
                                     
-                                    <Link to="/my-tickets" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item transition-all duration-200 hover:bg-gray-700 hover:text-white ${location.pathname === '/my-tickets' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                    <Link to="/my-tickets" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/my-tickets' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                         { !isSidebarExpanded ? (
                                             <LeftMenuTooltipBubble title="My Tickets">
                                                 <div className="flex items-center justify-center w-7 h-7 relative">
                                                     <CheckCircle2 size={23} className="flex-shrink-0" style={{ color: location.pathname === '/my-tickets' ? '#ffffff' : '#d1d5db' }} />
                                                     {ticketCounts.my_tickets > 0 && (
-                                                        <span className="sidebar-count-badge text-xs font-medium">
+                                                        <span className="sidebar-count-badge sidebar-count-badge-orange text-xs font-medium">
                                                             {ticketCounts.my_tickets}
                                                         </span>
                                                     )}
                                                 </div>
                                             </LeftMenuTooltipBubble>
                                         ) : (
-                                            <div className="flex items-center justify-center w-5 h-5 mr-2">
+                                            <div className="flex items-center justify-center w-5 h-5 mr-3">
                                                 <CheckCircle2 size={19} className="flex-shrink-0" style={{ color: location.pathname === '/my-tickets' ? '#ffffff' : '#d1d5db' }} />
                                             </div>
                                         )}
@@ -1203,7 +1268,7 @@ const AppContent = () => {
                                     </Link>
 
                                     {/* My Queue - for support roles */}
-                                    <Link to="/assigned-to-me" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item transition-all duration-200 hover:bg-gray-700 hover:text-white ${location.pathname === '/assigned-to-me' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                    <Link to="/assigned-to-me" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/assigned-to-me' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                         { !isSidebarExpanded ? (
                                             <LeftMenuTooltipBubble title="My Queue">
                                                 <div className="flex items-center justify-center w-7 h-7 relative">
@@ -1216,7 +1281,7 @@ const AppContent = () => {
                                                 </div>
                                             </LeftMenuTooltipBubble>
                                         ) : (
-                                            <div className="flex items-center justify-center w-5 h-5 mr-2">
+                                            <div className="flex items-center justify-center w-5 h-5 mr-3">
                                                 <AssignedToMeIcon className="flex-shrink-0" style={{ color: location.pathname === '/assigned-to-me' ? '#ffffff' : '#d1d5db', width: '19px', height: '19px' }} />
                                             </div>
                                         )}
@@ -1237,7 +1302,7 @@ const AppContent = () => {
                                     )}
 
                                     {/* Clients */}
-                                    <Link to="/clients" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item transition-all duration-200 hover:bg-gray-700 hover:text-white ${location.pathname === '/clients' || location.pathname.startsWith('/clients/') ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                    <Link to="/clients" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/clients' || location.pathname.startsWith('/clients/') ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                         { !isSidebarExpanded ? (
                                             <LeftMenuTooltipBubble title="Clients">
                                                 <div className="flex items-center justify-center w-7 h-7">
@@ -1245,7 +1310,7 @@ const AppContent = () => {
                                                 </div>
                                             </LeftMenuTooltipBubble>
                                         ) : (
-                                            <div className="flex items-center justify-center w-5 h-5 mr-2">
+                                            <div className="flex items-center justify-center w-5 h-5 mr-3">
                                                 <Handshake size={19} className="flex-shrink-0" style={{ color: (location.pathname === '/clients' || location.pathname.startsWith('/clients/')) ? '#ffffff' : '#d1d5db' }} />
                                             </div>
                                         )}
@@ -1253,7 +1318,7 @@ const AppContent = () => {
                                     </Link>
                                     
                                     {/* Users */}
-                                    <Link to="/user-management" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item transition-all duration-200 hover:bg-gray-700 hover:text-white ${location.pathname === '/user-management' || location.pathname.startsWith('/user-management/') ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                    <Link to="/user-management" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/user-management' || location.pathname.startsWith('/user-management/') ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
                                         { !isSidebarExpanded ? (
                                             <LeftMenuTooltipBubble title="Users">
                                                 <div className="flex items-center justify-center w-7 h-7">
@@ -1261,7 +1326,7 @@ const AppContent = () => {
                                                 </div>
                                             </LeftMenuTooltipBubble>
                                         ) : (
-                                            <div className="flex items-center justify-center w-5 h-5 mr-2">
+                                            <div className="flex items-center justify-center w-5 h-5 mr-3">
                                                 <Users size={19} className="flex-shrink-0" style={{ color: (location.pathname === '/user-management' || location.pathname.startsWith('/user-management/')) ? '#ffffff' : '#d1d5db' }} />
                                             </div>
                                         )}
@@ -1280,7 +1345,7 @@ const AppContent = () => {
                                     )}
 
                                     {/* Admins Management */}
-                                    <Link to="/admin-management" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item transition-all duration-200 hover:bg-gray-700 hover:text-white ${location.pathname === '/admin-management' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                    <Link to="/admin-management" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/admin-management' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
                                         { !isSidebarExpanded ? (
                                             <LeftMenuTooltipBubble title="Admins">
                                                 <div className="flex items-center justify-center w-7 h-7">
@@ -1288,7 +1353,7 @@ const AppContent = () => {
                                                 </div>
                                             </LeftMenuTooltipBubble>
                                         ) : (
-                                            <div className="flex items-center justify-center w-5 h-5 mr-2">
+                                            <div className="flex items-center justify-center w-5 h-5 mr-3">
                                                 <UserCog size={19} className="flex-shrink-0" style={{ color: location.pathname === '/admin-management' ? '#ffffff' : '#d1d5db' }} />
                                             </div>
                                         )}
@@ -1296,7 +1361,7 @@ const AppContent = () => {
                                     </Link>
 
                                     {/* Engineers Management */}
-                                    <Link to="/engineer-management" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item transition-all duration-200 hover:bg-gray-700 hover:text-white ${location.pathname === '/engineer-management' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                    <Link to="/engineer-management" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/engineer-management' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
                                         { !isSidebarExpanded ? (
                                             <LeftMenuTooltipBubble title="Engineers">
                                                 <div className="flex items-center justify-center w-7 h-7">
@@ -1304,7 +1369,7 @@ const AppContent = () => {
                                                 </div>
                                             </LeftMenuTooltipBubble>
                                         ) : (
-                                            <div className="flex items-center justify-center w-5 h-5 mr-2">
+                                            <div className="flex items-center justify-center w-5 h-5 mr-3">
                                                 <Wrench size={19} className="flex-shrink-0" style={{ color: location.pathname === '/engineer-management' ? '#ffffff' : '#d1d5db' }} />
                                             </div>
                                         )}
@@ -1312,23 +1377,23 @@ const AppContent = () => {
                                     </Link>
 
                                     {/* Personal Notes */}
-                                    <Link to="/personal-notes" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item transition-all duration-200 hover:bg-gray-700 hover:text-white ${location.pathname === '/personal-notes' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                    <Link to="/personal-notes" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/personal-notes' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                         { !isSidebarExpanded ? (
                                             <LeftMenuTooltipBubble title="My Notes">
                                                 <div className="flex items-center justify-center w-7 h-7">
-                                                    <FileText size={23} className="flex-shrink-0" style={{ color: location.pathname === '/personal-notes' ? '#ffffff' : '#d1d5db' }} />
+                                                    <img src={writingIcon} alt="My Notes" className="w-6 h-6 flex-shrink-0" style={{ filter: location.pathname === '/personal-notes' ? 'brightness(0) invert(1)' : 'brightness(0) saturate(100%) invert(84%) sepia(8%) saturate(239%) hue-rotate(169deg) brightness(95%) contrast(88%)' }} />
                                                 </div>
                                             </LeftMenuTooltipBubble>
                                         ) : (
-                                            <div className="flex items-center justify-center w-5 h-5 mr-2">
-                                                <FileText size={19} className="flex-shrink-0" style={{ color: location.pathname === '/personal-notes' ? '#ffffff' : '#d1d5db' }} />
+                                            <div className="flex items-center justify-center w-5 h-5 mr-3">
+                                                <img src={writingIcon} alt="My Notes" className="w-5 h-5 flex-shrink-0" style={{ filter: location.pathname === '/personal-notes' ? 'brightness(0) invert(1)' : 'brightness(0) saturate(100%) invert(84%) sepia(8%) saturate(239%) hue-rotate(169deg) brightness(95%) contrast(88%)' }} />
                                             </div>
                                         )}
                                         <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate" style={{ color: location.pathname === '/personal-notes' ? '#ffffff' : '#d1d5db' }}>My Notes</motion.span>
                                     </Link>
 
                                     {/* Settings - HIDDEN FOR NOW */}
-                                    {/* <Link to="/settings" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item transition-all duration-200 hover:bg-gray-700 hover:text-white ${location.pathname === '/settings' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                    {/* <Link to="/settings" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/settings' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                         { !isSidebarExpanded ? (
                                             <LeftMenuTooltipBubble title="Settings">
                                                 <div className="flex items-center justify-center w-7 h-7">
@@ -1336,7 +1401,7 @@ const AppContent = () => {
                                                 </div>
                                             </LeftMenuTooltipBubble>
                                         ) : (
-                                            <div className="flex items-center justify-center w-5 h-5 mr-2">
+                                            <div className="flex items-center justify-center w-5 h-5 mr-3">
                                                 <Settings size={19} className="flex-shrink-0" style={{ color: location.pathname === '/settings' ? '#ffffff' : '#d1d5db' }} />
                                             </div>
                                         )}
@@ -1346,30 +1411,30 @@ const AppContent = () => {
                                 </>
                             ) : currentUser.role === 'admin' ? (
                                 <>
-                                    <Link to="/all-tickets" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item transition-all duration-200 hover:bg-gray-700 hover:text-white ${location.pathname === '/all-tickets' || location.pathname.startsWith('/tickets/') ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                    <Link to="/all-tickets" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/all-tickets' || location.pathname.startsWith('/tickets/') ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                         { !isSidebarExpanded ? (
                                             <LeftMenuTooltipBubble title="All Tickets">
                                                 <div className="flex items-center justify-center w-7 h-7 relative">
                                                     <FileText size={23} className="flex-shrink-0" style={{ color: location.pathname === '/all-tickets' || location.pathname.startsWith('/tickets/') ? '#ffffff' : '#d1d5db' }} />
                                                     {ticketCounts.total_tickets > 0 && (
-                                                        <span className="sidebar-count-badge text-xs font-medium">
+                                                        <span className="sidebar-count-badge sidebar-count-badge-orange text-xs font-medium">
                                                             {ticketCounts.total_tickets}
                                                         </span>
                                                     )}
                                                 </div>
                                             </LeftMenuTooltipBubble>
                                         ) : (
-                                            <div className="flex items-center justify-center w-5 h-5 mr-2">
+                                            <div className="flex items-center justify-center w-5 h-5 mr-3">
                                                 <FileText size={19} className="flex-shrink-0" style={{ color: location.pathname === '/all-tickets' || location.pathname.startsWith('/tickets/') ? '#ffffff' : '#d1d5db' }} />
                                             </div>
                                         )}
-                                        <span className={`whitespace-nowrap transition-all duration-200 ${isSidebarExpanded ? 'opacity-100 w-auto' : 'opacity-0 w-0'}`} style={{ color: location.pathname === '/all-tickets' || location.pathname.startsWith('/tickets/') ? '#ffffff' : '#d1d5db' }}>
+                                        <span className={`whitespace-nowrap ${isSidebarExpanded ? 'opacity-100 w-auto' : 'opacity-0 w-0'}`} style={{ color: location.pathname === '/all-tickets' || location.pathname.startsWith('/tickets/') ? '#ffffff' : '#d1d5db' }}>
                                             All Tickets {isSidebarExpanded && ticketCounts.total_tickets > 0 && (<span style={{ color: '#f97316' }}>({ticketCounts.total_tickets})</span>)}
                                         </span>
                                     </Link>
 
                                     {/* My Queue */}
-                                    <Link to="/assigned-to-me" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item transition-all duration-200 hover:bg-gray-700 hover:text-white ${location.pathname === '/assigned-to-me' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                    <Link to="/assigned-to-me" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/assigned-to-me' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                         { !isSidebarExpanded ? (
                                             <LeftMenuTooltipBubble title="My Queue">
                                                 <div className="flex items-center justify-center w-7 h-7 relative">
@@ -1382,33 +1447,33 @@ const AppContent = () => {
                                                 </div>
                                             </LeftMenuTooltipBubble>
                                         ) : (
-                                            <div className="flex items-center justify-center w-5 h-5 mr-2">
+                                            <div className="flex items-center justify-center w-5 h-5 mr-3">
                                                 <AssignedToMeIcon className="flex-shrink-0" style={{ color: location.pathname === '/assigned-to-me' ? '#ffffff' : '#d1d5db', width: '19px', height: '19px' }} />
                                             </div>
                                         )}
-                                        <span className={`whitespace-nowrap transition-all duration-200 ${isSidebarExpanded ? 'opacity-100 w-auto' : 'opacity-0 w-0'}`} style={{ color: location.pathname === '/assigned-to-me' ? '#ffffff' : '#d1d5db' }}>
+                                        <span className={`whitespace-nowrap ${isSidebarExpanded ? 'opacity-100 w-auto' : 'opacity-0 w-0'}`} style={{ color: location.pathname === '/assigned-to-me' ? '#ffffff' : '#d1d5db' }}>
                                             My Queue {isSidebarExpanded && ticketCounts.assigned_to_me > 0 && (<span style={{ color: '#f97316' }}>({ticketCounts.assigned_to_me})</span>)}
                                         </span>
                                     </Link>
                                     
                                     {/* Personal Notes */}
-                                    <Link to="/personal-notes" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item transition-all duration-200 hover:bg-gray-700 hover:text-white ${location.pathname === '/personal-notes' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                    <Link to="/personal-notes" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/personal-notes' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                         { !isSidebarExpanded ? (
                                             <LeftMenuTooltipBubble title="My Notes">
                                                 <div className="flex items-center justify-center w-7 h-7">
-                                                    <FileText size={23} className="flex-shrink-0" style={{ color: location.pathname === '/personal-notes' ? '#ffffff' : '#d1d5db' }} />
+                                                    <img src={writingIcon} alt="My Notes" className="w-6 h-6 flex-shrink-0" style={{ filter: location.pathname === '/personal-notes' ? 'brightness(0) invert(1)' : 'brightness(0) saturate(100%) invert(84%) sepia(8%) saturate(239%) hue-rotate(169deg) brightness(95%) contrast(88%)' }} />
                                                 </div>
                                             </LeftMenuTooltipBubble>
                                         ) : (
-                                            <div className="flex items-center justify-center w-5 h-5 mr-2">
-                                                <FileText size={19} className="flex-shrink-0" style={{ color: location.pathname === '/personal-notes' ? '#ffffff' : '#d1d5db' }} />
+                                            <div className="flex items-center justify-center w-5 h-5 mr-3">
+                                                <img src={writingIcon} alt="My Notes" className="w-5 h-5 flex-shrink-0" style={{ filter: location.pathname === '/personal-notes' ? 'brightness(0) invert(1)' : 'brightness(0) saturate(100%) invert(84%) sepia(8%) saturate(239%) hue-rotate(169deg) brightness(95%) contrast(88%)' }} />
                                             </div>
                                         )}
-                                        <span className={`whitespace-nowrap overflow-hidden transition-all duration-200 ${isSidebarExpanded ? 'opacity-100 w-auto' : 'opacity-0 w-0'}`} style={{ color: location.pathname === '/personal-notes' ? '#ffffff' : '#d1d5db' }}>My Notes</span>
+                                        <span className={`whitespace-nowrap overflow-hidden ${isSidebarExpanded ? 'opacity-100 w-auto' : 'opacity-0 w-0'}`} style={{ color: location.pathname === '/personal-notes' ? '#ffffff' : '#d1d5db' }}>My Notes</span>
                                     </Link>
 
                                     {/* Settings - HIDDEN FOR NOW */}
-                                    {/* <Link to="/settings" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item transition-all duration-200 hover:bg-gray-700 hover:text-white ${location.pathname === '/settings' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                    {/* <Link to="/settings" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/settings' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                         { !isSidebarExpanded ? (
                                             <LeftMenuTooltipBubble title="Settings">
                                                 <div className="flex items-center justify-center w-7 h-7">
@@ -1416,18 +1481,18 @@ const AppContent = () => {
                                                 </div>
                                             </LeftMenuTooltipBubble>
                                         ) : (
-                                            <div className="flex items-center justify-center w-5 h-5 mr-2">
+                                            <div className="flex items-center justify-center w-5 h-5 mr-3">
                                                 <Settings size={19} className="flex-shrink-0" style={{ color: location.pathname === '/settings' ? '#ffffff' : '#d1d5db' }} />
                                             </div>
                                         )}
-                                        <span className={`whitespace-nowrap overflow-hidden transition-all duration-200 ${isSidebarExpanded ? 'opacity-100 w-auto' : 'opacity-0 w-0'}`} style={{ color: location.pathname === '/settings' ? '#ffffff' : '#d1d5db' }}>Settings</span>
+                                        <span className={`whitespace-nowrap overflow-hidden ${isSidebarExpanded ? 'opacity-100 w-auto' : 'opacity-0 w-0'}`} style={{ color: location.pathname === '/settings' ? '#ffffff' : '#d1d5db' }}>Settings</span>
                                     </Link> */}
 
                                 </>
                             ) : currentUser.role === 'site_admin' ? (
                                 <>
                                     {/* Dashboard Button for Site Admin */}
-                                    <Link to="/dashboard" className={`menu-item group flex items-center px-4 py-3 text-base font-semibold transition-all duration-200 hover:bg-gray-700 hover:text-white ${location.pathname === '/dashboard' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                    <Link to="/dashboard" className={`menu-item group flex items-center px-4 py-3 text-base font-semibold hover:bg-gray-700 hover:text-white ${location.pathname === '/dashboard' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                         { !isSidebarExpanded ? (
                                             <LeftMenuTooltipBubble title="Dashboard">
                                                 <div className="flex items-center justify-center w-7 h-7">
@@ -1435,27 +1500,27 @@ const AppContent = () => {
                                                 </div>
                                             </LeftMenuTooltipBubble>
                                         ) : (
-                                            <div className="flex items-center justify-center w-5 h-5 mr-2">
+                                            <div className="flex items-center justify-center w-5 h-5 mr-3">
                                                 <Home size={19} className="flex-shrink-0" style={{ color: location.pathname === '/dashboard' ? '#ffffff' : '#d1d5db' }} />
                                             </div>
                                         )}
                                         <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate" style={{ color: location.pathname === '/dashboard' ? '#ffffff' : '#d1d5db' }}>Dashboard</motion.span>
                                     </Link>
 
-                                    <Link to="/all-tickets" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item transition-all duration-200 hover:bg-gray-700 hover:text-white ${location.pathname === '/all-tickets' || location.pathname.startsWith('/tickets/') ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                    <Link to="/all-tickets" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/all-tickets' || location.pathname.startsWith('/tickets/') ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
                                         { !isSidebarExpanded ? (
                                             <LeftMenuTooltipBubble title="All Tickets">
                                                 <div className="flex items-center justify-center w-7 h-7 relative">
                                                     <FileText size={23} className="flex-shrink-0" style={{ color: location.pathname === '/all-tickets' || location.pathname.startsWith('/tickets/') ? '#ffffff' : '#d1d5db' }} />
                                                     {ticketCounts.total_tickets > 0 && (
-                                                        <span className="sidebar-count-badge text-xs font-medium">
+                                                        <span className="sidebar-count-badge sidebar-count-badge-orange text-xs font-medium">
                                                             {ticketCounts.total_tickets}
                                                         </span>
                                                     )}
                                                 </div>
                                             </LeftMenuTooltipBubble>
                                         ) : (
-                                            <div className="flex items-center justify-center w-5 h-5 mr-2">
+                                            <div className="flex items-center justify-center w-5 h-5 mr-3">
                                                 <FileText size={19} className="flex-shrink-0" style={{ color: location.pathname === '/all-tickets' || location.pathname.startsWith('/tickets/') ? '#ffffff' : '#d1d5db' }} />
                                             </div>
                                         )}
@@ -1464,20 +1529,20 @@ const AppContent = () => {
                                         </motion.span>
                                     </Link>
                                     
-                                    <Link to="/my-tickets" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item transition-all duration-200 hover:bg-gray-700 hover:text-white ${location.pathname === '/my-tickets' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                    <Link to="/my-tickets" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/my-tickets' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
                                         { !isSidebarExpanded ? (
                                             <LeftMenuTooltipBubble title="My Tickets">
                                                 <div className="flex items-center justify-center w-7 h-7 relative">
                                                     <UserCheck size={23} className="flex-shrink-0" style={{ color: location.pathname === '/my-tickets' ? '#ffffff' : '#d1d5db' }} />
                                                     {ticketCounts.my_tickets > 0 && (
-                                                        <span className="sidebar-count-badge text-xs font-medium">
+                                                        <span className="sidebar-count-badge sidebar-count-badge-orange text-xs font-medium">
                                                             {ticketCounts.my_tickets}
                                                         </span>
                                                     )}
                                                 </div>
                                             </LeftMenuTooltipBubble>
                                         ) : (
-                                            <div className="flex items-center justify-center w-5 h-5 mr-2">
+                                            <div className="flex items-center justify-center w-5 h-5 mr-3">
                                                 <UserCheck size={19} className="flex-shrink-0" style={{ color: location.pathname === '/my-tickets' ? '#ffffff' : '#d1d5db' }} />
                                             </div>
                                         )}
@@ -1486,30 +1551,10 @@ const AppContent = () => {
                                         </motion.span>
                                     </Link>
                                     
-                                    {/* My Queue - for site admin */}
-                                    <Link to="/assigned-to-me" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item transition-all duration-200 hover:bg-gray-700 hover:text-white ${location.pathname === '/assigned-to-me' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
-                                        { !isSidebarExpanded ? (
-                                            <LeftMenuTooltipBubble title="My Queue">
-                                                <div className="flex items-center justify-center w-7 h-7 relative">
-                                                    <AssignedToMeIcon className="flex-shrink-0" style={{ color: location.pathname === '/assigned-to-me' ? '#ffffff' : '#d1d5db', width: '23px', height: '23px' }} />
-                                                    {ticketCounts.assigned_to_me > 0 && (
-                                                        <span className="sidebar-count-badge text-xs font-medium">
-                                                            {ticketCounts.assigned_to_me}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            </LeftMenuTooltipBubble>
-                                        ) : (
-                                            <div className="flex items-center justify-center w-5 h-5 mr-2">
-                                                <AssignedToMeIcon className="flex-shrink-0" style={{ color: location.pathname === '/assigned-to-me' ? '#ffffff' : '#d1d5db', width: '19px', height: '19px' }} />
-                                            </div>
-                                        )}
-                                        <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap" style={{ color: location.pathname === '/assigned-to-me' ? '#ffffff' : '#d1d5db' }}>
-                                            My Queue {isSidebarExpanded && ticketCounts.assigned_to_me > 0 && (<span style={{ color: '#f97316' }}>({ticketCounts.assigned_to_me})</span>)}
-                                        </motion.span>
-                                    </Link>
-                                    
-                                    <Link to="/create-ticket" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item transition-all duration-200 hover:bg-green-50 hover:text-green-700 focus:outline-none ${location.pathname === '/create-ticket' ? 'bg-green-50 text-green-700 shadow-sm' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                    <Link
+                                        to="/create-ticket"
+                                        className={`group flex items-center px-3 py-2.5 text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/create-ticket' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}
+                                    > 
                                         { !isSidebarExpanded ? (
                                             <LeftMenuTooltipBubble title="Create Ticket">
                                                 <div className="flex items-center justify-center w-7 h-7">
@@ -1517,7 +1562,7 @@ const AppContent = () => {
                                                 </div>
                                             </LeftMenuTooltipBubble>
                                         ) : (
-                                            <div className="flex items-center justify-center w-5 h-5 mr-2">
+                                            <div className="flex items-center justify-center w-5 h-5 mr-3">
                                                 <Zap size={19} className="flex-shrink-0" style={{ color: location.pathname === '/create-ticket' ? '#ffffff' : '#d1d5db' }} />
                                             </div>
                                         )}
@@ -1525,7 +1570,7 @@ const AppContent = () => {
                                     </Link>
                                     
                                     {/* Users - Site Admin can see their company users */}
-                                    <Link to="/user-management" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item transition-all duration-200 hover:bg-gray-700 hover:text-white ${location.pathname === '/user-management' || location.pathname.startsWith('/user-management/') ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                    <Link to="/user-management" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/user-management' || location.pathname.startsWith('/user-management/') ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
                                         { !isSidebarExpanded ? (
                                             <LeftMenuTooltipBubble title="Users">
                                                 <div className="flex items-center justify-center w-7 h-7">
@@ -1533,7 +1578,7 @@ const AppContent = () => {
                                                 </div>
                                             </LeftMenuTooltipBubble>
                                         ) : (
-                                            <div className="flex items-center justify-center w-5 h-5 mr-2">
+                                            <div className="flex items-center justify-center w-5 h-5 mr-3">
                                                 <Users size={19} className="flex-shrink-0" style={{ color: (location.pathname === '/user-management' || location.pathname.startsWith('/user-management/')) ? '#ffffff' : '#d1d5db' }} />
                                             </div>
                                         )}
@@ -1541,23 +1586,23 @@ const AppContent = () => {
                                     </Link>
                                     
                                     {/* Personal Notes */}
-                                    <Link to="/personal-notes" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item transition-all duration-200 hover:bg-gray-700 hover:text-white ${location.pathname === '/personal-notes' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                    <Link to="/personal-notes" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/personal-notes' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                         { !isSidebarExpanded ? (
                                             <LeftMenuTooltipBubble title="My Notes">
                                                 <div className="flex items-center justify-center w-7 h-7">
-                                                    <FileText size={23} className="flex-shrink-0" style={{ color: location.pathname === '/personal-notes' ? '#ffffff' : '#d1d5db' }} />
+                                                    <img src={writingIcon} alt="My Notes" className="w-6 h-6 flex-shrink-0" style={{ filter: location.pathname === '/personal-notes' ? 'brightness(0) invert(1)' : 'brightness(0) saturate(100%) invert(84%) sepia(8%) saturate(239%) hue-rotate(169deg) brightness(95%) contrast(88%)' }} />
                                                 </div>
                                             </LeftMenuTooltipBubble>
                                         ) : (
-                                            <div className="flex items-center justify-center w-5 h-5 mr-2">
-                                                <FileText size={19} className="flex-shrink-0" style={{ color: location.pathname === '/personal-notes' ? '#ffffff' : '#d1d5db' }} />
+                                            <div className="flex items-center justify-center w-5 h-5 mr-3">
+                                                <img src={writingIcon} alt="My Notes" className="w-5 h-5 flex-shrink-0" style={{ filter: location.pathname === '/personal-notes' ? 'brightness(0) invert(1)' : 'brightness(0) saturate(100%) invert(84%) sepia(8%) saturate(239%) hue-rotate(169deg) brightness(95%) contrast(88%)' }} />
                                             </div>
                                         )}
                                         <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate" style={{ color: location.pathname === '/personal-notes' ? '#ffffff' : '#d1d5db' }}>My Notes</motion.span>
                                     </Link>
 
                                     {/* Settings - HIDDEN FOR NOW */}
-                                    {/* <Link to="/settings" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item transition-all duration-200 hover:bg-gray-700 hover:text-white ${location.pathname === '/settings' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                    {/* <Link to="/settings" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/settings' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                         { !isSidebarExpanded ? (
                                             <LeftMenuTooltipBubble title="Settings">
                                                 <div className="flex items-center justify-center w-7 h-7">
@@ -1565,7 +1610,7 @@ const AppContent = () => {
                                                 </div>
                                             </LeftMenuTooltipBubble>
                                         ) : (
-                                            <div className="flex items-center justify-center w-5 h-5 mr-2">
+                                            <div className="flex items-center justify-center w-5 h-5 mr-3">
                                                 <Settings size={19} className="flex-shrink-0" style={{ color: location.pathname === '/settings' ? '#ffffff' : '#d1d5db' }} />
                                             </div>
                                         )}
@@ -1585,7 +1630,7 @@ const AppContent = () => {
                                                 </motion.div>
                                             )}
                                             
-                                            <Link to="/reports" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item transition-all duration-200 hover:bg-gray-700 hover:text-white ${location.pathname === '/reports' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                            <Link to="/reports" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/reports' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                                 { !isSidebarExpanded ? (
                                                     <LeftMenuTooltipBubble title="Analytics">
                                                         <div className="flex items-center justify-center w-7 h-7">
@@ -1593,7 +1638,7 @@ const AppContent = () => {
                                                         </div>
                                                     </LeftMenuTooltipBubble>
                                                 ) : (
-                                                    <div className="flex items-center justify-center w-5 h-5 mr-2">
+                                                    <div className="flex items-center justify-center w-5 h-5 mr-3">
                                                         <TrendingUp size={19} className="flex-shrink-0" style={{ color: location.pathname === '/reports' ? '#ffffff' : '#d1d5db' }} />
                                                     </div>
                                                 )}
@@ -1607,7 +1652,7 @@ const AppContent = () => {
                                     {/* Only show Dashboard in sidebar for admin role */}
                                     {(currentUser.role === 'admin') && (
                                         <>
-                                            <Link to="/dashboard" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item transition-all duration-200 hover:bg-gray-700 hover:text-white ${location.pathname === '/dashboard' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                            <Link to="/dashboard" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/dashboard' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                                 { !isSidebarExpanded ? (
                                                     <LeftMenuTooltipBubble title="Dashboard">
                                                         <div className="flex items-center justify-center w-7 h-7">
@@ -1615,7 +1660,7 @@ const AppContent = () => {
                                                         </div>
                                                     </LeftMenuTooltipBubble>
                                                 ) : (
-                                                    <div className="flex items-center justify-center w-5 h-5 mr-2">
+                                                    <div className="flex items-center justify-center w-5 h-5 mr-3">
                                                         <Home size={19} className="flex-shrink-0" style={{ color: location.pathname === '/dashboard' ? '#ffffff' : '#d1d5db' }} />
                                                     </div>
                                                 )}
@@ -1637,7 +1682,7 @@ const AppContent = () => {
                                             )}
 
                                             {/* Admins Management */}
-                                            <Link to="/admin-management" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item transition-all duration-200 hover:bg-gray-700 hover:text-white ${location.pathname === '/admin-management' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                            <Link to="/admin-management" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/admin-management' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
                                                 { !isSidebarExpanded ? (
                                                     <LeftMenuTooltipBubble title="Admins">
                                                         <div className="flex items-center justify-center w-7 h-7">
@@ -1645,7 +1690,7 @@ const AppContent = () => {
                                                         </div>
                                                     </LeftMenuTooltipBubble>
                                                 ) : (
-                                                    <div className="flex items-center justify-center w-5 h-5 mr-2">
+                                                    <div className="flex items-center justify-center w-5 h-5 mr-3">
                                                         <UserCog size={19} className="flex-shrink-0" style={{ color: location.pathname === '/admin-management' ? '#ffffff' : '#d1d5db' }} />
                                                     </div>
                                                 )}
@@ -1653,7 +1698,7 @@ const AppContent = () => {
                                             </Link>
 
                                             {/* Engineers Management */}
-                                            <Link to="/engineer-management" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item transition-all duration-200 hover:bg-gray-700 hover:text-white ${location.pathname === '/engineer-management' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                            <Link to="/engineer-management" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/engineer-management' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
                                                 { !isSidebarExpanded ? (
                                                     <LeftMenuTooltipBubble title="Engineers">
                                                         <div className="flex items-center justify-center w-7 h-7">
@@ -1661,7 +1706,7 @@ const AppContent = () => {
                                                         </div>
                                                     </LeftMenuTooltipBubble>
                                                 ) : (
-                                                    <div className="flex items-center justify-center w-5 h-5 mr-2">
+                                                    <div className="flex items-center justify-center w-5 h-5 mr-3">
                                                         <Wrench size={19} className="flex-shrink-0" style={{ color: location.pathname === '/engineer-management' ? '#ffffff' : '#d1d5db' }} />
                                                     </div>
                                                 )}
@@ -1687,7 +1732,7 @@ const AppContent = () => {
                                             )}
 
                                             {/* Clients for admin and site_admin roles */}
-                                            <Link to="/clients" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item transition-all duration-200 hover:bg-gray-700 hover:text-white ${location.pathname === '/clients' || location.pathname.startsWith('/clients/') ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                            <Link to="/clients" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/clients' || location.pathname.startsWith('/clients/') ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                                 { !isSidebarExpanded ? (
                                                     <LeftMenuTooltipBubble title="Clients">
                                                         <div className="flex items-center justify-center w-7 h-7">
@@ -1695,7 +1740,7 @@ const AppContent = () => {
                                                         </div>
                                                     </LeftMenuTooltipBubble>
                                                 ) : (
-                                                    <div className="flex items-center justify-center w-5 h-5 mr-2">
+                                                    <div className="flex items-center justify-center w-5 h-5 mr-3">
                                                         <Handshake size={19} className="flex-shrink-0" style={{ color: (location.pathname === '/clients' || location.pathname.startsWith('/clients/')) ? '#ffffff' : '#d1d5db' }} />
                                                     </div>
                                                 )}
@@ -1703,7 +1748,7 @@ const AppContent = () => {
                                             </Link>
                                             
                                             {/* Users for admin and site_admin roles */}
-                                            <Link to="/user-management" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item transition-all duration-200 hover:bg-gray-700 hover:text-white ${location.pathname === '/user-management' || location.pathname.startsWith('/user-management/') ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                            <Link to="/user-management" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/user-management' || location.pathname.startsWith('/user-management/') ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
                                                 { !isSidebarExpanded ? (
                                                     <LeftMenuTooltipBubble title="Users">
                                                         <div className="flex items-center justify-center w-7 h-7">
@@ -1711,7 +1756,7 @@ const AppContent = () => {
                                                         </div>
                                                     </LeftMenuTooltipBubble>
                                                 ) : (
-                                                    <div className="flex items-center justify-center w-5 h-5 mr-2">
+                                                    <div className="flex items-center justify-center w-5 h-5 mr-3">
                                                         <Users size={19} className="flex-shrink-0" style={{ color: (location.pathname === '/user-management' || location.pathname.startsWith('/user-management/')) ? '#ffffff' : '#d1d5db' }} />
                                                     </div>
                                                 )}
@@ -1720,8 +1765,8 @@ const AppContent = () => {
                                         </>
                                     )}
                                     
-                                    {/* ACTIVITY Section */}
-                                    {isSidebarExpanded && (
+                                    {/* ACTIVITY Section - only show for admin, super_admin, and site_admin roles (exclude support and engineer roles) */}
+                                    {isSidebarExpanded && ['admin', 'super_admin', 'site_admin'].includes(currentUser.role) && (
                                         <>
                                             <div className="mx-3 my-4 border-t border-gray-700"></div>
                                             <motion.div
@@ -1734,9 +1779,27 @@ const AppContent = () => {
                                         </>
                                     )}
 
+                                    {/* Dashboard - hidden for 'user' role */}
+                                    {currentUser.role !== 'user' && (
+                                        <Link to="/dashboard" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/dashboard' ? 'active' : 'text-black'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                            { !isSidebarExpanded ? (
+                                                <LeftMenuTooltipBubble title="Dashboard">
+                                                    <div className="flex items-center justify-center w-7 h-7">
+                                                        <Home size={23} className="flex-shrink-0" style={{ color: location.pathname === '/dashboard' ? '#ffffff' : '#d1d5db' }} />
+                                                    </div>
+                                                </LeftMenuTooltipBubble>
+                                            ) : (
+                                                <div className="flex items-center justify-center w-5 h-5 mr-3">
+                                                    <Home size={19} className="flex-shrink-0" style={{ color: location.pathname === '/dashboard' ? '#ffffff' : '#d1d5db' }} />
+                                                </div>
+                                            )}
+                                            <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate" style={{ color: location.pathname === '/dashboard' ? '#ffffff' : '#d1d5db' }}>Dashboard</motion.span>
+                                        </Link>
+                                    )}
+
                                     {/* All Tickets - visible only for admin/support/super_admin/site_admin roles */}
                                     {(['admin', 'support', 'super_admin', 'site_admin'].includes(currentUser.role)) && (
-                                        <Link to="/all-tickets" className={`group flex items-center px-3 py-2.5 text-sm font-semibold menu-item transition-all duration-200 hover:bg-gray-700 hover:text-white ${location.pathname === '/all-tickets' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                        <Link to="/all-tickets" className={`group flex items-center px-3 py-2.5 text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/all-tickets' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
                                             { !isSidebarExpanded ? (
                                                 <LeftMenuTooltipBubble title="All Tickets">
                                                     <div className="flex items-center justify-center w-7 h-7 relative">
@@ -1749,7 +1812,7 @@ const AppContent = () => {
                                                     </div>
                                                 </LeftMenuTooltipBubble>
                                             ) : (
-                                                <div className="flex items-center justify-center w-5 h-5 mr-2">
+                                                <div className="flex items-center justify-center w-5 h-5 mr-3">
                                                     <FileText size={19} className="flex-shrink-0" style={{ color: location.pathname === '/all-tickets' || location.pathname.startsWith('/tickets/') ? '#ffffff' : '#d1d5db' }} />
                                                 </div>
                                             )}
@@ -1759,47 +1822,9 @@ const AppContent = () => {
                                         </Link>
                                     )}
                                     
-                                    {/* Dashboard for users */}
-                                    <Link to="/dashboard" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item transition-all duration-200 hover:bg-gray-700 hover:text-white ${location.pathname === '/dashboard' ? 'active' : 'text-black'} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
-                                        { !isSidebarExpanded ? (
-                                            <LeftMenuTooltipBubble title="Dashboard">
-                                                <div className="flex items-center justify-center w-7 h-7">
-                                                    <Home size={23} className="flex-shrink-0" style={{ color: location.pathname === '/dashboard' ? '#ffffff' : '#d1d5db' }} />
-                                                </div>
-                                            </LeftMenuTooltipBubble>
-                                        ) : (
-                                            <div className="flex items-center justify-center w-5 h-5 mr-2">
-                                                <Home size={19} className="flex-shrink-0" style={{ color: location.pathname === '/dashboard' ? '#ffffff' : '#d1d5db' }} />
-                                            </div>
-                                        )}
-                                        <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate" style={{ color: location.pathname === '/dashboard' ? '#ffffff' : '#d1d5db' }}>Dashboard</motion.span>
-                                    </Link>
-                                    
-                                    <Link to="/my-tickets" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item transition-all duration-200 hover:bg-gray-700 hover:text-white ${location.pathname === '/my-tickets' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
-                                        { !isSidebarExpanded ? (
-                                            <LeftMenuTooltipBubble title="My Tickets">
-                                                <div className="flex items-center justify-center w-7 h-7 relative">
-                                                    <UserCheck size={23} className="flex-shrink-0" style={{ color: location.pathname === '/my-tickets' ? '#ffffff' : '#d1d5db' }} />
-                                                    {ticketCounts.my_tickets > 0 && (
-                                                        <span className="sidebar-count-badge text-xs font-medium">
-                                                            {ticketCounts.my_tickets}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            </LeftMenuTooltipBubble>
-                                        ) : (
-                                            <div className="flex items-center justify-center w-5 h-5 mr-2">
-                                                <UserCheck size={19} className="flex-shrink-0" style={{ color: location.pathname === '/my-tickets' ? '#ffffff' : '#d1d5db' }} />
-                                            </div>
-                                        )}
-                                        <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap" style={{ color: location.pathname === '/my-tickets' ? '#ffffff' : '#d1d5db' }}>
-                                            My Tickets {isSidebarExpanded && ticketCounts.my_tickets > 0 && (<span style={{ color: '#f97316' }}>({ticketCounts.my_tickets})</span>)}
-                                        </motion.span>
-                                    </Link>
-                                    
-                                    {/* My Queue - visible for support/admin roles */}
-                                    {(['admin', 'support', 'super_admin', 'site_admin', 'engineer', 'senior_engineer', 'lead_engineer', 'principal_engineer'].includes(currentUser.role)) && (
-                                        <Link to="/assigned-to-me" className={`group flex items-center px-3 py-2.5 text-sm font-semibold menu-item transition-all duration-200 hover:bg-gray-700 hover:text-white ${location.pathname === '/assigned-to-me' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                    {/* My Queue - visible for support/admin/engineer roles (not site_admin) */}
+                                    {(['admin', 'support', 'super_admin', 'engineer', 'senior_engineer', 'lead_engineer', 'principal_engineer'].includes(currentUser.role)) && (
+                                        <Link to="/assigned-to-me" className={`group flex items-center px-3 py-2.5 text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/assigned-to-me' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                             { !isSidebarExpanded ? (
                                                 <LeftMenuTooltipBubble title="My Queue">
                                                     <div className="flex items-center justify-center w-7 h-7 relative">
@@ -1812,7 +1837,7 @@ const AppContent = () => {
                                                     </div>
                                                 </LeftMenuTooltipBubble>
                                             ) : (
-                                                <div className="flex items-center justify-center w-5 h-5 mr-2">
+                                                <div className="flex items-center justify-center w-5 h-5 mr-3">
                                                     <AssignedToMeIcon className="flex-shrink-0" style={{ color: location.pathname === '/assigned-to-me' ? '#ffffff' : '#d1d5db', width: '19px', height: '19px' }} />
                                                 </div>
                                             )}
@@ -1822,40 +1847,67 @@ const AppContent = () => {
                                         </Link>
                                     )}
                                     
+                                    <Link to="/my-tickets" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/my-tickets' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                        { !isSidebarExpanded ? (
+                                            <LeftMenuTooltipBubble title="My Tickets">
+                                                <div className="flex items-center justify-center w-7 h-7 relative">
+                                                    <UserCheck size={23} className="flex-shrink-0" style={{ color: location.pathname === '/my-tickets' ? '#ffffff' : '#d1d5db' }} />
+                                                    {ticketCounts.my_tickets > 0 && (
+                                                        <span className="sidebar-count-badge sidebar-count-badge-orange text-xs font-medium">
+                                                            {ticketCounts.my_tickets}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </LeftMenuTooltipBubble>
+                                        ) : (
+                                            <div className="flex items-center justify-center w-5 h-5 mr-3">
+                                                <UserCheck size={19} className="flex-shrink-0" style={{ color: location.pathname === '/my-tickets' ? '#ffffff' : '#d1d5db' }} />
+                                            </div>
+                                        )}
+                                        <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap" style={{ color: location.pathname === '/my-tickets' ? '#ffffff' : '#d1d5db' }}>
+                                            My Tickets {isSidebarExpanded && ticketCounts.my_tickets > 0 && (<span style={{ color: '#f97316' }}>({ticketCounts.my_tickets})</span>)}
+                                        </motion.span>
+                                    </Link>
+                                    
                                     {/* Create Ticket - visible for all users */}
-                                    <Link to="/create-ticket" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item transition-all duration-200 hover:bg-gray-700 hover:text-white ${location.pathname === '/create-ticket' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                    <Link
+                                        to="/create-ticket"
+                                        className={`group flex items-center px-3 py-2.5 text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/create-ticket' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}
+                                    > 
                                         { !isSidebarExpanded ? (
                                             <LeftMenuTooltipBubble title="Create Ticket">
                                                 <div className="flex items-center justify-center w-7 h-7">
-                                                    <Zap size={23} className="flex-shrink-0" />
+                                                    <Zap size={23} className="flex-shrink-0" style={{ color: location.pathname === '/create-ticket' ? '#ffffff' : '#d1d5db' }} />
                                                 </div>
                                             </LeftMenuTooltipBubble>
                                         ) : (
-                                            <div className="flex items-center justify-center w-5 h-5 mr-2">
-                                                <Zap size={19} className="flex-shrink-0" />
+                                            <div className="flex items-center justify-center w-5 h-5 mr-3">
+                                                <Zap size={19} className="flex-shrink-0" style={{ color: location.pathname === '/create-ticket' ? '#ffffff' : '#d1d5db' }} />
                                             </div>
                                         )}
-                                        <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate">Create Ticket</motion.span>
+                                        <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate" style={{ color: location.pathname === '/create-ticket' ? '#ffffff' : '#d1d5db' }}>Create Ticket</motion.span>
                                     </Link>
                                     
-                                    {/* Personal Notes - visible for all users */}
-                                    <Link to="/personal-notes" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item transition-all duration-200 hover:bg-gray-700 hover:text-white ${location.pathname === '/personal-notes' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
-                                        { !isSidebarExpanded ? (
-                                            <LeftMenuTooltipBubble title="My Notes">
-                                                <div className="flex items-center justify-center w-7 h-7">
-                                                    <FileText size={23} className="flex-shrink-0" style={{ color: location.pathname === '/personal-notes' ? '#ffffff' : '#d1d5db' }} />
+                                    {/* Personal Notes - hidden for 'user' role */}
+                                    {currentUser.role !== 'user' && (
+                                        <Link to="/personal-notes" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/personal-notes' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                            { !isSidebarExpanded ? (
+                                                <LeftMenuTooltipBubble title="My Notes">
+                                                    <div className="flex items-center justify-center w-7 h-7">
+                                                        <img src={writingIcon} alt="My Notes" className="w-6 h-6 flex-shrink-0" style={{ filter: location.pathname === '/personal-notes' ? 'brightness(0) invert(1)' : 'brightness(0) saturate(100%) invert(84%) sepia(8%) saturate(239%) hue-rotate(169deg) brightness(95%) contrast(88%)' }} />
+                                                    </div>
+                                                </LeftMenuTooltipBubble>
+                                            ) : (
+                                                <div className="flex items-center justify-center w-5 h-5 mr-3">
+                                                    <img src={writingIcon} alt="My Notes" className="w-5 h-5 flex-shrink-0" style={{ filter: location.pathname === '/personal-notes' ? 'brightness(0) invert(1)' : 'brightness(0) saturate(100%) invert(84%) sepia(8%) saturate(239%) hue-rotate(169deg) brightness(95%) contrast(88%)' }} />
                                                 </div>
-                                            </LeftMenuTooltipBubble>
-                                        ) : (
-                                            <div className="flex items-center justify-center w-5 h-5 mr-2">
-                                                <FileText size={19} className="flex-shrink-0" style={{ color: location.pathname === '/personal-notes' ? '#ffffff' : '#d1d5db' }} />
-                                            </div>
-                                        )}
-                                        <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate" style={{ color: location.pathname === '/personal-notes' ? '#ffffff' : '#d1d5db' }}>My Notes</motion.span>
-                                    </Link>
+                                            )}
+                                            <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate" style={{ color: location.pathname === '/personal-notes' ? '#ffffff' : '#d1d5db' }}>My Notes</motion.span>
+                                        </Link>
+                                    )}
 
                                     {/* Settings - HIDDEN FOR NOW */}
-                                    {/* <Link to="/settings" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item transition-all duration-200 hover:bg-gray-700 hover:text-white ${location.pathname === '/settings' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
+                                    {/* <Link to="/settings" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/settings' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                         { !isSidebarExpanded ? (
                                             <LeftMenuTooltipBubble title="Settings">
                                                 <div className="flex items-center justify-center w-7 h-7">
@@ -1863,7 +1915,7 @@ const AppContent = () => {
                                                 </div>
                                             </LeftMenuTooltipBubble>
                                         ) : (
-                                            <div className="flex items-center justify-center w-5 h-5 mr-2">
+                                            <div className="flex items-center justify-center w-5 h-5 mr-3">
                                                 <Settings size={19} className="flex-shrink-0" style={{ color: location.pathname === '/settings' ? '#ffffff' : '#d1d5db' }} />
                                             </div>
                                         )}
@@ -1882,15 +1934,16 @@ const AppContent = () => {
                                 {isSidebarExpanded && (
                                     <button
                                         onClick={() => setIsSidebarExpanded(false)}
-                                        className="group flex items-center px-3 py-2 text-sm font-semibold menu-item transition-all duration-200 hover:bg-gray-700 hover:text-white text-gray-400 justify-start w-full focus:outline-none focus-visible:ring-1 focus-visible:ring-blue-500"
+                                        className={`menu-item group flex items-center px-3 py-2.5 text-sm font-semibold hover:bg-gray-700 hover:text-white ${isSidebarExpanded ? 'justify-start' : 'justify-center'} w-full`}
                                         title="Collapse sidebar"
+                                        style={{ textAlign: 'left' }}
                                     >
-                                        <div className="flex items-center justify-center w-5 h-5 mr-2">
-                                            <svg width="19" height="19" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" data-rtl-flip="" className="icon max-md:hidden" style={{ color: '#d1d5db' }}>
+                                        <div className="flex items-center justify-center w-5 h-5 mr-3">
+                                            <svg width="19" height="19" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" data-rtl-flip="" className="icon max-md:hidden flex-shrink-0" style={{ color: '#d1d5db' }}>
                                                 <path d="M6.83496 3.99992C6.38353 4.00411 6.01421 4.0122 5.69824 4.03801C5.31232 4.06954 5.03904 4.12266 4.82227 4.20012L4.62207 4.28606C4.18264 4.50996 3.81498 4.85035 3.55859 5.26848L3.45605 5.45207C3.33013 5.69922 3.25006 6.01354 3.20801 6.52824C3.16533 7.05065 3.16504 7.71885 3.16504 8.66301V11.3271C3.16504 12.2712 3.16533 12.9394 3.20801 13.4618C3.25006 13.9766 3.33013 14.2909 3.45605 14.538L3.55859 14.7216C3.81498 15.1397 4.18266 15.4801 4.62207 15.704L4.82227 15.79C5.03904 15.8674 5.31234 15.9205 5.69824 15.9521C6.01398 15.9779 6.383 15.986 6.83398 15.9902L6.83496 3.99992ZM18.165 11.3271C18.165 12.2493 18.1653 12.9811 18.1172 13.5702C18.0745 14.0924 17.9916 14.5472 17.8125 14.9648L17.7295 15.1415C17.394 15.8 16.8834 16.3511 16.2568 16.7353L15.9814 16.8896C15.5157 17.1268 15.0069 17.2285 14.4102 17.2773C13.821 17.3254 13.0893 17.3251 12.167 17.3251H7.83301C6.91071 17.3251 6.17898 17.3254 5.58984 17.2773C5.06757 17.2346 4.61294 17.1508 4.19531 16.9716L4.01855 16.8896C3.36014 16.5541 2.80898 16.0434 2.4248 15.4169L2.27051 15.1415C2.03328 14.6758 1.93158 14.167 1.88281 13.5702C1.83468 12.9811 1.83496 12.2493 1.83496 11.3271V8.66301C1.83496 7.74072 1.83468 7.00898 1.88281 6.41985C1.93157 5.82309 2.03329 5.31432 2.27051 4.84856L2.4248 4.57317C2.80898 3.94666 3.36012 3.436 4.01855 3.10051L4.19531 3.0175C4.61285 2.83843 5.06771 2.75548 5.58984 2.71281C6.17898 2.66468 6.91071 2.66496 7.83301 2.66496H12.167C13.0893 2.66496 13.821 2.66468 14.4102 2.71281C15.0069 2.76157 15.5157 2.86329 15.9814 3.10051L16.2568 3.25481C16.8833 3.63898 17.394 4.19012 17.7295 4.84856L17.8125 5.02531C17.9916 5.44285 18.0745 5.89771 18.1172 6.41985C18.1653 7.00898 18.165 7.74072 18.165 8.66301V11.3271ZM8.16406 15.995H12.167C13.1112 15.995 13.7794 15.9947 14.3018 15.9521C14.8164 15.91 15.1308 15.8299 15.3779 15.704L15.5615 15.6015C15.9797 15.3451 16.32 14.9774 16.5439 14.538L16.6299 14.3378C16.7074 14.121 16.7605 13.8478 16.792 13.4618C16.8347 12.9394 16.835 12.2712 16.835 11.3271V8.66301C16.835 7.71885 16.8347 7.05065 16.792 6.52824C16.7605 6.14232 16.7073 5.86904 16.6299 5.65227L16.5439 5.45207C16.32 5.01264 15.9796 4.64498 15.5615 4.3886L15.3779 4.28606C15.1308 4.16013 14.8165 4.08006 14.3018 4.03801C13.7794 3.99533 13.1112 3.99504 12.167 3.99504H8.16406C8.16407 3.99667 8.16504 3.99829 8.16504 3.99992L8.16406 15.995Z"></path>
                                             </svg>
                                         </div>
-                                        <span className="whitespace-nowrap overflow-hidden truncate font-semibold menu-item">Collapse</span>
+                                        <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate" style={{ color: '#d1d5db' }}>Collapse</motion.span>
                                     </button>
                                 )}
 
@@ -1899,9 +1952,9 @@ const AppContent = () => {
                                     <LeftMenuTooltipBubble title="Expand sidebar">
                                         <button
                                             onClick={() => setIsSidebarExpanded(true)}
-                                            className="group flex items-center justify-center px-3 py-2 text-sm font-semibold menu-item transition-all duration-200 hover:bg-gray-700 hover:text-white text-white w-full focus:outline-none focus-visible:ring-1 focus-visible:ring-blue-500"
+                                            className="group flex items-center justify-center px-3 py-2.5 text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white w-full focus:outline-none focus-visible:ring-1 focus-visible:ring-blue-500"
                                         >
-                                            <div className="flex items-center justify-center w-5 h-5">
+                                            <div className="flex items-center justify-center w-7 h-7">
                                                 <svg width="19" height="19" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" data-rtl-flip="" className="icon max-md:hidden" style={{ color: '#d1d5db' }}>
                                                     <path d="M6.83496 3.99992C6.38353 4.00411 6.01421 4.0122 5.69824 4.03801C5.31232 4.06954 5.03904 4.12266 4.82227 4.20012L4.62207 4.28606C4.18264 4.50996 3.81498 4.85035 3.55859 5.26848L3.45605 5.45207C3.33013 5.69922 3.25006 6.01354 3.20801 6.52824C3.16533 7.05065 3.16504 7.71885 3.16504 8.66301V11.3271C3.16504 12.2712 3.16533 12.9394 3.20801 13.4618C3.25006 13.9766 3.33013 14.2909 3.45605 14.538L3.55859 14.7216C3.81498 15.1397 4.18266 15.4801 4.62207 15.704L4.82227 15.79C5.03904 15.8674 5.31234 15.9205 5.69824 15.9521C6.01398 15.9779 6.383 15.986 6.83398 15.9902L6.83496 3.99992ZM18.165 11.3271C18.165 12.2493 18.1653 12.9811 18.1172 13.5702C18.0745 14.0924 17.9916 14.5472 17.8125 14.9648L17.7295 15.1415C17.394 15.8 16.8834 16.3511 16.2568 16.7353L15.9814 16.8896C15.5157 17.1268 15.0069 17.2285 14.4102 17.2773C13.821 17.3254 13.0893 17.3251 12.167 17.3251H7.83301C6.91071 17.3251 6.17898 17.3254 5.58984 17.2773C5.06757 17.2346 4.61294 17.1508 4.19531 16.9716L4.01855 16.8896C3.36014 16.5541 2.80898 16.0434 2.4248 15.4169L2.27051 15.1415C2.03328 14.6758 1.93158 14.167 1.88281 13.5702C1.83468 12.9811 1.83496 12.2493 1.83496 11.3271V8.66301C1.83496 7.74072 1.83468 7.00898 1.88281 6.41985C1.93157 5.82309 2.03329 5.31432 2.27051 4.84856L2.4248 4.57317C2.80898 3.94666 3.36012 3.436 4.01855 3.10051L4.19531 3.0175C4.61285 2.83843 5.06771 2.75548 5.58984 2.71281C6.17898 2.66468 6.91071 2.66496 7.83301 2.66496H12.167C13.0893 2.66496 13.821 2.66468 14.4102 2.71281C15.0069 2.76157 15.5157 2.86329 15.9814 3.10051L16.2568 3.25481C16.8833 3.63898 17.394 4.19012 17.7295 4.84856L17.8125 5.02531C17.9916 5.44285 18.0745 5.89771 18.1172 6.41985C18.1653 7.00898 18.165 7.74072 18.165 8.66301V11.3271ZM8.16406 15.995H12.167C13.1112 15.995 13.7794 15.9947 14.3018 15.9521C14.8164 15.91 15.1308 15.8299 15.3779 15.704L15.5615 15.6015C15.9797 15.3451 16.32 14.9774 16.5439 14.538L16.6299 14.3378C16.7074 14.121 16.7605 13.8478 16.792 13.4618C16.8347 12.9394 16.835 12.2712 16.835 11.3271V8.66301C16.835 7.71885 16.8347 7.05065 16.792 6.52824C16.7605 6.14232 16.7073 5.86904 16.6299 5.65227L16.5439 5.45207C16.32 5.01264 15.9796 4.64498 15.5615 4.3886L15.3779 4.28606C15.1308 4.16013 14.8165 4.08006 14.3018 4.03801C13.7794 3.99533 13.1112 3.99504 12.167 3.99504H8.16406C8.16407 3.99667 8.16504 3.99829 8.16504 3.99992L8.16406 15.995Z"></path>
                                                 </svg>
@@ -1926,8 +1979,8 @@ const AppContent = () => {
                 variants={mainContentVariants}
                 style={currentUser && !isAuthLoading && location.pathname !== '/login' && location.pathname !== '/register' ? { 
                     position: 'fixed',
-                     top: 44,
-                     height: 'calc(100vh - 44px)',
+                     top: 48,
+                     height: 'calc(100vh - 48px)',
                     overflowY: 'auto',
                     zIndex: 40
                 } : { 
@@ -1957,13 +2010,21 @@ const AppContent = () => {
                         {/* Protected Routes (require currentUser) */}
                         {currentUser ? (
                             <>
-                                {/* Default route for logged-in users - all roles use DashboardComponent */}
+                                {/* Default route for logged-in users - redirect users to /my-tickets, others to dashboard */}
                                 <Route path="/" element={
-                                    <DashboardComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} />
+                                    currentUser.role === 'user' ? (
+                                        <Navigate to="/my-tickets" replace />
+                                    ) : (
+                                        <DashboardComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} />
+                                    )
                                 } />
 
                                 <Route path="/dashboard" element={
-                                    <DashboardComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} />
+                                    currentUser.role === 'user' ? (
+                                        <Navigate to="/my-tickets" replace />
+                                    ) : (
+                                        <DashboardComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} />
+                                    )
                                 } />
                                 <Route path="/all-tickets" element={
                                     (['support', 'admin', 'site_admin', 'super_admin'].includes(currentUser.role)) ?
@@ -1971,16 +2032,21 @@ const AppContent = () => {
                                         <AccessDeniedComponent />
                                 } />
                                 <Route path="/assigned-to-me" element={
-                                    (['support', 'admin', 'site_admin', 'super_admin'].includes(currentUser.role)) ?
-                                        <AllTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} initialFilterAssignment="assigned_to_me" showFilters={true} /> :
+                                    (['support', 'admin', 'super_admin', 'engineer', 'senior_engineer', 'lead_engineer', 'principal_engineer'].includes(currentUser.role)) ?
+                                        <MyQueueComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} /> :
                                         <AccessDeniedComponent />
                                 } />
                                 <Route path="/my-tickets" element={<MyTicketsComponent user={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} searchKeyword={searchKeyword} refreshKey={ticketListRefreshKey} isSidebarExpanded={isSidebarExpanded} />} />
                                 <Route path="/create-ticket" element={
-                                    <CreateTicketPage 
+                                    <CreateTicketComponent 
                                         user={currentUser} 
                                         showFlashMessage={showFlashMessage} 
-                                        navigateTo={navigateTo} 
+                                        onTicketCreated={handleTicketCreated}
+                                        navigateTo={navigateTo}
+                                        onSuccessStateChange={handleTicketSuccessStateChange}
+                                        onTicketSubmissionStart={handleTicketSubmissionStart}
+                                        onTicketSubmissionError={handleTicketSubmissionError}
+                                        onClose={() => navigateTo('/my-tickets')}
                                     />
                                 } />
                                 {/* Dynamic route for Ticket Detail */}
@@ -2077,7 +2143,7 @@ const AppContent = () => {
                         <div className="flex flex-col md:flex-row items-center justify-between space-y-2 md:space-y-0">
                             {/* Copyright */}
                             <p className="text-center md:text-left">
-                                &copy; {new Date().getFullYear()} Sahayaon. All rights reserved.
+                                &copy; 2025 Kriasol Technologies LLP. All rights reserved.
                             </p>
                             
                             {/* Legal Links */}
@@ -2094,6 +2160,7 @@ const AppContent = () => {
                     </div>
                 </footer>
             )}
+
         </motion.div>
     </div>
 );
