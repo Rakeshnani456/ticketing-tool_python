@@ -6,42 +6,91 @@ import { getFirestore, enableIndexedDbPersistence } from 'firebase/firestore'; /
 import { getStorage } from 'firebase/storage';
 
 // --- Firebase Client-Side Configuration ---
-// Replace these with your actual Firebase project configuration
+// IMPORTANT: This must match the backend Firebase project (it-ticketing-tool-dd679)
+// To get these values:
+// 1. Go to Firebase Console: https://console.firebase.google.com/project/it-ticketing-tool-dd679
+// 2. Click the gear icon ⚙️ > Project settings
+// 3. Scroll down to "Your apps" section
+// 4. If no web app exists, click "Add app" > Web (</>) icon
+// 5. Copy the config values from the Firebase SDK snippet
 const firebaseConfig = {
-  apiKey: "AIzaSyA4DwcAsBEYQ2utGOuz1hxL9YpsDRb_sh8",
-  authDomain: "ticketingtoolv2.firebaseapp.com",
-  projectId: "ticketingtoolv2",
-  storageBucket: "ticketingtoolv2.firebasestorage.app",
-  messagingSenderId: "198990329414",
-  appId: "1:198990329414:web:a9baeca96cad0409a47c47",
-  measurementId: "G-EK2M3KY9CJ"
+  apiKey: "AIzaSyDZVwd_WHUw8RzUfkVklT7_9U6Mc-FNL-o",
+  authDomain: "it-ticketing-tool-dd679.firebaseapp.com",
+  projectId: "it-ticketing-tool-dd679",
+  storageBucket: "it-ticketing-tool-dd679.firebasestorage.app",
+  messagingSenderId: "919553361675",
+  appId: "1:919553361675:web:55bfeb860ebef1b886840e",
+  measurementId: "G-H6M4JBS3TL"
 };
 
+// Validate config before initialization
+// Check for actual placeholder patterns (empty strings, placeholder text, etc.)
+const hasPlaceholders = 
+  !firebaseConfig.apiKey || 
+  !firebaseConfig.projectId || 
+  !firebaseConfig.messagingSenderId || 
+  !firebaseConfig.appId ||
+  firebaseConfig.apiKey.includes('YOUR_') ||
+  firebaseConfig.apiKey.includes('your-') ||
+  firebaseConfig.projectId.includes('your-') ||
+  firebaseConfig.projectId.includes('YOUR_');
+
+if (hasPlaceholders) {
+  console.error('⚠️ FIREBASE CONFIGURATION INCOMPLETE ⚠️');
+  console.error('Please update firebase.js with actual values from Firebase Console:');
+  console.error('https://console.firebase.google.com/project/it-ticketing-tool-dd679/settings/general');
+  console.error('\nRequired values:');
+  console.error('- apiKey');
+  console.error('- projectId');
+  console.error('- messagingSenderId');
+  console.error('- appId');
+  throw new Error(
+    'Firebase configuration is incomplete. Please update sahayaon-frontend/src/config/firebase.js ' +
+    'with actual values from Firebase Console for project it-ticketing-tool-dd679'
+  );
+}
+
 // Initialize Firebase
-const app = initializeApp(firebaseConfig);
+let app;
+let authClient;
+let dbClient;
+let storage;
 
-// Get Firebase Auth instance
-const authClient = getAuth(app);
-// Get Firestore instance
-const dbClient = getFirestore(app); // NEW: Export the Firestore client
-// Get Firebase Storage instance
-const storage = getStorage(app);
-
-// Enable offline persistence (handle multi-tab error gracefully)
-enableIndexedDbPersistence(dbClient).catch((err) => {
-  if (err.code === 'failed-precondition') {
-    // Multiple tabs open, persistence can only be enabled in one tab at a a time.
-    console.warn('Firestore persistence failed-precondition: Multiple tabs open. Persistence can only be enabled in one tab at a time.');
-  } else if (err.code === 'unimplemented') {
-    // The current browser does not support all of the features required to enable persistence
-    console.warn('Firestore persistence unimplemented: The current browser does not support all features required.');
-  } else {
-    console.error('Firestore persistence error:', err);
-  }
-});
+try {
+  app = initializeApp(firebaseConfig);
+  
+  // Get Firebase Auth instance
+  authClient = getAuth(app);
+  // Get Firestore instance
+  dbClient = getFirestore(app);
+  // Get Firebase Storage instance
+  storage = getStorage(app);
+  
+  // Enable offline persistence (handle multi-tab error gracefully)
+  enableIndexedDbPersistence(dbClient).catch((err) => {
+    if (err.code === 'failed-precondition') {
+      // Multiple tabs open, persistence can only be enabled in one tab at a a time.
+      console.warn('Firestore persistence failed-precondition: Multiple tabs open. Persistence can only be enabled in one tab at a time.');
+    } else if (err.code === 'unimplemented') {
+      // The current browser does not support all of the features required to enable persistence
+      console.warn('Firestore persistence unimplemented: The current browser does not support all features required.');
+    } else {
+      console.error('Firestore persistence error:', err);
+    }
+  });
+  
+  console.log('✅ Firebase initialized successfully');
+} catch (error) {
+  console.error('❌ Firebase initialization failed:', error);
+  console.error('\nPlease check:');
+  console.error('1. Firebase config values are correct');
+  console.error('2. Project it-ticketing-tool-dd679 exists and has a web app configured');
+  console.error('3. Get config from: https://console.firebase.google.com/project/it-ticketing-tool-dd679/settings/general');
+  throw error;
+}
 
 // Export the auth and db clients for use in other components
-export { app, authClient, dbClient, storage }; // NEW: Export 'app', 'dbClient', and 'storage'
+export { app, authClient, dbClient, storage };
 
 // This file sets up and initializes Firebase for your application.
 // It exports the `authClient` instance, allowing other components to

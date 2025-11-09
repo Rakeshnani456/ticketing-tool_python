@@ -166,6 +166,7 @@ const corsOptions = {
         const allowedOrigins = [
             'https://ticketingtoolv2.web.app',
             'https://ticketingtoolv2.firebaseapp.com',
+            'https://tt.kriasol.com',
             'http://localhost:3000',
             'http://localhost:3001'
         ];
@@ -376,6 +377,24 @@ const authenticateToken = async (req, res, next) => {
         next();
     } catch (error) {
         console.error('Error verifying Firebase ID token or fetching user role:', error);
+        
+        // Check for Firebase project ID mismatch
+        if (error.message && error.message.includes('aud') && error.message.includes('audience')) {
+            const expectedProject = process.env.project_id || 'unknown';
+            console.error(`\n⚠️  FIREBASE PROJECT ID MISMATCH DETECTED ⚠️`);
+            console.error(`Backend expects project: ${expectedProject}`);
+            console.error(`Frontend is using a different Firebase project.`);
+            console.error(`\nTo fix this:`);
+            console.error(`1. Check your backend .env file - ensure project_id matches the frontend Firebase project`);
+            console.error(`2. Frontend uses: ticketingtoolv2 (see sahayaon-frontend/src/config/firebase.js)`);
+            console.error(`3. Update backend .env: project_id=ticketingtoolv2`);
+            console.error(`4. Also update FIREBASE_STORAGE_BUCKET to match: ticketingtoolv2.firebasestorage.app\n`);
+            return res.status(500).json({ 
+                error: 'Firebase project ID mismatch. Backend and frontend must use the same Firebase project.',
+                details: `Backend expects: ${expectedProject}. Please check your .env file configuration.`
+            });
+        }
+        
         if (error.code === 'auth/argument-error' || error.code === 'auth/invalid-credential' || error.code === 'auth/id-token-expired') {
             return res.status(401).json({ error: 'Unauthorized: Invalid or expired token. Please log in again.' });
         }
@@ -502,19 +521,25 @@ app.get('/api/cache/stats', (req, res) => {
 // Add a dummy client if none exist (for testing) - keep this in server.js or a separate setup file
 (async () => {
     if (dbConnected) {
-        const snapshot = await clientsCollection.limit(1).get();
-        if (snapshot.empty) {
-            await clientsCollection.add({
-                client_name: 'Acme Corp',
-                client_type: 'Enterprise',
-                location: 'New York, USA',
-                domain: 'acme.com',
-                joined_date: '2022-01-15',
-                no_of_users: 120,
-                contract_end: '2025-12-31',
-                site_admin: 'john.doe@acme.com'
-            });
-            console.log('Dummy client added to clients collection.');
+        try {
+            const snapshot = await clientsCollection.limit(1).get();
+            if (snapshot.empty) {
+                await clientsCollection.add({
+                    client_name: 'Acme Corp',
+                    client_type: 'Enterprise',
+                    location: 'New York, USA',
+                    domain: 'acme.com',
+                    joined_date: '2022-01-15',
+                    no_of_users: 120,
+                    contract_end: '2025-12-31',
+                    site_admin: 'john.doe@acme.com'
+                });
+                console.log('Dummy client added to clients collection.');
+            }
+        } catch (error) {
+            console.error('Error checking/adding dummy client:', error.message);
+            console.error('Error code:', error.code);
+            console.error('This may indicate a Firestore configuration issue. The server will continue running.');
         }
     }
 })();

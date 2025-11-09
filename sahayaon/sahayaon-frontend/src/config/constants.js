@@ -2,20 +2,23 @@
 
 // --- API Base URL for your Node.js Backend ---
 // Make sure this matches your backend server's address
-export const API_BASE_URL = 'http://localhost:5000';
+//export const API_BASE_URL = 'http://localhost:5000';
 //export const API_BASE_URL = 'https://ticketing-tool-python-1.onrender.com';
+export const API_BASE_URL = 'https://ticketing-tool-python-hvdv.onrender.com';
 //export const API_BASE_URL = "https://scabrous-arnulfo-nonpoisonously.ngrok-free.dev";
 //export const API_BASE_URL = "https://your-ec2-public-ip:5000"; // Replace with your actual EC2 public IP
 
 
 // --- WebSocket Base URL for real-time connections ---
-export const WS_BASE_URL = 'ws://localhost:5000';
+//export const WS_BASE_URL = 'ws://localhost:5000';
 //export const WS_BASE_URL = 'wss://ticketing-tool-python-1.onrender.com';
+export const WS_BASE_URL = 'wss://ticketing-tool-python-hvdv.onrender.com';
 //export const WS_BASE_URL = "wss://scabrous-arnulfo-nonpoisonously.ngrok-free.dev";
 //export const WS_BASE_URL = "wss://your-ec2-public-ip:5000"; // Replace with your actual EC2 public IP
 
 // --- Frontend URL for email links ---
-export const FRONTEND_URL = 'https://ticketingtoolv2.web.app';
+// Update this to match your Firebase Hosting URL for project it-ticketing-tool-dd679
+export const FRONTEND_URL = 'https://it-ticketing-tool-dd679.web.app'; // Update if your hosting URL is different
 
 // --- React AI App URL for Vercel Deployment ---
 // This should point to your Vercel-deployed backend
