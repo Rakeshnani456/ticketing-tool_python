@@ -82,16 +82,29 @@ if (EMAIL_TRANSPORT === 'GMAIL') {
     const smtpHost = process.env.SMTP_HOST || 'smtp.office365.com';
     const smtpPort = Number(process.env.SMTP_PORT || 587);
     const smtpSecure = String(process.env.SMTP_SECURE || 'false').toLowerCase() === 'true';
+    
+    // Office365 requires STARTTLS on port 587 (not SSL/TLS)
+    // Port 587: secure=false (uses STARTTLS)
+    // Port 465: secure=true (uses SSL/TLS)
+    const isOffice365 = smtpHost.includes('office365.com') || smtpHost.includes('outlook.com');
+    const useStartTLS = isOffice365 && smtpPort === 587;
+    
     transporter = nodemailer.createTransport({
         host: smtpHost,
         port: smtpPort,
-        secure: smtpSecure,
+        secure: smtpSecure, // false for STARTTLS on port 587, true for SSL on port 465
+        requireTLS: useStartTLS, // Require TLS upgrade for Office365 on port 587
         auth: {
             user: process.env.EMAIL_USER,
             pass: process.env.EMAIL_PASS,
+        },
+        tls: {
+            // Use modern TLS settings
+            minVersion: 'TLSv1.2',
+            rejectUnauthorized: true // Set to false only if you have certificate issues
         }
     });
-    console.log(`📧 Email transport: SMTP host=${smtpHost} port=${smtpPort} secure=${smtpSecure}`);
+    console.log(`📧 Email transport: SMTP host=${smtpHost} port=${smtpPort} secure=${smtpSecure}${useStartTLS ? ' (STARTTLS)' : ''}`);
 }
 
 // Initialize email service
@@ -115,9 +128,49 @@ let emailServiceReady = false;
         emailServiceReady = false;
         console.error(`❌ Email service verification failed: ${err.message}`);
         if (EMAIL_TRANSPORT !== 'GMAIL') {
-            console.error('ℹ️ If you are using Office365, enable SMTP AUTH on the mailbox/tenant or switch to EMAIL_TRANSPORT=GMAIL or Graph.');
+            const smtpHost = process.env.SMTP_HOST || 'smtp.office365.com';
+            const isOffice365 = smtpHost.includes('office365.com') || smtpHost.includes('outlook.com');
+            
+            if (isOffice365) {
+                console.error('\n⚠️  Office365 SMTP Configuration Issue ⚠️');
+                console.error('To fix Office365 SMTP AUTH errors:');
+                console.error('');
+                console.error('1. Enable SMTP AUTH in Microsoft 365 Admin Center:');
+                console.error('   - Go to: https://admin.microsoft.com');
+                console.error('   - Navigate to: Settings > Mail > POP, IMAP, and SMTP access');
+                console.error('   - Enable "Authenticated SMTP" for your mailbox');
+                console.error('');
+                console.error('2. For tenant-wide settings (if you have admin access):');
+                console.error('   - PowerShell: Set-TransportConfig -SmtpClientAuthenticationDisabled $false');
+                console.error('   - Or use Exchange Admin Center > Mail flow > Connectors');
+                console.error('');
+                console.error('3. Verify your environment variables:');
+                console.error(`   - EMAIL_USER: ${process.env.EMAIL_USER || 'NOT SET'}`);
+                console.error(`   - EMAIL_PASS: ${process.env.EMAIL_PASS ? 'SET (hidden)' : 'NOT SET'}`);
+                console.error(`   - SMTP_HOST: ${smtpHost}`);
+                console.error(`   - SMTP_PORT: ${process.env.SMTP_PORT || '587'}`);
+                console.error(`   - SMTP_SECURE: ${process.env.SMTP_SECURE || 'false'}`);
+                console.error('');
+                console.error('4. For Office365, recommended settings:');
+                console.error('   - SMTP_HOST=smtp.office365.com');
+                console.error('   - SMTP_PORT=587');
+                console.error('   - SMTP_SECURE=false (uses STARTTLS)');
+                console.error('');
+                console.error('5. Alternative: Switch to Gmail');
+                console.error('   - Set EMAIL_TRANSPORT=GMAIL');
+                console.error('   - Use Gmail App Password (not regular password)');
+            } else {
+                console.error('ℹ️ SMTP Configuration:');
+                console.error(`   - Host: ${smtpHost}`);
+                console.error(`   - Port: ${process.env.SMTP_PORT || '587'}`);
+                console.error(`   - Verify SMTP credentials and server settings`);
+            }
         } else {
-            console.error('ℹ️ For Gmail, ensure you are using an App Password and IMAP/SMTP is enabled.');
+            console.error('ℹ️ Gmail Configuration:');
+            console.error('   - Ensure you are using an App Password (not regular password)');
+            console.error('   - Enable IMAP/SMTP in Gmail settings');
+            console.error('   - Enable 2-Factor Authentication (required for App Passwords)');
+            console.error('   - Generate App Password: https://myaccount.google.com/apppasswords');
         }
     }
 })();
@@ -168,7 +221,8 @@ const corsOptions = {
             'https://ticketingtoolv2.firebaseapp.com',
             'https://tt.kriasol.com',
             'http://localhost:3000',
-            'http://localhost:3001'
+            'http://localhost:3001',
+            'https://my.sahayaon.com'
         ];
         
         if (allowedOrigins.indexOf(origin) !== -1) {
