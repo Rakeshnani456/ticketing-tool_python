@@ -97,10 +97,16 @@ if (EMAIL_TRANSPORT === 'GMAIL') {
             user: EMAIL_USER,
             pass: process.env.EMAIL_PASS,
         },
+        connectionTimeout: 60000, // 60 seconds connection timeout
+        socketTimeout: 60000, // 60 seconds socket timeout
+        greetingTimeout: 30000, // 30 seconds greeting timeout
         tls: {
             minVersion: 'TLSv1.2',
             rejectUnauthorized: true
-        }
+        },
+        pool: true, // Use connection pooling for better reliability
+        maxConnections: 5,
+        maxMessages: 100
     });
     console.log(`📧 Email transport: GMAIL (smtp.gmail.com:465)`);
     console.log(`   Using email: ${EMAIL_USER}`);
@@ -124,10 +130,16 @@ if (EMAIL_TRANSPORT === 'GMAIL') {
             user: EMAIL_USER,
             pass: process.env.EMAIL_PASS,
         },
+        connectionTimeout: 60000, // 60 seconds connection timeout
+        socketTimeout: 60000, // 60 seconds socket timeout
+        greetingTimeout: 30000, // 30 seconds greeting timeout
         tls: {
             minVersion: 'TLSv1.2',
             rejectUnauthorized: true
-        }
+        },
+        pool: true, // Use connection pooling for better reliability
+        maxConnections: 5,
+        maxMessages: 100
     });
     console.log(`📧 Email transport: OUTLOOK/OFFICE365 (${smtpHost}:${smtpPort}, secure=${smtpSecure}${useStartTLS ? ', STARTTLS' : ''})`);
     console.log(`   Using email: ${EMAIL_USER}`);
@@ -149,10 +161,16 @@ if (EMAIL_TRANSPORT === 'GMAIL') {
             user: EMAIL_USER,
             pass: process.env.EMAIL_PASS,
         },
+        connectionTimeout: 60000, // 60 seconds connection timeout
+        socketTimeout: 60000, // 60 seconds socket timeout
+        greetingTimeout: 30000, // 30 seconds greeting timeout
         tls: {
             minVersion: 'TLSv1.2',
             rejectUnauthorized: true
-        }
+        },
+        pool: true, // Use connection pooling for better reliability
+        maxConnections: 5,
+        maxMessages: 100
     });
     console.log(`📧 Email transport: SMTP (${smtpHost}:${smtpPort}, secure=${smtpSecure}${useStartTLS ? ', STARTTLS' : ''})`);
     console.log(`   Using email: ${EMAIL_USER}`);
@@ -173,7 +191,12 @@ let emailServiceReady = false;
             console.log(`📧 Email user configured: ${EMAIL_USER}`);
             console.log(`📧 Email transport: ${EMAIL_TRANSPORT} ${EMAIL_TRANSPORT_ENV ? '(explicit)' : '(auto-detected)'}`);
         }
-        await transporter.verify();
+        // Add timeout wrapper for verify() to prevent hanging
+        const verifyPromise = transporter.verify();
+        const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Email verification timeout after 30 seconds')), 30000)
+        );
+        await Promise.race([verifyPromise, timeoutPromise]);
         emailServiceReady = true;
         console.log('✅ Email service verification successful');
     } catch (err) {
@@ -231,6 +254,13 @@ let emailServiceReady = false;
             console.error('   - SMTP_PORT=587');
             console.error('   - SMTP_SECURE=false (uses STARTTLS)');
             console.error('   - EMAIL_TRANSPORT=OUTLOOK (or leave empty for auto-detect)');
+            console.error('');
+            console.error('5. Connection timeout troubleshooting:');
+            console.error('   - If using cloud hosting (Render, Heroku, etc.), check if outbound SMTP is allowed');
+            console.error('   - Some platforms block port 587 - try port 25 or 465 as alternative');
+            console.error('   - Verify network firewall allows outbound connections to smtp.office365.com');
+            console.error('   - Check if your hosting provider requires specific SMTP relay configuration');
+            console.error('   - Consider using a dedicated email service (SendGrid, Mailgun) if SMTP is blocked');
         } else {
             const smtpHost = process.env.SMTP_HOST || 'smtp.office365.com';
             const isOffice365 = smtpHost.includes('office365.com') || smtpHost.includes('outlook.com');
@@ -261,6 +291,13 @@ let emailServiceReady = false;
                 console.error('   - SMTP_PORT=587');
                 console.error('   - SMTP_SECURE=false (uses STARTTLS)');
                 console.error('   - EMAIL_TRANSPORT=OUTLOOK (or leave empty for auto-detect)');
+                console.error('');
+                console.error('5. Connection timeout troubleshooting:');
+                console.error('   - If using cloud hosting (Render, Heroku, etc.), check if outbound SMTP is allowed');
+                console.error('   - Some platforms block port 587 - try port 25 or 465 as alternative');
+                console.error('   - Verify network firewall allows outbound connections to smtp.office365.com');
+                console.error('   - Check if your hosting provider requires specific SMTP relay configuration');
+                console.error('   - Consider using a dedicated email service (SendGrid, Mailgun) if SMTP is blocked');
             } else {
                 console.error('ℹ️ SMTP Configuration:');
                 console.error(`   - Host: ${smtpHost}`);
