@@ -180,28 +180,45 @@ if (EMAIL_TRANSPORT === 'GMAIL') {
 const emailService = new EmailService(transporter);
 
 // Startup email service check (non-blocking)
+// Note: Verification failure does NOT prevent email sending - it's just a connectivity check
 let emailServiceReady = false;
+const SKIP_EMAIL_VERIFICATION = process.env.SKIP_EMAIL_VERIFICATION === 'true';
+
 (async () => {
+    // Skip verification if explicitly disabled (useful for cloud platforms that block SMTP during startup)
+    if (SKIP_EMAIL_VERIFICATION) {
+        console.log('⏭️  Email verification skipped (SKIP_EMAIL_VERIFICATION=true)');
+        console.log('   Email service will attempt to send emails when needed.');
+        emailServiceReady = true; // Set to true so health check shows ready, but actual sends will still work
+        return;
+    }
+
     try {
         console.log('🔎 Verifying email service connectivity...');
         // Log essential env presence (masked)
         if (!EMAIL_USER || !process.env.EMAIL_PASS || !process.env.DISTRIBUTION_EMAIL) {
             console.warn('⚠️ Email env vars missing: EMAIL_USER/EMAIL_PASS/DISTRIBUTION_EMAIL');
+            console.warn('   Email service will still attempt to send, but may fail.');
         } else {
             console.log(`📧 Email user configured: ${EMAIL_USER}`);
             console.log(`📧 Email transport: ${EMAIL_TRANSPORT} ${EMAIL_TRANSPORT_ENV ? '(explicit)' : '(auto-detected)'}`);
         }
-        // Add timeout wrapper for verify() to prevent hanging
+        // Add timeout wrapper for verify() to prevent hanging (reduced to 15 seconds for faster startup)
         const verifyPromise = transporter.verify();
         const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Email verification timeout after 30 seconds')), 30000)
+            setTimeout(() => reject(new Error('Email verification timeout after 15 seconds')), 15000)
         );
         await Promise.race([verifyPromise, timeoutPromise]);
         emailServiceReady = true;
         console.log('✅ Email service verification successful');
     } catch (err) {
-        emailServiceReady = false;
+        // Don't set emailServiceReady to false - allow emails to still be attempted
+        // Verification is just a connectivity check, not a requirement
+        emailServiceReady = false; // Health check will show error, but emails will still be attempted
         console.error(`❌ Email service verification failed: ${err.message}`);
+        console.warn('⚠️  Note: Email sending will still be attempted when needed.');
+        console.warn('   Verification failure may indicate network/firewall issues, but emails may still work.');
+        console.warn('   To skip verification entirely, set SKIP_EMAIL_VERIFICATION=true in your environment.');
         if (EMAIL_TRANSPORT === 'GMAIL') {
             console.error('\n⚠️  Gmail Configuration Issue ⚠️');
             console.error('To fix Gmail authentication errors:');
@@ -261,6 +278,7 @@ let emailServiceReady = false;
             console.error('   - Verify network firewall allows outbound connections to smtp.office365.com');
             console.error('   - Check if your hosting provider requires specific SMTP relay configuration');
             console.error('   - Consider using a dedicated email service (SendGrid, Mailgun) if SMTP is blocked');
+            console.error('   - To skip verification (emails will still be attempted): Set SKIP_EMAIL_VERIFICATION=true');
         } else {
             const smtpHost = process.env.SMTP_HOST || 'smtp.office365.com';
             const isOffice365 = smtpHost.includes('office365.com') || smtpHost.includes('outlook.com');
@@ -298,6 +316,7 @@ let emailServiceReady = false;
                 console.error('   - Verify network firewall allows outbound connections to smtp.office365.com');
                 console.error('   - Check if your hosting provider requires specific SMTP relay configuration');
                 console.error('   - Consider using a dedicated email service (SendGrid, Mailgun) if SMTP is blocked');
+                console.error('   - To skip verification (emails will still be attempted): Set SKIP_EMAIL_VERIFICATION=true');
             } else {
                 console.error('ℹ️ SMTP Configuration:');
                 console.error(`   - Host: ${smtpHost}`);
