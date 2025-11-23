@@ -82,7 +82,38 @@ if (EMAIL_USER) {
 const EMAIL_TRANSPORT = EMAIL_TRANSPORT_ENV || detectedProvider || 'OUTLOOK';
 
 let transporter;
-if (EMAIL_TRANSPORT === 'OUTLOOK' || EMAIL_TRANSPORT === 'OFFICE365') {
+if (EMAIL_TRANSPORT === 'SENDGRID') {
+    // SendGrid SMTP (recommended for cloud platforms like Render)
+    const sendgridApiKey = process.env.SENDGRID_API_KEY || process.env.EMAIL_PASS;
+    if (!sendgridApiKey) {
+        console.error('❌ SendGrid configuration incomplete: SENDGRID_API_KEY or EMAIL_PASS required');
+    }
+    
+    transporter = nodemailer.createTransport({
+        host: 'smtp.sendgrid.net',
+        port: 587,
+        secure: false, // Use STARTTLS
+        auth: {
+            user: 'apikey', // SendGrid requires 'apikey' as username
+            pass: sendgridApiKey, // Your SendGrid API key
+        },
+        connectionTimeout: 30000,
+        socketTimeout: 30000,
+        greetingTimeout: 15000,
+        tls: {
+            minVersion: 'TLSv1.2',
+            rejectUnauthorized: true
+        },
+        pool: false,
+        maxConnections: 1,
+        maxMessages: 1
+    });
+    console.log(`📧 Email transport: SENDGRID (smtp.sendgrid.net:587, STARTTLS)`);
+    console.log(`   Using SendGrid API key (hidden)`);
+    if (process.env.DISTRIBUTION_EMAIL) {
+        console.log(`   From email: ${process.env.DISTRIBUTION_EMAIL}`);
+    }
+} else if (EMAIL_TRANSPORT === 'OUTLOOK' || EMAIL_TRANSPORT === 'OFFICE365') {
     // Office365/Outlook SMTP
     const smtpHost = process.env.SMTP_HOST || 'smtp.office365.com';
     const smtpPort = Number(process.env.SMTP_PORT || 587);
@@ -93,6 +124,27 @@ if (EMAIL_TRANSPORT === 'OUTLOOK' || EMAIL_TRANSPORT === 'OFFICE365') {
     // Port 465: secure=true (uses SSL/TLS)
     const useStartTLS = smtpPort === 587;
     
+    // Detect if running on cloud platform (Render, Heroku, etc.)
+    const isCloudPlatform = process.env.RENDER || process.env.HEROKU || process.env.NODE_ENV === 'production';
+    
+    // Warn if using port 465 on cloud platforms (often blocked)
+    if (isCloudPlatform && smtpPort === 465) {
+        console.warn(`⚠️  WARNING: Port 465 is often blocked on cloud platforms like Render!`);
+        console.warn(`   Port 465 may cause connection timeouts. Recommended: Use port 587 instead.`);
+        console.warn(`   Set SMTP_PORT=587 and SMTP_SECURE=false in your environment variables.`);
+    }
+    
+    // Disable connection pooling on cloud platforms by default to avoid connection reuse issues
+    // Connection pooling can cause problems with cloud providers' network configurations
+    // Users can explicitly enable it by setting EMAIL_USE_POOL=true
+    // Default: false on cloud platforms, true on local (unless explicitly disabled)
+    let usePool = false;
+    if (process.env.EMAIL_USE_POOL === 'true') {
+        usePool = true; // Explicitly enabled
+    } else if (!isCloudPlatform && process.env.EMAIL_USE_POOL !== 'false') {
+        usePool = true; // Default to true on local platforms unless explicitly disabled
+    }
+    
     transporter = nodemailer.createTransport({
         host: smtpHost,
         port: smtpPort,
@@ -102,19 +154,29 @@ if (EMAIL_TRANSPORT === 'OUTLOOK' || EMAIL_TRANSPORT === 'OFFICE365') {
             user: EMAIL_USER,
             pass: process.env.EMAIL_PASS,
         },
-        connectionTimeout: 30000, // 30 seconds connection timeout (reduced for faster failure)
-        socketTimeout: 30000, // 30 seconds socket timeout
-        greetingTimeout: 15000, // 15 seconds greeting timeout
+        connectionTimeout: isCloudPlatform ? 30000 : 60000, // Shorter timeout for cloud platforms
+        socketTimeout: isCloudPlatform ? 30000 : 60000, // Shorter timeout for cloud platforms
+        greetingTimeout: isCloudPlatform ? 15000 : 30000, // Shorter greeting timeout for cloud platforms
         tls: {
             minVersion: 'TLSv1.2',
             rejectUnauthorized: true
         },
-        pool: false, // Disable pooling to avoid connection reuse issues on cloud platforms
-        maxConnections: 1,
-        maxMessages: 1
+        // Disable pooling on cloud platforms - each email gets a fresh connection
+        pool: usePool,
+        maxConnections: usePool ? 5 : 1,
+        maxMessages: usePool ? 100 : 1,
+        // Add debug logging for troubleshooting
+        debug: process.env.EMAIL_DEBUG === 'true',
+        logger: process.env.EMAIL_DEBUG === 'true'
     });
-    console.log(`📧 Email transport: OUTLOOK/OFFICE365 (${smtpHost}:${smtpPort}, secure=${smtpSecure}${useStartTLS ? ', STARTTLS' : ''})`);
+    
+    if (isCloudPlatform && usePool) {
+        console.log(`⚠️  Warning: Connection pooling enabled on cloud platform. Consider setting EMAIL_USE_POOL=false if experiencing issues.`);
+    }
+    
+    console.log(`📧 Email transport: OUTLOOK/OFFICE365 (${smtpHost}:${smtpPort}, secure=${smtpSecure}${useStartTLS ? ', STARTTLS' : ''}, pool=${usePool})`);
     console.log(`   Using email: ${EMAIL_USER}`);
+    console.log(`   Platform: ${isCloudPlatform ? 'Cloud' : 'Local'}`);
 } else {
     // Generic SMTP (custom configuration)
     const smtpHost = process.env.SMTP_HOST || 'smtp.office365.com';
@@ -133,9 +195,9 @@ if (EMAIL_TRANSPORT === 'OUTLOOK' || EMAIL_TRANSPORT === 'OFFICE365') {
             user: EMAIL_USER,
             pass: process.env.EMAIL_PASS,
         },
-        connectionTimeout: 30000, // 30 seconds connection timeout (reduced for faster failure)
-        socketTimeout: 30000, // 30 seconds socket timeout
-        greetingTimeout: 15000, // 15 seconds greeting timeout
+        connectionTimeout: 60000, // 60 seconds connection timeout (increased for cloud platforms)
+        socketTimeout: 60000, // 60 seconds socket timeout
+        greetingTimeout: 30000, // 30 seconds greeting timeout
         tls: {
             minVersion: 'TLSv1.2',
             rejectUnauthorized: true
@@ -231,6 +293,13 @@ const SKIP_EMAIL_VERIFICATION = process.env.SKIP_EMAIL_VERIFICATION === 'true';
             console.error('   - Check if your hosting provider requires specific SMTP relay configuration');
             console.error('   - Consider using a dedicated email service (SendGrid, Mailgun) if SMTP is blocked');
             console.error('   - To skip verification (emails will still be attempted): Set SKIP_EMAIL_VERIFICATION=true');
+            console.error('');
+            console.error('6. Render-specific fixes:');
+            console.error('   - Ensure you are using an App Password (not regular password) from Microsoft');
+            console.error('   - Set EMAIL_USE_POOL=false to disable connection pooling (recommended for Render)');
+            console.error('   - Verify SMTP AUTH is enabled for your Office365 account');
+            console.error('   - Check Render logs for specific connection errors');
+            console.error('   - Try setting SMTP_PORT=465 and SMTP_SECURE=true as alternative');
         } else {
             const smtpHost = process.env.SMTP_HOST || 'smtp.office365.com';
             const isOffice365 = smtpHost.includes('office365.com') || smtpHost.includes('outlook.com');

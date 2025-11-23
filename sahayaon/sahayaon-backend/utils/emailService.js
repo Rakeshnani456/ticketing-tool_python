@@ -11,17 +11,109 @@ class EmailService {
     }
 
     /**
-     * Send email with timeout handling
+     * Send email with timeout handling and retry logic
      * @param {Object} mailOptions - Nodemailer mail options
-     * @param {number} timeoutMs - Timeout in milliseconds (default: 25000)
+     * @param {number} timeoutMs - Timeout in milliseconds (default: 60000)
+     * @param {number} maxRetries - Maximum number of retries (default: 2)
      * @returns {Promise<Object>} Send result
      */
-    async sendMailWithTimeout(mailOptions, timeoutMs = 25000) {
-        const sendPromise = this.transporter.sendMail(mailOptions);
-        const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error(`Email send timeout after ${timeoutMs}ms`)), timeoutMs)
-        );
-        return Promise.race([sendPromise, timeoutPromise]);
+    async sendMailWithTimeout(mailOptions, timeoutMs = 60000, maxRetries = 2) {
+        // Validate transporter exists
+        if (!this.transporter) {
+            throw new Error('Email transporter not initialized. Check your email configuration.');
+        }
+        
+        let lastError = null;
+        
+        for (let attempt = 0; attempt <= maxRetries; attempt++) {
+            try {
+                if (attempt > 0) {
+                    console.log(`[EmailService] Retry attempt ${attempt}/${maxRetries} for email to ${mailOptions.to}`);
+                    // Wait before retry (exponential backoff)
+                    await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+                }
+                
+                const sendPromise = this.transporter.sendMail(mailOptions);
+                const timeoutPromise = new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error(`Email send timeout after ${timeoutMs}ms`)), timeoutMs)
+                );
+                
+                const result = await Promise.race([sendPromise, timeoutPromise]);
+                if (attempt > 0) {
+                    console.log(`[EmailService] ✅ Email sent successfully on retry attempt ${attempt}`);
+                }
+                return result;
+            } catch (error) {
+                lastError = error;
+                const isTimeout = error.message && (error.message.includes('timeout') || error.message.includes('Timeout') || error.message.includes('ETIMEDOUT'));
+                // ESOCKET errors are connection-level errors that should be retried (includes ETIMEDOUT, ECONNREFUSED, etc.)
+                const isConnectionError = error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT' || error.code === 'ENOTFOUND' || error.code === 'ECONNRESET' || error.code === 'EPIPE' || error.code === 'ESOCKET' || isTimeout;
+                const isAuthError = error.code === 'EAUTH' || error.code === 'EENVELOPE' || (error.responseCode && error.responseCode >= 500);
+                
+                // Don't retry on authentication errors or invalid recipients, but log them for debugging
+                if (isAuthError) {
+                    console.error(`[EmailService] Authentication/configuration error: ${error.message}`);
+                    if (error.response) {
+                        console.error(`[EmailService] SMTP response: ${error.response}`);
+                    }
+                    if (error.code) {
+                        console.error(`[EmailService] Error code: ${error.code}`);
+                    }
+                    // Check if it's a cloud platform and provide specific guidance
+                    if (process.env.RENDER || process.env.HEROKU) {
+                        console.error(`[EmailService] ⚠️  Cloud platform detected. Common fixes:`);
+                        console.error(`   - Ensure EMAIL_PASS is an App Password (not regular password)`);
+                        console.error(`   - Verify SMTP AUTH is enabled in Microsoft 365 Admin Center`);
+                        console.error(`   - Try setting EMAIL_USE_POOL=false in environment variables`);
+                        console.error(`   - Check that SMTP port (587/465) is not blocked by your cloud provider`);
+                    }
+                    throw error;
+                }
+                
+                if (!isConnectionError && !isTimeout) {
+                    console.error(`[EmailService] Non-retryable error: ${error.message}`);
+                    if (error.code) {
+                        console.error(`[EmailService] Error code: ${error.code}`);
+                    }
+                    throw error;
+                }
+                
+                // Check if this is a port blocking issue (common on cloud platforms)
+                if ((error.code === 'ESOCKET' || error.code === 'ETIMEDOUT') && error.message && error.message.includes(':465')) {
+                    console.error(`[EmailService] ⚠️  Port 465 connection timeout detected!`);
+                    console.error(`[EmailService] Port 465 is often blocked on cloud platforms like Render.`);
+                    console.error(`[EmailService] Recommended fix: Switch to port 587 with STARTTLS`);
+                    console.error(`[EmailService] Set environment variables:`);
+                    console.error(`[EmailService]   SMTP_PORT=587`);
+                    console.error(`[EmailService]   SMTP_SECURE=false`);
+                    if (attempt >= maxRetries) {
+                        throw new Error(`Port 465 blocked. Please switch to port 587. Original error: ${error.message}`);
+                    }
+                }
+                
+                if (attempt < maxRetries) {
+                    console.warn(`[EmailService] Attempt ${attempt + 1} failed: ${error.message}, will retry...`);
+                    if (error.code) {
+                        console.warn(`[EmailService] Error code: ${error.code}`);
+                    }
+                } else {
+                    console.error(`[EmailService] All ${maxRetries + 1} attempts failed. Last error: ${error.message}`);
+                    if (error.code) {
+                        console.error(`[EmailService] Final error code: ${error.code}`);
+                    }
+                    // Provide helpful error message for cloud platform connection issues
+                    if ((error.code === 'ESOCKET' || error.code === 'ETIMEDOUT') && (process.env.RENDER || process.env.HEROKU)) {
+                        console.error(`[EmailService] 💡 Cloud Platform Connection Issue Detected`);
+                        console.error(`[EmailService] Try these solutions:`);
+                        console.error(`[EmailService]   1. Use port 587 instead of 465 (SMTP_PORT=587, SMTP_SECURE=false)`);
+                        console.error(`[EmailService]   2. Verify SMTP outbound connections are allowed by your cloud provider`);
+                        console.error(`[EmailService]   3. Consider using a relay service (SendGrid, Mailgun) if SMTP is blocked`);
+                    }
+                }
+            }
+        }
+        
+        throw lastError;
     }
 
     /**
@@ -65,7 +157,7 @@ class EmailService {
                 html: html,
             };
 
-            await this.sendMailWithTimeout(mailOptions, 25000);
+            await this.sendMailWithTimeout(mailOptions, 60000, 2);
             console.log(`[EmailService] Welcome email sent successfully to ${userData.userEmail}`);
             return true;
         } catch (error) {
@@ -117,7 +209,7 @@ class EmailService {
                 html: html,
             };
 
-            await this.sendMailWithTimeout(mailOptions, 25000);
+            await this.sendMailWithTimeout(mailOptions, 60000, 2);
             console.log(`Password reset email sent successfully to ${userData.userEmail}`);
             return true;
         } catch (error) {
@@ -183,7 +275,7 @@ class EmailService {
             }
 
             console.log(`[EmailService] Sending email to: ${mailOptions.to}, subject: ${subject}`);
-            await this.sendMailWithTimeout(mailOptions, 25000);
+            await this.sendMailWithTimeout(mailOptions, 60000, 2);
             console.log(`[EmailService] ✅ Ticket notification email sent successfully to ${mailOptions.to}`);
             return true;
         } catch (error) {
@@ -251,7 +343,7 @@ class EmailService {
             }
 
             console.log(`[EmailService] Sending email to: ${mailOptions.to}, subject: ${subject}`);
-            await this.sendMailWithTimeout(mailOptions, 25000);
+            await this.sendMailWithTimeout(mailOptions, 60000, 2);
             console.log(`[EmailService] ✅ Ticket status update email sent successfully to ${mailOptions.to}`);
             return true;
         } catch (error) {
@@ -321,7 +413,7 @@ class EmailService {
             }
 
             console.log(`[EmailService] Sending email to: ${mailOptions.to}, subject: ${subject}`);
-            await this.sendMailWithTimeout(mailOptions, 25000);
+            await this.sendMailWithTimeout(mailOptions, 60000, 2);
             const recipientType = isUserNotification ? 'user' : 'team';
             console.log(`[EmailService] ✅ Ticket assignment email sent successfully to ${recipientType}: ${mailOptions.to}`);
             return true;
@@ -376,7 +468,7 @@ class EmailService {
                 mailOptions.cc = ticketData.ccEmail;
             }
 
-            await this.sendMailWithTimeout(mailOptions, 25000);
+            await this.sendMailWithTimeout(mailOptions, 60000, 2);
             console.log(`User ticket assignment email sent successfully to: ${mailOptions.to}`);
             return true;
         } catch (error) {
@@ -426,7 +518,7 @@ class EmailService {
                 mailOptions.cc = ticketData.ccEmail;
             }
 
-            await this.sendMailWithTimeout(mailOptions, 25000);
+            await this.sendMailWithTimeout(mailOptions, 60000, 2);
             console.log(`Ticket closed email sent successfully to ${mailOptions.to}`);
             return true;
         } catch (error) {
@@ -476,7 +568,7 @@ class EmailService {
                 mailOptions.cc = ticketData.ccEmail;
             }
 
-            await this.sendMailWithTimeout(mailOptions, 25000);
+            await this.sendMailWithTimeout(mailOptions, 60000, 2);
             console.log(`Ticket cancellation email sent successfully to ${mailOptions.to}`);
             return true;
         } catch (error) {
@@ -520,7 +612,7 @@ class EmailService {
                 mailOptions.cc = ticketData.ccEmail;
             }
 
-            await this.sendMailWithTimeout(mailOptions, 25000);
+            await this.sendMailWithTimeout(mailOptions, 60000, 2);
             console.log(`Ticket comment email sent successfully to ${mailOptions.to}`);
             return true;
         } catch (error) {
@@ -564,7 +656,7 @@ class EmailService {
                 mailOptions.cc = attachmentData.ccEmail;
             }
 
-            await this.sendMailWithTimeout(mailOptions, 25000);
+            await this.sendMailWithTimeout(mailOptions, 60000, 2);
             console.log(`Attachment upload email sent successfully to ${mailOptions.to}`);
             return true;
         } catch (error) {
@@ -600,7 +692,7 @@ class EmailService {
                 mailOptions.cc = emailData.cc;
             }
 
-            await this.sendMailWithTimeout(mailOptions, 25000);
+            await this.sendMailWithTimeout(mailOptions, 60000, 2);
             console.log(`Custom email sent successfully to ${emailData.to}`);
             return true;
         } catch (error) {
@@ -661,7 +753,7 @@ class EmailService {
                 html: html,
             };
 
-            await this.sendMailWithTimeout(mailOptions, 25000);
+            await this.sendMailWithTimeout(mailOptions, 60000, 2);
             console.log(`Password sharing email sent successfully to ${userData.userEmail}`);
             return true;
         } catch (error) {
