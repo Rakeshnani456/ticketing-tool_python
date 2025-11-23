@@ -69,48 +69,20 @@ try {
 const EMAIL_USER = process.env.EMAIL_USER || '';
 const EMAIL_TRANSPORT_ENV = (process.env.EMAIL_TRANSPORT || '').toUpperCase().trim();
 
-// Auto-detect provider from email domain
+// Auto-detect provider from email domain (Outlook/Office365 only)
 let detectedProvider = null;
 if (EMAIL_USER) {
     const emailDomain = EMAIL_USER.toLowerCase().split('@')[1];
-    if (emailDomain === 'gmail.com' || emailDomain === 'googlemail.com') {
-        detectedProvider = 'GMAIL';
-    } else if (emailDomain && (emailDomain.includes('outlook.com') || emailDomain.includes('office365.com') || emailDomain.includes('microsoft.com') || emailDomain.includes('hotmail.com'))) {
+    if (emailDomain && (emailDomain.includes('outlook.com') || emailDomain.includes('office365.com') || emailDomain.includes('microsoft.com') || emailDomain.includes('hotmail.com'))) {
         detectedProvider = 'OUTLOOK';
     }
 }
 
-// Determine which transport to use (explicit setting takes precedence)
-const EMAIL_TRANSPORT = EMAIL_TRANSPORT_ENV || detectedProvider || 'SMTP';
+// Determine which transport to use (explicit setting takes precedence, default to OUTLOOK)
+const EMAIL_TRANSPORT = EMAIL_TRANSPORT_ENV || detectedProvider || 'OUTLOOK';
 
 let transporter;
-if (EMAIL_TRANSPORT === 'GMAIL') {
-    // Google (App Password required)
-    if (!EMAIL_USER || !process.env.EMAIL_PASS) {
-        console.error('❌ Gmail configuration incomplete: EMAIL_USER and EMAIL_PASS required');
-    }
-    transporter = nodemailer.createTransport({
-        host: 'smtp.gmail.com',
-        port: 465,
-        secure: true,
-        auth: {
-            user: EMAIL_USER,
-            pass: process.env.EMAIL_PASS,
-        },
-        connectionTimeout: 60000, // 60 seconds connection timeout
-        socketTimeout: 60000, // 60 seconds socket timeout
-        greetingTimeout: 30000, // 30 seconds greeting timeout
-        tls: {
-            minVersion: 'TLSv1.2',
-            rejectUnauthorized: true
-        },
-        pool: true, // Use connection pooling for better reliability
-        maxConnections: 5,
-        maxMessages: 100
-    });
-    console.log(`📧 Email transport: GMAIL (smtp.gmail.com:465)`);
-    console.log(`   Using email: ${EMAIL_USER}`);
-} else if (EMAIL_TRANSPORT === 'OUTLOOK' || EMAIL_TRANSPORT === 'OFFICE365') {
+if (EMAIL_TRANSPORT === 'OUTLOOK' || EMAIL_TRANSPORT === 'OFFICE365') {
     // Office365/Outlook SMTP
     const smtpHost = process.env.SMTP_HOST || 'smtp.office365.com';
     const smtpPort = Number(process.env.SMTP_PORT || 587);
@@ -130,16 +102,16 @@ if (EMAIL_TRANSPORT === 'GMAIL') {
             user: EMAIL_USER,
             pass: process.env.EMAIL_PASS,
         },
-        connectionTimeout: 60000, // 60 seconds connection timeout
-        socketTimeout: 60000, // 60 seconds socket timeout
-        greetingTimeout: 30000, // 30 seconds greeting timeout
+        connectionTimeout: 30000, // 30 seconds connection timeout (reduced for faster failure)
+        socketTimeout: 30000, // 30 seconds socket timeout
+        greetingTimeout: 15000, // 15 seconds greeting timeout
         tls: {
             minVersion: 'TLSv1.2',
             rejectUnauthorized: true
         },
-        pool: true, // Use connection pooling for better reliability
-        maxConnections: 5,
-        maxMessages: 100
+        pool: false, // Disable pooling to avoid connection reuse issues on cloud platforms
+        maxConnections: 1,
+        maxMessages: 1
     });
     console.log(`📧 Email transport: OUTLOOK/OFFICE365 (${smtpHost}:${smtpPort}, secure=${smtpSecure}${useStartTLS ? ', STARTTLS' : ''})`);
     console.log(`   Using email: ${EMAIL_USER}`);
@@ -161,16 +133,16 @@ if (EMAIL_TRANSPORT === 'GMAIL') {
             user: EMAIL_USER,
             pass: process.env.EMAIL_PASS,
         },
-        connectionTimeout: 60000, // 60 seconds connection timeout
-        socketTimeout: 60000, // 60 seconds socket timeout
-        greetingTimeout: 30000, // 30 seconds greeting timeout
+        connectionTimeout: 30000, // 30 seconds connection timeout (reduced for faster failure)
+        socketTimeout: 30000, // 30 seconds socket timeout
+        greetingTimeout: 15000, // 15 seconds greeting timeout
         tls: {
             minVersion: 'TLSv1.2',
             rejectUnauthorized: true
         },
-        pool: true, // Use connection pooling for better reliability
-        maxConnections: 5,
-        maxMessages: 100
+        pool: false, // Disable pooling to avoid connection reuse issues on cloud platforms
+        maxConnections: 1,
+        maxMessages: 1
     });
     console.log(`📧 Email transport: SMTP (${smtpHost}:${smtpPort}, secure=${smtpSecure}${useStartTLS ? ', STARTTLS' : ''})`);
     console.log(`   Using email: ${EMAIL_USER}`);
@@ -178,6 +150,11 @@ if (EMAIL_TRANSPORT === 'GMAIL') {
 
 // Initialize email service
 const emailService = new EmailService(transporter);
+console.log(`📧 Email service initialized`);
+console.log(`   Transporter: ${transporter ? 'configured' : 'NOT configured'}`);
+console.log(`   EMAIL_USER: ${EMAIL_USER || 'NOT SET'}`);
+console.log(`   DISTRIBUTION_EMAIL: ${process.env.DISTRIBUTION_EMAIL || 'NOT SET'}`);
+console.log(`   EMAIL_TRANSPORT: ${EMAIL_TRANSPORT}`);
 
 // Startup email service check (non-blocking)
 // Note: Verification failure does NOT prevent email sending - it's just a connectivity check
@@ -219,32 +196,7 @@ const SKIP_EMAIL_VERIFICATION = process.env.SKIP_EMAIL_VERIFICATION === 'true';
         console.warn('⚠️  Note: Email sending will still be attempted when needed.');
         console.warn('   Verification failure may indicate network/firewall issues, but emails may still work.');
         console.warn('   To skip verification entirely, set SKIP_EMAIL_VERIFICATION=true in your environment.');
-        if (EMAIL_TRANSPORT === 'GMAIL') {
-            console.error('\n⚠️  Gmail Configuration Issue ⚠️');
-            console.error('To fix Gmail authentication errors:');
-            console.error('');
-            console.error('1. Verify your environment variables:');
-            console.error(`   - EMAIL_USER: ${EMAIL_USER || 'NOT SET'}`);
-            console.error(`   - EMAIL_PASS: ${process.env.EMAIL_PASS ? 'SET (hidden)' : 'NOT SET'}`);
-            console.error(`   - EMAIL_TRANSPORT: ${EMAIL_TRANSPORT_ENV || 'AUTO-DETECTED'}`);
-            console.error('');
-            console.error('2. Use Gmail App Password (NOT your regular Gmail password):');
-            console.error('   - Go to: https://myaccount.google.com/apppasswords');
-            console.error('   - Sign in with your Gmail account');
-            console.error('   - Select "Mail" and "Other (Custom name)"');
-            console.error('   - Enter "Sahayaon" as the app name');
-            console.error('   - Copy the 16-character password (format: xxxx xxxx xxxx xxxx)');
-            console.error('   - Set EMAIL_PASS in your .env file (with or without spaces)');
-            console.error('');
-            console.error('3. Enable 2-Step Verification (required for App Passwords):');
-            console.error('   - Go to: https://myaccount.google.com/security');
-            console.error('   - Enable 2-Step Verification if not already enabled');
-            console.error('');
-            console.error('4. Common Gmail errors:');
-            console.error('   - "Invalid login": Wrong password or not using App Password');
-            console.error('   - "Less secure app access": Use App Password instead');
-            console.error('   - "Connection timeout": Check firewall/network settings');
-        } else if (EMAIL_TRANSPORT === 'OUTLOOK' || EMAIL_TRANSPORT === 'OFFICE365') {
+        if (EMAIL_TRANSPORT === 'OUTLOOK' || EMAIL_TRANSPORT === 'OFFICE365') {
             const smtpHost = process.env.SMTP_HOST || 'smtp.office365.com';
             console.error('\n⚠️  Office365 SMTP Configuration Issue ⚠️');
             console.error('To fix Office365 SMTP AUTH errors:');

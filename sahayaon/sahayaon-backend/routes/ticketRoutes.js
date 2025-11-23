@@ -546,9 +546,12 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                         ticketUrl: ticketUrl
                     };
                     
-                    await emailService.sendTicketNotificationEmail(ticketData);
+                    console.log(`[TicketRoutes] Calling emailService.sendTicketNotificationEmail for ticket ${newDisplayId}`);
+                    const emailResult = await emailService.sendTicketNotificationEmail(ticketData);
+                    console.log(`[TicketRoutes] Email send result: ${emailResult ? 'SUCCESS' : 'FAILED'}`);
                 } catch (error) {
-                    console.error('Error sending ticket notification email:', error);
+                    console.error('[TicketRoutes] Error sending ticket notification email:', error);
+                    console.error('[TicketRoutes] Error stack:', error.stack);
                 }
             });
         } catch (error) {

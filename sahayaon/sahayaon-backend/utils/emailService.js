@@ -11,6 +11,20 @@ class EmailService {
     }
 
     /**
+     * Send email with timeout handling
+     * @param {Object} mailOptions - Nodemailer mail options
+     * @param {number} timeoutMs - Timeout in milliseconds (default: 25000)
+     * @returns {Promise<Object>} Send result
+     */
+    async sendMailWithTimeout(mailOptions, timeoutMs = 25000) {
+        const sendPromise = this.transporter.sendMail(mailOptions);
+        const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error(`Email send timeout after ${timeoutMs}ms`)), timeoutMs)
+        );
+        return Promise.race([sendPromise, timeoutPromise]);
+    }
+
+    /**
      * Send welcome email to new users
      * @param {Object} userData - User data object
      * @param {string} userData.userName - User's full name
@@ -51,11 +65,14 @@ class EmailService {
                 html: html,
             };
 
-            await this.transporter.sendMail(mailOptions);
+            await this.sendMailWithTimeout(mailOptions, 25000);
             console.log(`[EmailService] Welcome email sent successfully to ${userData.userEmail}`);
             return true;
         } catch (error) {
             console.error(`[EmailService] Error sending welcome email to ${userData.userEmail}:`, error.message);
+            if (error.message.includes('timeout')) {
+                console.error(`[EmailService] Connection timeout - this may be due to network/firewall restrictions on your hosting platform`);
+            }
             console.error(`[EmailService] Error details:`, error);
             // Log more details for debugging
             if (error.code) {
@@ -100,11 +117,14 @@ class EmailService {
                 html: html,
             };
 
-            await this.transporter.sendMail(mailOptions);
+            await this.sendMailWithTimeout(mailOptions, 25000);
             console.log(`Password reset email sent successfully to ${userData.userEmail}`);
             return true;
         } catch (error) {
             console.error(`Error sending password reset email to ${userData.userEmail}:`, error.message);
+            if (error.message.includes('timeout')) {
+                console.error(`[EmailService] Connection timeout - this may be due to network/firewall restrictions on your hosting platform`);
+            }
             return false;
         }
     }
@@ -118,10 +138,20 @@ class EmailService {
      */
     async sendTicketNotificationEmail(ticketData) {
         try {
+            console.log(`[EmailService] Attempting to send ticket notification email...`);
+            
             if (!process.env.DISTRIBUTION_EMAIL) {
-                console.error(`[EmailService] DISTRIBUTION_EMAIL not configured`);
+                console.error(`[EmailService] DISTRIBUTION_EMAIL not configured - cannot send email`);
                 return false;
             }
+
+            if (!this.transporter) {
+                console.error(`[EmailService] Email transporter not initialized - cannot send email`);
+                return false;
+            }
+
+            console.log(`[EmailService] DISTRIBUTION_EMAIL: ${process.env.DISTRIBUTION_EMAIL}`);
+            console.log(`[EmailService] User email: ${ticketData.userEmail || 'not provided'}`);
 
             const { subject, text, html } = getTicketNotificationTemplate(ticketData);
             
@@ -132,6 +162,11 @@ class EmailService {
             }
             if (process.env.DISTRIBUTION_EMAIL) {
                 toList.push(process.env.DISTRIBUTION_EMAIL);
+            }
+            
+            if (toList.length === 0) {
+                console.error(`[EmailService] No recipients found - cannot send email`);
+                return false;
             }
             
             const mailOptions = {
@@ -147,11 +182,22 @@ class EmailService {
                 mailOptions.cc = ticketData.ccEmail;
             }
 
-            await this.transporter.sendMail(mailOptions);
-            console.log(`Ticket notification email sent successfully to ${mailOptions.to}`);
+            console.log(`[EmailService] Sending email to: ${mailOptions.to}, subject: ${subject}`);
+            await this.sendMailWithTimeout(mailOptions, 25000);
+            console.log(`[EmailService] ✅ Ticket notification email sent successfully to ${mailOptions.to}`);
             return true;
         } catch (error) {
-            console.error(`Error sending ticket notification email:`, error.message);
+            console.error(`[EmailService] ❌ Error sending ticket notification email:`, error.message);
+            console.error(`[EmailService] Error stack:`, error.stack);
+            if (error.message.includes('timeout')) {
+                console.error(`[EmailService] Connection timeout - this may be due to network/firewall restrictions on your hosting platform`);
+            }
+            if (error.code) {
+                console.error(`[EmailService] Error code: ${error.code}`);
+            }
+            if (error.response) {
+                console.error(`[EmailService] SMTP response: ${error.response}`);
+            }
             return false;
         }
     }
@@ -165,8 +211,15 @@ class EmailService {
      */
     async sendTicketStatusUpdateEmail(ticketData) {
         try {
+            console.log(`[EmailService] Attempting to send ticket status update email...`);
+            
             if (!process.env.DISTRIBUTION_EMAIL) {
-                console.error(`[EmailService] DISTRIBUTION_EMAIL not configured`);
+                console.error(`[EmailService] DISTRIBUTION_EMAIL not configured - cannot send email`);
+                return false;
+            }
+
+            if (!this.transporter) {
+                console.error(`[EmailService] Email transporter not initialized - cannot send email`);
                 return false;
             }
 
@@ -175,9 +228,14 @@ class EmailService {
             // To: User + Engineer (from toEmail field which should contain both)
             const toList = ticketData.toEmail ? ticketData.toEmail.split(',').map(e => e.trim()) : [];
             
+            if (toList.length === 0) {
+                console.warn(`[EmailService] No recipients in toEmail, using DISTRIBUTION_EMAIL`);
+                toList.push(process.env.DISTRIBUTION_EMAIL);
+            }
+            
             const mailOptions = {
                 from: process.env.DISTRIBUTION_EMAIL,
-                to: toList.length > 0 ? toList.join(',') : process.env.DISTRIBUTION_EMAIL,
+                to: toList.join(','),
                 subject: subject,
                 text: text,
                 html: html,
@@ -192,11 +250,22 @@ class EmailService {
                 mailOptions.cc = ccList.join(',');
             }
 
-            await this.transporter.sendMail(mailOptions);
-            console.log(`Ticket status update email sent successfully to ${mailOptions.to}`);
+            console.log(`[EmailService] Sending email to: ${mailOptions.to}, subject: ${subject}`);
+            await this.sendMailWithTimeout(mailOptions, 25000);
+            console.log(`[EmailService] ✅ Ticket status update email sent successfully to ${mailOptions.to}`);
             return true;
         } catch (error) {
-            console.error(`Error sending ticket status update email:`, error.message);
+            console.error(`[EmailService] ❌ Error sending ticket status update email:`, error.message);
+            console.error(`[EmailService] Error stack:`, error.stack);
+            if (error.message.includes('timeout')) {
+                console.error(`[EmailService] Connection timeout - this may be due to network/firewall restrictions on your hosting platform`);
+            }
+            if (error.code) {
+                console.error(`[EmailService] Error code: ${error.code}`);
+            }
+            if (error.response) {
+                console.error(`[EmailService] SMTP response: ${error.response}`);
+            }
             return false;
         }
     }
@@ -211,8 +280,15 @@ class EmailService {
      */
     async sendTicketAssignmentEmail(ticketData, isUserNotification = false) {
         try {
+            console.log(`[EmailService] Attempting to send ticket assignment email (${isUserNotification ? 'user' : 'team'} notification)...`);
+            
             if (!process.env.DISTRIBUTION_EMAIL) {
-                console.error(`[EmailService] DISTRIBUTION_EMAIL not configured`);
+                console.error(`[EmailService] DISTRIBUTION_EMAIL not configured - cannot send email`);
+                return false;
+            }
+
+            if (!this.transporter) {
+                console.error(`[EmailService] Email transporter not initialized - cannot send email`);
                 return false;
             }
 
@@ -224,6 +300,11 @@ class EmailService {
             const toList = ticketData.toEmail ? ticketData.toEmail.split(',').map(e => e.trim()) : [];
             if (!toList.includes(process.env.DISTRIBUTION_EMAIL)) {
                 toList.push(process.env.DISTRIBUTION_EMAIL);
+            }
+            
+            if (toList.length === 0) {
+                console.error(`[EmailService] No recipients found - cannot send email`);
+                return false;
             }
             
             const mailOptions = {
@@ -239,12 +320,23 @@ class EmailService {
                 mailOptions.cc = ticketData.ccEmail;
             }
 
-            await this.transporter.sendMail(mailOptions);
+            console.log(`[EmailService] Sending email to: ${mailOptions.to}, subject: ${subject}`);
+            await this.sendMailWithTimeout(mailOptions, 25000);
             const recipientType = isUserNotification ? 'user' : 'team';
-            console.log(`Ticket assignment email sent successfully to ${recipientType}: ${mailOptions.to}`);
+            console.log(`[EmailService] ✅ Ticket assignment email sent successfully to ${recipientType}: ${mailOptions.to}`);
             return true;
         } catch (error) {
-            console.error(`Error sending ticket assignment email:`, error.message);
+            console.error(`[EmailService] ❌ Error sending ticket assignment email:`, error.message);
+            console.error(`[EmailService] Error stack:`, error.stack);
+            if (error.message.includes('timeout')) {
+                console.error(`[EmailService] Connection timeout - this may be due to network/firewall restrictions on your hosting platform`);
+            }
+            if (error.code) {
+                console.error(`[EmailService] Error code: ${error.code}`);
+            }
+            if (error.response) {
+                console.error(`[EmailService] SMTP response: ${error.response}`);
+            }
             return false;
         }
     }
@@ -284,11 +376,14 @@ class EmailService {
                 mailOptions.cc = ticketData.ccEmail;
             }
 
-            await this.transporter.sendMail(mailOptions);
+            await this.sendMailWithTimeout(mailOptions, 25000);
             console.log(`User ticket assignment email sent successfully to: ${mailOptions.to}`);
             return true;
         } catch (error) {
             console.error(`Error sending user ticket assignment email:`, error.message);
+            if (error.message.includes('timeout')) {
+                console.error(`[EmailService] Connection timeout - this may be due to network/firewall restrictions on your hosting platform`);
+            }
             return false;
         }
     }
@@ -331,11 +426,14 @@ class EmailService {
                 mailOptions.cc = ticketData.ccEmail;
             }
 
-            await this.transporter.sendMail(mailOptions);
+            await this.sendMailWithTimeout(mailOptions, 25000);
             console.log(`Ticket closed email sent successfully to ${mailOptions.to}`);
             return true;
         } catch (error) {
             console.error(`Error sending ticket closed email:`, error.message);
+            if (error.message.includes('timeout')) {
+                console.error(`[EmailService] Connection timeout - this may be due to network/firewall restrictions on your hosting platform`);
+            }
             return false;
         }
     }
@@ -378,11 +476,14 @@ class EmailService {
                 mailOptions.cc = ticketData.ccEmail;
             }
 
-            await this.transporter.sendMail(mailOptions);
+            await this.sendMailWithTimeout(mailOptions, 25000);
             console.log(`Ticket cancellation email sent successfully to ${mailOptions.to}`);
             return true;
         } catch (error) {
             console.error(`Error sending ticket cancellation email:`, error.message);
+            if (error.message.includes('timeout')) {
+                console.error(`[EmailService] Connection timeout - this may be due to network/firewall restrictions on your hosting platform`);
+            }
             return false;
         }
     }
@@ -419,11 +520,14 @@ class EmailService {
                 mailOptions.cc = ticketData.ccEmail;
             }
 
-            await this.transporter.sendMail(mailOptions);
+            await this.sendMailWithTimeout(mailOptions, 25000);
             console.log(`Ticket comment email sent successfully to ${mailOptions.to}`);
             return true;
         } catch (error) {
             console.error(`Error sending ticket comment email:`, error.message);
+            if (error.message.includes('timeout')) {
+                console.error(`[EmailService] Connection timeout - this may be due to network/firewall restrictions on your hosting platform`);
+            }
             return false;
         }
     }
@@ -460,11 +564,14 @@ class EmailService {
                 mailOptions.cc = attachmentData.ccEmail;
             }
 
-            await this.transporter.sendMail(mailOptions);
+            await this.sendMailWithTimeout(mailOptions, 25000);
             console.log(`Attachment upload email sent successfully to ${mailOptions.to}`);
             return true;
         } catch (error) {
             console.error(`Error sending attachment upload email:`, error.message);
+            if (error.message.includes('timeout')) {
+                console.error(`[EmailService] Connection timeout - this may be due to network/firewall restrictions on your hosting platform`);
+            }
             return false;
         }
     }
@@ -493,11 +600,14 @@ class EmailService {
                 mailOptions.cc = emailData.cc;
             }
 
-            await this.transporter.sendMail(mailOptions);
+            await this.sendMailWithTimeout(mailOptions, 25000);
             console.log(`Custom email sent successfully to ${emailData.to}`);
             return true;
         } catch (error) {
             console.error(`Error sending custom email to ${emailData.to}:`, error.message);
+            if (error.message.includes('timeout')) {
+                console.error(`[EmailService] Connection timeout - this may be due to network/firewall restrictions on your hosting platform`);
+            }
             return false;
         }
     }
@@ -551,11 +661,14 @@ class EmailService {
                 html: html,
             };
 
-            await this.transporter.sendMail(mailOptions);
+            await this.sendMailWithTimeout(mailOptions, 25000);
             console.log(`Password sharing email sent successfully to ${userData.userEmail}`);
             return true;
         } catch (error) {
             console.error(`Error sending password sharing email to ${userData.userEmail}:`, error.message);
+            if (error.message.includes('timeout')) {
+                console.error(`[EmailService] Connection timeout - this may be due to network/firewall restrictions on your hosting platform`);
+            }
             return false;
         }
     }
