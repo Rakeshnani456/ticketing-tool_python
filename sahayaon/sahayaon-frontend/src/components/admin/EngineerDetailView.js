@@ -258,17 +258,30 @@ const EngineerDetailView = ({ user }) => {
   const handleResetPasswordConfirm = async () => {
     setResetPasswordLoading(true);
     try {
-      // Generate a new password with Sahayaon# prefix
+      // Generate a new password: 8 characters (4 from "Sahayaon" letters + 4 random characters)
       const generatePassword = () => {
-        const prefix = 'Sahayaon#';
-        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-        let randomText = '';
-        // Generate random text (subtract prefix length from total length, aiming for ~12 total chars)
-        const randomLength = 12 - prefix.length;
-        for (let i = 0; i < randomLength; i++) {
-          randomText += chars.charAt(Math.floor(Math.random() * chars.length));
+        const sahayaonLetters = ['S', 'a', 'h', 'y', 'o', 'n'];
+        const randomChars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+        
+        // Pick 4 random letters from "Sahayaon"
+        const selectedLetters = [];
+        for (let i = 0; i < 4; i++) {
+          const randomIndex = Math.floor(Math.random() * sahayaonLetters.length);
+          selectedLetters.push(sahayaonLetters[randomIndex]);
         }
-        return prefix + randomText;
+        
+        // Add 4 random characters (numbers or alphabets)
+        for (let i = 0; i < 4; i++) {
+          selectedLetters.push(randomChars.charAt(Math.floor(Math.random() * randomChars.length)));
+        }
+        
+        // Shuffle the array to mix letters and random chars
+        for (let i = selectedLetters.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [selectedLetters[i], selectedLetters[j]] = [selectedLetters[j], selectedLetters[i]];
+        }
+        
+        return selectedLetters.join('');
       };
 
       const newPasswordValue = generatePassword();
@@ -293,7 +306,8 @@ const EngineerDetailView = ({ user }) => {
         },
         body: JSON.stringify({ 
           password: newPassword, 
-          mustChangePassword: true 
+          mustChangePassword: true,
+          sendEmail: emailSent 
         })
       });
 
@@ -302,36 +316,8 @@ const EngineerDetailView = ({ user }) => {
         throw new Error(errorData.error || 'Failed to reset password');
       }
 
-      // If email checkbox is checked, send the password email
-      if (emailSent) {
-        try {
-          const emailRes = await fetch(`${API_BASE_URL}/api/users/${engineerId}/send-password-email`, {
-            method: 'POST',
-            headers: { 
-              'Authorization': `Bearer ${idToken}`,
-              'Content-Type': 'application/json' 
-            },
-            body: JSON.stringify({ 
-              password: newPassword,
-              userEmail: engineerData.email,
-              userName: `${engineerData.firstName || ''} ${engineerData.lastName || ''}`.trim() || engineerData.name || 'Engineer',
-              companyName: engineerData.clientname || engineerData.companyName || 'Company',
-              loginUrl: process.env.REACT_APP_FRONTEND_URL || 'http://localhost:3000'
-            }),
-          });
-          
-          if (emailRes.ok) {
-            // Password reset and email sent successfully - no notification needed
-          } else {
-            // Password reset successful, but email failed to send - no notification needed
-          }
-        } catch (emailErr) {
-          console.error('Email sending failed:', emailErr);
-          // Password reset successful, but email failed to send - no notification needed
-        }
-      } else {
-        // Password reset successfully - no notification needed
-      }
+      // Email is now sent automatically by the backend when sendEmail is true
+      // No need to call send-password-email separately
       
       // Close the modal after successful update
       handleCloseResetPasswordModal();

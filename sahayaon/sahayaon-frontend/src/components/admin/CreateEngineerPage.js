@@ -115,15 +115,29 @@ const CreateEngineerPage = ({ user }) => {
 
   // Generate a secure password
   const generatePassword = () => {
-    const prefix = 'Sahayaon#';
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    let randomText = '';
-    // Generate random text (subtract prefix length from total length, aiming for ~12 total chars)
-    const randomLength = 12 - prefix.length;
-    for (let i = 0; i < randomLength; i++) {
-      randomText += chars.charAt(Math.floor(Math.random() * chars.length));
+    // 8 characters: 4 from "Sahayaon" letters + 4 random characters (numbers or alphabets)
+    const sahayaonLetters = ['S', 'a', 'h', 'y', 'o', 'n'];
+    const randomChars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    
+    // Pick 4 random letters from "Sahayaon"
+    const selectedLetters = [];
+    for (let i = 0; i < 4; i++) {
+      const randomIndex = Math.floor(Math.random() * sahayaonLetters.length);
+      selectedLetters.push(sahayaonLetters[randomIndex]);
     }
-    const password = prefix + randomText;
+    
+    // Add 4 random characters (numbers or alphabets)
+    for (let i = 0; i < 4; i++) {
+      selectedLetters.push(randomChars.charAt(Math.floor(Math.random() * randomChars.length)));
+    }
+    
+    // Shuffle the array to mix letters and random chars
+    for (let i = selectedLetters.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [selectedLetters[i], selectedLetters[j]] = [selectedLetters[j], selectedLetters[i]];
+    }
+    
+    const password = selectedLetters.join('');
     setGeneratedPassword(password);
     setValue('password', password);
     setPasswordCopied(false);

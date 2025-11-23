@@ -10,6 +10,7 @@ const ClientGridManagement = ({ user }) => {
   // State management
   const [clients, setClients] = useState([]);
   const [users, setUsers] = useState([]);
+  const [assets, setAssets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -41,6 +42,26 @@ const ClientGridManagement = ({ user }) => {
     });
     return counts;
   }, [users]);
+
+  // Calculate asset counts per client
+  const assetCounts = useMemo(() => {
+    const counts = {};
+    assets.forEach(asset => {
+      const clientName = asset.client_name;
+      if (clientName) {
+        if (!counts[clientName]) {
+          counts[clientName] = { total: 0, hardware: 0, software: 0 };
+        }
+        counts[clientName].total += 1;
+        if (asset.asset_type === 'hardware') {
+          counts[clientName].hardware += 1;
+        } else if (asset.asset_type === 'software') {
+          counts[clientName].software += 1;
+        }
+      }
+    });
+    return counts;
+  }, [assets]);
 
 
   // Filter and sort clients
@@ -158,9 +179,24 @@ const ClientGridManagement = ({ user }) => {
       }
     );
 
+    const unsubscribeAssets = onSnapshot(
+      collection(db, 'assets'),
+      (snapshot) => {
+        const assetsData = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        setAssets(assetsData);
+      },
+      (error) => {
+        console.error('Error fetching assets:', error);
+      }
+    );
+
     return () => {
       unsubscribeClients();
       unsubscribeUsers();
+      unsubscribeAssets();
     };
   }, [user, db]);
 
@@ -1130,6 +1166,7 @@ const ClientGridManagement = ({ user }) => {
                     </span>
                   </div>
                 </th>
+                <th style={{ textAlign: 'center' }}>Assets</th>
                 <th style={{ textAlign: 'center' }}>Actions</th>
               </tr>
             </thead>
@@ -1137,6 +1174,7 @@ const ClientGridManagement = ({ user }) => {
               {paginatedClients.map((client) => {
                 const isSelected = selectedClients.includes(client.id);
                 const userCount = userCounts[client.companyName] || 0;
+                const assetInfo = assetCounts[client.companyName] || { total: 0, hardware: 0, software: 0 };
                 
                 return (
                   <tr
@@ -1229,6 +1267,42 @@ const ClientGridManagement = ({ user }) => {
                     </td>
                     <td style={{ textAlign: 'center' }}>
                       {getUserStatusChip(userCount)}
+                    </td>
+                    <td style={{ textAlign: 'center' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', alignItems: 'center' }}>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/assets?client=${encodeURIComponent(client.companyName)}`);
+                          }}
+                          style={{
+                            padding: '0.25rem 0.5rem',
+                            background: '#3b82f6',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '0.375rem',
+                            fontSize: '0.75rem',
+                            fontWeight: 500,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.25rem'
+                          }}
+                          title="View Assets"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                            <line x1="9" y1="3" x2="9" y2="21"/>
+                          </svg>
+                          {assetInfo.total}
+                        </button>
+                        {assetInfo.total > 0 && (
+                          <div style={{ fontSize: '0.65rem', color: '#6b7280', display: 'flex', gap: '0.5rem' }}>
+                            <span>H: {assetInfo.hardware}</span>
+                            <span>S: {assetInfo.software}</span>
+                          </div>
+                        )}
+                      </div>
                     </td>
                     <td style={{ textAlign: 'center' }}>
                       <div className="action-buttons">

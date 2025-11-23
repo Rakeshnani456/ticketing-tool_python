@@ -25,7 +25,7 @@ import {
     Pin,
     Key,
     Plus,
-
+    Package,
     ChevronUp,
     Home,
     FileText,
@@ -137,6 +137,9 @@ import NoteDetailComponent from './components/NoteDetailComponent';
 import SettingsComponent from './components/SettingsComponent';
 import PrivacyPolicyPage from './components/legal/PrivacyPolicyPage';
 import TermsOfServicePage from './components/legal/TermsOfServicePage';
+import AssetManagementComponent from './components/assets/AssetManagementComponent';
+import AssetDetailPage from './components/assets/AssetDetailPage';
+import RepairQueueWorkflow from './components/assets/RepairQueueWorkflow';
 
 
 
@@ -255,6 +258,8 @@ const AppContent = () => {
     const { showSuccess, showError, showWarning, showInfo } = useNotification();
     // State for the current authenticated user (Firebase user + custom role)
     const [currentUser, setCurrentUser] = useState(null);
+    // Ref to track if user just logged in via login component (to skip duplicate API call)
+    const justLoggedInRef = useRef(false);
     // Key to force refresh of ticket lists (e.g., after creating a new ticket)
     const [ticketListRefreshKey, setTicketListRefreshKey] = useState(0);
     // State for the global search keyword
@@ -531,8 +536,15 @@ const AppContent = () => {
     useEffect(() => {
         const unsubscribeAuth = onAuthStateChanged(authClient, async (firebaseUser) => {
             if (firebaseUser) {
+                // Skip duplicate API call if user just logged in via login component
+                if (justLoggedInRef.current && currentUser && currentUser.uid === firebaseUser.uid) {
+                    justLoggedInRef.current = false; // Reset flag
+                    setIsAuthLoading(false);
+                    return; // Skip the duplicate /login call
+                }
+                
                 try {
-                    const idToken = await firebaseUser.getIdToken(); // Get Firebase ID token
+                    const idToken = await firebaseUser.getIdToken(false); // Use cached token if available (faster)
                     // Verify ID token with backend to get user's custom role
                     const response = await fetch(`${API_BASE_URL}/login`, {
                         method: 'POST',
@@ -540,29 +552,26 @@ const AppContent = () => {
                             'Content-Type': 'application/json',
                             'Authorization': `Bearer ${idToken}`
                         },
-                        body: JSON.stringify({ email: firebaseUser.email }),
+                        // Removed email from body - already in token
                     });
                     const data = await response.json();
                     if (response.ok) {
                         // On successful verification, set currentUser state with Firebase user and role
                         let userProfile = { firebaseUser, role: data.user.role, email: firebaseUser.email, uid: firebaseUser.uid };
                         
-                        // For site_admin users, fetch complete profile from Firestore to get client_name
-                        if (data.user.role === 'site_admin') {
+                        // Include client_name if provided in response (optimized - backend now includes it for site_admin)
+                        if (data.user.client_name) {
+                            userProfile.client_name = data.user.client_name;
+                            userProfile.companyName = data.user.client_name;
+                        } else if (data.user.role === 'site_admin') {
+                            // Fallback: fetch from Firestore only if not in response
                             try {
                                 const userDocRef = doc(dbClient, 'users', firebaseUser.uid);
                                 const userDoc = await getDoc(userDocRef);
                                 if (userDoc.exists()) {
                                     const userData = userDoc.data();
-                                    console.log("Site admin user data:", userData);
-                                    userProfile = {
-                                        ...userProfile,
-                                        client_name: userData.client_name || userData.companyName,
-                                        companyName: userData.client_name || userData.companyName
-                                    };
-                                    console.log("Site admin profile after enhancement:", userProfile);
-                                } else {
-                                    console.error("Site admin user document not found in Firestore");
+                                    userProfile.client_name = userData.client_name || userData.companyName;
+                                    userProfile.companyName = userData.client_name || userData.companyName;
                                 }
                             } catch (error) {
                                 console.error('Error fetching site admin profile:', error);
@@ -688,6 +697,8 @@ const AppContent = () => {
      * @returns {void}
      */
     const handleLoginSuccess = (user) => {
+        // Mark that we just logged in to skip duplicate API call in onAuthStateChanged
+        justLoggedInRef.current = true;
         setCurrentUser(user);
         setIsAuthLoading(false);
         // Notifications are now handled by centralized data management
@@ -1351,7 +1362,8 @@ const AppContent = () => {
                                         </motion.div>
                                     )}
 
-                                    {/* Admins Management */}
+                                    {/* Admins Management - Hidden for now */}
+                                    {false && (
                                     <Link to="/admin-management" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/admin-management' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
                                         { !isSidebarExpanded ? (
                                             <LeftMenuTooltipBubble title="Admins">
@@ -1366,6 +1378,7 @@ const AppContent = () => {
                                         )}
                                         <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate" style={{ color: location.pathname === '/admin-management' ? '#ffffff' : '#d1d5db' }}>Admins</motion.span>
                                     </Link>
+                                    )}
 
                                     {/* Engineers Management */}
                                     <Link to="/engineer-management" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/engineer-management' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
@@ -1383,18 +1396,36 @@ const AppContent = () => {
                                         <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate" style={{ color: location.pathname === '/engineer-management' ? '#ffffff' : '#d1d5db' }}>Engineers</motion.span>
                                     </Link>
 
+                                    {/* Asset Management - temporarily hidden for site_admin */}
+                                    {currentUser.role !== 'site_admin' && (
+                                        <Link to="/assets" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/assets' || location.pathname.startsWith('/assets/') ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                            { !isSidebarExpanded ? (
+                                                <LeftMenuTooltipBubble title="Assets">
+                                                    <div className="flex items-center justify-center w-7 h-7">
+                                                        <Package size={23} className="flex-shrink-0" style={{ color: (location.pathname === '/assets' || location.pathname.startsWith('/assets/')) ? '#ffffff' : '#d1d5db' }} />
+                                                    </div>
+                                                </LeftMenuTooltipBubble>
+                                            ) : (
+                                                <div className="flex items-center justify-center w-5 h-5 mr-3">
+                                                    <Package size={19} className="flex-shrink-0" style={{ color: (location.pathname === '/assets' || location.pathname.startsWith('/assets/')) ? '#ffffff' : '#d1d5db' }} />
+                                                </div>
+                                            )}
+                                            <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate" style={{ color: (location.pathname === '/assets' || location.pathname.startsWith('/assets/')) ? '#ffffff' : '#d1d5db' }}>Assets</motion.span>
+                                        </Link>
+                                    )}
+
                                     {/* Personal Notes - hidden for site_admin */}
                                     {currentUser.role !== 'site_admin' && (
                                         <Link to="/personal-notes" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/personal-notes' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}> 
                                             { !isSidebarExpanded ? (
                                                 <LeftMenuTooltipBubble title="My Notes">
                                                     <div className="flex items-center justify-center w-7 h-7">
-                                                        <img src={writingIcon} alt="My Notes" className="w-6 h-6 flex-shrink-0" style={{ filter: location.pathname === '/personal-notes' ? 'brightness(0) invert(1)' : 'brightness(0) saturate(100%) invert(84%) sepia(8%) saturate(239%) hue-rotate(169deg) brightness(95%) contrast(88%)' }} />
+                                                        <img src={writingIcon} alt="My Notes" className="flex-shrink-0" style={{ width: '23px', height: '23px', filter: location.pathname === '/personal-notes' ? 'brightness(0) invert(1)' : 'brightness(0) saturate(100%) invert(84%) sepia(8%) saturate(239%) hue-rotate(169deg) brightness(95%) contrast(88%)' }} />
                                                     </div>
                                                 </LeftMenuTooltipBubble>
                                             ) : (
                                                 <div className="flex items-center justify-center w-5 h-5 mr-3">
-                                                    <img src={writingIcon} alt="My Notes" className="w-5 h-5 flex-shrink-0" style={{ filter: location.pathname === '/personal-notes' ? 'brightness(0) invert(1)' : 'brightness(0) saturate(100%) invert(84%) sepia(8%) saturate(239%) hue-rotate(169deg) brightness(95%) contrast(88%)' }} />
+                                                    <img src={writingIcon} alt="My Notes" className="flex-shrink-0" style={{ width: '19px', height: '19px', filter: location.pathname === '/personal-notes' ? 'brightness(0) invert(1)' : 'brightness(0) saturate(100%) invert(84%) sepia(8%) saturate(239%) hue-rotate(169deg) brightness(95%) contrast(88%)' }} />
                                                 </div>
                                             )}
                                             <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate" style={{ color: location.pathname === '/personal-notes' ? '#ffffff' : '#d1d5db' }}>My Notes</motion.span>
@@ -1471,12 +1502,12 @@ const AppContent = () => {
                                             { !isSidebarExpanded ? (
                                                 <LeftMenuTooltipBubble title="My Notes">
                                                     <div className="flex items-center justify-center w-7 h-7">
-                                                        <img src={writingIcon} alt="My Notes" className="w-6 h-6 flex-shrink-0" style={{ filter: location.pathname === '/personal-notes' ? 'brightness(0) invert(1)' : 'brightness(0) saturate(100%) invert(84%) sepia(8%) saturate(239%) hue-rotate(169deg) brightness(95%) contrast(88%)' }} />
+                                                        <img src={writingIcon} alt="My Notes" className="flex-shrink-0" style={{ width: '23px', height: '23px', filter: location.pathname === '/personal-notes' ? 'brightness(0) invert(1)' : 'brightness(0) saturate(100%) invert(84%) sepia(8%) saturate(239%) hue-rotate(169deg) brightness(95%) contrast(88%)' }} />
                                                     </div>
                                                 </LeftMenuTooltipBubble>
                                             ) : (
                                                 <div className="flex items-center justify-center w-5 h-5 mr-3">
-                                                    <img src={writingIcon} alt="My Notes" className="w-5 h-5 flex-shrink-0" style={{ filter: location.pathname === '/personal-notes' ? 'brightness(0) invert(1)' : 'brightness(0) saturate(100%) invert(84%) sepia(8%) saturate(239%) hue-rotate(169deg) brightness(95%) contrast(88%)' }} />
+                                                    <img src={writingIcon} alt="My Notes" className="flex-shrink-0" style={{ width: '19px', height: '19px', filter: location.pathname === '/personal-notes' ? 'brightness(0) invert(1)' : 'brightness(0) saturate(100%) invert(84%) sepia(8%) saturate(239%) hue-rotate(169deg) brightness(95%) contrast(88%)' }} />
                                                 </div>
                                             )}
                                             <span className={`whitespace-nowrap overflow-hidden ${isSidebarExpanded ? 'opacity-100 w-auto' : 'opacity-0 w-0'}`} style={{ color: location.pathname === '/personal-notes' ? '#ffffff' : '#d1d5db' }}>My Notes</span>
@@ -1595,6 +1626,24 @@ const AppContent = () => {
                                         )}
                                         <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate" style={{ color: (location.pathname === '/user-management' || location.pathname.startsWith('/user-management/')) ? '#ffffff' : '#d1d5db' }}>Users</motion.span>
                                     </Link>
+
+                                    {/* Asset Management for Site Admin - temporarily hidden */}
+                                    {false && (
+                                        <Link to="/assets" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/assets' || location.pathname.startsWith('/assets/') ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                            { !isSidebarExpanded ? (
+                                                <LeftMenuTooltipBubble title="Assets">
+                                                    <div className="flex items-center justify-center w-7 h-7">
+                                                        <Package size={23} className="flex-shrink-0" style={{ color: (location.pathname === '/assets' || location.pathname.startsWith('/assets/')) ? '#ffffff' : '#d1d5db' }} />
+                                                    </div>
+                                                </LeftMenuTooltipBubble>
+                                            ) : (
+                                                <div className="flex items-center justify-center w-5 h-5 mr-3">
+                                                    <Package size={19} className="flex-shrink-0" style={{ color: (location.pathname === '/assets' || location.pathname.startsWith('/assets/')) ? '#ffffff' : '#d1d5db' }} />
+                                                </div>
+                                            )}
+                                            <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate" style={{ color: (location.pathname === '/assets' || location.pathname.startsWith('/assets/')) ? '#ffffff' : '#d1d5db' }}>Assets</motion.span>
+                                        </Link>
+                                    )}
                                     
                                     {/* Personal Notes - hidden for site_admin */}
                                     {currentUser.role !== 'site_admin' && (
@@ -1602,12 +1651,12 @@ const AppContent = () => {
                                             { !isSidebarExpanded ? (
                                                 <LeftMenuTooltipBubble title="My Notes">
                                                     <div className="flex items-center justify-center w-7 h-7">
-                                                        <img src={writingIcon} alt="My Notes" className="w-6 h-6 flex-shrink-0" style={{ filter: location.pathname === '/personal-notes' ? 'brightness(0) invert(1)' : 'brightness(0) saturate(100%) invert(84%) sepia(8%) saturate(239%) hue-rotate(169deg) brightness(95%) contrast(88%)' }} />
+                                                        <img src={writingIcon} alt="My Notes" className="flex-shrink-0" style={{ width: '23px', height: '23px', filter: location.pathname === '/personal-notes' ? 'brightness(0) invert(1)' : 'brightness(0) saturate(100%) invert(84%) sepia(8%) saturate(239%) hue-rotate(169deg) brightness(95%) contrast(88%)' }} />
                                                     </div>
                                                 </LeftMenuTooltipBubble>
                                             ) : (
                                                 <div className="flex items-center justify-center w-5 h-5 mr-3">
-                                                    <img src={writingIcon} alt="My Notes" className="w-5 h-5 flex-shrink-0" style={{ filter: location.pathname === '/personal-notes' ? 'brightness(0) invert(1)' : 'brightness(0) saturate(100%) invert(84%) sepia(8%) saturate(239%) hue-rotate(169deg) brightness(95%) contrast(88%)' }} />
+                                                    <img src={writingIcon} alt="My Notes" className="flex-shrink-0" style={{ width: '19px', height: '19px', filter: location.pathname === '/personal-notes' ? 'brightness(0) invert(1)' : 'brightness(0) saturate(100%) invert(84%) sepia(8%) saturate(239%) hue-rotate(169deg) brightness(95%) contrast(88%)' }} />
                                                 </div>
                                             )}
                                             <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate" style={{ color: location.pathname === '/personal-notes' ? '#ffffff' : '#d1d5db' }}>My Notes</motion.span>
@@ -1694,7 +1743,8 @@ const AppContent = () => {
                                                 </>
                                             )}
 
-                                            {/* Admins Management */}
+                                            {/* Admins Management - Hidden for now */}
+                                            {false && (
                                             <Link to="/admin-management" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/admin-management' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
                                                 { !isSidebarExpanded ? (
                                                     <LeftMenuTooltipBubble title="Admins">
@@ -1709,6 +1759,7 @@ const AppContent = () => {
                                                 )}
                                                 <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate" style={{ color: location.pathname === '/admin-management' ? '#ffffff' : '#d1d5db' }}>Admins</motion.span>
                                             </Link>
+                                            )}
 
                                             {/* Engineers Management */}
                                             <Link to="/engineer-management" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/engineer-management' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
@@ -1775,6 +1826,24 @@ const AppContent = () => {
                                                 )}
                                                 <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate" style={{ color: (location.pathname === '/user-management' || location.pathname.startsWith('/user-management/')) ? '#ffffff' : '#d1d5db' }}>Users</motion.span>
                                             </Link>
+
+                                            {/* Asset Management for admin and site_admin roles - temporarily hidden for site_admin */}
+                                            {currentUser.role !== 'site_admin' && (
+                                                <Link to="/assets" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/assets' || location.pathname.startsWith('/assets/') ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                                    { !isSidebarExpanded ? (
+                                                        <LeftMenuTooltipBubble title="Assets">
+                                                            <div className="flex items-center justify-center w-7 h-7">
+                                                                <Package size={23} className="flex-shrink-0" style={{ color: (location.pathname === '/assets' || location.pathname.startsWith('/assets/')) ? '#ffffff' : '#d1d5db' }} />
+                                                            </div>
+                                                        </LeftMenuTooltipBubble>
+                                                    ) : (
+                                                        <div className="flex items-center justify-center w-5 h-5 mr-3">
+                                                            <Package size={19} className="flex-shrink-0" style={{ color: (location.pathname === '/assets' || location.pathname.startsWith('/assets/')) ? '#ffffff' : '#d1d5db' }} />
+                                                        </div>
+                                                    )}
+                                                    <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate" style={{ color: (location.pathname === '/assets' || location.pathname.startsWith('/assets/')) ? '#ffffff' : '#d1d5db' }}>Assets</motion.span>
+                                                </Link>
+                                            )}
                                         </>
                                     )}
                                     
@@ -1900,6 +1969,24 @@ const AppContent = () => {
                                         )}
                                         <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate" style={{ color: location.pathname === '/create-ticket' ? '#ffffff' : '#d1d5db' }}>Create Ticket</motion.span>
                                     </Link>
+
+                                    {/* Asset Management - temporarily hidden for user role */}
+                                    {currentUser.role !== 'user' && (
+                                        <Link to="/assets" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/assets' || location.pathname.startsWith('/assets/') ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                            { !isSidebarExpanded ? (
+                                                <LeftMenuTooltipBubble title="My Assets">
+                                                    <div className="flex items-center justify-center w-7 h-7">
+                                                        <Package size={23} className="flex-shrink-0" style={{ color: (location.pathname === '/assets' || location.pathname.startsWith('/assets/')) ? '#ffffff' : '#d1d5db' }} />
+                                                    </div>
+                                                </LeftMenuTooltipBubble>
+                                            ) : (
+                                                <div className="flex items-center justify-center w-5 h-5 mr-3">
+                                                    <Package size={19} className="flex-shrink-0" style={{ color: (location.pathname === '/assets' || location.pathname.startsWith('/assets/')) ? '#ffffff' : '#d1d5db' }} />
+                                                </div>
+                                            )}
+                                            <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate" style={{ color: (location.pathname === '/assets' || location.pathname.startsWith('/assets/')) ? '#ffffff' : '#d1d5db' }}>My Assets</motion.span>
+                                        </Link>
+                                    )}
                                     
                                     {/* Personal Notes - hidden for 'user' and 'site_admin' roles */}
                                     {currentUser.role !== 'user' && currentUser.role !== 'site_admin' && (
@@ -1907,12 +1994,12 @@ const AppContent = () => {
                                             { !isSidebarExpanded ? (
                                                 <LeftMenuTooltipBubble title="My Notes">
                                                     <div className="flex items-center justify-center w-7 h-7">
-                                                        <img src={writingIcon} alt="My Notes" className="w-6 h-6 flex-shrink-0" style={{ filter: location.pathname === '/personal-notes' ? 'brightness(0) invert(1)' : 'brightness(0) saturate(100%) invert(84%) sepia(8%) saturate(239%) hue-rotate(169deg) brightness(95%) contrast(88%)' }} />
+                                                        <img src={writingIcon} alt="My Notes" className="flex-shrink-0" style={{ width: '23px', height: '23px', filter: location.pathname === '/personal-notes' ? 'brightness(0) invert(1)' : 'brightness(0) saturate(100%) invert(84%) sepia(8%) saturate(239%) hue-rotate(169deg) brightness(95%) contrast(88%)' }} />
                                                     </div>
                                                 </LeftMenuTooltipBubble>
                                             ) : (
                                                 <div className="flex items-center justify-center w-5 h-5 mr-3">
-                                                    <img src={writingIcon} alt="My Notes" className="w-5 h-5 flex-shrink-0" style={{ filter: location.pathname === '/personal-notes' ? 'brightness(0) invert(1)' : 'brightness(0) saturate(100%) invert(84%) sepia(8%) saturate(239%) hue-rotate(169deg) brightness(95%) contrast(88%)' }} />
+                                                    <img src={writingIcon} alt="My Notes" className="flex-shrink-0" style={{ width: '19px', height: '19px', filter: location.pathname === '/personal-notes' ? 'brightness(0) invert(1)' : 'brightness(0) saturate(100%) invert(84%) sepia(8%) saturate(239%) hue-rotate(169deg) brightness(95%) contrast(88%)' }} />
                                                 </div>
                                             )}
                                             <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate" style={{ color: location.pathname === '/personal-notes' ? '#ffffff' : '#d1d5db' }}>My Notes</motion.span>
@@ -2132,6 +2219,9 @@ const AppContent = () => {
                                 <Route path="/clients/create-client" element={currentUser.role === 'super_admin' ? <CreateClientPage user={currentUser} /> : <AccessDeniedComponent />} />
                                 <Route path="/clients/edit-client/:clientId" element={currentUser.role === 'super_admin' ? <EditClientPage user={currentUser} /> : <AccessDeniedComponent />} />
                                 <Route path="/clients/client-detail/:clientId" element={currentUser.role === 'super_admin' ? <ClientDetailView user={currentUser} /> : <AccessDeniedComponent />} />
+                                <Route path="/assets" element={<AssetManagementComponent currentUser={currentUser} />} />
+                                <Route path="/assets/:assetId" element={<AssetDetailPage currentUser={currentUser} showFlashMessage={showFlashMessage} />} />
+                                <Route path="/assets/:assetId/repair-queue/:queueId" element={<RepairQueueWorkflow currentUser={currentUser} showFlashMessage={showFlashMessage} />} />
 
                                 {/* Catch-all for logged-in users if no other route matches */}
                                 {/* This ensures that if they go to an invalid path, they are redirected to their default view */}

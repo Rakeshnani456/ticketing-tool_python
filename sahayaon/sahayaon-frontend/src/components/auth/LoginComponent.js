@@ -329,11 +329,12 @@ const LoginComponent = ({ onLoginSuccess, navigateTo, showFlashMessage }) => {
             // 1. Authenticate with Firebase
             const userCredential = await signInWithEmailAndPassword(authClient, email, password);
             const firebaseUser = userCredential.user;
-            const idToken = await firebaseUser.getIdToken();
+            // Use forceRefresh: false to use cached token if available (faster)
+            const idToken = await firebaseUser.getIdToken(false);
 
             // 2. Backend verification with timeout
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+            const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout (reduced from 10s)
 
             const response = await fetch(`${API_BASE_URL}/login`, {
                 method: 'POST',
@@ -341,7 +342,7 @@ const LoginComponent = ({ onLoginSuccess, navigateTo, showFlashMessage }) => {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${idToken}`
                 },
-                body: JSON.stringify({ email: firebaseUser.email }),
+                // Removed email from body - it's already in the token, reducing payload size
                 signal: controller.signal
             });
 
@@ -351,13 +352,19 @@ const LoginComponent = ({ onLoginSuccess, navigateTo, showFlashMessage }) => {
             // 3. Handle response
             if (response.ok) {
                 showToast('Login successful! Welcome back.', 'success');
-                setTimeout(() => {
-                    onLoginSuccess({ 
-                        firebaseUser, 
-                        role: data.user.role, 
-                        email: firebaseUser.email 
-                    });
-                }, 1000);
+                // Include client_name if provided (for site_admin users)
+                const userData = {
+                    firebaseUser, 
+                    role: data.user.role, 
+                    email: firebaseUser.email,
+                    uid: firebaseUser.uid
+                };
+                if (data.user.client_name) {
+                    userData.client_name = data.user.client_name;
+                    userData.companyName = data.user.client_name;
+                }
+                // Call immediately - no delay for fastest login experience
+                onLoginSuccess(userData);
             } else if (response.status === 403 && data.mustChangePassword) {
                 // Show simple security alert and don't proceed with login
                 setPendingUserData(data);
@@ -422,12 +429,9 @@ const LoginComponent = ({ onLoginSuccess, navigateTo, showFlashMessage }) => {
             <Toast {...toast} onClose={hideToast} />
             <div className="h-screen bg-gray-50 flex overflow-hidden">
                 {/* Left side - Company Name */}
-                <div className="hidden lg:flex lg:w-1/2 xl:w-3/5 bg-white relative overflow-hidden" style={{
-                    backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23f3f4f6' fill-opacity='0.4'%3E%3Ccircle cx='30' cy='30' r='2'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
-                    backgroundRepeat: 'repeat'
-                }}>
+                <div className="hidden lg:flex lg:w-1/2 xl:w-3/5 bg-white relative overflow-hidden border-r border-gray-200">
                     <div className="relative z-10 flex flex-col justify-center items-center px-12 py-16 text-gray-800 h-full w-full">
-                        <img src={require('../../assets/logo/Logo2.png')} alt="Company Logo" className="max-h-40 w-auto max-w-full object-contain" />
+                        <img src={require('../../assets/logo/Logo2.png')} alt="Company Logo" className="max-h-32 w-auto max-w-full object-contain" />
                     </div>
                     
                     {/* Footer copyright */}
@@ -446,7 +450,7 @@ const LoginComponent = ({ onLoginSuccess, navigateTo, showFlashMessage }) => {
                             <img src={require('../../assets/logo/Logo2.png')} alt="Company Logo" className="max-h-25 w-auto max-w-full object-contain" />
                         </div>
 
-                        <div className="bg-white rounded-2xl border border-gray-100 p-6">
+                        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
                             <div className="text-center mb-6">
                                 <h2 className="text-xl font-bold text-gray-900 mb-1">Sign In</h2>
                                 <p className="text-gray-600 text-sm">Enter your credentials to access your account</p>

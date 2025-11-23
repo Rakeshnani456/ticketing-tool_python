@@ -79,6 +79,7 @@ const ClientDetailView = ({ user }) => {
   // State management
   const [client, setClient] = useState(null);
   const [clientUsers, setClientUsers] = useState([]);
+  const [clientAssets, setClientAssets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState(0);
@@ -162,6 +163,30 @@ const ClientDetailView = ({ user }) => {
 
     return () => unsubscribeClient();
   }, [clientId, db]);
+
+  // Fetch client assets
+  useEffect(() => {
+    if (!client?.companyName) return;
+
+    const unsubscribeAssets = onSnapshot(
+      query(
+        collection(db, 'assets'),
+        where('client_name', '==', client.companyName)
+      ),
+      (snapshot) => {
+        const assets = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        setClientAssets(assets);
+      },
+      (error) => {
+        console.error('Error fetching assets:', error);
+      }
+    );
+
+    return () => unsubscribeAssets();
+  }, [client?.companyName, db]);
 
   // Fetch client users
   useEffect(() => {
@@ -1140,6 +1165,7 @@ const ClientDetailView = ({ user }) => {
          <Tabs value={activeTab} onChange={(e, newValue) => setActiveTab(newValue)} sx={{ mb: 1, minHeight: '32px', '& .MuiTab-root': { minHeight: '32px', padding: '6px 8px', fontSize: '0.75rem', fontWeight: '500', marginRight: '4px' }, '& .MuiTabs-indicator': { height: '2px' } }}>
            <Tab label="Overview" />
            <Tab label={`Users (${clientUsers.length})`} />
+           <Tab label={`Assets (${clientAssets.length})`} />
          </Tabs>
 
         {/* Tab Content */}
@@ -1504,6 +1530,121 @@ const ClientDetailView = ({ user }) => {
          )}
 
          {activeTab === 1 && <UsersTable />}
+
+         {activeTab === 2 && (
+           <Box sx={{ mt: 2 }}>
+             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+               <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                 Client Assets ({clientAssets.length})
+               </Typography>
+               <Button
+                 variant="contained"
+                 size="small"
+                 startIcon={<AddIcon />}
+                 onClick={() => navigate(`/assets?client=${encodeURIComponent(client.companyName)}`)}
+                 sx={{ textTransform: 'none' }}
+               >
+                 View All Assets
+               </Button>
+             </Box>
+
+             {clientAssets.length === 0 ? (
+               <Card sx={{ p: 3, textAlign: 'center' }}>
+                 <Typography variant="body2" color="text.secondary">
+                   No assets found for this client.
+                 </Typography>
+                 <Button
+                   variant="outlined"
+                   size="small"
+                   startIcon={<AddIcon />}
+                   onClick={() => navigate(`/assets?client=${encodeURIComponent(client.companyName)}`)}
+                   sx={{ mt: 2, textTransform: 'none' }}
+                 >
+                   Add Asset
+                 </Button>
+               </Card>
+             ) : (
+               <TableContainer component={Paper} sx={{ boxShadow: 'none', border: '1px solid #e5e7eb' }}>
+                 <Table size="small">
+                   <TableHead sx={{ bgcolor: '#f9fafb' }}>
+                     <TableRow>
+                       <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem' }}>Asset Name</TableCell>
+                       <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem' }}>Asset ID</TableCell>
+                       <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem' }}>Type</TableCell>
+                       <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem' }}>Status</TableCell>
+                       <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem' }}>Owner</TableCell>
+                       <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem' }}>Warranty</TableCell>
+                     </TableRow>
+                   </TableHead>
+                   <TableBody>
+                     {clientAssets.slice(0, 10).map((asset) => (
+                       <TableRow
+                         key={asset.id}
+                         hover
+                         sx={{ cursor: 'pointer' }}
+                         onClick={() => navigate(`/assets?client=${encodeURIComponent(client.companyName)}`)}
+                       >
+                         <TableCell sx={{ fontSize: '0.8rem' }}>
+                           {asset.asset_name || asset.name || 'Unnamed Asset'}
+                         </TableCell>
+                         <TableCell sx={{ fontSize: '0.8rem', fontFamily: 'monospace' }}>
+                           {asset.asset_id || asset.id?.substring(0, 8)}
+                         </TableCell>
+                         <TableCell>
+                           <Chip
+                             label={asset.asset_type || 'Unknown'}
+                             size="small"
+                             color={asset.asset_type === 'hardware' ? 'primary' : 'secondary'}
+                             sx={{ fontSize: '0.7rem', height: '20px' }}
+                           />
+                         </TableCell>
+                         <TableCell>
+                           <Chip
+                             label={asset.status || 'Active'}
+                             size="small"
+                             color={
+                               asset.status === 'Active' ? 'success' :
+                               asset.status === 'Under Repair' ? 'warning' :
+                               asset.status === 'Retired' ? 'default' : 'info'
+                             }
+                             sx={{ fontSize: '0.7rem', height: '20px' }}
+                           />
+                         </TableCell>
+                         <TableCell sx={{ fontSize: '0.8rem' }}>
+                           {asset.owner_name || asset.owner_email || 'Unassigned'}
+                         </TableCell>
+                         <TableCell sx={{ fontSize: '0.8rem' }}>
+                           {asset.warranty_end ? (
+                             (() => {
+                               try {
+                                 const date = asset.warranty_end?.toDate ? asset.warranty_end.toDate() : new Date(asset.warranty_end);
+                                 return date.toLocaleDateString();
+                               } catch {
+                                 return 'N/A';
+                               }
+                             })()
+                           ) : 'N/A'}
+                         </TableCell>
+                       </TableRow>
+                     ))}
+                   </TableBody>
+                 </Table>
+                 {clientAssets.length > 10 && (
+                   <Box sx={{ p: 2, textAlign: 'center', borderTop: '1px solid #e5e7eb' }}>
+                     <Button
+                       variant="text"
+                       size="small"
+                       onClick={() => navigate(`/assets?client=${encodeURIComponent(client.companyName)}`)}
+                       sx={{ textTransform: 'none' }}
+                     >
+                       View All {clientAssets.length} Assets →
+                     </Button>
+                   </Box>
+                 )}
+               </TableContainer>
+             )}
+           </Box>
+         )}
       </Box>
 
 

@@ -7,7 +7,6 @@ import {
 import { 
   Edit as EditIcon, 
   Delete as DeleteIcon, 
-  Add as AddIcon, 
   Clear as ClearIcon, 
   LockReset as LockResetIcon, 
   Search as SearchIcon,
@@ -18,7 +17,6 @@ import {
   SupervisorAccount as SupervisorAccountIcon,
   Work as WorkIcon,
   Badge as BadgeIcon,
-  AdminPanelSettings as AdminIcon,
   Close as CloseIcon
 } from '@mui/icons-material';
 import { API_BASE_URL } from '../../config/constants';
@@ -425,24 +423,22 @@ const EngineerManagementComponent = ({ user, showFlashMessage }) => {
             <p className="text-gray-600">Manage engineers in your organization</p>
           </div>
           <div className="flex gap-2">
-      <div
-        onClick={handleAdd}
-        className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded transition-all duration-200 ease-in-out cursor-pointer"
-      >
-        <AddIcon sx={{ fontSize: '16px' }} />
-        Add Engineer
-      </div>
-      <div
-        onClick={() => setShowActionsColumn(!showActionsColumn)}
-        className={`inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded transition-all duration-200 ease-in-out cursor-pointer ${
-          showActionsColumn 
-            ? 'text-red-600 hover:text-red-700 hover:bg-red-50' 
-            : 'text-purple-600 hover:text-purple-700 hover:bg-purple-50'
-        }`}
-      >
-        <AdminIcon sx={{ fontSize: '16px' }} />
-        {showActionsColumn ? 'Cancel' : 'Manage'}
-      </div>
+            <button
+              onClick={handleAdd}
+              className="px-3 py-1.5 text-sm font-semibold text-blue-600 hover:text-blue-700 hover:underline rounded transition-colors duration-200 ease-in-out focus:outline-none"
+            >
+              Add Engineer
+            </button>
+            <button
+              onClick={() => setShowActionsColumn(!showActionsColumn)}
+              className={`px-3 py-1.5 text-sm font-semibold rounded transition-colors duration-200 ease-in-out focus:outline-none hover:underline ${
+                showActionsColumn 
+                  ? 'text-red-600 hover:text-red-700' 
+                  : 'text-purple-600 hover:text-purple-700'
+              }`}
+            >
+              {showActionsColumn ? 'Cancel' : 'Manage'}
+            </button>
           </div>
         </div>
 

@@ -14,14 +14,15 @@ import { getStorage } from 'firebase/storage';
 // 4. If no web app exists, click "Add app" > Web (</>) icon
 // 5. Copy the config values from the Firebase SDK snippet
 const firebaseConfig = {
-  apiKey: "AIzaSyDZVwd_WHUw8RzUfkVklT7_9U6Mc-FNL-o",
-  authDomain: "it-ticketing-tool-dd679.firebaseapp.com",
-  projectId: "it-ticketing-tool-dd679",
-  storageBucket: "it-ticketing-tool-dd679.firebasestorage.app",
-  messagingSenderId: "919553361675",
-  appId: "1:919553361675:web:55bfeb860ebef1b886840e",
-  measurementId: "G-H6M4JBS3TL"
+  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
+  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.REACT_APP_FIREBASE_APP_ID,
+  measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID
 };
+
 
 // Validate config before initialization
 // Check for actual placeholder patterns (empty strings, placeholder text, etc.)
@@ -37,16 +38,23 @@ const hasPlaceholders =
 
 if (hasPlaceholders) {
   console.error('⚠️ FIREBASE CONFIGURATION INCOMPLETE ⚠️');
-  console.error('Please update firebase.js with actual values from Firebase Console:');
-  console.error('https://console.firebase.google.com/project/it-ticketing-tool-dd679/settings/general');
-  console.error('\nRequired values:');
-  console.error('- apiKey');
-  console.error('- projectId');
-  console.error('- messagingSenderId');
-  console.error('- appId');
+  console.error('Firebase configuration values are missing or incomplete.');
+  console.error('\nThis app uses environment variables. Please ensure you have:');
+  console.error('1. Created a .env file in sahayaon-frontend/ directory');
+  console.error('2. Added all REACT_APP_FIREBASE_* environment variables');
+  console.error('3. Restarted your development server after creating/updating .env');
+  console.error('\nRequired environment variables:');
+  console.error('- REACT_APP_FIREBASE_API_KEY');
+  console.error('- REACT_APP_FIREBASE_AUTH_DOMAIN');
+  console.error('- REACT_APP_FIREBASE_PROJECT_ID');
+  console.error('- REACT_APP_FIREBASE_STORAGE_BUCKET');
+  console.error('- REACT_APP_FIREBASE_MESSAGING_SENDER_ID');
+  console.error('- REACT_APP_FIREBASE_APP_ID');
+  console.error('- REACT_APP_FIREBASE_MEASUREMENT_ID');
+  console.error('\nGet values from: https://console.firebase.google.com/project/it-ticketing-tool-dd679/settings/general');
   throw new Error(
-    'Firebase configuration is incomplete. Please update sahayaon-frontend/src/config/firebase.js ' +
-    'with actual values from Firebase Console for project it-ticketing-tool-dd679'
+    'Firebase configuration is incomplete. Please create a .env file in sahayaon-frontend/ ' +
+    'with REACT_APP_FIREBASE_* environment variables and restart your development server.'
   );
 }
 

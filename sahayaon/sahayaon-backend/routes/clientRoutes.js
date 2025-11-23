@@ -142,13 +142,37 @@ module.exports = (db, clientsCollection, usersCollection, verifyFirebaseToken) =
             // --- Automatically create a user for the site admin ---
             // Get admin SDK from global require (since not passed in)
             const admin = require('firebase-admin');
+            // Generate password: 8 characters (4 from "Sahayaon" letters + 4 random characters)
+            const sahayaonLetters = ['S', 'a', 'h', 'y', 'o', 'n'];
+            const randomChars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+            
+            // Pick 4 random letters from "Sahayaon"
+            const selectedLetters = [];
+            for (let i = 0; i < 4; i++) {
+                const randomIndex = Math.floor(Math.random() * sahayaonLetters.length);
+                selectedLetters.push(sahayaonLetters[randomIndex]);
+            }
+            
+            // Add 4 random characters (numbers or alphabets)
+            for (let i = 0; i < 4; i++) {
+                selectedLetters.push(randomChars.charAt(Math.floor(Math.random() * randomChars.length)));
+            }
+            
+            // Shuffle the array to mix letters and random chars
+            for (let i = selectedLetters.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [selectedLetters[i], selectedLetters[j]] = [selectedLetters[j], selectedLetters[i]];
+            }
+            
+            const generatedPassword = selectedLetters.join('');
+            
             // Prepare user data
             const userData = {
                 client_name: companyName,
                 firstName: siteFirstName,
                 lastName: siteLastName,
                 email: siteEmail,
-                password: 'Welcome@123', // Default password, can be randomized
+                password: generatedPassword,
                 contactNumber: siteContactNumber,
                 designation: siteDesignation,
                 role: 'site_admin',

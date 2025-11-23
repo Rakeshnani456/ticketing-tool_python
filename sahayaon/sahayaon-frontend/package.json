@@ -33,6 +33,7 @@
     "downshift": "^9.0.10",
     "eslint": "^8.57.1",
     "eslint-config-next": "^14.0.4",
+    "exceljs": "^4.4.0",
     "firebase": "^11.9.1",
     "formik": "^2.4.6",
     "framer-motion": "^12.23.12",

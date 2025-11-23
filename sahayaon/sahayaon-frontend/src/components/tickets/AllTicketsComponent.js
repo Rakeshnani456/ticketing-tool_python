@@ -723,6 +723,9 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
     // State to track loading for individual ticket status changes
     const [changingStatusTickets, setChangingStatusTickets] = useState(new Set());
     
+    // Ref to track optimistic updates - prevents WebSocket from overwriting them
+    const optimisticUpdatesRef = useRef(new Map()); // Map<ticketId, {assignment, timestamp}>
+    
     // View mode is always list (kanban view removed)
     
     // Sorting state
@@ -1375,18 +1378,56 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                 : null;
             
             // OPTIMISTIC UPDATE - Update UI immediately
-            setAllTickets(prevTickets => 
-                prevTickets.map(ticket => 
+            const optimisticUpdateTime = new Date().toISOString();
+            const optimisticTimestamp = Date.now();
+            
+            // Track this optimistic update in ref
+            optimisticUpdatesRef.current.set(ticketId, {
+                assigned_to_email: assignmentValue,
+                assigned_to_name: assignedEngineer?.name || null,
+                timestamp: optimisticTimestamp
+            });
+            
+            console.log(`[OPTIMISTIC] Updating ticket ${ticketId} assignment to ${assignmentValue} immediately`);
+            
+            setAllTickets(prevTickets => {
+                const updated = prevTickets.map(ticket => 
                     ticket.id === ticketId 
                         ? { 
                             ...ticket, 
                             assigned_to_email: assignmentValue,
                             assigned_to_name: assignedEngineer?.name || null,
-                            updated_at: new Date().toISOString() 
+                            assigned_to_id: assignedEngineer?.id || null,
+                            updated_at: optimisticUpdateTime,
+                            _optimisticUpdate: true, // Flag to preserve this update
+                            _optimisticUpdateTime: optimisticTimestamp // Timestamp for comparison
                         }
                         : ticket
-                )
-            );
+                );
+                // Also update cache immediately so WebSocket refresh gets fresh data
+                setCachedData(updated);
+                console.log(`[OPTIMISTIC] State updated, ticket count: ${updated.length}`);
+                
+                // CRITICAL: Also immediately update displayedTickets to trigger UI re-render
+                // This bypasses the useEffect delay
+                setDisplayedTickets(prevDisplayed => {
+                    return prevDisplayed.map(ticket => 
+                        ticket.id === ticketId 
+                            ? { 
+                                ...ticket, 
+                                assigned_to_email: assignmentValue,
+                                assigned_to_name: assignedEngineer?.name || null,
+                                assigned_to_id: assignedEngineer?.id || null,
+                                updated_at: optimisticUpdateTime,
+                                _optimisticUpdate: true,
+                                _optimisticUpdateTime: optimisticTimestamp
+                            }
+                            : ticket
+                    );
+                });
+                
+                return updated;
+            });
 
             // Show success message immediately
             showFlashMessage(
@@ -1406,21 +1447,54 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
             }, 500);
             
             // Update the ticket assignment via API in background (user doesn't wait)
+            // Include assigned_to_id for faster backend lookup (avoids slow email query)
+            const assignmentPayload = {
+                assigned_to_email: assignmentValue
+            };
+            if (assignedEngineer?.id) {
+                assignmentPayload.assigned_to_id = assignedEngineer.id;
+            }
+            
+            // Get token before fetch to measure timing
+            const tokenStartTime = performance.now();
+            const idToken = await user.firebaseUser.getIdToken();
+            const tokenEndTime = performance.now();
+            console.log(`[PERF] getIdToken took ${(tokenEndTime - tokenStartTime).toFixed(2)}ms`);
+            
+            const fetchStartTime = performance.now();
             const response = await fetch(`${API_BASE_URL}/tickets/${ticketId}`, {
                 method: 'PATCH',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${await user.firebaseUser.getIdToken()}`
+                    'Authorization': `Bearer ${idToken}`
                 },
-                body: JSON.stringify({
-                    assigned_to_email: assignmentValue
-                })
+                body: JSON.stringify(assignmentPayload)
             });
+            const fetchEndTime = performance.now();
+            console.log(`[PERF] Fetch request took ${(fetchEndTime - fetchStartTime).toFixed(2)}ms`);
 
             if (!response.ok) {
                 const errorData = await response.json();
                 throw new Error(errorData.error || 'Failed to assign ticket');
             }
+
+            // API call succeeded - remove optimistic flag but keep the update
+            console.log(`[OPTIMISTIC] API confirmed assignment for ticket ${ticketId}`);
+            setAllTickets(prevTickets => 
+                prevTickets.map(ticket => 
+                    ticket.id === ticketId && ticket._optimisticUpdate
+                        ? { 
+                            ...ticket, 
+                            _optimisticUpdate: false // Remove flag, data is now confirmed
+                        }
+                        : ticket
+                )
+            );
+            
+            // Keep the optimistic update in ref for a bit longer (in case WebSocket is delayed)
+            setTimeout(() => {
+                optimisticUpdatesRef.current.delete(ticketId);
+            }, 10000); // Remove after 10 seconds
 
             // No need to refresh - optimistic update already done
 
@@ -2129,11 +2203,84 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                 const newTickets = ticketsData.filter(t => !existingIds.has(t.id));
                 
                 if (newTickets.length > 0) {
-                    // If there are new tickets, do full update
-                    setAllTickets(ticketsData);
+                    // If there are new tickets, do full update but preserve optimistic updates
+                    setAllTickets(prevTickets => {
+                        const optimisticTickets = new Map();
+                        prevTickets.forEach(t => {
+                            if (t._optimisticUpdate && t._optimisticUpdateTime) {
+                                optimisticTickets.set(t.id, t);
+                            }
+                        });
+                        
+                        return ticketsData.map(ticket => {
+                            const optimistic = optimisticTickets.get(ticket.id);
+                            if (optimistic) {
+                                const age = Date.now() - optimistic._optimisticUpdateTime;
+                                if (age < 10000) { // Keep for 10 seconds
+                                    return optimistic;
+                                }
+                            }
+                            return ticket;
+                        });
+                    });
                 } else {
                     // Just merge updates for existing tickets
+                    // CRITICAL: Preserve optimistic updates - they take precedence over WebSocket data
                     setAllTickets(prevTickets => {
+                        // Check if we have any optimistic updates (in state or ref)
+                        const hasOptimisticUpdates = prevTickets.some(t => t._optimisticUpdate && t._optimisticUpdateTime) || 
+                                                    optimisticUpdatesRef.current.size > 0;
+                        
+                        if (hasOptimisticUpdates) {
+                            console.log(`[MERGE] Preserving ${optimisticUpdatesRef.current.size} optimistic updates from WebSocket overwrite`);
+                            return prevTickets.map(prevTicket => {
+                                const optimisticInRef = optimisticUpdatesRef.current.get(prevTicket.id);
+                                
+                                // If this ticket has an optimistic update (in state or ref), preserve it
+                                if ((prevTicket._optimisticUpdate && prevTicket._optimisticUpdateTime) || optimisticInRef) {
+                                    const optimisticAge = optimisticInRef 
+                                        ? Date.now() - optimisticInRef.timestamp
+                                        : Date.now() - prevTicket._optimisticUpdateTime;
+                                    
+                                    // Keep optimistic update for 10 seconds (WebSocket might be delayed)
+                                    if (optimisticAge < 10000) {
+                                        const updatedTicket = ticketsData.find(t => t.id === prevTicket.id);
+                                        
+                                        // Use optimistic data from ref if available, otherwise from state
+                                        const optimisticAssignment = optimisticInRef?.assigned_to_email || prevTicket.assigned_to_email;
+                                        
+                                        // Only update if WebSocket confirms the same assignment
+                                        if (updatedTicket && updatedTicket.assigned_to_email === optimisticAssignment) {
+                                            // WebSocket confirmed - remove flag but keep the optimistic data
+                                            const { _optimisticUpdate, _optimisticUpdateTime, ...cleanTicket } = updatedTicket;
+                                            return { ...cleanTicket, assigned_to_email: optimisticAssignment };
+                                        }
+                                        
+                                        // Keep optimistic update - WebSocket might be stale
+                                        if (optimisticInRef) {
+                                            return {
+                                                ...prevTicket,
+                                                assigned_to_email: optimisticInRef.assigned_to_email,
+                                                assigned_to_name: optimisticInRef.assigned_to_name,
+                                                _optimisticUpdate: true,
+                                                _optimisticUpdateTime: optimisticInRef.timestamp
+                                            };
+                                        }
+                                        return prevTicket;
+                                    }
+                                }
+                                
+                                // No optimistic update or it's old - use WebSocket data
+                                const updatedTicket = ticketsData.find(t => t.id === prevTicket.id);
+                                if (updatedTicket) {
+                                    const { _optimisticUpdate, _optimisticUpdateTime, ...cleanTicket } = updatedTicket;
+                                    return cleanTicket;
+                                }
+                                return prevTicket;
+                            });
+                        }
+                        
+                        // No optimistic updates - safe to merge WebSocket data normally
                         return prevTickets.map(prevTicket => {
                             const updatedTicket = ticketsData.find(t => t.id === prevTicket.id);
                             return updatedTicket || prevTicket;

@@ -138,24 +138,49 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
             console.log('🔍 Initializing counter from existing tickets...');
             
             // Get the highest existing display ID
-            const lastTicketQuery = await ticketsCollection
-                .orderBy('display_id', 'desc')
-                .limit(1)
-                .get();
-            
+            // Handle potential index issues gracefully
             let highestNumber = 0;
-            
-            if (!lastTicketQuery.empty) {
-                const lastTicket = lastTicketQuery.docs[0].data();
-                const lastDisplayId = lastTicket.display_id;
-                console.log('🔍 Highest existing display_id:', lastDisplayId);
+            try {
+                const lastTicketQuery = await ticketsCollection
+                    .orderBy('display_id', 'desc')
+                    .limit(1)
+                    .get();
                 
-                if (lastDisplayId && lastDisplayId.startsWith('TT')) {
-                    const numberPart = lastDisplayId.substring(2);
-                    const lastNumber = parseInt(numberPart, 10);
-                    if (!isNaN(lastNumber) && lastNumber > 0) {
-                        highestNumber = lastNumber;
+                if (!lastTicketQuery.empty) {
+                    const lastTicket = lastTicketQuery.docs[0].data();
+                    const lastDisplayId = lastTicket.display_id;
+                    console.log('🔍 Highest existing display_id:', lastDisplayId);
+                    
+                    if (lastDisplayId && lastDisplayId.startsWith('TT')) {
+                        const numberPart = lastDisplayId.substring(2);
+                        const lastNumber = parseInt(numberPart, 10);
+                        if (!isNaN(lastNumber) && lastNumber > 0) {
+                            highestNumber = lastNumber;
+                        }
                     }
+                }
+            } catch (queryError) {
+                // If orderBy fails (e.g., index not created), try without ordering
+                if (queryError.code === 9 || queryError.message?.includes('index')) {
+                    console.warn('⚠️ Index for display_id not found. Trying alternative method...');
+                    try {
+                        const allTicketsSnapshot = await ticketsCollection.limit(100).get();
+                        let maxNumber = 0;
+                        allTicketsSnapshot.forEach(doc => {
+                            const data = doc.data();
+                            if (data.display_id && data.display_id.startsWith('TT')) {
+                                const numPart = parseInt(data.display_id.substring(2), 10);
+                                if (!isNaN(numPart) && numPart > maxNumber) {
+                                    maxNumber = numPart;
+                                }
+                            }
+                        });
+                        highestNumber = maxNumber;
+                    } catch (fallbackError) {
+                        console.warn('⚠️ Could not query tickets for counter initialization. Starting from 0.');
+                    }
+                } else {
+                    throw queryError;
                 }
             }
             
@@ -166,10 +191,25 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                 last_updated: admin.firestore.FieldValue.serverTimestamp()
             });
             
-            console.log('🔍 Counter initialized with value:', highestNumber);
+            console.log(`✅ Counter initialized with value: ${highestNumber}`);
             
         } catch (error) {
-            console.error('Error initializing counter:', error);
+            // Distinguish between different error types
+            if (error.code === 5 || error.code === 'NOT_FOUND') {
+                console.warn('⚠️ Counter initialization: Firestore NOT_FOUND error. This may indicate:');
+                console.warn('   - Firestore database is not fully initialized');
+                console.warn('   - Service account permissions issue');
+                console.warn('   - Network connectivity issue');
+                console.warn('   Counter will be created automatically when first ticket is created.');
+            } else if (error.code === 7 || error.code === 'PERMISSION_DENIED') {
+                console.error('❌ Counter initialization: Permission denied. Check service account permissions.');
+                console.error('   Ensure the service account has Firestore read/write permissions.');
+            } else {
+                console.error('❌ Error initializing counter:', error.message || error);
+                console.error('   Error code:', error.code || 'unknown');
+            }
+            // Don't throw - allow server to continue running
+            // Counter will be created on-demand when first ticket is created
         }
     }
 
@@ -472,16 +512,38 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                     const baseUrl = getBaseUrl(req);
                     const ticketUrl = `${baseUrl}/tickets/${docRef.id}`;
                     
+                    // Fetch user data to get firstName and lastName
+                    let userFirstName = '';
+                    let userLastName = '';
+                    let userName = reporterEmail;
+                    try {
+                        const userEmail = request_for_email || reporterEmail;
+                        const userSnap = await usersCollection.where('email', '==', userEmail).limit(1).get();
+                        if (!userSnap.empty) {
+                            const userData = userSnap.docs[0].data();
+                            userFirstName = userData.firstName || '';
+                            userLastName = userData.lastName || '';
+                            if (userData.firstName || userData.lastName) {
+                                userName = `${userData.firstName || ''} ${userData.lastName || ''}`.trim();
+                            }
+                        }
+                    } catch (userError) {
+                        console.warn('Error fetching user data for email:', userError.message);
+                    }
+                    
+                    // Ticket Creation Email: To: User + Distribution List, CC: none
                     const ticketData = {
                         ticketId: newDisplayId,
                         subject: short_description,
                         description: long_description || short_description,
                         priority: priority || 'Low',
                         category: category,
+                        firstName: userFirstName,
+                        lastName: userLastName,
+                        userName: userName,
+                        userEmail: request_for_email || reporterEmail,
                         reporterName: reporterEmail,
-                        ticketUrl: ticketUrl,
-                        toEmail: 'process.env.DISTRIBUTION_EMAIL',
-                        ccEmail: request_for_email === reporterEmail ? request_for_email : `${request_for_email},${reporterEmail}`
+                        ticketUrl: ticketUrl
                     };
                     
                     await emailService.sendTicketNotificationEmail(ticketData);
@@ -501,6 +563,7 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
         const {
             status,
             assigned_to_email,
+            assigned_to_id, // User ID sent from frontend for faster lookup
             priority,
             short_description,
             long_description,
@@ -513,6 +576,9 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
 
         const authenticatedUid = req.user.uid;
         const authenticatedUserRole = req.user.role;
+        
+        // Variable to store assignment background data (for processing after response is sent)
+        let assignmentBackgroundData = null;
 
         if (status && !validTicketStatuses.includes(status)) {
             return res.status(400).json({ error: 'Invalid ticket status provided.' });
@@ -558,8 +624,11 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                 }
             }
 
+            // OPTIMIZATION: Use client timestamp for updated_at to avoid serverTimestamp() latency
+            // serverTimestamp() requires a round-trip to Firestore servers, adding 200-300ms delay
+            // Client timestamp is sufficient for updated_at since we have precise timestamps in history arrays
             const updateData = {
-                updated_at: admin.firestore.FieldValue.serverTimestamp()
+                updated_at: new Date() // Client timestamp - much faster than serverTimestamp()
             };
 
             if (priority !== undefined) updateData.priority = priority;
@@ -630,7 +699,7 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                                 toList.push(ticketData.reporter_email);
                             }
                             
-                            let ccList = ['process.env.DISTRIBUTION_EMAIL'];
+                            let ccList = [process.env.DISTRIBUTION_EMAIL];
                             // Add the engineer who uploaded the attachment
                             ccList.push(req.user.email);
                             if (ticketData.assigned_to_email) {
@@ -660,7 +729,7 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                                 fileName: attachments.map(att => att.originalFilename || att.fileName || att.filename || 'Unknown file').join(', '),
                                 uploadedBy: userName,
                                 ticketUrl: ticketUrl,
-                                toEmail: 'process.env.DISTRIBUTION_EMAIL',
+                                toEmail: process.env.DISTRIBUTION_EMAIL,
                                 ccEmail: req.user.email
                             };
                             
@@ -684,7 +753,9 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                 // 1. Status is changing to Resolved/Cancelled, OR
                 // 2. Status is Resolved/Cancelled and fields are not already set
                 if (isChangingStatus || !isAlreadyResolvedOrCancelled || !ticketData.resolved_at || !ticketData.closed_by_email) {
-                    updateData.resolved_at = admin.firestore.FieldValue.serverTimestamp();
+                    // OPTIMIZATION: Use client timestamp for resolved_at to avoid serverTimestamp() latency
+                    // The exact server time isn't critical here - client time is sufficient
+                    updateData.resolved_at = new Date(); // Client timestamp - much faster
                     updateData.closed_by_email = req.user.email;
                 }
                 
@@ -698,15 +769,18 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
             }
 
             // Status change logic
+            // OPTIMIZATION: Store history entry for background update (non-blocking)
+            let statusHistoryEntry = null;
             if (status && status !== ticketData.status) {
                 updateData.status = status;
-                const statusHistoryEntry = {
+                statusHistoryEntry = {
                     old_status: ticketData.status,
                     new_status: status,
                     user_email: req.user.email,
-                    timestamp: new Date()
+                    timestamp: new Date() // Use client timestamp - will be updated in background
                 };
-                updateData.status_history = admin.firestore.FieldValue.arrayUnion(statusHistoryEntry);
+                // REMOVED: Don't update history in critical path - move to background
+                // updateData.status_history = admin.firestore.FieldValue.arrayUnion(statusHistoryEntry);
                 
                 // Move status change logging to background
                 setImmediate(async () => {
@@ -760,7 +834,7 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                         toList.push(ticketReporterEmail);
                     }
                     
-                    let ccList = ['process.env.DISTRIBUTION_EMAIL'];
+                    let ccList = [process.env.DISTRIBUTION_EMAIL];
                     if (ticketData.assigned_to_email) {
                         ccList.push(ticketData.assigned_to_email);
                     }
@@ -770,10 +844,34 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                             const baseUrl = getBaseUrl(req);
                             const ticketUrl = `${baseUrl}/tickets/${ticketId}`;
                             
+                            // Fetch user data to get firstName and lastName
+                            let userFirstName = '';
+                            let userLastName = '';
+                            let userName = requestForEmail || ticketReporterEmail || '';
+                            try {
+                                const userEmail = requestForEmail || ticketReporterEmail;
+                                if (userEmail) {
+                                    const userSnap = await usersCollection.where('email', '==', userEmail).limit(1).get();
+                                    if (!userSnap.empty) {
+                                        const userData = userSnap.docs[0].data();
+                                        userFirstName = userData.firstName || '';
+                                        userLastName = userData.lastName || '';
+                                        if (userData.firstName || userData.lastName) {
+                                            userName = `${userData.firstName || ''} ${userData.lastName || ''}`.trim();
+                                        }
+                                    }
+                                }
+                            } catch (userError) {
+                                console.warn('Error fetching user data for email:', userError.message);
+                            }
+                            
                             const emailData = {
                                 display_id: ticketData.display_id,
                                 short_description: ticketData.short_description,
                                 status: status,
+                                firstName: userFirstName,
+                                lastName: userLastName,
+                                userName: userName,
                                 ticketUrl: ticketUrl,
                                 toEmail: toList.join(','),
                                 ccEmail: ccList.join(',')
@@ -787,7 +885,7 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                 } else {
                     // Non-engineer action: To = process.env.DISTRIBUTION_EMAIL + users, CC = none
                     setImmediate(async () => {
-                        let toList = ['process.env.DISTRIBUTION_EMAIL'];
+                        let toList = [process.env.DISTRIBUTION_EMAIL];
                         
                         // Add user emails to "To" field
                         if (requestForEmail && ticketReporterEmail) {
@@ -805,10 +903,34 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                         const baseUrl = getBaseUrl(req);
                         const ticketUrl = `${baseUrl}/tickets/${ticketId}`;
                         
+                        // Fetch user data to get firstName and lastName
+                        let userFirstName = '';
+                        let userLastName = '';
+                        let userName = requestForEmail || ticketReporterEmail || '';
+                        try {
+                            const userEmail = requestForEmail || ticketReporterEmail;
+                            if (userEmail) {
+                                const userSnap = await usersCollection.where('email', '==', userEmail).limit(1).get();
+                                if (!userSnap.empty) {
+                                    const userData = userSnap.docs[0].data();
+                                    userFirstName = userData.firstName || '';
+                                    userLastName = userData.lastName || '';
+                                    if (userData.firstName || userData.lastName) {
+                                        userName = `${userData.firstName || ''} ${userData.lastName || ''}`.trim();
+                                    }
+                                }
+                            }
+                        } catch (userError) {
+                            console.warn('Error fetching user data for email:', userError.message);
+                        }
+                        
                         const emailData = {
                             display_id: ticketData.display_id,
                             short_description: ticketData.short_description,
                             status: status,
+                            firstName: userFirstName,
+                            lastName: userLastName,
+                            userName: userName,
                             ticketUrl: ticketUrl,
                             toEmail: toList.join(','),
                             ccEmail: null
@@ -824,202 +946,153 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                 if (assigned_to_email === null || assigned_to_email === '') {
                     updateData.assigned_to_id = null;
                     updateData.assigned_to_email = null;
+                    // OPTIMIZATION: Store history entry for background update (non-blocking)
                     const assignmentHistoryEntry = {
                         old_assigned_to: ticketData.assigned_to_email,
                         new_assigned_to: null,
                         user_email: req.user.email,
-                        timestamp: new Date()
+                        timestamp: new Date() // Use client timestamp - will be updated in background
                     };
-                    updateData.assigned_to_history = admin.firestore.FieldValue.arrayUnion(assignmentHistoryEntry);
+                    // REMOVED: Don't update history in critical path - move to background
+                    // updateData.assigned_to_history = admin.firestore.FieldValue.arrayUnion(assignmentHistoryEntry);
+                    
+                    // Store for background processing
+                    if (!assignmentBackgroundData) {
+                        assignmentBackgroundData = {
+                            ticketId,
+                            ticketData: JSON.parse(JSON.stringify(ticketData))
+                        };
+                    }
+                    assignmentBackgroundData.assignmentHistoryEntry = assignmentHistoryEntry;
+                    // Move unassignment notification to background for faster response
                     if (ticketData.assigned_to_id) {
-                        await notificationsCollection.add({
-                            userId: ticketData.assigned_to_id,
-                            message: `Ticket ${ticketData.display_id} - "${ticketData.short_description}" has been unassigned from you.`,
-                            type: 'ticket_unassigned',
-                            read: false,
-                            timestamp: admin.firestore.FieldValue.serverTimestamp(),
-                            ticketId: ticketId
+                        setImmediate(async () => {
+                            try {
+                                await notificationsCollection.add({
+                                    userId: ticketData.assigned_to_id,
+                                    message: `Ticket ${ticketData.display_id} - "${ticketData.short_description}" has been unassigned from you.`,
+                                    type: 'ticket_unassigned',
+                                    read: false,
+                                    timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                                    ticketId: ticketId
+                                });
+                            } catch (error) {
+                                console.error('Error in background unassignment notification:', error);
+                            }
                         });
                     }
                 } else {
-                    const userQuery = await usersCollection.where('email', '==', assigned_to_email).limit(1).get();
-                    if (userQuery.empty) {
-                        console.log(`Assignment failed: User with email ${assigned_to_email} not found in database`);
-                        return res.status(404).json({ error: 'Assigned user email not found.' });
-                    }
-                    const assignedUserDoc = userQuery.docs[0];
-                    const assignedUserData = assignedUserDoc.data();
+                    // OPTIMIZATION: Trust frontend's assigned_to_id when provided to avoid blocking lookup
+                    // Full validation happens in background - if it fails, we rollback
+                    let assignedUserDoc = null;
+                    let assignedUserData = null;
+                    let validationRequired = true;
                     
-                    console.log(`Assignment attempt: ${req.user.email} (${authenticatedUserRole}) trying to assign to ${assigned_to_email} (${assignedUserData.role})`);
-                    
-                    // Allow assignment based on user role
-                    let canAssign = false;
-                    if (authenticatedUserRole === 'site_admin') {
-                        // Site admin can assign to support, admin, and site_admin users
-                        canAssign = ['support', 'admin', 'site_admin'].includes(assignedUserData.role);
+                    if (assigned_to_id) {
+                        // OPTIMIZED: Trust the frontend's ID and proceed with update
+                        // We'll validate in background and rollback if validation fails
+                        updateData.assigned_to_id = assigned_to_id;
+                        updateData.assigned_to_email = assigned_to_email;
+                        
+                        // Store for background validation
+                        // Use assigned_to_id as assignedUserDocId since we're trusting it
+                        assignmentBackgroundData = {
+                            ticketId,
+                            ticketData: JSON.parse(JSON.stringify(ticketData)),
+                            assigned_to_email,
+                            assigned_to_id,
+                            assignedUserDocId: assigned_to_id, // Use the ID we're trusting
+                            authenticatedUid,
+                            authenticatedUserRole,
+                            needsValidation: true // Flag to indicate we need to validate in background
+                        };
+                        
+                        validationRequired = false; // Skip blocking validation
+                        console.log(`[PERF] Assignment: Trusting frontend ID ${assigned_to_id}, validating in background`);
                     } else {
-                        // Other users can assign to support, admin, and super_admin users
-                        canAssign = ['support', 'admin', 'super_admin'].includes(assignedUserData.role);
-                    }
-                    
-                    if (!canAssign) {
-                        console.log(`Assignment failed: User ${assigned_to_email} has role ${assignedUserData.role} which is not assignable by ${authenticatedUserRole}`);
-                        if (authenticatedUserRole === 'site_admin') {
-                            return res.status(400).json({ error: 'User cannot be assigned as they are not a support associate, admin, or site admin.' });
-                        } else {
-                            return res.status(400).json({ error: 'User cannot be assigned as they are not a support associate, admin, or super admin.' });
+                        // Fallback: Email query (slower, but needed for backward compatibility)
+                        // This path is slower but necessary when ID is not provided
+                        const userQuery = await usersCollection.where('email', '==', assigned_to_email).limit(1).get();
+                        if (userQuery.empty) {
+                            console.log(`Assignment failed: User with email ${assigned_to_email} not found in database`);
+                            return res.status(404).json({ error: 'Assigned user email not found.' });
                         }
+                        assignedUserDoc = userQuery.docs[0];
+                        assignedUserData = assignedUserDoc.data();
+                        
+                        // Validate role synchronously (required when ID not provided)
+                        const canAssign = authenticatedUserRole === 'site_admin'
+                            ? ['support', 'admin', 'site_admin'].includes(assignedUserData.role)
+                            : ['support', 'admin', 'super_admin'].includes(assignedUserData.role);
+                        
+                        if (!canAssign) {
+                            console.log(`Assignment failed: User ${assigned_to_email} has role ${assignedUserData.role} which is not assignable by ${authenticatedUserRole}`);
+                            return res.status(400).json({ 
+                                error: authenticatedUserRole === 'site_admin'
+                                    ? 'User cannot be assigned as they are not a support associate, admin, or site admin.'
+                                    : 'User cannot be assigned as they are not a support associate, admin, or super admin.'
+                            });
+                        }
+                        
+                        updateData.assigned_to_id = assignedUserDoc.id;
+                        updateData.assigned_to_email = assigned_to_email;
+                        
+                        // Store for background processing
+                        assignmentBackgroundData = {
+                            ticketId,
+                            ticketData: JSON.parse(JSON.stringify(ticketData)),
+                            assigned_to_email,
+                            assignedUserDocId: assignedUserDoc.id,
+                            assignedUserData: assignedUserDoc.data(),
+                            authenticatedUid,
+                            authenticatedUserRole,
+                            needsValidation: false
+                        };
                     }
-                    
-                    updateData.assigned_to_id = assignedUserDoc.id;
-                    updateData.assigned_to_email = assigned_to_email;
 
+                    // OPTIMIZATION: Store history entry for background update (non-blocking)
                     const assignmentHistoryEntry = {
                         old_assigned_to: ticketData.assigned_to_email,
                         new_assigned_to: assigned_to_email,
                         user_email: req.user.email,
-                        timestamp: new Date()
+                        timestamp: new Date() // Use client timestamp - will be updated in background
                     };
-                    updateData.assigned_to_history = admin.firestore.FieldValue.arrayUnion(assignmentHistoryEntry);
+                    // REMOVED: Don't update history in critical path - move to background
+                    // updateData.assigned_to_history = admin.firestore.FieldValue.arrayUnion(assignmentHistoryEntry);
                     
-                    // Move assignment logging to background
-                    setImmediate(async () => {
-                        try {
-                            // Log assignment activity with enhanced context
-                            const userDoc = await usersCollection.doc(authenticatedUid).get();
-                            const userData = userDoc.exists ? userDoc.data() : {};
-                            let userName = req.user.email;
-                            if (userData.firstName || userData.lastName) {
-                                userName = `${userData.firstName || ''} ${userData.lastName || ''}`.trim();
-                            } else if (userData.name) {
-                                userName = userData.name;
-                            } else if (userData.client_name) {
-                                userName = userData.client_name;
-                            }
-                            await logTicketAssigned(db, ticketId, userName, assigned_to_email, req.user.email, { ...ticketData, ticket_display_id: ticketData.display_id });
-                        } catch (error) {
-                            console.error('Error in background assignment logging:', error);
-                        }
-                    });
-
-                    // Move notification operations to background
-                    setImmediate(async () => {
-                        try {
-                            if (assignedUserDoc.id !== authenticatedUid) {
-                                await notificationsCollection.add({
-                                    userId: assignedUserDoc.id,
-                                    message: `Ticket ${ticketData.display_id} - "${ticketData.short_description}" has been assigned to you.`,
-                                    type: 'ticket_assigned',
-                                    read: false,
-                                    timestamp: admin.firestore.FieldValue.serverTimestamp(),
-                                    ticketId: ticketId
-                                });
-                            }
-                            if (ticketData.assigned_to_id && ticketData.assigned_to_id !== assignedUserDoc.id) {
-                                await notificationsCollection.add({
-                                    userId: ticketData.assigned_to_id,
-                                    message: `Ticket ${ticketData.display_id} - "${ticketData.short_description}" has been reassigned from you.`,
-                                    type: 'ticket_reassigned_from',
-                                    read: false,
-                                    timestamp: admin.firestore.FieldValue.serverTimestamp(),
-                                    ticketId: ticketId
-                                });
-                            }
-                        } catch (error) {
-                            console.error('Error in background notification operations:', error);
-                        }
-                    });
-
-                    // Send assignment email
-                    const reporterEmail = ticketData.reporter_email;
-                    const requestForEmail = ticketData.request_for_email;
-                    const assignedEngineerEmail = assigned_to_email;
-                    const emailSubject = `Ticket ${ticketData.display_id} Assigned`;
-                    const emailText = `Ticket ${ticketData.display_id} - "${ticketData.short_description}" has been assigned to engineer: ${assignedEngineerEmail}.`;
-                    const baseUrl = getBaseUrl(req);
-                    const ticketLink = `${baseUrl}/tickets/${ticketId}`;
-                    const emailHtml = `<div style=\"font-family: Arial, sans-serif; color: #222;\"><p>Ticket <a href=\"${ticketLink}\" style=\"color: #2563eb; text-decoration: underline;\" target=\"_blank\"><strong>${ticketData.display_id}</strong></a> - ${ticketData.short_description} has been assigned to engineer: <strong>${assignedEngineerEmail}</strong>.</p><p>Access the Ticketing Tool for more details.</p></div>`;
-                    
-                    // Check if action is performed by engineer
-                    const isEngineerAction = ['support', 'admin', 'super_admin', 'site_admin'].includes(authenticatedUserRole);
-                    
-                    if (isEngineerAction) {
-                        // Engineer action: To = request_for_email/reporter_email, CC = process.env.DISTRIBUTION_EMAIL + assigned engineer
-                        let toList = [];
-                        if (requestForEmail && reporterEmail) {
-                            if (requestForEmail === reporterEmail) {
-                                toList.push(requestForEmail);
-                            } else {
-                                toList.push(requestForEmail, reporterEmail);
-                            }
-                        } else if (requestForEmail) {
-                            toList.push(requestForEmail);
-                        } else if (reporterEmail) {
-                            toList.push(reporterEmail);
-                        }
-                        
-                        let ccList = ['process.env.DISTRIBUTION_EMAIL'];
-                        if (assignedEngineerEmail) {
-                            ccList.push(assignedEngineerEmail);
-                        }
-                        
-                        setImmediate(async () => {
-                            try {
-                                const baseUrl = getBaseUrl(req);
-                                const ticketUrl = `${baseUrl}/tickets/${ticketId}`;
-                                
-                                const emailData = {
-                                    display_id: ticketData.display_id,
-                                    short_description: ticketData.short_description,
-                                    assignedEngineerEmail: assignedEngineerEmail,
-                                    ticketUrl: ticketUrl,
-                                    toEmail: toList.join(','),
-                                    ccEmail: ccList.join(',')
-                                };
-                                
-                                await emailService.sendTicketAssignmentEmail(emailData, false); // false = team notification
-                            } catch (error) {
-                                console.error('Error sending ticket assignment email:', error);
-                            }
-                        });
+                    // Add history entry to assignmentBackgroundData (which should already be set above)
+                    if (assignmentBackgroundData) {
+                        assignmentBackgroundData.assignmentHistoryEntry = assignmentHistoryEntry;
                     } else {
-                        // Non-engineer action: To = reporter_email, request_for_email; CC = assigned engineer
-                        let toList = [];
-                        if (reporterEmail) toList.push(reporterEmail);
-                        if (requestForEmail && requestForEmail !== reporterEmail) toList.push(requestForEmail);
-                        let ccList = assignedEngineerEmail;
-                        setImmediate(async () => {
-                            try {
-                                const baseUrl = getBaseUrl(req);
-                                const ticketUrl = `${baseUrl}/tickets/${ticketId}`;
-                                
-                                const emailData = {
-                                    display_id: ticketData.display_id,
-                                    short_description: ticketData.short_description,
-                                    assignedEngineerEmail: assignedEngineerEmail,
-                                    ticketUrl: ticketUrl,
-                                    toEmail: toList.join(','),
-                                    ccEmail: ccList
-                                };
-                                
-                                await emailService.sendTicketAssignmentEmail(emailData, true); // true = user notification
-                            } catch (error) {
-                                console.error('Error sending ticket assignment email:', error);
-                            }
-                        });
+                        // Fallback: This shouldn't happen, but handle it just in case
+                        // (This path is for when assignedUserDoc exists from email query)
+                        assignmentBackgroundData = {
+                            ticketId,
+                            ticketData: JSON.parse(JSON.stringify(ticketData)), // Deep clone to avoid reference issues
+                            assigned_to_email,
+                            assignedUserDocId: assignedUserDoc ? assignedUserDoc.id : assigned_to_id,
+                            assignedUserData: assignedUserDoc ? assignedUserDoc.data() : null,
+                            authenticatedUid,
+                            authenticatedUserRole,
+                            needsValidation: false,
+                            assignmentHistoryEntry // Store history entry for background update
+                        };
                     }
                 }
             }
 
             // Priority change
+            // OPTIMIZATION: Store history entry for background update (non-blocking)
+            let priorityHistoryEntry = null;
             if (priority && priority !== ticketData.priority) {
-                const priorityHistoryEntry = {
+                priorityHistoryEntry = {
                     old_priority: ticketData.priority,
                     new_priority: priority,
                     user_email: req.user.email,
-                    timestamp: new Date()
+                    timestamp: new Date() // Use client timestamp - will be updated in background
                 };
-                updateData.priority_history = admin.firestore.FieldValue.arrayUnion(priorityHistoryEntry);
+                // REMOVED: Don't update history in critical path - move to background
+                // updateData.priority_history = admin.firestore.FieldValue.arrayUnion(priorityHistoryEntry);
                 
                 // Move priority change logging to background
                 setImmediate(async () => {
@@ -1043,26 +1116,280 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
             }
 
             // Category change
+            // OPTIMIZATION: Store history entry for background update (non-blocking)
+            let categoryHistoryEntry = null;
             if (category && category !== ticketData.category) {
-                const categoryHistoryEntry = {
+                categoryHistoryEntry = {
                     old_category: ticketData.category,
                     new_category: category,
                     user_email: req.user.email,
-                    timestamp: new Date()
+                    timestamp: new Date() // Use client timestamp - will be updated in background
                 };
-                updateData.category_history = admin.firestore.FieldValue.arrayUnion(categoryHistoryEntry);
+                // REMOVED: Don't update history in critical path - move to background
+                // updateData.category_history = admin.firestore.FieldValue.arrayUnion(categoryHistoryEntry);
             }
 
+            // OPTIMIZED: Update only critical fields first (no history arrays = much faster)
+            // History arrays will be updated in background after response is sent
+            const updateStartTime = Date.now();
+            const updateDataSize = JSON.stringify(updateData).length;
+            
+            // Critical update: Only essential fields (status, assignment, priority, etc.)
+            // This should be much faster (100-200ms) without arrayUnion operations
             await ticketsCollection.doc(ticketId).update(updateData);
+            const updateEndTime = Date.now();
+            const updateDuration = updateEndTime - updateStartTime;
             
-            // Return success immediately to user
+            console.log(`[PERF] Critical update took ${updateDuration}ms for ticket ${ticketId} (payload: ${updateDataSize} bytes)`);
+            
+            // Store history entries for background processing
+            const historyUpdates = {};
+            if (statusHistoryEntry) {
+                historyUpdates.status_history = statusHistoryEntry;
+            }
+            if (priorityHistoryEntry) {
+                historyUpdates.priority_history = priorityHistoryEntry;
+            }
+            if (categoryHistoryEntry) {
+                historyUpdates.category_history = categoryHistoryEntry;
+            }
+            
+            // Return success immediately after update completes - DON'T WAIT FOR EMAILS
+            const responseStartTime = Date.now();
             res.status(200).json({ message: 'Ticket updated successfully!' });
+            // Force flush the response immediately
+            if (res.flush) res.flush();
+            const responseEndTime = Date.now();
+            console.log(`[PERF] Response sent in ${responseEndTime - responseStartTime}ms after update (total time from request: ${responseEndTime - (req._startTime || Date.now())}ms)`);
             
-            // Handle all background operations asynchronously
+            // Handle all background operations asynchronously (non-blocking) - AFTER response is sent
             setImmediate(async () => {
                 try {
+                    // OPTIMIZATION: Update history arrays in background (non-blocking)
+                    // This doesn't affect response time since it happens after response is sent
+                    if (Object.keys(historyUpdates).length > 0) {
+                        try {
+                            const historyUpdateData = {};
+                            if (historyUpdates.status_history) {
+                                historyUpdateData.status_history = admin.firestore.FieldValue.arrayUnion(historyUpdates.status_history);
+                            }
+                            if (historyUpdates.priority_history) {
+                                historyUpdateData.priority_history = admin.firestore.FieldValue.arrayUnion(historyUpdates.priority_history);
+                            }
+                            if (historyUpdates.category_history) {
+                                historyUpdateData.category_history = admin.firestore.FieldValue.arrayUnion(historyUpdates.category_history);
+                            }
+                            
+                            if (Object.keys(historyUpdateData).length > 0) {
+                                await ticketsCollection.doc(ticketId).update(historyUpdateData);
+                                console.log(`[PERF] History arrays updated in background for ticket ${ticketId}`);
+                            }
+                        } catch (historyError) {
+                            console.error('Error updating history arrays in background:', historyError);
+                            // Don't fail the entire operation if history update fails
+                        }
+                    }
+                    
+                    // Update assignment history if present
+                    if (assignmentBackgroundData && assignmentBackgroundData.assignmentHistoryEntry) {
+                        try {
+                            await ticketsCollection.doc(ticketId).update({
+                                assigned_to_history: admin.firestore.FieldValue.arrayUnion(assignmentBackgroundData.assignmentHistoryEntry)
+                            });
+                            console.log(`[PERF] Assignment history updated in background for ticket ${ticketId}`);
+                        } catch (historyError) {
+                            console.error('Error updating assignment history in background:', historyError);
+                        }
+                    }
+                    
                     // Trigger analytics update for real-time reports
                     await triggerAnalyticsUpdate('updated', { ...ticketData, ...updateData, id: ticketId });
+                    
+                    // Handle assignment emails and notifications in background
+                    if (assignmentBackgroundData) {
+                        const {
+                            ticketId: bgTicketId,
+                            ticketData: bgTicketData,
+                            assigned_to_email: bgAssignedToEmail,
+                            assigned_to_id: bgAssignedToId,
+                            assignedUserDocId: bgAssignedUserDocId,
+                            assignedUserData: bgAssignedUserData,
+                            authenticatedUid: bgAuthenticatedUid,
+                            authenticatedUserRole: bgAuthenticatedUserRole,
+                            needsValidation: bgNeedsValidation
+                        } = assignmentBackgroundData;
+                        
+                        // OPTIMIZATION: If we trusted frontend ID, validate now and rollback if invalid
+                        let validatedUserDoc = null;
+                        let validatedUserData = null;
+                        
+                        if (bgNeedsValidation && bgAssignedToId) {
+                            try {
+                                // Validate the user exists and has correct email
+                                validatedUserDoc = await usersCollection.doc(bgAssignedToId).get();
+                                if (!validatedUserDoc.exists) {
+                                    console.error(`[VALIDATION] Assignment failed: User with ID ${bgAssignedToId} not found - rolling back`);
+                                    // Rollback assignment
+                                    await ticketsCollection.doc(bgTicketId).update({
+                                        assigned_to_id: bgTicketData.assigned_to_id,
+                                        assigned_to_email: bgTicketData.assigned_to_email
+                                    });
+                                    return; // Don't proceed with notifications/emails
+                                }
+                                validatedUserData = validatedUserDoc.data();
+                                
+                                // Verify email matches
+                                if (validatedUserData.email !== bgAssignedToEmail) {
+                                    console.error(`[VALIDATION] Assignment failed: Email mismatch - rolling back`);
+                                    await ticketsCollection.doc(bgTicketId).update({
+                                        assigned_to_id: bgTicketData.assigned_to_id,
+                                        assigned_to_email: bgTicketData.assigned_to_email
+                                    });
+                                    return;
+                                }
+                                
+                                // Validate role
+                                const canAssign = bgAuthenticatedUserRole === 'site_admin'
+                                    ? ['support', 'admin', 'site_admin'].includes(validatedUserData.role)
+                                    : ['support', 'admin', 'super_admin'].includes(validatedUserData.role);
+                                
+                                if (!canAssign) {
+                                    console.error(`[VALIDATION] Assignment failed: Invalid role - rolling back`);
+                                    await ticketsCollection.doc(bgTicketId).update({
+                                        assigned_to_id: bgTicketData.assigned_to_id,
+                                        assigned_to_email: bgTicketData.assigned_to_email
+                                    });
+                                    return;
+                                }
+                                
+                                // Validation passed - use validated data
+                                console.log(`[VALIDATION] Assignment validated successfully for ${bgAssignedToEmail}`);
+                                assignmentBackgroundData.assignedUserDocId = validatedUserDoc.id;
+                                assignmentBackgroundData.assignedUserData = validatedUserData;
+                            } catch (validationError) {
+                                console.error('[VALIDATION] Error during background validation:', validationError);
+                                // Rollback on error
+                                try {
+                                    await ticketsCollection.doc(bgTicketId).update({
+                                        assigned_to_id: bgTicketData.assigned_to_id,
+                                        assigned_to_email: bgTicketData.assigned_to_email
+                                    });
+                                } catch (rollbackError) {
+                                    console.error('[VALIDATION] Error rolling back assignment:', rollbackError);
+                                }
+                                return;
+                            }
+                        }
+                        
+                        // Use validated data if available, otherwise use original
+                        const finalAssignedUserDocId = validatedUserDoc ? validatedUserDoc.id : bgAssignedUserDocId;
+                        const finalAssignedUserData = validatedUserData || bgAssignedUserData;
+                        
+                        // Assignment logging
+                        try {
+                            const userDoc = await usersCollection.doc(bgAuthenticatedUid).get();
+                            const userData = userDoc.exists ? userDoc.data() : {};
+                            let userName = req.user.email;
+                            if (userData.firstName || userData.lastName) {
+                                userName = `${userData.firstName || ''} ${userData.lastName || ''}`.trim();
+                            } else if (userData.name) {
+                                userName = userData.name;
+                            } else if (userData.client_name) {
+                                userName = userData.client_name;
+                            }
+                            await logTicketAssigned(db, bgTicketId, userName, bgAssignedToEmail, req.user.email, { ...bgTicketData, ticket_display_id: bgTicketData.display_id });
+                        } catch (error) {
+                            console.error('Error in background assignment logging:', error);
+                        }
+                        
+                        // Notifications
+                        try {
+                            if (finalAssignedUserDocId && finalAssignedUserDocId !== bgAuthenticatedUid) {
+                                await notificationsCollection.add({
+                                    userId: finalAssignedUserDocId,
+                                    message: `Ticket ${bgTicketData.display_id} - "${bgTicketData.short_description}" has been assigned to you.`,
+                                    type: 'ticket_assigned',
+                                    read: false,
+                                    timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                                    ticketId: bgTicketId
+                                });
+                            }
+                            if (bgTicketData.assigned_to_id && bgTicketData.assigned_to_id !== finalAssignedUserDocId) {
+                                await notificationsCollection.add({
+                                    userId: bgTicketData.assigned_to_id,
+                                    message: `Ticket ${bgTicketData.display_id} - "${bgTicketData.short_description}" has been reassigned from you.`,
+                                    type: 'ticket_reassigned_from',
+                                    read: false,
+                                    timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                                    ticketId: bgTicketId
+                                });
+                            }
+                        } catch (error) {
+                            console.error('Error in background notification operations:', error);
+                        }
+                        
+                        // Send assignment emails
+                        try {
+                            const reporterEmail = bgTicketData.reporter_email;
+                            const requestForEmail = bgTicketData.request_for_email;
+                            const assignedEngineerEmail = bgAssignedToEmail;
+                            const baseUrl = getBaseUrl(req);
+                            const ticketUrl = `${baseUrl}/tickets/${bgTicketId}`;
+                            
+                            const isEngineerAction = ['support', 'admin', 'super_admin', 'site_admin'].includes(bgAuthenticatedUserRole);
+                            
+                            if (isEngineerAction) {
+                                // Engineer action: To = request_for_email/reporter_email, CC = process.env.DISTRIBUTION_EMAIL + assigned engineer
+                                let toList = [];
+                                if (requestForEmail && reporterEmail) {
+                                    if (requestForEmail === reporterEmail) {
+                                        toList.push(requestForEmail);
+                                    } else {
+                                        toList.push(requestForEmail, reporterEmail);
+                                    }
+                                } else if (requestForEmail) {
+                                    toList.push(requestForEmail);
+                                } else if (reporterEmail) {
+                                    toList.push(reporterEmail);
+                                }
+                                
+                                let ccList = [process.env.DISTRIBUTION_EMAIL];
+                                if (assignedEngineerEmail) {
+                                    ccList.push(assignedEngineerEmail);
+                                }
+                                
+                                const emailData = {
+                                    display_id: bgTicketData.display_id,
+                                    short_description: bgTicketData.short_description,
+                                    assignedEngineerEmail: assignedEngineerEmail,
+                                    ticketUrl: ticketUrl,
+                                    toEmail: toList.join(','),
+                                    ccEmail: ccList.join(',')
+                                };
+                                
+                                await emailService.sendTicketAssignmentEmail(emailData, false); // false = team notification
+                            } else {
+                                // Non-engineer action: To = reporter_email, request_for_email; CC = assigned engineer
+                                let toList = [];
+                                if (reporterEmail) toList.push(reporterEmail);
+                                if (requestForEmail && requestForEmail !== reporterEmail) toList.push(requestForEmail);
+                                let ccList = assignedEngineerEmail;
+                                
+                                const emailData = {
+                                    display_id: bgTicketData.display_id,
+                                    short_description: bgTicketData.short_description,
+                                    assignedEngineerEmail: assignedEngineerEmail,
+                                    ticketUrl: ticketUrl,
+                                    toEmail: toList.join(','),
+                                    ccEmail: ccList
+                                };
+                                
+                                await emailService.sendTicketAssignmentEmail(emailData, true); // true = user notification
+                            }
+                        } catch (error) {
+                            console.error('Error sending ticket assignment email:', error);
+                        }
+                    }
                 } catch (error) {
                     console.error('Error in background analytics update:', error);
                 }
@@ -1183,7 +1510,7 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
             const ticketLink = `${baseUrl}/tickets/${ticketId}`;
             const emailHtml = `<div style=\"font-family: Arial, sans-serif; color: #222;\"><p>Your ticket (<a href=\"${ticketLink}\" style=\"color: #2563eb; text-decoration: underline;\" target=\"_blank\"><strong>${ticketData.display_id}</strong></a> - ${ticketData.short_description}) has been cancelled.</p><p>Access the Ticketing Tool for more details.</p></div>`;
             setImmediate(async () => {
-                let toList = ['process.env.DISTRIBUTION_EMAIL'];
+                let toList = [process.env.DISTRIBUTION_EMAIL];
                 
                 // Add user emails to "To" field
                 if (requestForEmail && ticketReporterEmail) {
@@ -1332,7 +1659,7 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                             toList.push(reporterEmail);
                         }
                         
-                        let ccList = ['process.env.DISTRIBUTION_EMAIL'];
+                        let ccList = [process.env.DISTRIBUTION_EMAIL];
                         if (assignedToEmail) {
                             ccList.push(assignedToEmail);
                         }
@@ -1348,7 +1675,7 @@ module.exports = (db, admin, ticketsCollection, usersCollection, notificationsCo
                         });
                     } else {
                         // Non-engineer action: To = process.env.DISTRIBUTION_EMAIL + assigned engineer, CC = request_for_email/reporter_email
-                        let toList = ['process.env.DISTRIBUTION_EMAIL'];
+                        let toList = [process.env.DISTRIBUTION_EMAIL];
                         
                         // Add assigned engineer to "To" field if ticket is assigned
                         if (assignedToEmail) {

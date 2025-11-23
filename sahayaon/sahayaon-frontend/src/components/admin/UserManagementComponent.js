@@ -10,7 +10,6 @@ import {
 import { 
     Edit as EditIcon, 
     Delete as DeleteIcon, 
-    Add as AddIcon, 
     Clear as ClearIcon, 
     VpnKey as VpnKeyIcon, 
     LockReset as LockResetIcon, 
@@ -46,6 +45,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { getFirestore, collection, onSnapshot, query, where, orderBy } from 'firebase/firestore';
 import { app } from '../../config/firebase';
 import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import { useTheme } from '@mui/material/styles';
 import SmartCacheManager from '../../utils/smartCacheManager';
 // For Material-UI v5 and above
@@ -123,16 +123,31 @@ const EMPLOYMENT_TYPES = [
   { value: 'freelance', label: 'Freelance' },
 ];
 
-function generatePassword(length = 12) {
-  const prefix = 'Sahayaon#';
-  const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  let randomText = '';
-  // Generate random text (subtract prefix length from total length)
-  const randomLength = length - prefix.length;
-  for (let i = 0; i < randomLength; i++) {
-    randomText += chars.charAt(Math.floor(Math.random() * chars.length));
+function generatePassword() {
+  // 8 characters: 4 from "Sahayaon" letters + 4 random characters (numbers or alphabets)
+  const sahayaonLetters = ['S', 'a', 'h', 'y', 'o', 'n'];
+  const randomChars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  
+  // Pick 4 random letters from "Sahayaon"
+  let password = '';
+  const selectedLetters = [];
+  for (let i = 0; i < 4; i++) {
+    const randomIndex = Math.floor(Math.random() * sahayaonLetters.length);
+    selectedLetters.push(sahayaonLetters[randomIndex]);
   }
-  return prefix + randomText;
+  
+  // Add 4 random characters (numbers or alphabets)
+  for (let i = 0; i < 4; i++) {
+    selectedLetters.push(randomChars.charAt(Math.floor(Math.random() * randomChars.length)));
+  }
+  
+  // Shuffle the array to mix letters and random chars
+  for (let i = selectedLetters.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [selectedLetters[i], selectedLetters[j]] = [selectedLetters[j], selectedLetters[i]];
+  }
+  
+  return selectedLetters.join('');
 }
 
 const USER_TEMPLATE_HEADERS = [
@@ -145,6 +160,31 @@ const USER_TEMPLATE_HEADERS = [
   'managerEmail',
   'employmentType',
 ];
+
+// Friendly display names for Excel template headers
+const USER_TEMPLATE_DISPLAY_NAMES = [
+  'First Name',
+  'Last Name',
+  'Employee ID',
+  'Email',
+  'Designation',
+  'Contact Number',
+  'Manager Email',
+  'Employment Type'
+];
+
+// Map display names back to field names for processing
+const HEADER_NAME_MAP = {
+  'First Name': 'firstName',
+  'Last Name': 'lastName',
+  'Employee ID': 'employeeId',
+  'Email': 'email',
+  'Designation': 'designation',
+  'Contact Number': 'contactNumber',
+  'Manager Email': 'managerEmail',
+  'Employment Type': 'employmentType',
+  'Company Name': 'companyName'
+};
 
 
 const UserManagementComponent = ({ user, showFlashMessage }) => {
@@ -486,13 +526,14 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                     console.log("🔍 Site admin query created:", { clientName: userClientName });
                 } else {
                     // For admin and super_admin, filter by relevant roles only
-                    // This reduces reads significantly compared to getting ALL users
+                    // Exclude engineer roles - engineers are managed separately, not as users
+                    // Engineer roles: 'support', 'engineer', 'senior_engineer', 'lead_engineer', 'principal_engineer'
                     usersQuery = query(
                         usersRef,
-                        where('role', 'in', ['user', 'site_admin', 'support', 'admin', 'super_admin']),
+                        where('role', 'in', ['user', 'site_admin', 'admin', 'super_admin']),
                         orderBy('firstName', 'asc')
                     );
-                    console.log("🔍 Admin/Super admin query created");
+                    console.log("🔍 Admin/Super admin query created (excluding engineers)");
                 }
                 
                 console.log("🔍 Query setup complete, setting up onSnapshot listener...");
@@ -1025,7 +1066,11 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
             'Authorization': `Bearer ${idToken}`,
             'Content-Type': 'application/json' 
           },
-          body: JSON.stringify({ password: newPassword, mustChangePassword: true }),
+          body: JSON.stringify({ 
+          password: newPassword, 
+          mustChangePassword: true,
+          sendEmail: emailSent 
+        }),
         });
         
         if (!res.ok) {
@@ -1033,36 +1078,12 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
           throw new Error(errData.error || 'Failed to change password');
         }
         
-        // If email checkbox is checked, send the password email
-        if (emailSent) {
-          try {
-            const userData = users.find(u => u.uid === pwdUserId);
-            if (userData) {
-              const emailRes = await fetch(`${API_BASE_URL}/api/users/${pwdUserId}/send-password-email`, {
-                method: 'POST',
-                headers: { 
-                  'Authorization': `Bearer ${idToken}`,
-                  'Content-Type': 'application/json' 
-                },
-                body: JSON.stringify({ 
-                  password: newPassword,
-                  userEmail: userData.email,
-                  userName: `${userData.firstName || ''} ${userData.lastName || ''}`.trim() || userData.name || 'User',
-                  companyName: userData.clientname || userData.companyName || 'Company',
-                  loginUrl: FRONTEND_URL
-                }),
-              });
-              
-              if (emailRes.ok) {
-                setPasswordResetStatus('Password reset and email sent successfully!');
-              } else {
-                setPasswordResetStatus('Password reset successful, but email failed to send.');
-              }
-            }
-          } catch (emailErr) {
-            console.error('Email sending failed:', emailErr);
-            setPasswordResetStatus('Password reset successful, but email failed to send.');
-          }
+        // Email is now sent automatically by the backend when sendEmail is true
+        const responseData = await res.json();
+        if (responseData.emailSent) {
+          setPasswordResetStatus('Password reset and email sent successfully!');
+        } else if (emailSent) {
+          setPasswordResetStatus('Password reset successful, but email failed to send.');
         } else {
           setPasswordResetStatus('Password reset successfully!');
         }
@@ -1154,42 +1175,92 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
         return user && user.role === 'site_admin' && user.uid === userRow.uid;
     };
 
-    const handleDownloadTemplate = () => {
+    const handleDownloadTemplate = async () => {
+      // Employment type options for dropdown
+      const employmentTypeOptions = ['Full-time', 'Part-time', 'Contract', 'Intern', 'Other'];
+      
       // Create dynamic headers based on user role
       let templateHeaders = [...USER_TEMPLATE_HEADERS];
-      
-      console.log('User role:', user?.role);
-      console.log('Original headers:', templateHeaders);
+      let displayHeaders = [...USER_TEMPLATE_DISPLAY_NAMES];
       
       // Add company column for super_admin only
       if (user && user.role === 'super_admin') {
         templateHeaders.splice(2, 0, 'companyName'); // Insert after employeeId
-        console.log('Added companyName for super_admin');
+        displayHeaders.splice(2, 0, 'Company Name'); // Insert after Employee ID
       }
       
-      console.log('Final headers:', templateHeaders);
+      // Create ExcelJS workbook
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('Users');
       
-      // Create CSV content with headers and sample row
-      const csvContent = [
-        templateHeaders.join(','),
-        // Add sample row with empty values, but pre-fill companyName if client is selected
-        templateHeaders.map(header => {
-          if (header === 'companyName' && selectedClientForAction) {
-            return selectedClientForAction;
-          }
-          return '';
-        }).join(',')
-      ].join('\n');
+      // Add header row with friendly display names
+      worksheet.addRow(displayHeaders);
       
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      // Add sample row with empty values, but pre-fill companyName if client is selected
+      const sampleRow = templateHeaders.map(header => {
+        if (header === 'companyName' && selectedClientForAction) {
+          return selectedClientForAction;
+        }
+        return '';
+      });
+      worksheet.addRow(sampleRow);
+      
+      // Set column widths
+      displayHeaders.forEach((header, index) => {
+        worksheet.getColumn(index + 1).width = 20;
+      });
+      
+      // Style header row
+      const headerRow = worksheet.getRow(1);
+      headerRow.font = { bold: true };
+      headerRow.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFE0E0E0' }
+      };
+      
+      // Find employmentType column index (1-based for ExcelJS)
+      // Use display names since that's what we're showing in the template
+      const employmentTypeIndex = displayHeaders.indexOf('Employment Type') + 1;
+      
+      // Add data validation dropdown to employmentType column
+      if (employmentTypeIndex > 0) {
+        // Create the list formula string - must be in format: "Option1,Option2,Option3"
+        // The double quotes are important for Excel to recognize it as a list
+        const listFormula = `"${employmentTypeOptions.join(',')}"`;
+        
+        // Apply data validation to cells in the employmentType column (rows 2 to 500)
+        // ExcelJS applies validation to individual cells
+        for (let row = 2; row <= 500; row++) {
+          const cell = worksheet.getCell(row, employmentTypeIndex);
+          
+          // Set data validation with dropdown list
+          cell.dataValidation = {
+            type: 'list',
+            allowBlank: true, // Allow blank for flexibility
+            formulae: [listFormula],
+            showInputMessage: true,
+            promptTitle: 'Employment Type',
+            prompt: 'Please select an employment type from the dropdown',
+            showErrorMessage: true,
+            errorStyle: 'error',
+            errorTitle: 'Invalid Value',
+            error: 'Please select a value from the dropdown list: ' + employmentTypeOptions.join(', ')
+          };
+        }
+      }
+      
+      // Generate buffer and download
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
-      const url = URL.createObjectURL(blob);
-      link.setAttribute('href', url);
-      link.setAttribute('download', selectedClientForAction ? `${selectedClientForAction}_user_template.csv` : 'user_import_template.csv');
-      link.style.visibility = 'hidden';
+      link.href = url;
+      link.download = selectedClientForAction ? `${selectedClientForAction}_user_template.xlsx` : 'user_import_template.xlsx';
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
     };
 
     const handleImportFile = (e) => {
@@ -1207,13 +1278,19 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
             const lines = csvText.split('\n');
             const headers = lines[0].split(',').map(h => h.trim());
             
-            // Create expected headers based on user role
+            // Check if headers match either field names or display names
             let expectedHeaders = [...USER_TEMPLATE_HEADERS];
+            let expectedDisplayNames = [...USER_TEMPLATE_DISPLAY_NAMES];
             if (user && user.role === 'super_admin') {
-              expectedHeaders.splice(2, 0, 'companyName'); // Insert after employeeId
+              expectedHeaders.splice(2, 0, 'companyName');
+              expectedDisplayNames.splice(2, 0, 'Company Name');
             }
             
-            const missingCols = expectedHeaders.filter(h => !headers.includes(h));
+            // Check for missing columns (accept either display names or field names)
+            const allExpected = [...expectedHeaders, ...expectedDisplayNames];
+            const missingCols = expectedDisplayNames.filter(h => 
+              !headers.includes(h) && !headers.includes(HEADER_NAME_MAP[h])
+            );
             if (missingCols.length > 0) {
               setImportError('Missing columns: ' + missingCols.join(', '));
               setImportedUsers([]);
@@ -1228,8 +1305,21 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                 headers.forEach((header, index) => {
                   row[header] = values[index] || '';
                 });
-                if (row.email && row.email !== 'email') {
-                  json.push(row);
+                
+                // Map friendly names to field names
+                const mappedRow = {};
+                Object.keys(HEADER_NAME_MAP).forEach(displayName => {
+                  const fieldName = HEADER_NAME_MAP[displayName];
+                  mappedRow[fieldName] = row[displayName] || row[fieldName] || '';
+                });
+                // Also handle companyName if it exists
+                if (row['Company Name'] || row['companyName']) {
+                  mappedRow.companyName = (row['Company Name'] || row['companyName'] || '').trim();
+                }
+                
+                const email = mappedRow.email || row.email || row['Email'];
+                if (email && email.trim() !== '' && email.toLowerCase() !== 'email') {
+                  json.push(mappedRow);
                 }
               }
             }
@@ -1239,14 +1329,35 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
             const sheetName = workbook.SheetNames[0];
             const worksheet = workbook.Sheets[sheetName];
             
-            // Create expected headers based on user role
+            // Convert to JSON - Excel will have friendly header names
+            const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+            
+            // Map friendly header names back to field names
             let expectedHeaders = [...USER_TEMPLATE_HEADERS];
             if (user && user.role === 'super_admin') {
               expectedHeaders.splice(2, 0, 'companyName'); // Insert after employeeId
             }
             
-            json = XLSX.utils.sheet_to_json(worksheet, { header: expectedHeaders, defval: '' });
-            json = json.filter(row => row.email && row.email !== 'email');
+            json = jsonData
+              .filter(row => {
+                // Check if email exists (using either friendly name or field name)
+                const email = row['Email'] || row['email'] || row.email;
+                return email && email.trim() !== '' && email.toLowerCase() !== 'email';
+              })
+              .map(row => {
+                // Map friendly names to field names
+                const mappedRow = {};
+                Object.keys(HEADER_NAME_MAP).forEach(displayName => {
+                  const fieldName = HEADER_NAME_MAP[displayName];
+                  const value = row[displayName] || row[fieldName] || '';
+                  mappedRow[fieldName] = typeof value === 'string' ? value.trim() : value;
+                });
+                // Also handle companyName if it exists in the row
+                if (row['Company Name'] || row['companyName']) {
+                  mappedRow.companyName = (row['Company Name'] || row['companyName'] || '').trim();
+                }
+                return mappedRow;
+              });
           }
           
           if (json.length === 0) {
@@ -2033,31 +2144,8 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                     >
                         <button
                             onClick={openAddUserModal}
-                            style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '6px',
-                                padding: '6px 12px',
-                                fontSize: '0.75rem',
-                                fontWeight: '500',
-                                color: 'white',
-                                backgroundColor: '#3b82f6',
-                                border: '1px solid #3b82f6',
-                                borderRadius: '4px',
-                                cursor: 'pointer',
-                                height: '28px',
-                                transition: 'all 0.2s ease'
-                            }}
-                            onMouseEnter={(e) => {
-                                e.target.style.backgroundColor = '#2563eb';
-                                e.target.style.borderColor = '#2563eb';
-                            }}
-                            onMouseLeave={(e) => {
-                                e.target.style.backgroundColor = '#3b82f6';
-                                e.target.style.borderColor = '#3b82f6';
-                            }}
+                            className="px-3 py-1.5 text-sm font-semibold text-blue-600 hover:text-blue-700 hover:underline rounded transition-colors duration-200 ease-in-out focus:outline-none"
                         >
-                            <AddIcon style={{ fontSize: '14px', width: '14px', height: '14px' }} />
                             Add
                         </button>
                         <button

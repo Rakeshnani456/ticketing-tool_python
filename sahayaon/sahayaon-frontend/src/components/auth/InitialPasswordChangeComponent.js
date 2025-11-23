@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { signOut } from 'firebase/auth';
-import { Shield, Lock, Eye, EyeOff } from 'lucide-react';
+import { Shield, Lock, Eye, EyeOff, AlertCircle, CheckCircle2, X, ArrowRight, XCircle } from 'lucide-react';
 
 // Import common UI components
 import FormInput from '../common/FormInput';
@@ -138,11 +138,14 @@ const Toast = ({ message, type, isVisible, onClose }) => {
     };
 
 /**
- * Initial Password Change Component
+ * Initial Password Change Component - Enterprise Portal Style
  */
 const InitialPasswordChangeComponent = ({ navigateTo, showFlashMessage }) => {
     const navigate = useNavigate();
     const location = useLocation();
+    
+    // Step management: 'prompt' -> 'form' -> 'success'
+    const [currentStep, setCurrentStep] = useState('prompt');
     
     // Form state
     const [newPassword, setNewPassword] = useState('');
@@ -152,7 +155,7 @@ const InitialPasswordChangeComponent = ({ navigateTo, showFlashMessage }) => {
     const [fieldErrors, setFieldErrors] = useState({});
     
     // Password validation state
-    const [passwordStrength, setPasswordStrength] = useState({ score: 0, feedback: '' });
+    const [passwordStrength, setPasswordStrength] = useState({ score: 0, feedback: '', strength: '' });
     
     // Get user data from location state
     const userData = location.state?.userData;
@@ -185,10 +188,26 @@ const InitialPasswordChangeComponent = ({ navigateTo, showFlashMessage }) => {
     };
 
     /**
+     * Handle cancel action
+     */
+    const handleCancel = async () => {
+        // Sign out user and redirect to login
+        await signOut(authClient);
+        navigate('/login');
+    };
+
+    /**
+     * Handle continue to password form
+     */
+    const handleContinue = () => {
+        setCurrentStep('form');
+    };
+
+    /**
      * Validate password strength
      */
     const validatePasswordStrength = (password) => {
-        if (!password) return { score: 0, feedback: '' };
+        if (!password) return { score: 0, feedback: [], strength: '' };
 
         let score = 0;
         let feedback = [];
@@ -211,7 +230,7 @@ const InitialPasswordChangeComponent = ({ navigateTo, showFlashMessage }) => {
         const strengthText = score < 2 ? 'Weak' : score < 4 ? 'Fair' : score < 5 ? 'Good' : 'Strong';
         const feedbackText = feedback.length > 0 ? `Add ${feedback.join(', ')}` : '';
 
-        return { score, feedback: feedbackText, strength: strengthText };
+        return { score, feedback: feedbackText, strength: strengthText, checks: feedback };
     };
 
     /**
@@ -252,15 +271,14 @@ const InitialPasswordChangeComponent = ({ navigateTo, showFlashMessage }) => {
             const data = await response.json();
 
             if (response.ok) {
-                showStatus('Password updated successfully! You can now log in.', 'success');
+                // Show success step
+                setCurrentStep('success');
                 
-                // Sign out and redirect to login
-                await signOut(authClient);
-                
-                // Redirect to login after a short delay
-                setTimeout(() => {
+                // Sign out and redirect to login after delay
+                setTimeout(async () => {
+                    await signOut(authClient);
                     navigate('/login');
-                }, 2000);
+                }, 3000);
             } else {
                 const errorMsg = data.error || 'Failed to update password. Please try again.';
                 showStatus(errorMsg, 'error');
@@ -297,22 +315,73 @@ const InitialPasswordChangeComponent = ({ navigateTo, showFlashMessage }) => {
     };
 
     /**
-     * Password strength indicator component
+     * Password strength indicator component - Enterprise style
      */
     const PasswordStrengthIndicator = ({ strength }) => {
         if (!strength.score) return null;
 
         const getStrengthColor = () => {
-            if (strength.score < 2) return 'text-red-500';
-            if (strength.score < 4) return 'text-yellow-500';
-            return 'text-green-500';
+            if (strength.score < 2) return { text: 'text-red-600', bg: 'bg-red-500', label: 'Weak' };
+            if (strength.score < 4) return { text: 'text-yellow-600', bg: 'bg-yellow-500', label: 'Fair' };
+            if (strength.score < 5) return { text: 'text-gray-700', bg: 'bg-gray-600', label: 'Good' };
+            return { text: 'text-green-600', bg: 'bg-green-600', label: 'Strong' };
         };
 
+        const colors = getStrengthColor();
+        const progress = (strength.score / 5) * 100;
+
         return (
-            <div className="mt-1">
-                <p className={`text-xs ${getStrengthColor()}`}>
-                    Password strength: {strength.strength}
-                </p>
+            <div className="mt-2 space-y-1">
+                <div className="flex items-center justify-between text-xs">
+                    <span className={`font-medium ${colors.text}`}>
+                        Password Strength: <strong>{colors.label}</strong>
+                    </span>
+                    <span className="text-gray-500">{strength.score}/5</span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
+                    <div 
+                        className={`h-full transition-all duration-300 ${colors.bg}`}
+                        style={{ width: `${progress}%` }}
+                    />
+                </div>
+                {strength.feedback && (
+                    <p className="text-xs text-gray-600 mt-1">{strength.feedback}</p>
+                )}
+            </div>
+        );
+    };
+
+    /**
+     * Password requirements checklist
+     */
+    const PasswordRequirements = ({ password }) => {
+        const requirements = [
+            { label: 'At least 8 characters', met: password.length >= 8 },
+            { label: 'One uppercase letter', met: /[A-Z]/.test(password) },
+            { label: 'One lowercase letter', met: /[a-z]/.test(password) },
+            { label: 'One number', met: /\d/.test(password) },
+            { label: 'One special character', met: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password) }
+        ];
+
+        if (!password) return null;
+
+        return (
+            <div className="mt-3 p-3 bg-gray-50 rounded-md border border-gray-200">
+                <p className="text-xs font-medium text-gray-700 mb-2">Password Requirements:</p>
+                <ul className="space-y-1">
+                    {requirements.map((req, idx) => (
+                        <li key={idx} className="flex items-center text-xs">
+                            {req.met ? (
+                                <CheckCircle2 size={13} className="text-green-600 mr-2 flex-shrink-0" />
+                            ) : (
+                                <XCircle size={13} className="text-gray-400 mr-2 flex-shrink-0" />
+                            )}
+                            <span className={req.met ? 'text-gray-900' : 'text-gray-600'}>
+                                {req.label}
+                            </span>
+                        </li>
+                    ))}
+                </ul>
             </div>
         );
     };
@@ -320,9 +389,9 @@ const InitialPasswordChangeComponent = ({ navigateTo, showFlashMessage }) => {
     // If no user data, show loading
     if (!userData) {
         return (
-            <div className="flex items-center justify-center min-h-screen">
+            <div className="flex items-center justify-center min-h-screen bg-gray-50">
                 <div className="flex flex-col items-center space-y-4">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+                    <div className="animate-spin rounded-full h-8 w-8 border-2 border-gray-400 border-t-transparent"></div>
                     <p className="text-gray-600 text-sm">Loading...</p>
                 </div>
             </div>
@@ -330,110 +399,284 @@ const InitialPasswordChangeComponent = ({ navigateTo, showFlashMessage }) => {
     }
 
     return (
-        <div className="h-screen bg-gray-50 flex overflow-hidden">
-            {/* Left side - Company Name */}
-            <div className="hidden lg:flex lg:w-1/2 xl:w-3/5 bg-white relative overflow-hidden" style={{
-                backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23f3f4f6' fill-opacity='0.4'%3E%3Ccircle cx='30' cy='30' r='2'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
-                backgroundRepeat: 'repeat'
-            }}>
-                <div className="relative z-10 flex flex-col justify-center items-center px-12 py-16 text-gray-800">
-                    <img src={require('../../assets/logo/logo_final.png')} alt="Company Logo" className="h-20 mb-8" />
-                </div>
-                
-                {/* Footer copyright */}
-                <div className="absolute bottom-6 left-6 right-6">
-                    <div className="text-center">
-                        <p className="text-xs text-gray-600">© 2025 Kriasol Technologies LLP. All rights reserved.</p>
-                    </div>
+        <div className="min-h-screen bg-gray-50 flex flex-col lg:flex-row">
+            {/* Left side - Branding */}
+            <div className="hidden lg:flex lg:w-1/2 xl:w-2/5 bg-white relative border-r border-gray-200">
+                <div className="relative z-10 flex flex-col justify-center items-center px-12 py-16 w-full h-full">
+                    <img 
+                        src={require('../../assets/logo/Logo2.png')} 
+                        alt="SahayaOn Logo" 
+                        className="h-20 mb-6 object-contain" 
+                    />
                 </div>
             </div>
 
-            {/* Right side - Password Change Form */}
-            <div className="w-full lg:w-1/2 xl:w-2/5 flex items-center justify-center p-4 overflow-y-auto">
-                <div className="w-full max-w-md">
+            {/* Right side - Content */}
+            <div className="w-full lg:w-1/2 xl:w-3/5 flex items-center justify-center p-4 sm:p-6 lg:p-8 min-h-screen overflow-y-auto">
+                <div className="w-full max-w-lg py-4">
                     {/* Mobile logo */}
-                    <div className="lg:hidden flex justify-center mb-4">
-                        <img src={require('../../assets/logo/logo_final.png')} alt="Company Logo" className="h-10" />
+                    <div className="lg:hidden flex justify-center mb-6">
+                        <img 
+                            src={require('../../assets/logo/Logo2.png')} 
+                            alt="SahayaOn Logo" 
+                            className="h-12 object-contain" 
+                        />
                     </div>
 
-                    <div className="bg-white rounded-2xl border border-gray-100 p-6">
-                        <div className="text-center mb-6">
-                            <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                                <Shield className="w-6 h-6 text-orange-600" />
+                    {/* Step 1: Prompt Screen */}
+                    {currentStep === 'prompt' && (
+                        <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
+                            {/* Header */}
+                            <div className="bg-gray-50 px-6 py-5 border-b border-gray-200">
+                                <div className="flex items-start">
+                                    <div className="w-12 h-12 bg-blue-50 rounded-lg flex items-center justify-center mr-4 flex-shrink-0">
+                                        <Shield className="w-6 h-6 text-blue-600" />
+                                    </div>
+                                    <div className="flex-1">
+                                        <h2 className="text-xl font-semibold text-gray-900 mb-1">
+                                            Security Update Required
+                                        </h2>
+                                        <p className="text-xs text-gray-500">
+                                            Account: <span className="font-medium text-gray-700">{userEmail}</span>
+                                        </p>
+                                    </div>
+                                </div>
                             </div>
-                            <h2 className="text-xl font-bold text-gray-900 mb-1">Update Password</h2>
-                            <p className="text-gray-600 text-sm">
-                                Create a new secure password for <span className="font-medium text-gray-800">{userEmail}</span>
-                            </p>
+
+                            {/* Content */}
+                            <div className="px-6 py-6">
+                                {/* Main Message */}
+                                <div className="mb-6">
+                                    <p className="text-gray-700 text-sm leading-relaxed mb-3">
+                                        To ensure the security of your account and protect your information, you must update your password before accessing the system.
+                                    </p>
+                                    <p className="text-gray-600 text-sm leading-relaxed">
+                                        This is a mandatory security measure that helps maintain the integrity of your account and comply with our security policies.
+                                    </p>
+                                </div>
+
+                                {/* Security Benefits */}
+                                <div className="bg-blue-50 border-l-4 border-blue-500 rounded-md p-4 mb-6">
+                                    <div className="flex items-start">
+                                        <div className="flex-shrink-0">
+                                            <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5" />
+                                        </div>
+                                        <div className="ml-3 flex-1">
+                                            <h3 className="text-sm font-semibold text-blue-900 mb-2">
+                                                Why This Is Important
+                                            </h3>
+                                            <ul className="space-y-1.5 text-xs text-blue-800">
+                                                <li className="flex items-start">
+                                                    <span className="text-blue-600 mr-2">•</span>
+                                                    <span>Protects your account from unauthorized access</span>
+                                                </li>
+                                                <li className="flex items-start">
+                                                    <span className="text-blue-600 mr-2">•</span>
+                                                    <span>Ensures compliance with security best practices</span>
+                                                </li>
+                                                <li className="flex items-start">
+                                                    <span className="text-blue-600 mr-2">•</span>
+                                                    <span>Helps safeguard your sensitive business data</span>
+                                                </li>
+                                            </ul>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Password Requirements */}
+                                <div className="bg-gray-50 border border-gray-200 rounded-md p-4 mb-6">
+                                    <div className="flex items-start">
+                                        <Lock className="w-4 h-4 text-gray-600 mr-3 mt-0.5 flex-shrink-0" />
+                                        <div className="flex-1">
+                                            <p className="text-sm font-semibold text-gray-900 mb-2">
+                                                Password Requirements
+                                            </p>
+                                            <ul className="space-y-1 text-xs text-gray-700">
+                                                <li className="flex items-center">
+                                                    <span className="w-1.5 h-1.5 bg-gray-400 rounded-full mr-2 flex-shrink-0"></span>
+                                                    Minimum 8 characters in length
+                                                </li>
+                                                <li className="flex items-center">
+                                                    <span className="w-1.5 h-1.5 bg-gray-400 rounded-full mr-2 flex-shrink-0"></span>
+                                                    At least one uppercase letter (A-Z)
+                                                </li>
+                                                <li className="flex items-center">
+                                                    <span className="w-1.5 h-1.5 bg-gray-400 rounded-full mr-2 flex-shrink-0"></span>
+                                                    At least one lowercase letter (a-z)
+                                                </li>
+                                                <li className="flex items-center">
+                                                    <span className="w-1.5 h-1.5 bg-gray-400 rounded-full mr-2 flex-shrink-0"></span>
+                                                    At least one number (0-9)
+                                                </li>
+                                                <li className="flex items-center">
+                                                    <span className="w-1.5 h-1.5 bg-gray-400 rounded-full mr-2 flex-shrink-0"></span>
+                                                    At least one special character (!@#$%^&*)
+                                                </li>
+                                            </ul>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Action Buttons */}
+                                <div className="flex flex-col sm:flex-row gap-3 mt-8 pt-6 border-t border-gray-200">
+                                    <button
+                                        onClick={handleCancel}
+                                        className="flex-1 px-4 py-2.5 bg-white hover:bg-gray-50 text-gray-700 font-medium rounded-md transition-colors border border-gray-300 hover:border-gray-400 flex items-center justify-center text-sm"
+                                    >
+                                        <X className="w-4 h-4 mr-2" />
+                                        Cancel & Sign Out
+                                    </button>
+                                    <button
+                                        onClick={handleContinue}
+                                        className="flex-1 px-4 py-2.5 bg-gray-900 hover:bg-gray-800 text-white font-medium rounded-md transition-colors shadow-sm hover:shadow flex items-center justify-center text-sm"
+                                    >
+                                        Proceed to Update Password
+                                        <ArrowRight className="w-4 h-4 ml-2" />
+                                    </button>
+                                </div>
+                            </div>
                         </div>
+                    )}
 
-                        <StatusAlert 
-                            message={statusMessage.message} 
-                            type={statusMessage.type} 
-                            onDismiss={clearStatus}
-                        />
+                    {/* Step 2: Password Form */}
+                    {currentStep === 'form' && (
+                        <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
+                            {/* Header */}
+                            <div className="bg-gray-50 px-6 py-4 border-b border-gray-200">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center">
+                                        <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center mr-3">
+                                            <Lock className="w-5 h-5 text-blue-600" />
+                                        </div>
+                                        <div>
+                                            <h2 className="text-lg font-semibold text-gray-900">Create New Password</h2>
+                                            <p className="text-xs text-gray-500">
+                                                Step 2 of 2 • Account: <span className="font-medium text-gray-700">{userEmail}</span>
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={handleCancel}
+                                        className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-200 rounded-md transition-colors"
+                                        aria-label="Close"
+                                        title="Cancel and sign out"
+                                    >
+                                        <X className="w-5 h-5" />
+                                    </button>
+                                </div>
+                            </div>
 
-                        <form onSubmit={handleChangePassword} className="space-y-4">
-                            <div>
-                                <FormInput
-                                    id="newPassword"
-                                    label="New Password"
-                                    type="password"
-                                    value={newPassword}
-                                    onChange={handleNewPasswordChange}
-                                    onFocus={() => handleInputFocus('newPassword')}
-                                    required
-                                    showPasswordToggle={true}
-                                    error={!!fieldErrors.newPassword}
-                                    className="h-10"
+                            {/* Form Content */}
+                            <div className="px-6 py-6">
+                                <div className="mb-5">
+                                    <p className="text-sm text-gray-600 leading-relaxed">
+                                        Please create a strong password that meets all security requirements. Your password will be encrypted and securely stored.
+                                    </p>
+                                </div>
+
+                                <StatusAlert 
+                                    message={statusMessage.message} 
+                                    type={statusMessage.type} 
+                                    onDismiss={clearStatus}
                                 />
-                                {fieldErrors.newPassword && (
-                                    <p className="text-red-500 text-xs mt-1">{fieldErrors.newPassword}</p>
-                                )}
-                                <PasswordStrengthIndicator strength={passwordStrength} />
-                            </div>
 
-                            <div>
-                                <FormInput
-                                    id="confirmPassword"
-                                    label="Confirm New Password"
-                                    type="password"
-                                    value={confirmPassword}
-                                    onChange={(e) => setConfirmPassword(e.target.value)}
-                                    onFocus={() => handleInputFocus('confirmPassword')}
-                                    required
-                                    showPasswordToggle={true}
-                                    error={!!fieldErrors.confirmPassword}
-                                    className="h-10"
-                                />
-                                {fieldErrors.confirmPassword && (
-                                    <p className="text-red-500 text-xs mt-1">{fieldErrors.confirmPassword}</p>
-                                )}
-                            </div>
+                                <form onSubmit={handleChangePassword} className="space-y-5 mt-5">
+                                    <div>
+                                        <FormInput
+                                            id="newPassword"
+                                            label="New Password"
+                                            type="password"
+                                            value={newPassword}
+                                            onChange={handleNewPasswordChange}
+                                            onFocus={() => handleInputFocus('newPassword')}
+                                            required
+                                            showPasswordToggle={true}
+                                            error={!!fieldErrors.newPassword}
+                                            className="h-11 text-sm"
+                                            placeholder="Enter your new password"
+                                        />
+                                        {fieldErrors.newPassword && (
+                                            <p className="text-red-600 text-xs mt-1.5 flex items-center">
+                                                <XCircle className="w-3.5 h-3.5 mr-1" />
+                                                {fieldErrors.newPassword}
+                                            </p>
+                                        )}
+                                        <PasswordStrengthIndicator strength={passwordStrength} />
+                                        <PasswordRequirements password={newPassword} />
+                                    </div>
 
-                            <div className="pt-1">
-                                <PrimaryButton 
-                                    type="submit" 
-                                    loading={passwordChangeLoading} 
-                                    Icon={Lock} 
-                                    className="w-full h-10 text-sm font-semibold"
-                                    disabled={passwordStrength.score < 3}
-                                >
-                                    {passwordChangeLoading ? "Updating Password..." : "Update Password"}
-                                </PrimaryButton>
-                            </div>
-                        </form>
-                        
-                        {/* Footer links */}
-                        <div className="mt-6 pt-4 border-t border-gray-200">
-                            <div className="flex items-center justify-center space-x-4 text-xs text-gray-600">
-                                <a href="#" className="hover:text-gray-800 transition-colors">Privacy Policy</a>
-                                <span>•</span>
-                                <a href="#" className="hover:text-gray-800 transition-colors">Terms of Service</a>
-                                <span>•</span>
-                                <a href="#" className="hover:text-gray-800 transition-colors">Contact</a>
+                                    <div>
+                                        <FormInput
+                                            id="confirmPassword"
+                                            label="Confirm New Password"
+                                            type="password"
+                                            value={confirmPassword}
+                                            onChange={(e) => setConfirmPassword(e.target.value)}
+                                            onFocus={() => handleInputFocus('confirmPassword')}
+                                            required
+                                            showPasswordToggle={true}
+                                            error={!!fieldErrors.confirmPassword}
+                                            className="h-11 text-sm"
+                                            placeholder="Re-enter your new password"
+                                        />
+                                        {fieldErrors.confirmPassword && (
+                                            <p className="text-red-600 text-xs mt-1.5 flex items-center">
+                                                <XCircle className="w-3.5 h-3.5 mr-1" />
+                                                {fieldErrors.confirmPassword}
+                                            </p>
+                                        )}
+                                        {confirmPassword && newPassword === confirmPassword && (
+                                            <p className="text-green-600 text-xs mt-1.5 flex items-center">
+                                                <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
+                                                Passwords match
+                                            </p>
+                                        )}
+                                    </div>
+
+                                    <div className="pt-2">
+                                        <PrimaryButton 
+                                            type="submit" 
+                                            loading={passwordChangeLoading} 
+                                            Icon={Lock} 
+                                            className="w-full h-10 text-sm font-medium"
+                                            disabled={passwordStrength.score < 3 || newPassword !== confirmPassword}
+                                        >
+                                            {passwordChangeLoading ? "Updating Password..." : "Update Password"}
+                                        </PrimaryButton>
+                                    </div>
+                                </form>
                             </div>
                         </div>
+                    )}
+
+                    {/* Step 3: Success Screen */}
+                    {currentStep === 'success' && (
+                        <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
+                            <div className="px-6 py-10 text-center">
+                                <div className="w-16 h-16 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-5">
+                                    <CheckCircle2 className="w-8 h-8 text-green-600" />
+                                </div>
+                                <h2 className="text-xl font-semibold text-gray-900 mb-3">
+                                    Password Updated Successfully
+                                </h2>
+                                <p className="text-gray-700 text-sm mb-2 leading-relaxed max-w-md mx-auto">
+                                    Your password has been successfully updated and encrypted. Your account is now secured with the new password.
+                                </p>
+                                <p className="text-gray-500 text-xs mb-6">
+                                    You will be redirected to the login page in a few moments. Please sign in with your new password.
+                                </p>
+                                <div className="flex justify-center">
+                                    <div className="animate-spin rounded-full h-6 w-6 border-2 border-gray-400 border-t-transparent"></div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Footer */}
+                    <div className="mt-6 text-center">
+                        <p className="text-xs text-gray-500">
+                            © 2025 Kriasol Technologies LLP. All rights reserved.
+                        </p>
                     </div>
                 </div>
             </div>

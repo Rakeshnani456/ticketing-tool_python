@@ -1,6 +1,6 @@
 // utils/emailService.js
 
-const { getWelcomeEmailTemplate, getPasswordResetTemplate, getTicketNotificationTemplate, getTicketStatusUpdateTemplate, getTicketAssignmentTemplate, getUserTicketAssignmentTemplate, getTicketCancellationTemplate, getTicketCommentTemplate, getPasswordSharingTemplate, getAttachmentUploadTemplate } = require('./emailTemplates');
+const { getWelcomeEmailTemplate, getPasswordResetTemplate, getTicketNotificationTemplate, getTicketStatusUpdateTemplate, getTicketClosedTemplate, getTicketAssignmentTemplate, getUserTicketAssignmentTemplate, getTicketCancellationTemplate, getTicketCommentTemplate, getPasswordSharingTemplate, getAttachmentUploadTemplate } = require('./emailTemplates');
 
 /**
  * Email service for sending various types of emails
@@ -70,6 +70,8 @@ class EmailService {
 
     /**
      * Send password reset email
+     * To: User only
+     * CC: (none)
      * @param {Object} userData - User data object
      * @param {string} userData.userName - User's full name
      * @param {string} userData.resetUrl - Password reset URL
@@ -78,6 +80,16 @@ class EmailService {
      */
     async sendPasswordResetEmail(userData) {
         try {
+            if (!process.env.DISTRIBUTION_EMAIL) {
+                console.error(`[EmailService] DISTRIBUTION_EMAIL not configured`);
+                return false;
+            }
+
+            if (!userData.userEmail) {
+                console.error(`[EmailService] Missing userEmail in userData`);
+                return false;
+            }
+
             const { subject, text, html } = getPasswordResetTemplate(userData);
             
             const mailOptions = {
@@ -98,22 +110,42 @@ class EmailService {
     }
 
     /**
-     * Send ticket notification email
+     * Send ticket notification email (Ticket Creation)
+     * To: User, Distribution List
+     * CC: (none)
      * @param {Object} ticketData - Ticket data object
      * @returns {Promise<boolean>} Success status
      */
     async sendTicketNotificationEmail(ticketData) {
         try {
+            if (!process.env.DISTRIBUTION_EMAIL) {
+                console.error(`[EmailService] DISTRIBUTION_EMAIL not configured`);
+                return false;
+            }
+
             const { subject, text, html } = getTicketNotificationTemplate(ticketData);
+            
+            // To: User + Distribution List
+            const toList = [];
+            if (ticketData.userEmail) {
+                toList.push(ticketData.userEmail);
+            }
+            if (process.env.DISTRIBUTION_EMAIL) {
+                toList.push(process.env.DISTRIBUTION_EMAIL);
+            }
             
             const mailOptions = {
                 from: process.env.DISTRIBUTION_EMAIL,
-                to: ticketData.toEmail || process.env.DISTRIBUTION_EMAIL,
-                cc: ticketData.ccEmail,
+                to: toList.join(','),
                 subject: subject,
                 text: text,
                 html: html,
             };
+
+            // Only add CC if provided
+            if (ticketData.ccEmail) {
+                mailOptions.cc = ticketData.ccEmail;
+            }
 
             await this.transporter.sendMail(mailOptions);
             console.log(`Ticket notification email sent successfully to ${mailOptions.to}`);
@@ -125,22 +157,40 @@ class EmailService {
     }
 
     /**
-     * Send ticket status update notification email
+     * Send ticket status update notification email (Ticket Updated)
+     * To: User, Engineer
+     * CC: Distribution List (if provided)
      * @param {Object} ticketData - Ticket data object
      * @returns {Promise<boolean>} Success status
      */
     async sendTicketStatusUpdateEmail(ticketData) {
         try {
+            if (!process.env.DISTRIBUTION_EMAIL) {
+                console.error(`[EmailService] DISTRIBUTION_EMAIL not configured`);
+                return false;
+            }
+
             const { subject, text, html } = getTicketStatusUpdateTemplate(ticketData);
+            
+            // To: User + Engineer (from toEmail field which should contain both)
+            const toList = ticketData.toEmail ? ticketData.toEmail.split(',').map(e => e.trim()) : [];
             
             const mailOptions = {
                 from: process.env.DISTRIBUTION_EMAIL,
-                to: ticketData.toEmail || process.env.DISTRIBUTION_EMAIL,
-                cc: ticketData.ccEmail,
+                to: toList.length > 0 ? toList.join(',') : process.env.DISTRIBUTION_EMAIL,
                 subject: subject,
                 text: text,
                 html: html,
             };
+
+            // CC: Distribution List + assigned engineer (if provided)
+            const ccList = [];
+            if (ticketData.ccEmail) {
+                ccList.push(...ticketData.ccEmail.split(',').map(e => e.trim()));
+            }
+            if (ccList.length > 0) {
+                mailOptions.cc = ccList.join(',');
+            }
 
             await this.transporter.sendMail(mailOptions);
             console.log(`Ticket status update email sent successfully to ${mailOptions.to}`);
@@ -152,25 +202,42 @@ class EmailService {
     }
 
     /**
-     * Send ticket assignment notification email
+     * Send ticket assignment notification email (Ticket Assigned)
+     * To: User, Engineer, Distribution List
+     * CC: (varies based on context)
      * @param {Object} ticketData - Ticket data object
      * @param {boolean} isUserNotification - Whether this is a user notification (true) or team notification (false)
      * @returns {Promise<boolean>} Success status
      */
     async sendTicketAssignmentEmail(ticketData, isUserNotification = false) {
         try {
+            if (!process.env.DISTRIBUTION_EMAIL) {
+                console.error(`[EmailService] DISTRIBUTION_EMAIL not configured`);
+                return false;
+            }
+
             // Choose template based on recipient type
             const template = isUserNotification ? getUserTicketAssignmentTemplate : getTicketAssignmentTemplate;
             const { subject, text, html } = template(ticketData);
             
+            // To: User + Engineer + Distribution List
+            const toList = ticketData.toEmail ? ticketData.toEmail.split(',').map(e => e.trim()) : [];
+            if (!toList.includes(process.env.DISTRIBUTION_EMAIL)) {
+                toList.push(process.env.DISTRIBUTION_EMAIL);
+            }
+            
             const mailOptions = {
                 from: process.env.DISTRIBUTION_EMAIL,
-                to: ticketData.toEmail || process.env.DISTRIBUTION_EMAIL,
-                cc: ticketData.ccEmail,
+                to: toList.join(','),
                 subject: subject,
                 text: text,
                 html: html,
             };
+
+            // CC: (varies - add if provided)
+            if (ticketData.ccEmail) {
+                mailOptions.cc = ticketData.ccEmail;
+            }
 
             await this.transporter.sendMail(mailOptions);
             const recipientType = isUserNotification ? 'user' : 'team';
@@ -183,22 +250,39 @@ class EmailService {
     }
 
     /**
-     * Send ticket assignment notification email to users
+     * Send ticket assignment notification email to users (Ticket Assigned)
+     * To: User, Engineer, Distribution List
+     * CC: (varies)
      * @param {Object} ticketData - Ticket data object
      * @returns {Promise<boolean>} Success status
      */
     async sendUserTicketAssignmentEmail(ticketData) {
         try {
+            if (!process.env.DISTRIBUTION_EMAIL) {
+                console.error(`[EmailService] DISTRIBUTION_EMAIL not configured`);
+                return false;
+            }
+
             const { subject, text, html } = getUserTicketAssignmentTemplate(ticketData);
+            
+            // To: User + Engineer + Distribution List
+            const toList = ticketData.toEmail ? ticketData.toEmail.split(',').map(e => e.trim()) : [];
+            if (!toList.includes(process.env.DISTRIBUTION_EMAIL)) {
+                toList.push(process.env.DISTRIBUTION_EMAIL);
+            }
             
             const mailOptions = {
                 from: process.env.DISTRIBUTION_EMAIL,
-                to: ticketData.toEmail || process.env.DISTRIBUTION_EMAIL,
-                cc: ticketData.ccEmail,
+                to: toList.join(','),
                 subject: subject,
                 text: text,
                 html: html,
             };
+
+            // CC: (varies - add if provided)
+            if (ticketData.ccEmail) {
+                mailOptions.cc = ticketData.ccEmail;
+            }
 
             await this.transporter.sendMail(mailOptions);
             console.log(`User ticket assignment email sent successfully to: ${mailOptions.to}`);
@@ -210,22 +294,89 @@ class EmailService {
     }
 
     /**
+     * Send ticket closed/resolved email (Ticket Closed)
+     * To: User, Distribution List
+     * CC: (varies)
+     * @param {Object} ticketData - Ticket data object
+     * @returns {Promise<boolean>} Success status
+     */
+    async sendTicketClosedEmail(ticketData) {
+        try {
+            if (!process.env.DISTRIBUTION_EMAIL) {
+                console.error(`[EmailService] DISTRIBUTION_EMAIL not configured`);
+                return false;
+            }
+
+            const { subject, text, html } = getTicketClosedTemplate(ticketData);
+            
+            // To: User + Distribution List
+            const toList = [];
+            if (ticketData.userEmail) {
+                toList.push(ticketData.userEmail);
+            }
+            if (process.env.DISTRIBUTION_EMAIL) {
+                toList.push(process.env.DISTRIBUTION_EMAIL);
+            }
+            
+            const mailOptions = {
+                from: process.env.DISTRIBUTION_EMAIL,
+                to: toList.join(','),
+                subject: subject,
+                text: text,
+                html: html,
+            };
+
+            // CC: (varies - add if provided)
+            if (ticketData.ccEmail) {
+                mailOptions.cc = ticketData.ccEmail;
+            }
+
+            await this.transporter.sendMail(mailOptions);
+            console.log(`Ticket closed email sent successfully to ${mailOptions.to}`);
+            return true;
+        } catch (error) {
+            console.error(`Error sending ticket closed email:`, error.message);
+            return false;
+        }
+    }
+
+    /**
      * Send ticket cancellation notification email
+     * To: User, Distribution List
+     * CC: (varies)
      * @param {Object} ticketData - Ticket data object
      * @returns {Promise<boolean>} Success status
      */
     async sendTicketCancellationEmail(ticketData) {
         try {
+            if (!process.env.DISTRIBUTION_EMAIL) {
+                console.error(`[EmailService] DISTRIBUTION_EMAIL not configured`);
+                return false;
+            }
+
             const { subject, text, html } = getTicketCancellationTemplate(ticketData);
             
+            // To: User + Distribution List
+            const toList = [];
+            if (ticketData.userEmail) {
+                toList.push(ticketData.userEmail);
+            }
+            if (process.env.DISTRIBUTION_EMAIL) {
+                toList.push(process.env.DISTRIBUTION_EMAIL);
+            }
+            
             const mailOptions = {
-                from: 'process.env.DISTRIBUTION_EMAIL',
-                to: ticketData.toEmail || 'process.env.DISTRIBUTION_EMAIL',
-                cc: ticketData.ccEmail,
+                from: process.env.DISTRIBUTION_EMAIL,
+                to: toList.length > 0 ? toList.join(',') : process.env.DISTRIBUTION_EMAIL,
                 subject: subject,
                 text: text,
                 html: html,
             };
+
+            // CC: (varies - add if provided)
+            if (ticketData.ccEmail) {
+                mailOptions.cc = ticketData.ccEmail;
+            }
 
             await this.transporter.sendMail(mailOptions);
             console.log(`Ticket cancellation email sent successfully to ${mailOptions.to}`);
@@ -238,21 +389,35 @@ class EmailService {
 
     /**
      * Send ticket comment notification email
+     * To: User, Engineer (varies)
+     * CC: Distribution List (if provided)
      * @param {Object} ticketData - Ticket data object
      * @returns {Promise<boolean>} Success status
      */
     async sendTicketCommentEmail(ticketData) {
         try {
+            if (!process.env.DISTRIBUTION_EMAIL) {
+                console.error(`[EmailService] DISTRIBUTION_EMAIL not configured`);
+                return false;
+            }
+
             const { subject, text, html } = getTicketCommentTemplate(ticketData);
             
+            // To: User + Engineer (from toEmail field)
+            const toList = ticketData.toEmail ? ticketData.toEmail.split(',').map(e => e.trim()) : [];
+            
             const mailOptions = {
-                from: 'process.env.DISTRIBUTION_EMAIL',
-                to: ticketData.toEmail || 'process.env.DISTRIBUTION_EMAIL',
-                cc: ticketData.ccEmail,
+                from: process.env.DISTRIBUTION_EMAIL,
+                to: toList.length > 0 ? toList.join(',') : process.env.DISTRIBUTION_EMAIL,
                 subject: subject,
                 text: text,
                 html: html,
             };
+
+            // CC: Distribution List (if provided)
+            if (ticketData.ccEmail) {
+                mailOptions.cc = ticketData.ccEmail;
+            }
 
             await this.transporter.sendMail(mailOptions);
             console.log(`Ticket comment email sent successfully to ${mailOptions.to}`);
@@ -265,21 +430,35 @@ class EmailService {
 
     /**
      * Send attachment upload notification email
+     * To: User, Engineer (varies)
+     * CC: Distribution List (if provided)
      * @param {Object} attachmentData - Attachment data object
      * @returns {Promise<boolean>} Success status
      */
     async sendAttachmentUploadEmail(attachmentData) {
         try {
+            if (!process.env.DISTRIBUTION_EMAIL) {
+                console.error(`[EmailService] DISTRIBUTION_EMAIL not configured`);
+                return false;
+            }
+
             const { subject, text, html } = getAttachmentUploadTemplate(attachmentData);
+            
+            // To: User + Engineer (from toEmail field)
+            const toList = attachmentData.toEmail ? attachmentData.toEmail.split(',').map(e => e.trim()) : [];
             
             const mailOptions = {
                 from: process.env.DISTRIBUTION_EMAIL,
-                to: attachmentData.toEmail || 'process.env.DISTRIBUTION_EMAIL',
-                cc: attachmentData.ccEmail,
+                to: toList.length > 0 ? toList.join(',') : process.env.DISTRIBUTION_EMAIL,
                 subject: subject,
                 text: text,
                 html: html,
             };
+
+            // CC: Distribution List (if provided)
+            if (attachmentData.ccEmail) {
+                mailOptions.cc = attachmentData.ccEmail;
+            }
 
             await this.transporter.sendMail(mailOptions);
             console.log(`Attachment upload email sent successfully to ${mailOptions.to}`);
@@ -345,11 +524,23 @@ class EmailService {
 
     /**
      * Send password sharing email for admin password resets
+     * To: User only
+     * CC: (none)
      * @param {Object} userData - User data object
      * @returns {Promise<boolean>} Success status
      */
     async sendPasswordSharingEmail(userData) {
         try {
+            if (!process.env.DISTRIBUTION_EMAIL) {
+                console.error(`[EmailService] DISTRIBUTION_EMAIL not configured`);
+                return false;
+            }
+
+            if (!userData.userEmail) {
+                console.error(`[EmailService] Missing userEmail in userData`);
+                return false;
+            }
+
             const { subject, text, html } = getPasswordSharingTemplate(userData);
             
             const mailOptions = {

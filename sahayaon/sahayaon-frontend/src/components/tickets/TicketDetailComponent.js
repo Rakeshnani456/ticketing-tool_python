@@ -46,6 +46,7 @@ import Button from '@mui/material/Button';
 import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
 import ResolutionModal from '../common/ResolutionModal';
+import AssignmentNotesModal from '../common/AssignmentNotesModal';
 
 
 // Import the new modular components
@@ -127,6 +128,12 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
     const [isResolvingViaModal, setIsResolvingViaModal] = useState(false);
     const [updateModeLoading, setUpdateModeLoading] = useState(false);
     const [pendingFieldUpdates, setPendingFieldUpdates] = useState({});
+    
+    // State for assignment notes modal
+    const [showAssignmentModal, setShowAssignmentModal] = useState(false);
+    const [pendingAssignmentEmail, setPendingAssignmentEmail] = useState(null);
+    const [assignmentNotes, setAssignmentNotes] = useState('');
+    const [isReassigningViaModal, setIsReassigningViaModal] = useState(false);
 
     // Add state and ref for the popup at the top of the component
     const [profilePopup, setProfilePopup] = useState({ visible: false, user: null, anchorRef: null });
@@ -148,6 +155,9 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
 
     // Helper to show popup for any field with delay
     const showProfilePopup = (user, anchorRef) => {
+        // Safety check: only show popup if user has an email
+        if (!user || !user.email) return;
+        
         if (popupHideTimeout.current) clearTimeout(popupHideTimeout.current);
         if (popupShowTimeout.current) clearTimeout(popupShowTimeout.current);
         popupShowTimeout.current = setTimeout(() => {
@@ -572,41 +582,75 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
         }
     }, [ticket]);
 
-    // Load support users when canEdit is true (not just when editing)
+    // Load support users early - start loading as soon as ticket loads and user is a support user/engineer
+    // This improves UX by pre-fetching users before they need to assign
+    const hasFetchedUsersRef = useRef(false);
     useEffect(() => {
-        if (canEdit && (isSupportUser || isEngineer)) {
+        // Start loading if user has permission to view/edit tickets (not just when canEdit is true)
+        // This way users are ready when they click the dropdown
+        if (ticket && (isSupportUser || isEngineer) && user?.firebaseUser && !hasFetchedUsersRef.current) {
+            hasFetchedUsersRef.current = true;
             setSupportUsersLoading(true);
             user.firebaseUser.getIdToken()
                 .then(idToken => {
-                    return fetch(`${API_BASE_URL}/api/users`, {
+                    // Add cache-busting query parameter and forAssignment flag to ensure fresh data and correct filtering
+                    return fetch(`${API_BASE_URL}/api/users?t=${Date.now()}&forAssignment=true`, {
                         headers: {
                             'Authorization': `Bearer ${idToken}`,
                             'Content-Type': 'application/json'
                         }
                     });
                 })
-                .then(res => res.json())
+                .then(res => {
+                    if (!res.ok) {
+                        throw new Error(`HTTP error! status: ${res.status}`);
+                    }
+                    return res.json();
+                })
                 .then(data => {
                     // Filter users based on current user's role and assignment permissions
+                    // Include all engineer roles (support, engineer, senior_engineer, lead_engineer, principal_engineer) and super_admin
+                    const engineerRoles = ['support', 'engineer', 'senior_engineer', 'lead_engineer', 'principal_engineer'];
                     let filteredUsers = [];
                     if (Array.isArray(data)) {
                         if (user?.role === 'site_admin') {
-                            // Site admin can assign to support, admin, and site_admin users
-                            filteredUsers = data.filter(u => ['support', 'admin', 'site_admin'].includes(u.role));
+                            // Site admin can assign to all engineers, super_admin, and site_admin users
+                            filteredUsers = data.filter(u => 
+                                engineerRoles.includes(u.role) || 
+                                u.role === 'super_admin' ||
+                                u.role === 'site_admin'
+                            );
                         } else {
-                            // Other users can assign to support, admin, and super_admin users
-                            filteredUsers = data.filter(u => ['support', 'admin', 'super_admin'].includes(u.role));
+                            // Other users (engineers, super_admin, etc.) can assign to all engineers AND super_admin users
+                            // This ensures both superadmins and support engineers are included
+                            filteredUsers = data.filter(u => 
+                                engineerRoles.includes(u.role) || 
+                                u.role === 'super_admin'
+                            );
                         }
                     }
+                    console.log('Fetched users for assignment:', {
+                        total: data?.length || 0,
+                        filtered: filteredUsers.length,
+                        engineers: filteredUsers.filter(u => engineerRoles.includes(u.role)).length,
+                        superadmins: filteredUsers.filter(u => u.role === 'super_admin').length,
+                        allRoles: [...new Set(filteredUsers.map(u => u.role))]
+                    });
                     setSupportUsers(filteredUsers);
                     setSupportUsersLoading(false);
                 })
-                .catch(() => {
+                .catch((error) => {
+                    console.error('Error fetching support users:', error);
                     setSupportUsers([]);
                     setSupportUsersLoading(false);
+                    hasFetchedUsersRef.current = false; // Allow retry on error
                 });
+        } else if (!ticket || !(isSupportUser || isEngineer)) {
+            // If conditions not met, clear loading state and reset ref
+            setSupportUsersLoading(false);
+            hasFetchedUsersRef.current = false;
         }
-    }, [canEdit, isSupportUser, isEngineer, user]);
+    }, [ticket, isSupportUser, isEngineer, user]);
 
     // Disable auto-enable editing - now controlled by Update button
     // Only disable editing if ticket is closed/resolved
@@ -645,7 +689,7 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
         setPendingFieldUpdates({});
     }, [ticket, canEdit]);
 
-    // Handle Confirm Update - batch save all pending changes
+    // Handle Confirm Update - batch save all pending changes with optimistic updates
     const handleConfirmUpdate = useCallback(async () => {
         if (!ticket || !canEdit) return;
 
@@ -678,6 +722,10 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
             }
         }
 
+        // Store original state for rollback
+        const originalTicket = { ...ticket };
+        const originalEditableFields = { ...editableFields };
+
         setUpdateModeLoading(true);
 
         try {
@@ -696,6 +744,15 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
             }
             if (editableFields.assigned_to_email !== (ticket.assigned_to_email || '')) {
                 updates.assigned_to_email = editableFields.assigned_to_email || null;
+                // Include assigned_to_id for faster backend lookup (avoids slow email query)
+                if (updates.assigned_to_email) {
+                    const assignedUser = supportUsers.find(u => u.email === updates.assigned_to_email);
+                    if (assignedUser?.uid) {
+                        updates.assigned_to_id = assignedUser.uid;
+                    }
+                } else {
+                    updates.assigned_to_id = null;
+                }
             }
 
             // If no changes, just return
@@ -704,7 +761,19 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                 return;
             }
 
-            // Send batch update
+            // OPTIMISTIC UPDATE: Update UI immediately
+            const optimisticUpdate = {
+                ...updates,
+                updated_at: new Date().toISOString()
+            };
+            setTicket(prev => prev ? ({ ...prev, ...optimisticUpdate }) : prev);
+            setEditableFields(prev => ({ ...prev, ...updates }));
+            setPendingFieldUpdates({});
+            
+            // Show immediate feedback
+            showFlashMessage('Updating ticket...', 'info');
+
+            // Send batch update in background
             const idToken = await user.firebaseUser.getIdToken();
             const response = await fetch(`${API_BASE_URL}/tickets/${ticketId}`, {
                 method: 'PATCH',
@@ -718,22 +787,24 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
             const data = await response.json();
 
             if (response.ok) {
-                // Update local state
-                setTicket(prev => prev ? ({ ...prev, ...updates, updated_at: new Date().toISOString() }) : prev);
-                // Update editableFields to match the saved values
-                setEditableFields(prev => ({ ...prev, ...updates }));
-                setPendingFieldUpdates({});
+                // Success - confirm optimistic update
                 showFlashMessage('Ticket updated successfully!', 'success');
             } else {
+                // ERROR: Rollback optimistic update
+                setTicket(originalTicket);
+                setEditableFields(originalEditableFields);
                 showFlashMessage(data.error || 'Failed to update ticket.', 'error');
             }
         } catch (error) {
             console.error('Error updating ticket:', error);
+            // ERROR: Rollback optimistic update
+            setTicket(originalTicket);
+            setEditableFields(originalEditableFields);
             showFlashMessage('Network error while updating ticket.', 'error');
         } finally {
             setUpdateModeLoading(false);
         }
-    }, [ticket, canEdit, editableFields, user, ticketId, showFlashMessage]);
+    }, [ticket, canEdit, editableFields, user, ticketId, showFlashMessage, supportUsers, timeSpent, closureNotes]);
 
     // Handle individual field updates - update local state (no auto-save)
     const handleFieldUpdate = useCallback((fieldName, value) => {
@@ -757,6 +828,23 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
             setModalClosureNotes(closureNotes || ticket.closure_notes || '');
             setShowResolutionModal(true);
             return;
+        }
+
+        // INTERCEPT: If reassigning from one user to another (not from unassigned), require notes
+        if (fieldName === 'assigned_to_email') {
+            const currentAssignment = ticket.assigned_to_email || '';
+            const newAssignment = value || '';
+            
+            // Check if this is a reassignment (from one user to another, not initial assignment)
+            if (currentAssignment && newAssignment && currentAssignment !== newAssignment) {
+                // This is a reassignment - show modal for notes
+                setPendingAssignmentEmail(newAssignment);
+                setAssignmentNotes('');
+                setShowAssignmentModal(true);
+                // Don't update the field yet - wait for notes
+                return;
+            }
+            // If it's initial assignment (from unassigned) or unassigning, allow it without notes
         }
 
         // Update local state (no auto-save)
@@ -841,24 +929,58 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
         setClosureNotesHasError(false);
         setClosureNotesErrorMessage('');
 
+        // Store original ticket state for rollback on error
+        const originalTicket = ticket ? { ...ticket } : null;
+        const originalEditableFields = { ...editableFields };
+
         try {
             const idToken = await user.firebaseUser.getIdToken();
-            const payload = { ...editableFields };
-
-            if (actionType === 'close') {
-                payload.status = 'Resolved';
-            }
-
-            const newStatusIsTerminalForClosure = ['Resolved'].includes(payload.status);
+            
+            // Build payload with only changed fields (not entire editableFields)
+            const payload = {};
+            const newStatusIsTerminalForClosure = ['Resolved'].includes(editableFields.status);
             const oldStatusWasTerminal = ['Resolved', 'Cancelled'].includes(ticket.status);
 
+            // Status change
+            if (actionType === 'close') {
+                payload.status = 'Resolved';
+            } else if (editableFields.status !== ticket.status) {
+                payload.status = editableFields.status;
+            }
+
+            // Priority change
+            if (editableFields.priority !== ticket.priority) {
+                payload.priority = editableFields.priority;
+            }
+
+            // Assignment change
+            if (editableFields.assigned_to_email !== (ticket.assigned_to_email || '')) {
+                payload.assigned_to_email = editableFields.assigned_to_email || null;
+                // Include assigned_to_id for faster backend lookup (avoids slow email query)
+                if (payload.assigned_to_email) {
+                    const assignedUser = supportUsers.find(u => u.email === payload.assigned_to_email);
+                    if (assignedUser?.uid) {
+                        payload.assigned_to_id = assignedUser.uid;
+                    }
+                } else {
+                    payload.assigned_to_id = null;
+                }
+            }
+
+            // Closure notes and time spent (only for resolution)
+            const finalStatus = payload.status || editableFields.status;
+            if (finalStatus === 'Resolved' && !oldStatusWasTerminal) {
+                payload.closure_notes = closureNotes.trim() || null;
+                payload.time_spent = timeSpent.trim() || null;
+            }
+
+            // Validation
             let validationFailed = false;
 
             // Validation for Hold status - require comment for engineers/super_admins
-            if (user?.role === 'super_admin' && payload.status === 'Hold' && ticket.status !== 'Hold') {
+            if (user?.role === 'super_admin' && (payload.status || editableFields.status) === 'Hold' && ticket.status !== 'Hold') {
                 const hasComments = ticket?.comments && ticket.comments.length > 0;
                 if (!hasComments) {
-                    // Silently revert to prevent Hold status without comment
                     if (actionType === 'close') setCloseButtonState('error');
                     else setSaveButtonState('error');
                     setUpdateLoading(false);
@@ -871,7 +993,7 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
             }
 
             if (isSupportUser && newStatusIsTerminalForClosure && !oldStatusWasTerminal) {
-                if (!payload.assigned_to_email) {
+                if (!editableFields.assigned_to_email) {
                     setAssignedToHasError(true);
                     setAssignedToErrorMessage('Assigned to field cannot be empty when resolving.');
                     validationFailed = true;
@@ -906,48 +1028,51 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                 return;
             }
 
-            payload.closure_notes = closureNotes.trim() || null;
-            payload.time_spent = timeSpent.trim() || null;
-
-            if (payload.status === 'Resolved' && !oldStatusWasTerminal) {
+            // Handle resolved/cancelled status metadata
+            if (finalStatus === 'Resolved' && !oldStatusWasTerminal) {
                 payload.closed_by_email = user.email;
                 payload.resolved_at = new Date().toISOString();
-                setEditableFields(prev => ({
-                    ...prev,
-                    closed_by_email: user.email,
-                    resolved_at: payload.resolved_at,
-                }));
-            } else if (payload.status === 'Cancelled' && !oldStatusWasTerminal) {
+            } else if (finalStatus === 'Cancelled' && !oldStatusWasTerminal) {
                 payload.closed_by_email = user.email;
                 payload.resolved_at = new Date().toISOString();
-                payload.closure_notes = closureNotes.trim() || null;
-                setEditableFields(prev => ({
-                    ...prev,
-                    closed_by_email: user.email,
-                    resolved_at: payload.resolved_at,
-                }));
+            } else if (!newStatusIsTerminalForClosure && oldStatusWasTerminal && finalStatus !== 'Cancelled') {
+                payload.closed_by_email = null;
+                payload.resolved_at = null;
+                payload.closure_notes = null;
+                payload.time_spent = null;
             }
-            else if (!newStatusIsTerminalForClosure && oldStatusWasTerminal) {
-                if (payload.status !== 'Cancelled') {
-                    payload.closed_by_email = null;
-                    payload.resolved_at = null;
-                    payload.closure_notes = null;
-                    payload.time_spent = null;
-                    setEditableFields(prev => ({
-                        ...prev,
-                        closed_by_email: '',
-                        resolved_at: null,
-                    }));
-                    setClosureNotes('');
-                    setTimeSpent('');
+
+            // If no changes, just return
+            if (Object.keys(payload).length === 0) {
+                if (actionType === 'close') setCloseButtonState('default');
+                else {
+                    setSaveButtonState('save');
+                    setUpdateLoading(false);
                 }
+                return;
             }
 
-            if (payload.status === 'Resolved' && !ticket.resolved_at && !payload.resolved_at) {
-                payload.resolved_at = new Date().toISOString();
-                setEditableFields(prev => ({ ...prev, resolved_at: payload.resolved_at }));
+            // OPTIMISTIC UPDATE: Update UI immediately before API call
+            const optimisticUpdate = {
+                ...payload,
+                updated_at: new Date().toISOString()
+            };
+            
+            // Update ticket state optimistically
+            setTicket(prev => prev ? ({ ...prev, ...optimisticUpdate }) : prev);
+            
+            // Update editableFields to match
+            setEditableFields(prev => ({ ...prev, ...payload }));
+            
+            // Show immediate feedback
+            if (actionType === 'close') {
+                setCloseButtonState('saving');
+                showFlashMessage('Resolving ticket...', 'info');
+            } else {
+                showFlashMessage('Updating ticket...', 'info');
             }
 
+            // Make API call in background
             const response = await fetch(`${API_BASE_URL}/tickets/${ticketId}`, {
                 method: 'PATCH',
                 headers: {
@@ -958,30 +1083,24 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
             });
 
             const data = await response.json();
+            
             if (response.ok) {
+                // Success - confirm optimistic update
                 if (actionType === 'close') {
                     setCloseButtonState('success');
                     window.scrollTo({ top: 0, behavior: 'smooth' });
-                    
                     showFlashMessage('Ticket resolved successfully!', 'success');
-                    
-                    // Do NOT auto-redirect - user stays on the ticket detail page
-                    // They can use the back button to return to the page they came from
                 } else {
                     setSaveButtonState('success');
-                    
-                    if (payload.status === 'Resolved' && !oldStatusWasTerminal) {
+                    if (finalStatus === 'Resolved' && !oldStatusWasTerminal) {
                         showFlashMessage('Ticket resolved successfully!', 'success');
-                        
-                        // Do NOT auto-redirect - user stays on the ticket detail page
-                        // They can use the back button to return to the page they came from
+                    } else {
+                        showFlashMessage('Ticket updated successfully!', 'success');
                     }
                 }
                 setError(null);
 
-                // Optimistically update local ticket to reflect edits immediately
-                setTicket(prev => prev ? ({ ...prev, ...payload }) : prev);
-
+                // Reset button states after short delay
                 setTimeout(() => {
                     if (actionType === 'close') {
                         setCloseButtonState('default');
@@ -996,6 +1115,12 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                     setClosureNotesHasError(false);
                 }, 500);
             } else {
+                // ERROR: Rollback optimistic update
+                if (originalTicket) {
+                    setTicket(originalTicket);
+                }
+                setEditableFields(originalEditableFields);
+                
                 if (actionType === 'close') {
                     setCloseButtonState('error');
                     showFlashMessage(data.error === 'Only the assigned engineer can update status or priority.' ? 'You cannot change the status or priority of this ticket unless it is assigned to you.' : (data.error || 'Failed to close ticket.'), 'error');
@@ -1010,6 +1135,13 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
             }
         } catch (error) {
             console.error('Update ticket error:', error);
+            
+            // ERROR: Rollback optimistic update
+            if (originalTicket) {
+                setTicket(originalTicket);
+            }
+            setEditableFields(originalEditableFields);
+            
             if (actionType === 'close') {
                 setCloseButtonState('error');
                 showFlashMessage('Network error or server unreachable during ticket closure.', 'error');
@@ -1071,7 +1203,7 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
     }, [pendingResolutionStatus, ticket]);
 
     // Handler for confirming resolution via modal
-    const handleModalConfirm = useCallback(async () => {
+    const handleModalConfirm = useCallback(async (notes = '') => {
         if (!ticket || !canEdit) return;
 
         // Validate modal inputs
@@ -1095,18 +1227,43 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                 resolved_at: new Date().toISOString()
             };
 
-            const response = await fetch(`${API_BASE_URL}/tickets/${ticketId}`, {
-                method: 'PATCH',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${idToken}`
-                },
-                body: JSON.stringify(payload)
-            });
+            // Make API calls in parallel: update ticket and add notes as comment (if provided)
+            const promises = [
+                fetch(`${API_BASE_URL}/tickets/${ticketId}`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${idToken}`
+                    },
+                    body: JSON.stringify(payload)
+                })
+            ];
 
-            const data = await response.json();
+            // Add notes as a comment if provided
+            if (notes && notes.trim()) {
+                promises.push(
+                    fetch(`${API_BASE_URL}/tickets/${ticketId}/add_comment`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${idToken}`
+                        },
+                        body: JSON.stringify({ 
+                            comment_text: `**Resolution Notes**\n\n${notes.trim()}` 
+                        })
+                    })
+                );
+            }
 
-            if (response.ok) {
+            const [ticketResponse, ...commentResponses] = await Promise.all(promises);
+            const data = await ticketResponse.json();
+
+            if (ticketResponse.ok) {
+                // Check if comment was added successfully
+                if (notes && notes.trim() && commentResponses[0] && !commentResponses[0].ok) {
+                    console.error('Failed to add resolution notes as comment');
+                }
+
                 // Close modal
                 setShowResolutionModal(false);
                 setPendingResolutionStatus(null);
@@ -1136,6 +1293,113 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
             setIsResolvingViaModal(false);
         }
     }, [ticket, canEdit, modalTimeSpent, modalClosureNotes, user, ticketId, showFlashMessage, navigateTo, editableFields]);
+
+    // Handle assignment modal confirmation
+    const handleAssignmentModalConfirm = useCallback(async () => {
+        if (!ticket || !canEdit || !pendingAssignmentEmail) return;
+
+        // Store values before closing modal
+        const newAssignmentEmail = pendingAssignmentEmail;
+        const notesToAdd = assignmentNotes.trim();
+        const fromUser = ticket.assigned_to_email || 'Unassigned';
+        const toUser = newAssignmentEmail || 'Unassigned';
+
+        // Store original state for rollback
+        const originalTicket = { ...ticket };
+        const originalEditableFields = { ...editableFields };
+
+        // Find assigned user for optimistic update
+        const assignedUser = newAssignmentEmail 
+            ? supportUsers.find(u => u.email === newAssignmentEmail)
+            : null;
+
+        // OPTIMISTIC UPDATE: Update UI immediately for instant feedback
+        const optimisticUpdates = {
+            assigned_to_email: newAssignmentEmail || null,
+            assigned_to_name: assignedUser?.name || null,
+            assigned_to_id: assignedUser?.uid || null,
+            updated_at: new Date().toISOString()
+        };
+        setTicket(prev => prev ? ({ ...prev, ...optimisticUpdates }) : prev);
+        setEditableFields(prev => ({ ...prev, assigned_to_email: newAssignmentEmail || null }));
+
+        // Close modal immediately - don't wait for API
+        setShowAssignmentModal(false);
+        setPendingAssignmentEmail(null);
+        setAssignmentNotes('');
+        setPendingFieldUpdates({});
+
+        // Show immediate success message
+        const assignedName = assignedUser?.name || newAssignmentEmail || 'Unassigned';
+        showFlashMessage(`Assigning to ${assignedName}...`, 'info');
+
+        // Process API calls in background (non-blocking)
+        try {
+            const idToken = await user.firebaseUser.getIdToken();
+            
+            // Prepare assignment notes text
+            const noteText = notesToAdd
+                ? `**Ticket Reassigned**\n\nFrom: ${fromUser}\nTo: ${toUser}\n\n**Notes:**\n${notesToAdd}`
+                : `**Ticket Reassigned**\n\nFrom: ${fromUser}\nTo: ${toUser}`;
+            
+            // Update assignment (critical operation)
+            // Include assigned_to_id for faster backend lookup (avoids slow email query)
+            const assignmentPayload = {
+                assigned_to_email: newAssignmentEmail || null
+            };
+            if (assignedUser?.uid) {
+                assignmentPayload.assigned_to_id = assignedUser.uid;
+            } else if (!newAssignmentEmail) {
+                assignmentPayload.assigned_to_id = null;
+            }
+            
+            const assignmentResponse = await fetch(`${API_BASE_URL}/tickets/${ticketId}`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${idToken}`
+                },
+                body: JSON.stringify(assignmentPayload)
+            });
+
+            const assignmentData = await assignmentResponse.json();
+
+            if (!assignmentResponse.ok) {
+                // ERROR: Revert optimistic update on failure
+                setTicket(originalTicket);
+                setEditableFields(originalEditableFields);
+                showFlashMessage(assignmentData.error || 'Failed to reassign ticket.', 'error');
+                return;
+            }
+
+            // Success - show confirmation
+            showFlashMessage(`Ticket assigned to ${assignedName}!`, 'success');
+
+            // Add notes in background (non-blocking, don't wait)
+            if (notesToAdd) {
+                fetch(`${API_BASE_URL}/tickets/${ticketId}/add_note`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${idToken}`
+                    },
+                    body: JSON.stringify({ 
+                        note_text: noteText,
+                        note_type: 'internal'
+                    })
+                }).catch(error => {
+                    console.error('Failed to add assignment notes:', error);
+                    // Don't show error to user since reassignment succeeded
+                });
+            }
+        } catch (error) {
+            console.error('Error reassigning ticket:', error);
+            // ERROR: Revert optimistic update on error
+            setTicket(originalTicket);
+            setEditableFields(originalEditableFields);
+            showFlashMessage('Network error while reassigning ticket.', 'error');
+        }
+    }, [ticket, canEdit, pendingAssignmentEmail, assignmentNotes, supportUsers, user, ticketId, showFlashMessage, editableFields]);
 
     const handleAddComment = async (e) => {
         e.preventDefault();
@@ -1505,6 +1769,29 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
                 loading={isResolvingViaModal}
                 ticket={ticket}
                 user={user}
+            />
+            
+            {/* Assignment Notes Modal */}
+            <AssignmentNotesModal
+                isOpen={showAssignmentModal}
+                onClose={() => {
+                    setShowAssignmentModal(false);
+                    setPendingAssignmentEmail(null);
+                    setAssignmentNotes('');
+                    // Revert the assignment change in editableFields
+                    setEditableFields(prev => ({
+                        ...prev,
+                        assigned_to_email: ticket.assigned_to_email || ''
+                    }));
+                }}
+                onConfirm={handleAssignmentModalConfirm}
+                assignmentNotes={assignmentNotes}
+                setAssignmentNotes={setAssignmentNotes}
+                loading={false}
+                ticket={ticket}
+                user={user}
+                fromUser={ticket.assigned_to_email || null}
+                toUser={pendingAssignmentEmail || null}
             />
         </div>
     );

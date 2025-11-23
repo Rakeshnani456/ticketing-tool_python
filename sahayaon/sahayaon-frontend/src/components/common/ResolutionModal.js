@@ -16,6 +16,8 @@ const ResolutionModal = ({
     ticket = null,
     user = null
 }) => {
+    const [activeTab, setActiveTab] = useState('resolution'); // 'notes' or 'resolution'
+    const [notes, setNotes] = useState(''); // For general notes (reassignment, steps, findings)
     const [errors, setErrors] = useState({
         timeSpent: '',
         closureNotes: ''
@@ -24,36 +26,52 @@ const ResolutionModal = ({
     const modalRef = useRef(null);
     const closeButtonRef = useRef(null);
     const confirmButtonRef = useRef(null);
+    const originalStylesRef = useRef(null);
+
+    // Reset notes when modal opens
+    useEffect(() => {
+        if (isOpen) {
+            setNotes('');
+            setActiveTab('resolution');
+        }
+    }, [isOpen]);
 
     // Lock body scroll and prevent background interaction when modal is open
     useEffect(() => {
         if (isOpen) {
+            // Store original styles only once
+            if (!originalStylesRef.current) {
+                originalStylesRef.current = {
+                    bodyOverflow: window.getComputedStyle(document.body).overflow,
+                    bodyPosition: document.body.style.position,
+                    bodyTop: document.body.style.top,
+                    scrollY: window.scrollY
+                };
+            }
+            
             // Add class to body to style header/sidebar
             document.body.classList.add('resolution-modal-open');
             
             // Prevent body scroll
-            const originalStyle = window.getComputedStyle(document.body).overflow;
             document.body.style.overflow = 'hidden';
             
             // Prevent scrolling on iOS
-            const originalPosition = document.body.style.position;
-            const originalTop = document.body.style.top;
-            const scrollY = window.scrollY;
             document.body.style.position = 'fixed';
-            document.body.style.top = `-${scrollY}px`;
+            document.body.style.top = `-${originalStylesRef.current.scrollY}px`;
             document.body.style.width = '100%';
             
-            // Disable pointer events on header and sidebar
+            // Store references to avoid re-querying on every render
             const header = document.querySelector('header');
             const sidebar = document.querySelector('.sidebar-glass');
             
-            if (header) {
+            // Only modify if elements exist and haven't been modified yet
+            if (header && header.style.pointerEvents !== 'none') {
                 header.style.pointerEvents = 'none';
                 header.style.opacity = '0.3';
                 header.style.transition = 'opacity 0.2s ease';
             }
             
-            if (sidebar) {
+            if (sidebar && sidebar.style.pointerEvents !== 'none') {
                 sidebar.style.pointerEvents = 'none';
                 sidebar.style.opacity = '0.3';
                 sidebar.style.transition = 'opacity 0.2s ease';
@@ -124,11 +142,16 @@ const ResolutionModal = ({
                     sidebarEl.style.transition = '';
                 }
                 
-                document.body.style.overflow = originalStyle;
-                document.body.style.position = originalPosition;
-                document.body.style.top = originalTop;
-                document.body.style.width = '';
-                window.scrollTo(0, scrollY);
+                // Restore original styles
+                if (originalStylesRef.current) {
+                    document.body.style.overflow = originalStylesRef.current.bodyOverflow;
+                    document.body.style.position = originalStylesRef.current.bodyPosition;
+                    document.body.style.top = originalStylesRef.current.bodyTop;
+                    document.body.style.width = '';
+                    window.scrollTo(0, originalStylesRef.current.scrollY);
+                    originalStylesRef.current = null; // Reset for next open
+                }
+                
                 document.removeEventListener('keydown', handleEscape);
                 document.removeEventListener('keydown', handleTabKey);
             };
@@ -148,15 +171,16 @@ const ResolutionModal = ({
             newErrors.timeSpent = 'Please enter a valid number (1-4 digits)';
         }
 
-        // Validate closure notes
+        // Validate closure notes (resolution comments)
         if (!closureNotes.trim()) {
-            newErrors.closureNotes = 'Closure notes are required';
+            newErrors.closureNotes = 'Resolution comments are required';
         }
 
         setErrors(newErrors);
 
         if (!newErrors.timeSpent && !newErrors.closureNotes) {
-            onConfirm();
+            // Pass both notes and resolution comments to the handler
+            onConfirm(notes);
         }
     };
 
@@ -345,34 +369,84 @@ const ResolutionModal = ({
                                 </p>
                             </div>
 
-                            {/* Closure Notes */}
-                            <div>
-                                <label className="block text-xs font-semibold text-emerald-700 mb-1.5 flex items-center gap-2">
-                                    <FileText className="w-3.5 h-3.5 text-emerald-600" />
-                                    Closure Notes <span className="text-red-500">*</span>
-                                </label>
-                                <textarea
-                                    value={closureNotes}
-                                    onChange={handleClosureNotesChange}
-                                    rows={4}
-                                    placeholder="Describe the resolution steps, final status, and any important details..."
-                                    disabled={loading}
-                                    className={`w-full px-2.5 py-1.5 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all resize-none ${
-                                        errors.closureNotes 
-                                            ? 'border-red-500 bg-red-50' 
-                                            : 'border-gray-300 bg-white hover:border-gray-400'
-                                    } ${loading ? 'bg-gray-50 cursor-not-allowed' : ''}`}
-                                />
-                                {errors.closureNotes && (
-                                    <p className="mt-1 text-xs text-red-600 flex items-center gap-1">
-                                        <XCircle className="w-3 h-3" />
-                                        {errors.closureNotes}
-                                    </p>
-                                )}
-                                <p className="mt-1 text-xs text-emerald-600 font-medium">
-                                    Provide details about how this ticket was resolved
-                                </p>
+                            {/* Tabs for Notes and Resolution Comments */}
+                            <div className="border-b border-gray-200 mb-3">
+                                <nav className="flex gap-1" aria-label="Tabs">
+                                    <button
+                                        type="button"
+                                        onClick={() => setActiveTab('resolution')}
+                                        disabled={loading}
+                                        className={`px-3 py-2 text-xs font-semibold border-b-2 transition-colors ${
+                                            activeTab === 'resolution'
+                                                ? 'border-emerald-600 text-emerald-700'
+                                                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                        } ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                    >
+                                        Resolution Comments
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setActiveTab('notes')}
+                                        disabled={loading}
+                                        className={`px-3 py-2 text-xs font-semibold border-b-2 transition-colors ${
+                                            activeTab === 'notes'
+                                                ? 'border-blue-600 text-blue-700'
+                                                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                        } ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                    >
+                                        Notes
+                                    </button>
+                                </nav>
                             </div>
+
+                            {/* Tab Content */}
+                            {activeTab === 'resolution' ? (
+                                <div>
+                                    <label className="block text-xs font-semibold text-emerald-700 mb-1.5 flex items-center gap-2">
+                                        <FileText className="w-3.5 h-3.5 text-emerald-600" />
+                                        Resolution Comments <span className="text-red-500">*</span>
+                                    </label>
+                                    <textarea
+                                        value={closureNotes}
+                                        onChange={handleClosureNotesChange}
+                                        rows={4}
+                                        placeholder="Describe the resolution steps, final status, and any important details for closing this ticket..."
+                                        disabled={loading}
+                                        className={`w-full px-2.5 py-1.5 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all resize-none ${
+                                            errors.closureNotes 
+                                                ? 'border-red-500 bg-red-50' 
+                                                : 'border-gray-300 bg-white hover:border-gray-400'
+                                        } ${loading ? 'bg-gray-50 cursor-not-allowed' : ''}`}
+                                    />
+                                    {errors.closureNotes && (
+                                        <p className="mt-1 text-xs text-red-600 flex items-center gap-1">
+                                            <XCircle className="w-3 h-3" />
+                                            {errors.closureNotes}
+                                        </p>
+                                    )}
+                                    <p className="mt-1 text-xs text-emerald-600 font-medium">
+                                        Provide details about how this ticket was resolved (required for closing)
+                                    </p>
+                                </div>
+                            ) : (
+                                <div>
+                                    <label className="block text-xs font-semibold text-blue-700 mb-1.5 flex items-center gap-2">
+                                        <FileText className="w-3.5 h-3.5 text-blue-600" />
+                                        Notes (Optional)
+                                    </label>
+                                    <textarea
+                                        value={notes}
+                                        onChange={(e) => setNotes(e.target.value)}
+                                        rows={4}
+                                        placeholder="Add notes for reassignment, steps, findings, or any information for other engineers/super admins or yourself..."
+                                        disabled={loading}
+                                        className="w-full px-2.5 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all resize-none bg-white hover:border-gray-400"
+                                    />
+                                    <p className="mt-1 text-xs text-blue-600 font-medium">
+                                        Optional: Add notes for reassignment, troubleshooting steps, findings, or any information for other engineers/super admins
+                                    </p>
+                                </div>
+                            )}
                         </div>
                     </div>
 

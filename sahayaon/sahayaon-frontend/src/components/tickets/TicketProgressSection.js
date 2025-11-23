@@ -295,16 +295,15 @@ const TicketProgressSection = ({
                                     onChange={(value) => { 
                                         handleFieldUpdate('assigned_to_email', value);
                                     }}
-                                    options={[
-                                        { value: '', label: 'Unassigned' },
-                                        ...supportUsers.map(u => ({
-                                            value: u.email,
-                                            label: u.name ? `${u.name} (${u.email})` : u.email
-                                        }))
-                                    ]}
-                                    placeholder="Select Assignee"
+                                    options={supportUsersLoading ? [
+                                        { value: '', label: 'Loading users...', disabled: true }
+                                    ] : supportUsers.map(u => ({
+                                        value: u.email,
+                                        label: u.name ? `${u.name} (${u.email})` : u.email
+                                    }))}
+                                    placeholder={supportUsersLoading ? "Loading users..." : supportUsers.length === 0 ? "No users available" : "Select Assignee"}
                                     className="w-full"
-                                    disabled={!canEdit || isTicketClosedOrResolved || supportUsersLoading}
+                                    disabled={!canEdit || isTicketClosedOrResolved}
                                     size="sm"
                                     focusStyle="gray"
                                 />

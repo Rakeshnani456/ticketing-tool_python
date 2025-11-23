@@ -83,7 +83,8 @@ module.exports = (db, admin, usersCollection, verifyFirebaseToken) => {
         const idToken = authHeader.split(' ')[1];
 
         try {
-            const decodedToken = await admin.auth().verifyIdToken(idToken);
+            // Use checkRevoked: false for faster token verification (still secure, just skips revocation check)
+            const decodedToken = await admin.auth().verifyIdToken(idToken, false);
             const uid = decodedToken.uid;
             const emailFromToken = decodedToken.email || '';
 
@@ -101,10 +102,20 @@ module.exports = (db, admin, usersCollection, verifyFirebaseToken) => {
                 role: userProfile.role || 'user',
                 mustChangePassword: userProfile.mustChangePassword || false
             };
+            
+            // Include client_name for site_admin users to avoid extra Firestore read on frontend
+            if (userProfile.role === 'site_admin') {
+                loggedInUser.client_name = userProfile.client_name || userProfile.companyName || '';
+            }
 
-            await userDocRef.update({
+            // Update login activity asynchronously (non-blocking) to improve response time
+            // Fire and forget - don't wait for this to complete before sending response
+            userDocRef.update({
                 lastLogin: admin.firestore.FieldValue.serverTimestamp(),
                 loginActivity: admin.firestore.FieldValue.arrayUnion(new Date().toISOString())
+            }).catch(err => {
+                // Log error but don't block login
+                console.error(`Failed to update login activity for user ${uid}:`, err.message);
             });
 
             if (userProfile.mustChangePassword) {

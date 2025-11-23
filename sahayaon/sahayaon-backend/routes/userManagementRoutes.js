@@ -15,14 +15,24 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
         try {
             const userRole = req.user.role;
             const userClientName = req.user.client_name;
+            const forAssignment = req.query.forAssignment === 'true'; // Check if this is for ticket assignment
+            
+            // Engineer roles that should be excluded from user management
+            const engineerRoles = ['support', 'engineer', 'senior_engineer', 'lead_engineer', 'principal_engineer'];
+            
+            // Check if the user is an engineer (any engineer role) - define before use
+            const isEngineer = engineerRoles.includes(userRole || '');
             
             // Create cache key based on user role and client
-            const cacheKey = `users_${userRole}_${userClientName || 'all'}`;
+            const cacheKey = `users_${userRole}_${userClientName || 'all'}_${forAssignment ? 'assignment' : 'management'}`;
             
-            // Try to get from cache first
-            const cachedUsers = cacheManager.get(cacheKey);
-            if (cachedUsers) {
-                return res.status(200).json(cachedUsers);
+            // For engineers, don't use cache to ensure fresh data (cache can be stale)
+            // Try to get from cache first (only for non-engineers and non-assignment requests)
+            if (!isEngineer && !forAssignment) {
+                const cachedUsers = cacheManager.get(cacheKey);
+                if (cachedUsers) {
+                    return res.status(200).json(cachedUsers);
+                }
             }
             
             // Test Firestore connection
@@ -32,9 +42,11 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
             }
             
             let snapshot;
+            
             if (userRole === 'site_admin') {
                 if (userClientName) {
                     // For site_admin, get users from their company/client
+                    // Exclude engineers - they are managed separately
                     
                     // OPTIMIZED: Use a single query with 'in' operator to check both fields
                     try {
@@ -60,12 +72,27 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
                     console.error('Site admin has no client_name set, returning empty result');
                     return res.status(200).json([]);
                 }
-            } else if (userRole === 'support') {
-                // For support role, get all support users
-                snapshot = await usersCollection.where('role', '==', 'support').limit(500).get();
+            } else if (isEngineer) {
+                // For engineers (any engineer role), get users they can assign tickets to:
+                // all engineer roles (support, engineer, senior_engineer, lead_engineer, principal_engineer) and super_admin
+                // Use 'in' operator to get multiple roles in a single query
+                // Note: Firestore 'in' operator supports up to 10 values
+                snapshot = await usersCollection
+                    .where('role', 'in', ['support', 'engineer', 'senior_engineer', 'lead_engineer', 'principal_engineer', 'super_admin'])
+                    .limit(500)
+                    .get();
             } else if (userRole === 'admin' || userRole === 'super_admin') {
-                // For admin/super_admin, get all users
-                snapshot = await usersCollection.limit(1000).get();
+                if (forAssignment) {
+                    // For ticket assignment, super_admin needs both engineers and superadmins
+                    snapshot = await usersCollection
+                        .where('role', 'in', ['support', 'engineer', 'senior_engineer', 'lead_engineer', 'principal_engineer', 'super_admin'])
+                        .limit(500)
+                        .get();
+                } else {
+                    // For user management, get all users but exclude engineers
+                    // Engineers are managed separately and should not appear in user management
+                    snapshot = await usersCollection.limit(1000).get();
+                }
             } else {
                 return res.status(403).json({ error: 'Insufficient permissions to view users.' });
             }
@@ -75,10 +102,32 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
                 return res.status(200).json([]);
             }
             
-            const users = snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() }));
+            // Filter users based on role
+            // For engineers, include all engineer roles, admin, and super_admin (already filtered by query)
+            // For other roles, exclude engineer roles (engineers are managed separately) unless it's for assignment
+            let users = snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() }));
             
-            // Cache the results for 2 minutes
-            cacheManager.set(cacheKey, users, 2 * 60 * 1000);
+            if (!isEngineer && !forAssignment) {
+                // Filter out engineer roles for non-engineer users when NOT for assignment
+                // Engineers are managed separately and should not appear in user management
+                users = users.filter(user => !engineerRoles.includes(user.role));
+            }
+            // For engineers or assignment requests, we already filtered by the query, so no additional filtering needed
+            
+            // Cache the results for 2 minutes (only for non-engineers and non-assignment requests to avoid stale data)
+            if (!isEngineer && !forAssignment) {
+                cacheManager.set(cacheKey, users, 2 * 60 * 1000);
+            }
+            
+            // Log for debugging
+            if (isEngineer || forAssignment) {
+                console.log(`[API /users] ${forAssignment ? 'Assignment' : 'Engineer'} query returned ${users.length} users:`, {
+                    engineers: users.filter(u => engineerRoles.includes(u.role)).length,
+                    superadmins: users.filter(u => u.role === 'super_admin').length,
+                    roles: [...new Set(users.map(u => u.role))],
+                    forAssignment: forAssignment
+                });
+            }
             
             return res.status(200).json(users);
         } catch (err) {
@@ -173,11 +222,15 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
                     console.log(`[Users] Scheduling welcome email | email=${email}`);
                     const portalUrl = process.env.FRONTEND_URL || 'https://tt.kriasol.com/';
                     const emailData = {
-                        userName: `${firstName} ${lastName}`,
+                        firstName: firstName,
+                        lastName: lastName,
+                        userName: `${firstName} ${lastName}`.trim() || email,
                         clientName: 'Sahayaon Technologies',
                         portalUrl: portalUrl,
                         userEmail: email,
+                        username: email,
                         tempPassword: finalPassword,
+                        password: finalPassword,
                         companyName: 'Sahayaon Technologies'
                     };
                     
@@ -247,11 +300,15 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
                     console.log(`[Users] Scheduling welcome email | email=${email}`);
                     const portalUrl = process.env.FRONTEND_URL || 'https://tt.kriasol.com/';
                     const emailData = {
-                        userName: `${firstName} ${lastName}`,
+                        firstName: firstName,
+                        lastName: lastName,
+                        userName: `${firstName} ${lastName}`.trim() || email,
                         clientName: companyName,
                         portalUrl: portalUrl,
                         userEmail: email,
+                        username: email,
                         tempPassword: password,
+                        password: password,
                         companyName: companyName
                     };
                     
@@ -388,7 +445,7 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
     // PUT /api/users/:uid/password - Change user password
     router.put('/:uid/password', verifyFirebaseToken, async (req, res) => {
         const { uid } = req.params;
-        const { password, mustChangePassword } = req.body;
+        const { password, mustChangePassword, sendEmail } = req.body;
         if (!password || password.length < 6) {
             return res.status(400).json({ error: 'Password must be at least 6 characters.' });
         }
@@ -398,7 +455,51 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
             if (mustChangePassword) {
                 await usersCollection.doc(uid).update({ mustChangePassword: true });
             }
-            return res.status(200).json({ message: 'Password updated successfully.' });
+            
+            // Send email if requested
+            let emailSent = false;
+            if (sendEmail && emailService) {
+                try {
+                    const userDoc = await usersCollection.doc(uid).get();
+                    if (userDoc.exists) {
+                        const userData = userDoc.data();
+                        if (userData.email) {
+                            const loginUrl = process.env.FRONTEND_URL || 'https://tt.kriasol.com/';
+                            const firstName = userData.firstName || '';
+                            const lastName = userData.lastName || '';
+                            const fullUserName = (firstName && lastName) ? `${firstName} ${lastName}` : (userData.name || userData.email);
+                            
+                            const emailData = {
+                                firstName: firstName,
+                                lastName: lastName,
+                                userName: fullUserName,
+                                companyName: userData.client_name || userData.companyName || 'Company',
+                                userEmail: userData.email,
+                                newPassword: password,
+                                password: password,
+                                tempPassword: password,
+                                loginUrl,
+                                portalUrl: loginUrl
+                            };
+                            
+                            emailSent = await emailService.sendPasswordSharingEmail(emailData);
+                            if (emailSent) {
+                                console.log(`Password reset email sent successfully to ${userData.email}`);
+                            } else {
+                                console.error(`Failed to send password reset email to ${userData.email}`);
+                            }
+                        }
+                    }
+                } catch (emailError) {
+                    console.error('Error sending password reset email:', emailError);
+                    // Don't fail the password update if email fails
+                }
+            }
+            
+            return res.status(200).json({ 
+                message: 'Password updated successfully.',
+                emailSent: emailSent
+            });
         } catch (err) {
             console.error('Error updating password:', err);
             return res.status(500).json({ error: err.message || 'Failed to update password.' });
@@ -418,8 +519,29 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
             
             const userData = userDoc.data();
             
-            // Generate a new random password
-            const newPassword = Math.random().toString(36).slice(-12) + Math.random().toString(36).slice(-12);
+            // Generate a new password: 8 characters (4 from "Sahayaon" letters + 4 random characters)
+            const sahayaonLetters = ['S', 'a', 'h', 'y', 'o', 'n'];
+            const randomChars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+            
+            // Pick 4 random letters from "Sahayaon"
+            const selectedLetters = [];
+            for (let i = 0; i < 4; i++) {
+                const randomIndex = Math.floor(Math.random() * sahayaonLetters.length);
+                selectedLetters.push(sahayaonLetters[randomIndex]);
+            }
+            
+            // Add 4 random characters (numbers or alphabets)
+            for (let i = 0; i < 4; i++) {
+                selectedLetters.push(randomChars.charAt(Math.floor(Math.random() * randomChars.length)));
+            }
+            
+            // Shuffle the array to mix letters and random chars
+            for (let i = selectedLetters.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [selectedLetters[i], selectedLetters[j]] = [selectedLetters[j], selectedLetters[i]];
+            }
+            
+            const newPassword = selectedLetters.join('');
             
             // Update the user's password in Firebase Auth
             await admin.auth().updateUser(uid, { password: newPassword });
@@ -427,9 +549,44 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
             // Set mustChangePassword to true in Firestore
             await usersCollection.doc(uid).update({ mustChangePassword: true });
             
+            // Automatically send password reset email
+            let emailSent = false;
+            if (emailService && userData.email) {
+                try {
+                    const loginUrl = process.env.FRONTEND_URL || 'https://tt.kriasol.com/';
+                    const firstName = userData.firstName || '';
+                    const lastName = userData.lastName || '';
+                    const fullUserName = (firstName && lastName) ? `${firstName} ${lastName}` : (userData.name || userData.email);
+                    
+                    const emailData = {
+                        firstName: firstName,
+                        lastName: lastName,
+                        userName: fullUserName,
+                        companyName: userData.client_name || userData.companyName || 'Company',
+                        userEmail: userData.email,
+                        newPassword: newPassword,
+                        password: newPassword,
+                        tempPassword: newPassword,
+                        loginUrl,
+                        portalUrl: loginUrl
+                    };
+                    
+                    emailSent = await emailService.sendPasswordSharingEmail(emailData);
+                    if (emailSent) {
+                        console.log(`Password reset email sent successfully to ${userData.email}`);
+                    } else {
+                        console.error(`Failed to send password reset email to ${userData.email}`);
+                    }
+                } catch (emailError) {
+                    console.error('Error sending password reset email:', emailError);
+                    // Don't fail the password reset if email fails
+                }
+            }
+            
             return res.status(200).json({ 
                 message: 'Password reset successfully.',
-                newPassword: newPassword
+                newPassword: newPassword,
+                emailSent: emailSent
             });
         } catch (err) {
             console.error('Error resetting password:', err);
@@ -456,12 +613,24 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
             // Send the password sharing email
             if (emailService) {
                 const loginUrl = process.env.FRONTEND_URL || 'https://tt.kriasol.com/';
+                
+                // Get user data to extract firstName and lastName
+                const userData = userDoc.data();
+                const firstName = userData.firstName || '';
+                const lastName = userData.lastName || '';
+                const fullUserName = (firstName && lastName) ? `${firstName} ${lastName}` : (userName || userEmail);
+                
                 const emailData = {
-                    userName,
+                    firstName: firstName,
+                    lastName: lastName,
+                    userName: fullUserName,
                     companyName,
                     userEmail,
                     newPassword: password,
-                    loginUrl
+                    password: password,
+                    tempPassword: password,
+                    loginUrl,
+                    portalUrl: loginUrl
                 };
                 
                 const emailSent = await emailService.sendPasswordSharingEmail(emailData);

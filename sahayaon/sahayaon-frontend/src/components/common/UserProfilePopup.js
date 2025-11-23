@@ -4,6 +4,10 @@ import OutlookIcon from '../../assets/icons/OutlookIcon.svg';
 
 const UserProfilePopup = ({ user, anchorRef, visible, onMouseEnter, onMouseLeave }) => {
   if (!user || !visible) return null;
+  
+  // Safety check: ensure email exists before using it
+  const userEmail = user?.email || '';
+  if (!userEmail) return null;
 
   // Position the popup below the anchor element
   const rect = anchorRef?.current?.getBoundingClientRect();
@@ -16,6 +20,9 @@ const UserProfilePopup = ({ user, anchorRef, visible, onMouseEnter, onMouseLeave
       }
     : { display: 'none' };
 
+  // Safely extract name from email if fullName is not available
+  const displayName = user.fullName || (userEmail.includes('@') ? userEmail.split('@')[0] : userEmail);
+
   return (
     <div
       className="bg-white border border-gray-300 rounded shadow-lg p-4 min-w-[220px]"
@@ -23,14 +30,14 @@ const UserProfilePopup = ({ user, anchorRef, visible, onMouseEnter, onMouseLeave
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
-      <div className="font-bold text-base mb-1">{user.fullName || user.email.split('@')[0]}</div>
-      <div className="text-sm text-gray-700 mb-2">{user.email}</div>
+      <div className="font-bold text-base mb-1">{displayName}</div>
+      <div className="text-sm text-gray-700 mb-2">{userEmail}</div>
       <div className="flex gap-3">
-        <a href={`mailto:${user.email}`} title="Send Email">
+        <a href={`mailto:${userEmail}`} title="Send Email">
           <img src={OutlookIcon} alt="Outlook" className="w-5 h-5 hover:opacity-80" />
         </a>
         <a
-          href={`https://teams.microsoft.com/l/chat/0/0?users=${encodeURIComponent(user.email)}`}
+          href={`https://teams.microsoft.com/l/chat/0/0?users=${encodeURIComponent(userEmail)}`}
           target="_blank"
           rel="noopener noreferrer"
           title="Chat in Microsoft Teams"

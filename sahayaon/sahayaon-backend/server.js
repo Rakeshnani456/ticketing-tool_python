@@ -17,6 +17,7 @@ let usersCollection;
 let ticketsCollection;
 let notificationsCollection;
 let clientsCollection;
+let assetsCollection;
 let dbConnected = false;
 
 try {
@@ -49,6 +50,7 @@ try {
     ticketsCollection = db.collection('tickets');
     notificationsCollection = db.collection('notifications');
     clientsCollection = db.collection('clients');
+    assetsCollection = db.collection('assets');
     console.log("Connected to Firebase Firestore successfully!");
     dbConnected = true;
     app.locals.admin = admin; // Make admin available in routes
@@ -63,22 +65,47 @@ try {
 }
 
 // Email transporter (configurable via env)
-const EMAIL_TRANSPORT = (process.env.EMAIL_TRANSPORT || 'SMTP').toUpperCase();
+// Auto-detect email provider based on EMAIL_USER domain if EMAIL_TRANSPORT not explicitly set
+const EMAIL_USER = process.env.EMAIL_USER || '';
+const EMAIL_TRANSPORT_ENV = (process.env.EMAIL_TRANSPORT || '').toUpperCase().trim();
+
+// Auto-detect provider from email domain
+let detectedProvider = null;
+if (EMAIL_USER) {
+    const emailDomain = EMAIL_USER.toLowerCase().split('@')[1];
+    if (emailDomain === 'gmail.com' || emailDomain === 'googlemail.com') {
+        detectedProvider = 'GMAIL';
+    } else if (emailDomain && (emailDomain.includes('outlook.com') || emailDomain.includes('office365.com') || emailDomain.includes('microsoft.com') || emailDomain.includes('hotmail.com'))) {
+        detectedProvider = 'OUTLOOK';
+    }
+}
+
+// Determine which transport to use (explicit setting takes precedence)
+const EMAIL_TRANSPORT = EMAIL_TRANSPORT_ENV || detectedProvider || 'SMTP';
+
 let transporter;
 if (EMAIL_TRANSPORT === 'GMAIL') {
     // Google (App Password required)
+    if (!EMAIL_USER || !process.env.EMAIL_PASS) {
+        console.error('❌ Gmail configuration incomplete: EMAIL_USER and EMAIL_PASS required');
+    }
     transporter = nodemailer.createTransport({
         host: 'smtp.gmail.com',
         port: 465,
         secure: true,
         auth: {
-            user: process.env.EMAIL_USER,
+            user: EMAIL_USER,
             pass: process.env.EMAIL_PASS,
+        },
+        tls: {
+            minVersion: 'TLSv1.2',
+            rejectUnauthorized: true
         }
     });
-    console.log('📧 Email transport: GMAIL (SMTP)');
-} else {
-    // Generic SMTP (default). For Office365, ensure SMTP AUTH is enabled in tenant.
+    console.log(`📧 Email transport: GMAIL (smtp.gmail.com:465)`);
+    console.log(`   Using email: ${EMAIL_USER}`);
+} else if (EMAIL_TRANSPORT === 'OUTLOOK' || EMAIL_TRANSPORT === 'OFFICE365') {
+    // Office365/Outlook SMTP
     const smtpHost = process.env.SMTP_HOST || 'smtp.office365.com';
     const smtpPort = Number(process.env.SMTP_PORT || 587);
     const smtpSecure = String(process.env.SMTP_SECURE || 'false').toLowerCase() === 'true';
@@ -86,8 +113,7 @@ if (EMAIL_TRANSPORT === 'GMAIL') {
     // Office365 requires STARTTLS on port 587 (not SSL/TLS)
     // Port 587: secure=false (uses STARTTLS)
     // Port 465: secure=true (uses SSL/TLS)
-    const isOffice365 = smtpHost.includes('office365.com') || smtpHost.includes('outlook.com');
-    const useStartTLS = isOffice365 && smtpPort === 587;
+    const useStartTLS = smtpPort === 587;
     
     transporter = nodemailer.createTransport({
         host: smtpHost,
@@ -95,16 +121,41 @@ if (EMAIL_TRANSPORT === 'GMAIL') {
         secure: smtpSecure, // false for STARTTLS on port 587, true for SSL on port 465
         requireTLS: useStartTLS, // Require TLS upgrade for Office365 on port 587
         auth: {
-            user: process.env.EMAIL_USER,
+            user: EMAIL_USER,
             pass: process.env.EMAIL_PASS,
         },
         tls: {
-            // Use modern TLS settings
             minVersion: 'TLSv1.2',
-            rejectUnauthorized: true // Set to false only if you have certificate issues
+            rejectUnauthorized: true
         }
     });
-    console.log(`📧 Email transport: SMTP host=${smtpHost} port=${smtpPort} secure=${smtpSecure}${useStartTLS ? ' (STARTTLS)' : ''}`);
+    console.log(`📧 Email transport: OUTLOOK/OFFICE365 (${smtpHost}:${smtpPort}, secure=${smtpSecure}${useStartTLS ? ', STARTTLS' : ''})`);
+    console.log(`   Using email: ${EMAIL_USER}`);
+} else {
+    // Generic SMTP (custom configuration)
+    const smtpHost = process.env.SMTP_HOST || 'smtp.office365.com';
+    const smtpPort = Number(process.env.SMTP_PORT || 587);
+    const smtpSecure = String(process.env.SMTP_SECURE || 'false').toLowerCase() === 'true';
+    
+    const isOffice365 = smtpHost.includes('office365.com') || smtpHost.includes('outlook.com');
+    const useStartTLS = isOffice365 && smtpPort === 587;
+    
+    transporter = nodemailer.createTransport({
+        host: smtpHost,
+        port: smtpPort,
+        secure: smtpSecure,
+        requireTLS: useStartTLS,
+        auth: {
+            user: EMAIL_USER,
+            pass: process.env.EMAIL_PASS,
+        },
+        tls: {
+            minVersion: 'TLSv1.2',
+            rejectUnauthorized: true
+        }
+    });
+    console.log(`📧 Email transport: SMTP (${smtpHost}:${smtpPort}, secure=${smtpSecure}${useStartTLS ? ', STARTTLS' : ''})`);
+    console.log(`   Using email: ${EMAIL_USER}`);
 }
 
 // Initialize email service
@@ -116,10 +167,11 @@ let emailServiceReady = false;
     try {
         console.log('🔎 Verifying email service connectivity...');
         // Log essential env presence (masked)
-        if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS || !process.env.DISTRIBUTION_EMAIL) {
+        if (!EMAIL_USER || !process.env.EMAIL_PASS || !process.env.DISTRIBUTION_EMAIL) {
             console.warn('⚠️ Email env vars missing: EMAIL_USER/EMAIL_PASS/DISTRIBUTION_EMAIL');
         } else {
-            console.log(`📧 Email user configured: ${process.env.EMAIL_USER}`);
+            console.log(`📧 Email user configured: ${EMAIL_USER}`);
+            console.log(`📧 Email transport: ${EMAIL_TRANSPORT} ${EMAIL_TRANSPORT_ENV ? '(explicit)' : '(auto-detected)'}`);
         }
         await transporter.verify();
         emailServiceReady = true;
@@ -127,7 +179,59 @@ let emailServiceReady = false;
     } catch (err) {
         emailServiceReady = false;
         console.error(`❌ Email service verification failed: ${err.message}`);
-        if (EMAIL_TRANSPORT !== 'GMAIL') {
+        if (EMAIL_TRANSPORT === 'GMAIL') {
+            console.error('\n⚠️  Gmail Configuration Issue ⚠️');
+            console.error('To fix Gmail authentication errors:');
+            console.error('');
+            console.error('1. Verify your environment variables:');
+            console.error(`   - EMAIL_USER: ${EMAIL_USER || 'NOT SET'}`);
+            console.error(`   - EMAIL_PASS: ${process.env.EMAIL_PASS ? 'SET (hidden)' : 'NOT SET'}`);
+            console.error(`   - EMAIL_TRANSPORT: ${EMAIL_TRANSPORT_ENV || 'AUTO-DETECTED'}`);
+            console.error('');
+            console.error('2. Use Gmail App Password (NOT your regular Gmail password):');
+            console.error('   - Go to: https://myaccount.google.com/apppasswords');
+            console.error('   - Sign in with your Gmail account');
+            console.error('   - Select "Mail" and "Other (Custom name)"');
+            console.error('   - Enter "Sahayaon" as the app name');
+            console.error('   - Copy the 16-character password (format: xxxx xxxx xxxx xxxx)');
+            console.error('   - Set EMAIL_PASS in your .env file (with or without spaces)');
+            console.error('');
+            console.error('3. Enable 2-Step Verification (required for App Passwords):');
+            console.error('   - Go to: https://myaccount.google.com/security');
+            console.error('   - Enable 2-Step Verification if not already enabled');
+            console.error('');
+            console.error('4. Common Gmail errors:');
+            console.error('   - "Invalid login": Wrong password or not using App Password');
+            console.error('   - "Less secure app access": Use App Password instead');
+            console.error('   - "Connection timeout": Check firewall/network settings');
+        } else if (EMAIL_TRANSPORT === 'OUTLOOK' || EMAIL_TRANSPORT === 'OFFICE365') {
+            const smtpHost = process.env.SMTP_HOST || 'smtp.office365.com';
+            console.error('\n⚠️  Office365 SMTP Configuration Issue ⚠️');
+            console.error('To fix Office365 SMTP AUTH errors:');
+            console.error('');
+            console.error('1. Enable SMTP AUTH in Microsoft 365 Admin Center:');
+            console.error('   - Go to: https://admin.microsoft.com');
+            console.error('   - Navigate to: Settings > Mail > POP, IMAP, and SMTP access');
+            console.error('   - Enable "Authenticated SMTP" for your mailbox');
+            console.error('');
+            console.error('2. For tenant-wide settings (if you have admin access):');
+            console.error('   - PowerShell: Set-TransportConfig -SmtpClientAuthenticationDisabled $false');
+            console.error('   - Or use Exchange Admin Center > Mail flow > Connectors');
+            console.error('');
+            console.error('3. Verify your environment variables:');
+            console.error(`   - EMAIL_USER: ${EMAIL_USER || 'NOT SET'}`);
+            console.error(`   - EMAIL_PASS: ${process.env.EMAIL_PASS ? 'SET (hidden)' : 'NOT SET'}`);
+            console.error(`   - SMTP_HOST: ${smtpHost}`);
+            console.error(`   - SMTP_PORT: ${process.env.SMTP_PORT || '587'}`);
+            console.error(`   - SMTP_SECURE: ${process.env.SMTP_SECURE || 'false'}`);
+            console.error(`   - EMAIL_TRANSPORT: ${EMAIL_TRANSPORT_ENV || 'AUTO-DETECTED'}`);
+            console.error('');
+            console.error('4. For Office365, recommended settings:');
+            console.error('   - SMTP_HOST=smtp.office365.com');
+            console.error('   - SMTP_PORT=587');
+            console.error('   - SMTP_SECURE=false (uses STARTTLS)');
+            console.error('   - EMAIL_TRANSPORT=OUTLOOK (or leave empty for auto-detect)');
+        } else {
             const smtpHost = process.env.SMTP_HOST || 'smtp.office365.com';
             const isOffice365 = smtpHost.includes('office365.com') || smtpHost.includes('outlook.com');
             
@@ -145,32 +249,25 @@ let emailServiceReady = false;
                 console.error('   - Or use Exchange Admin Center > Mail flow > Connectors');
                 console.error('');
                 console.error('3. Verify your environment variables:');
-                console.error(`   - EMAIL_USER: ${process.env.EMAIL_USER || 'NOT SET'}`);
+                console.error(`   - EMAIL_USER: ${EMAIL_USER || 'NOT SET'}`);
                 console.error(`   - EMAIL_PASS: ${process.env.EMAIL_PASS ? 'SET (hidden)' : 'NOT SET'}`);
                 console.error(`   - SMTP_HOST: ${smtpHost}`);
                 console.error(`   - SMTP_PORT: ${process.env.SMTP_PORT || '587'}`);
                 console.error(`   - SMTP_SECURE: ${process.env.SMTP_SECURE || 'false'}`);
+                console.error(`   - EMAIL_TRANSPORT: ${EMAIL_TRANSPORT_ENV || 'AUTO-DETECTED'}`);
                 console.error('');
                 console.error('4. For Office365, recommended settings:');
                 console.error('   - SMTP_HOST=smtp.office365.com');
                 console.error('   - SMTP_PORT=587');
                 console.error('   - SMTP_SECURE=false (uses STARTTLS)');
-                console.error('');
-                console.error('5. Alternative: Switch to Gmail');
-                console.error('   - Set EMAIL_TRANSPORT=GMAIL');
-                console.error('   - Use Gmail App Password (not regular password)');
+                console.error('   - EMAIL_TRANSPORT=OUTLOOK (or leave empty for auto-detect)');
             } else {
                 console.error('ℹ️ SMTP Configuration:');
                 console.error(`   - Host: ${smtpHost}`);
                 console.error(`   - Port: ${process.env.SMTP_PORT || '587'}`);
                 console.error(`   - Verify SMTP credentials and server settings`);
+                console.error(`   - EMAIL_TRANSPORT: ${EMAIL_TRANSPORT_ENV || 'AUTO-DETECTED'}`);
             }
-        } else {
-            console.error('ℹ️ Gmail Configuration:');
-            console.error('   - Ensure you are using an App Password (not regular password)');
-            console.error('   - Enable IMAP/SMTP in Gmail settings');
-            console.error('   - Enable 2-Factor Authentication (required for App Passwords)');
-            console.error('   - Generate App Password: https://myaccount.google.com/apppasswords');
         }
     }
 })();
@@ -538,6 +635,7 @@ const searchRoutes = require('./routes/searchRoutes');
 const readStatesRoutes = require('./routes/readStatesRoutes');
 const gdprRoutes = require('./routes/gdprRoutes');
 const emailToTicketRoutes = require('./routes/emailToTicketRoutes');
+const assetRoutes = require('./routes/assetRoutes');
 
 
 app.use('/', authRoutes(db, admin, usersCollection, authenticateToken));
@@ -560,6 +658,9 @@ app.use('/api/gdpr', gdprRoutes(db, admin, authenticateToken));
 if (emailToTicketService) {
     app.use('/api/email-to-ticket', emailToTicketRoutes(emailToTicketService, authenticateToken, checkRole));
 }
+
+// Asset Management routes
+app.use('/api/assets', assetRoutes(db, admin, assetsCollection, usersCollection, clientsCollection, authenticateToken, checkRole));
 
 // Add cache statistics endpoint
 app.get('/api/cache/stats', (req, res) => {
@@ -588,12 +689,29 @@ app.get('/api/cache/stats', (req, res) => {
                     contract_end: '2025-12-31',
                     site_admin: 'john.doe@acme.com'
                 });
-                console.log('Dummy client added to clients collection.');
+                console.log('✅ Dummy client added to clients collection.');
+            } else {
+                console.log('ℹ️ Clients collection already has data. Skipping dummy client creation.');
             }
         } catch (error) {
-            console.error('Error checking/adding dummy client:', error.message);
-            console.error('Error code:', error.code);
-            console.error('This may indicate a Firestore configuration issue. The server will continue running.');
+            // Distinguish between different error types
+            if (error.code === 5 || error.code === 'NOT_FOUND') {
+                console.warn('⚠️ Dummy client check: Firestore NOT_FOUND error.');
+                console.warn('   This may indicate:');
+                console.warn('   - Firestore database is not fully initialized');
+                console.warn('   - Service account permissions issue');
+                console.warn('   - Network connectivity issue');
+                console.warn('   The server will continue running. Clients can be added manually.');
+            } else if (error.code === 7 || error.code === 'PERMISSION_DENIED') {
+                console.error('❌ Dummy client check: Permission denied.');
+                console.error('   Check service account permissions in Firebase Console:');
+                console.error('   https://console.firebase.google.com/project/' + (process.env.project_id || 'your-project') + '/settings/iam');
+                console.error('   Ensure the service account has Firestore read/write permissions.');
+            } else {
+                console.error('❌ Error checking/adding dummy client:', error.message || error);
+                console.error('   Error code:', error.code || 'unknown');
+            }
+            console.log('ℹ️ Server will continue running. This is a non-critical initialization step.');
         }
     }
 })();

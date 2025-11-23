@@ -84,6 +84,16 @@ service cloud.firestore {
         userDoc.data.client_name == resource.data.client_name;
     }
 
+    // Helper: site_admin can read assets from their own company/client
+    function isSiteAdminForAsset() {
+      let userDoc = get(/databases/$(database)/documents/users/$(getUserId()));
+      return exists(/databases/$(database)/documents/users/$(getUserId())) &&
+        userDoc.data.role == 'site_admin' &&
+        userDoc.data.get('client_name', '') != '' &&
+        resource.data.get('client_name', '') != '' &&
+        userDoc.data.client_name == resource.data.client_name;
+    }
+
     // Rules for the 'users' collection
     match /users/{userId} {
       // Allow users to read their own profile data (e.g., roles)
@@ -106,6 +116,62 @@ service cloud.firestore {
       allow create, update, delete: if hasSuperAdminRole();
     }
     // --- END NEW RULES FOR 'clients' COLLECTION ---
+
+    // --- NEW RULES FOR 'assets' COLLECTION ---
+    match /assets/{assetId} {
+      // Allow read access:
+      // - Users can read their own assets (where owner_uid matches)
+      // - Site admins can read assets for their client (where client_name matches)
+      // - Support/Admin/Super Admin can read all assets
+      allow read: if isAuthenticated() && (
+        resource.data.get('owner_uid', '') == getUserId() ||
+        hasSupportAdminOrSuperAdminRole() ||
+        isSiteAdminForAsset()
+      );
+
+      // Allow list queries based on role:
+      // - Users can list their own assets (where owner_uid matches)
+      // - Site admins can list assets for their client (where client_name matches)
+      // - Support/Admin/Super Admin can list all assets
+      allow list: if isAuthenticated() && (
+        resource.data.get('owner_uid', '') == getUserId() ||
+        hasSupportAdminOrSuperAdminRole() ||
+        isSiteAdminForAsset()
+      );
+
+      // Allow create: authenticated users can create assets
+      // The owner_uid should match the current user, or site_admin can create for their client
+      allow create: if isAuthenticated() && (
+        request.resource.data.get('owner_uid', '') == getUserId() ||
+        (hasSupportAdminOrSuperAdminRole()) ||
+        (exists(/databases/$(database)/documents/users/$(getUserId())) &&
+         get(/databases/$(database)/documents/users/$(getUserId())).data.role == 'site_admin' &&
+         get(/databases/$(database)/documents/users/$(getUserId())).data.get('client_name', '') != '' &&
+         request.resource.data.get('client_name', '') != '' &&
+         get(/databases/$(database)/documents/users/$(getUserId())).data.client_name == request.resource.data.client_name)
+      );
+
+      // Allow update:
+      // - Users can update their own assets
+      // - Site admins can update assets for their client
+      // - Support/Admin/Super Admin can update any asset
+      allow update: if isAuthenticated() && (
+        resource.data.get('owner_uid', '') == getUserId() ||
+        hasSupportAdminOrSuperAdminRole() ||
+        isSiteAdminForAsset()
+      );
+
+      // Allow delete:
+      // - Users can delete their own assets
+      // - Site admins can delete assets for their client
+      // - Support/Admin/Super Admin can delete any asset
+      allow delete: if isAuthenticated() && (
+        resource.data.get('owner_uid', '') == getUserId() ||
+        hasSupportAdminOrSuperAdminRole() ||
+        isSiteAdminForAsset()
+      );
+    }
+    // --- END NEW RULES FOR 'assets' COLLECTION ---
 
     // Public artifacts (e.g., app-wide configurations if any)
     match /artifacts/{appId}/public/data/{document=**} {

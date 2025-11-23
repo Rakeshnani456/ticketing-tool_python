@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import CustomButton from '../common/CustomButton';
 import { API_BASE_URL } from '../../config/constants';
+import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import { 
     Box, 
     Typography, 
@@ -67,6 +69,30 @@ const ClientImportPage = () => {
         'managerEmail',
         'employmentType'
     ];
+    
+    // Friendly display names for Excel template headers
+    const USER_TEMPLATE_DISPLAY_NAMES = [
+        'First Name',
+        'Last Name',
+        'Employee ID',
+        'Email',
+        'Designation',
+        'Contact Number',
+        'Manager Email',
+        'Employment Type'
+    ];
+    
+    // Map display names back to field names for processing
+    const HEADER_NAME_MAP = {
+        'First Name': 'firstName',
+        'Last Name': 'lastName',
+        'Employee ID': 'employeeId',
+        'Email': 'email',
+        'Designation': 'designation',
+        'Contact Number': 'contactNumber',
+        'Manager Email': 'managerEmail',
+        'Employment Type': 'employmentType'
+    };
 
     useEffect(() => {
         if (!clientName) {
@@ -74,23 +100,76 @@ const ClientImportPage = () => {
         }
     }, [clientName, navigate]);
 
-    const handleDownloadTemplate = () => {
-        // Create CSV content with headers and sample row
-        const csvContent = [
-            USER_TEMPLATE_HEADERS.join(','),
-            // Add sample row with empty values
-            USER_TEMPLATE_HEADERS.map(() => '').join(',')
-        ].join('\n');
+    const handleDownloadTemplate = async () => {
+        // Employment type options for dropdown
+        const employmentTypeOptions = ['Full-time', 'Part-time', 'Contract', 'Intern', 'Other'];
         
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        // Create ExcelJS workbook
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet('Users');
+        
+        // Add header row with friendly display names
+        worksheet.addRow(USER_TEMPLATE_DISPLAY_NAMES);
+        
+        // Add empty sample row
+        worksheet.addRow(USER_TEMPLATE_HEADERS.map(() => ''));
+        
+        // Set column widths
+        USER_TEMPLATE_DISPLAY_NAMES.forEach((header, index) => {
+            worksheet.getColumn(index + 1).width = 20;
+        });
+        
+        // Style header row
+        const headerRow = worksheet.getRow(1);
+        headerRow.font = { bold: true };
+        headerRow.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFE0E0E0' }
+        };
+        
+        // Find employmentType column index (1-based for ExcelJS)
+        // Use display names since that's what we're showing in the template
+        const employmentTypeIndex = USER_TEMPLATE_DISPLAY_NAMES.indexOf('Employment Type') + 1;
+        
+        // Add data validation dropdown to employmentType column
+        if (employmentTypeIndex > 0) {
+            // Create the list formula string - must be in format: "Option1,Option2,Option3"
+            // The double quotes are important for Excel to recognize it as a list
+            const listFormula = `"${employmentTypeOptions.join(',')}"`;
+            
+            // Apply data validation to cells in the employmentType column (rows 2 to 500)
+            // ExcelJS applies validation to individual cells
+            for (let row = 2; row <= 500; row++) {
+                const cell = worksheet.getCell(row, employmentTypeIndex);
+                
+                // Set data validation with dropdown list
+                cell.dataValidation = {
+                    type: 'list',
+                    allowBlank: true, // Allow blank for flexibility
+                    formulae: [listFormula],
+                    showInputMessage: true,
+                    promptTitle: 'Employment Type',
+                    prompt: 'Please select an employment type from the dropdown',
+                    showErrorMessage: true,
+                    errorStyle: 'error',
+                    errorTitle: 'Invalid Value',
+                    error: 'Please select a value from the dropdown list: ' + employmentTypeOptions.join(', ')
+                };
+            }
+        }
+        
+        // Generate buffer and download
+        const buffer = await workbook.xlsx.writeBuffer();
+        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = window.URL.createObjectURL(blob);
         const link = document.createElement('a');
-        const url = URL.createObjectURL(blob);
-        link.setAttribute('href', url);
-        link.setAttribute('download', clientName ? `${clientName}_user_template.csv` : 'user_import_template.csv');
-        link.style.visibility = 'hidden';
+        link.href = url;
+        link.download = clientName ? `${clientName}_user_template.xlsx` : 'user_import_template.xlsx';
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
     };
 
     const handleFileUpload = (e) => {
@@ -101,44 +180,98 @@ const ClientImportPage = () => {
         const reader = new FileReader();
         reader.onload = (evt) => {
             try {
-                const text = evt.target.result;
-                const lines = text.split('\n').filter(line => line.trim());
+                let users = [];
                 
-                if (lines.length < 2) {
-                    setImportError('File must contain at least a header row and one data row.');
-                    return;
-                }
-                
-                const headers = lines[0].split(',').map(h => h.trim());
-                const expectedHeaders = [...USER_TEMPLATE_HEADERS];
-                
-                const missingCols = expectedHeaders.filter(h => !headers.includes(h));
-                if (missingCols.length > 0) {
-                    setImportError('Missing required columns: ' + missingCols.join(', ') + '. Please use the provided template.');
-                    return;
-                }
-                
-                const users = [];
-                for (let i = 1; i < lines.length; i++) {
-                    if (lines[i].trim()) {
-                        const values = lines[i].split(',').map(v => v.trim());
-                        const user = {};
-                        headers.forEach((header, index) => {
-                            user[header] = values[index] || '';
-                        });
-                        
-                        if (user.email) {
-                            users.push({
-                                ...user,
+                // Check if file is XLSX or CSV
+                if (file.name.toLowerCase().endsWith('.xlsx') || file.name.toLowerCase().endsWith('.xls')) {
+                    // Process XLSX file
+                    const data = new Uint8Array(evt.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const sheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[sheetName];
+                    
+                    // Convert to JSON - Excel will have friendly header names
+                    const jsonData = XLSX.utils.sheet_to_json(worksheet, { 
+                        defval: '',
+                        raw: false
+                    });
+                    
+                    // Map friendly header names back to field names and filter out empty rows
+                    users = jsonData
+                        .filter(row => {
+                            // Check if email exists (using either friendly name or field name)
+                            const email = row['Email'] || row['email'] || row.email;
+                            return email && email.trim() !== '' && email.toLowerCase() !== 'email';
+                        })
+                        .map(row => {
+                            // Map friendly names to field names
+                            const mappedRow = {};
+                            Object.keys(HEADER_NAME_MAP).forEach(displayName => {
+                                const fieldName = HEADER_NAME_MAP[displayName];
+                                const value = row[displayName] || row[fieldName] || '';
+                                mappedRow[fieldName] = typeof value === 'string' ? value.trim() : value;
+                            });
+                            return {
+                                ...mappedRow,
                                 companyName: clientName, // Set the client name from URL parameter
                                 password: generatePassword()
+                            };
+                        });
+                } else if (file.name.toLowerCase().endsWith('.csv')) {
+                    // Process CSV file (backward compatibility)
+                    const text = evt.target.result;
+                    const lines = text.split('\n').filter(line => line.trim());
+                    
+                    if (lines.length < 2) {
+                        setImportError('File must contain at least a header row and one data row.');
+                        return;
+                    }
+                    
+                    const headers = lines[0].split(',').map(h => h.trim());
+                    const expectedHeaders = [...USER_TEMPLATE_HEADERS];
+                    const expectedDisplayNames = [...USER_TEMPLATE_DISPLAY_NAMES];
+                    
+                    // Check if headers match either field names or display names
+                    const allExpectedHeaders = [...expectedHeaders, ...expectedDisplayNames];
+                    const missingCols = expectedDisplayNames.filter(h => !headers.includes(h) && !headers.includes(HEADER_NAME_MAP[h]));
+                    if (missingCols.length > 0) {
+                        setImportError('Missing required columns: ' + missingCols.join(', ') + '. Please use the provided template.');
+                        return;
+                    }
+                    
+                    for (let i = 1; i < lines.length; i++) {
+                        if (lines[i].trim()) {
+                            const values = lines[i].split(',').map(v => v.trim());
+                            const user = {};
+                            headers.forEach((header, index) => {
+                                user[header] = values[index] || '';
                             });
+                            
+                            // Map friendly names to field names
+                            const mappedUser = {};
+                            Object.keys(HEADER_NAME_MAP).forEach(displayName => {
+                                const fieldName = HEADER_NAME_MAP[displayName];
+                                mappedUser[fieldName] = user[displayName] || user[fieldName] || '';
+                            });
+                            
+                            const email = mappedUser.email || user.email || user['Email'];
+                            if (email && email.trim() !== '') {
+                                users.push({
+                                    ...mappedUser,
+                                    email: email.trim(),
+                                    companyName: clientName, // Set the client name from URL parameter
+                                    password: generatePassword()
+                                });
+                            }
                         }
                     }
+                } else {
+                    setImportError('Please upload an XLSX or CSV file.');
+                    return;
                 }
                 
                 if (users.length === 0) {
-                    setImportError('No valid user data found in the file.');
+                    setImportError('No valid user data found in the file. Please ensure the file contains at least one row with an email address.');
                     return;
                 }
                 
@@ -153,27 +286,44 @@ const ClientImportPage = () => {
                 })));
                 
             } catch (err) {
-                setImportError('Failed to parse file. Please use the provided template.');
+                console.error('Error parsing file:', err);
+                setImportError('Failed to parse file. Please ensure you are using the provided template format.');
             }
         };
         
-        if (file.name.toLowerCase().endsWith('.csv')) {
+        if (file.name.toLowerCase().endsWith('.xlsx') || file.name.toLowerCase().endsWith('.xls')) {
+            reader.readAsArrayBuffer(file);
+        } else if (file.name.toLowerCase().endsWith('.csv')) {
             reader.readAsText(file);
         } else {
-            setImportError('Please upload a CSV file.');
+            setImportError('Please upload an XLSX or CSV file.');
         }
     };
 
     const generatePassword = () => {
-        const prefix = 'Sahayaon#';
-        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-        let randomText = '';
-        // Generate random text (subtract prefix length from total length, aiming for ~12 total chars)
-        const randomLength = 12 - prefix.length;
-        for (let i = 0; i < randomLength; i++) {
-            randomText += chars.charAt(Math.floor(Math.random() * chars.length));
+        // 8 characters: 4 from "Sahayaon" letters + 4 random characters (numbers or alphabets)
+        const sahayaonLetters = ['S', 'a', 'h', 'y', 'o', 'n'];
+        const randomChars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+        
+        // Pick 4 random letters from "Sahayaon"
+        const selectedLetters = [];
+        for (let i = 0; i < 4; i++) {
+            const randomIndex = Math.floor(Math.random() * sahayaonLetters.length);
+            selectedLetters.push(sahayaonLetters[randomIndex]);
         }
-        return prefix + randomText;
+        
+        // Add 4 random characters (numbers or alphabets)
+        for (let i = 0; i < 4; i++) {
+            selectedLetters.push(randomChars.charAt(Math.floor(Math.random() * randomChars.length)));
+        }
+        
+        // Shuffle the array to mix letters and random chars
+        for (let i = selectedLetters.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [selectedLetters[i], selectedLetters[j]] = [selectedLetters[j], selectedLetters[i]];
+        }
+        
+        return selectedLetters.join('');
     };
 
     const handleConfirmImport = async () => {
@@ -335,7 +485,7 @@ const ClientImportPage = () => {
                                             Download Template
                                         </Typography>
                                         <Typography variant="body2" sx={{ color: '#666', mb: 2, fontSize: '0.8rem' }}>
-                                            Download CSV template (company name will be added automatically)
+                                            Download XLSX template (company name will be added automatically)
                                         </Typography>
                                     </Box>
                                     <CustomButton
@@ -363,10 +513,10 @@ const ClientImportPage = () => {
                                 }}>
                                     <Box>
                                         <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1, fontSize: '0.9rem' }}>
-                                            Upload CSV File
+                                            Upload XLSX File
                                         </Typography>
                                         <Typography variant="body2" sx={{ color: '#666', mb: 2, fontSize: '0.8rem' }}>
-                                            Upload your filled CSV file
+                                            Upload your filled XLSX or CSV file
                                         </Typography>
                                     </Box>
                                     
@@ -383,12 +533,12 @@ const ClientImportPage = () => {
                                     >
                                         <UploadIcon sx={{ color: '#999', fontSize: 24, mb: 1 }} />
                                         <Typography variant="body2" sx={{ color: '#666', mb: 1, fontSize: '0.8rem' }}>
-                                            Click to upload CSV
+                                            Click to upload XLSX/CSV
                                         </Typography>
                                         <input
                                             ref={fileInputRef}
                                             type="file"
-                                            accept=".csv"
+                                            accept=".xlsx,.xls,.csv"
                                             onChange={handleFileUpload}
                                             style={{ display: 'none' }}
                                         />

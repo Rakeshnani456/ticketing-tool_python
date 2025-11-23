@@ -40,39 +40,6 @@ const createBaseTemplate = (contentFunction) => {
             margin: 20px 0;
         }
         
-        /* Header styles */
-        .header {
-            background: #e85c34;
-            color: white;
-            padding: 30px 40px;
-            text-align: center;
-            position: relative;
-        }
-        
-        .header::after {
-            content: '';
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            height: 4px;
-            background: #d1451f;
-        }
-        
-        .header h1 {
-            font-size: 28px;
-            font-weight: 600;
-            margin: 0;
-            letter-spacing: -0.5px;
-        }
-        
-        .header .tagline {
-            font-size: 16px;
-            font-weight: 300;
-            margin-top: 8px;
-            opacity: 0.9;
-        }
-        
         /* Content styles */
         .content {
             padding: 32px;
@@ -258,12 +225,8 @@ const createBaseTemplate = (contentFunction) => {
                 padding: 0;
             }
             
-            .header, .content, .footer {
+            .content, .footer {
                 padding: 20px;
-            }
-            
-            .header h1 {
-                font-size: 24px;
             }
             
             h2 {
@@ -279,18 +242,13 @@ const createBaseTemplate = (contentFunction) => {
 </head>
 <body>
     <div class="email-container">
-        <div class="header">
-            <h1>Sahayaon Technologies</h1>
-            <div class="tagline">Enterprise Ticketing System</div>
-        </div>
         <div class="content">
             ${content}
         </div>
         <div class="footer">
-            <p>This is an automated message from the Sahayaon Technologies Enterprise Ticketing System.</p>
+            <p>This is an automated message from SahayaOn.</p>
             <div class="contact">
-                <p>For technical support, contact: <a href="mailto:HelloIT@kriasol.com">HelloIT@kriasol.com</a></p>
-                <p>© 2025 Kriasol Technologies LLP. All rights reserved.</p>
+                <p>Powered by KriaSol Technologies</p>
             </div>
         </div>
     </div>
@@ -300,85 +258,94 @@ const createBaseTemplate = (contentFunction) => {
 };
 
 /**
- * Welcome email template for new users
+ * Helper function to format user's full name
+ * @param {Object} userData - User data object
+ * @returns {string} Formatted full name
+ */
+const formatUserName = (userData) => {
+    const { firstName = '', lastName = '', userName = '' } = userData;
+    // Trim whitespace and check if both names exist
+    const first = (firstName || '').trim();
+    const last = (lastName || '').trim();
+    
+    if (first && last) {
+        return `${first} ${last}`;
+    }
+    // If only one name exists, use it
+    if (first) {
+        return first;
+    }
+    if (last) {
+        return last;
+    }
+    // Fallback to userName
+    return (userName || '').trim() || '';
+};
+
+/**
+ * Welcome email template for new users (User Created)
  * @param {Object} userData - User data object
  * @returns {Object} Email content with subject, text, and html
  */
 const getWelcomeEmailTemplate = (userData) => {
     const {
+        firstName = '',
+        lastName = '',
         userName = '',
-        clientName = '',
-        portalUrl = '',
         userEmail = '',
+        username = userEmail,
         tempPassword = '',
-        companyName = ''
+        password = tempPassword,
+        portalUrl = ''
     } = userData;
-    const subject = `Welcome to ${clientName || companyName} Enterprise Ticketing Portal – Your Account Details`;
+    const fullName = formatUserName({ firstName, lastName, userName });
+    const subject = `Welcome to SahayaOn – Your Account Details`;
     const textContent = `
-Dear ${userName},
+Hi ${fullName},
 
-Welcome to the ${clientName || companyName} Enterprise Ticketing Portal, powered by Sahayaon Technologies.
+Your access to SahayaOn has been successfully created. You are now part of a streamlined IT service ecosystem.
 
-Your account has been successfully created in our enterprise ticketing system. Below you will find your temporary login credentials:
+Login Details:
+
+Username: ${username || userEmail}
+
+Temporary Password: ${password || tempPassword}
 
 Portal URL: ${portalUrl}
-Username / Email: ${userEmail}
-Temporary Password: ${tempPassword}
 
-SECURITY NOTICE:
-For your account security, please log in using the above credentials and immediately change your password upon first login.
+For security, please change your password at first login.
 
-GETTING STARTED:
-1. Access the portal using the URL provided above.
-2. Sign in with your username/email and temporary password.
-3. You will be prompted to create a new secure password.
-4. Complete your profile setup and begin utilizing the portal for efficient ticket management.
+Your experience now becomes more proactive and efficient.
 
-If you encounter any issues during the login process or have questions about the system, please contact our enterprise support team at HelloIT@kriasol.com.
+Regards
 
-Thank you for partnering with Sahayaon Technologies.
+SahayaOn Admin
 
-Best regards,
-IT Team
-Sahayaon Technologies LLP
+KriaSol Technologies
     `;
     const htmlContent = createBaseTemplate(() => `
-        <h2>Welcome to ${clientName || companyName} Enterprise Ticketing Portal</h2>
+        <p>Hi <strong>${fullName}</strong>,</p>
         
-        <p>Dear <strong>${userName}</strong>,</p>
-        
-        <p>Welcome to the <strong>${clientName || companyName} Enterprise Ticketing Portal</strong>, powered by Sahayaon Technologies.</p>
-        
-        <p>Your account has been successfully created in our enterprise ticketing system. Below you will find your temporary login credentials:</p>
+        <p>Your access to SahayaOn has been successfully created. You are now part of a streamlined IT service ecosystem.</p>
         
         <div class="info-box">
-            <h3>Your Account Details</h3>
+            <h3>Login Details:</h3>
             <ul>
-                <li><strong>Portal URL:</strong> <a href="${portalUrl}" class="button">Access Enterprise Portal</a></li>
-                <li><strong>Username / Email:</strong> <span class="highlight">${userEmail}</span></li>
-                <li><strong>Temporary Password:</strong> <span class="highlight">${tempPassword}</span></li>
+                <li><strong>Username:</strong> <span class="highlight">${username || userEmail}</span></li>
+                <li><strong>Temporary Password:</strong> <span class="highlight">${password || tempPassword}</span></li>
+                <li><strong>Portal URL:</strong> <a href="${portalUrl}" class="button">Access Portal</a></li>
             </ul>
         </div>
         
         <div class="warning">
-            <strong>SECURITY NOTICE:</strong> For your account security, please log in using the above credentials and immediately change your password upon first login.
+            <strong>For security, please change your password at first login.</strong>
         </div>
         
-        <div class="info-box">
-            <h3>Getting Started</h3>
-            <ol>
-                <li>Access the portal using the URL provided above.</li>
-                <li>Sign in with your username/email and temporary password.</li>
-                <li>You will be prompted to create a new secure password.</li>
-                <li>Complete your profile setup and begin utilizing the portal for efficient ticket management.</li>
-            </ol>
-        </div>
+        <p>Your experience now becomes more proactive and efficient.</p>
         
-        <p>If you encounter any issues during the login process or have questions about the system, please contact our enterprise support team at <a href="mailto:HelloIT@kriasol.com">HelloIT@kriasol.com</a>.</p>
-        
-        <div class="success">
-            <strong>Thank you for partnering with Sahayaon Technologies.</strong>
-        </div>
+        <p>Regards</p>
+        <p><strong>SahayaOn Admin</strong></p>
+        <p>KriaSol Technologies</p>
     `);
     return {
         subject,
@@ -394,53 +361,57 @@ Sahayaon Technologies LLP
  */
 const getPasswordResetTemplate = (userData) => {
     const {
+        firstName = '',
+        lastName = '',
         userName = '',
-        resetUrl = '',
-        userEmail = ''
+        password = '',
+        tempPassword = password,
+        newPassword = password || tempPassword,
+        portalUrl = '',
+        resetUrl = portalUrl
     } = userData;
-    const subject = 'Password Reset Request - Sahayaon Enterprise Ticketing System';
+    const fullName = formatUserName({ firstName, lastName, userName });
+    const subject = `SahayaOn Password Reset Successful`;
     const textContent = `
-Dear ${userName},
+Hi ${fullName},
 
-We have received a password reset request for your account in the Sahayaon Enterprise Ticketing System.
+Your password has been reset as requested.
 
-To reset your password, please click on the following link:
-${resetUrl}
+New Temporary Password: ${newPassword || tempPassword || password}
 
-SECURITY INFORMATION:
-- If you did not initiate this password reset request, please disregard this email and contact our security team immediately.
-- This password reset link will expire in 24 hours for security purposes.
-- For your account protection, never share your password with anyone.
+Portal URL: ${portalUrl || resetUrl}
 
-If you have any questions or concerns about your account security, please contact our enterprise support team at HelloIT@kriasol.com.
+Please log in and update your password to maintain account security.
 
-Best regards,
-IT Security Team
-Sahayaon Technologies LLP
+Your access workflows remain uninterrupted.
+
+Regards
+
+SahayaOn System
+
+KriaSol Technologies
     `;
     const htmlContent = createBaseTemplate(() => `
-        <h2>Password Reset Request</h2>
+        <p>Hi <strong>${fullName}</strong>,</p>
         
-        <p>Dear <strong>${userName}</strong>,</p>
-        
-        <p>We have received a password reset request for your account in the <strong>Sahayaon Enterprise Ticketing System</strong>.</p>
-        
-        <p>To reset your password, please click on the button below:</p>
-        
-        <div style="text-align: center;">
-            <a href="${resetUrl}" class="button">Reset Password</a>
-        </div>
+        <p>Your password has been reset as requested.</p>
         
         <div class="info-box">
-            <h3>Security Information</h3>
             <ul>
-                <li>If you did not initiate this password reset request, please disregard this email and contact our security team immediately.</li>
-                <li>This password reset link will expire in <strong>24 hours</strong> for security purposes.</li>
-                <li>For your account protection, never share your password with anyone.</li>
+                <li><strong>New Temporary Password:</strong> <span class="highlight">${newPassword || tempPassword || password}</span></li>
+                <li><strong>Portal URL:</strong> <a href="${portalUrl || resetUrl}" class="button">Access Portal</a></li>
             </ul>
         </div>
         
-        <p>If you have any questions or concerns about your account security, please contact our enterprise support team at <a href="mailto:HelloIT@kriasol.com">HelloIT@kriasol.com</a>.</p>
+        <div class="warning">
+            <strong>Please log in and update your password to maintain account security.</strong>
+        </div>
+        
+        <p>Your access workflows remain uninterrupted.</p>
+        
+        <p>Regards</p>
+        <p><strong>SahayaOn System</strong></p>
+        <p>KriaSol Technologies</p>
     `);
     return {
         subject,
@@ -450,65 +421,70 @@ Sahayaon Technologies LLP
 };
 
 /**
- * Ticket notification email template
+ * Ticket notification email template (Ticket Creation)
  * @param {Object} ticketData - Ticket data object
  * @returns {Object} Email content with subject, text, and html
  */
 const getTicketNotificationTemplate = (ticketData) => {
     const {
         ticketId = '',
-        subject = '',
-        description = '',
-        priority = 'Low',
+        firstName = '',
+        lastName = '',
+        userName = '',
         category = '',
-        reporterName = '',
+        priority = 'Low',
+        description = '',
         ticketUrl = ''
     } = ticketData;
-    const emailSubject = `[${priority} Priority] New Ticket Created - ${ticketId}`;
+    const fullName = formatUserName({ firstName, lastName, userName });
+    const emailSubject = `[SahayaOn] Ticket Logged – ${ticketId}`;
     const textContent = `
-NEW TICKET NOTIFICATION
+Hi ${fullName},
 
-A new ticket has been submitted to the Enterprise Ticketing System.
+Your request has been successfully logged in SahayaOn. Our team is activating the workflow to address it.
 
-Ticket Information:
-- Ticket ID: ${ticketId}
-- Subject: ${subject}
-- Description: ${description}
-- Priority: ${priority}
-- Category: ${category}
-- Reported by: ${reporterName}
+Ticket details:
 
-Please review this ticket and take appropriate action based on its priority level.
+Ticket ID: ${ticketId}${ticketUrl ? `\nView Ticket: ${ticketUrl}` : ''}
 
-You can view the full details and update the ticket status by accessing the link below:
-${ticketUrl}
+Category: ${category}
 
-Thank you,
-IT Team
-Sahayaon Technologies LLP
+Priority: ${priority}
+
+Description: ${description}
+
+You will receive further updates as the ticket progresses.
+
+Our team is aligned and tracking towards closure.
+
+Regards
+
+SahayaOn Support
+
+Powered by KriaSol Technologies
     `;
     const htmlContent = createBaseTemplate(() => `
-        <h2>New Ticket Notification</h2>
+        <p>Hi <strong>${fullName}</strong>,</p>
         
-        <p>A new ticket has been submitted to the <strong>Enterprise Ticketing System</strong>.</p>
+        <p>Your request has been successfully logged in SahayaOn. Our team is activating the workflow to address it.</p>
         
         <div class="info-box">
-            <h3>Ticket Information</h3>
+            <h3>Ticket details:</h3>
             <ul>
-                <li><strong>Ticket ID:</strong> ${ticketId}</li>
-                <li><strong>Subject:</strong> ${subject}</li>
-                <li><strong>Description:</strong> ${description}</li>
-                <li><strong>Priority:</strong> <span class="highlight">${priority}</span></li>
+                <li><strong>Ticket ID:</strong> ${ticketUrl ? `<a href="${ticketUrl}" style="color: #3182ce; text-decoration: underline;">${ticketId}</a>` : ticketId}</li>
                 <li><strong>Category:</strong> ${category}</li>
-                <li><strong>Reported by:</strong> ${reporterName}</li>
+                <li><strong>Priority:</strong> <span class="highlight">${priority}</span></li>
+                <li><strong>Description:</strong> ${description}</li>
             </ul>
         </div>
         
-        <p>Please review this ticket and take appropriate action based on its priority level.</p>
+        <p>You will receive further updates as the ticket progresses.</p>
         
-        <div style="text-align: center;">
-            <a href="${ticketUrl}" class="button">View Ticket Details</a>
-        </div>
+        <p>Our team is aligned and tracking towards closure.</p>
+        
+        <p>Regards</p>
+        <p><strong>SahayaOn Support</strong></p>
+        <p>Powered by KriaSol Technologies</p>
     `);
     return {
         subject: emailSubject,
@@ -525,56 +501,53 @@ Sahayaon Technologies LLP
 const getTicketStatusUpdateTemplate = (ticketData) => {
     const {
         display_id = '',
-        short_description = '',
+        ticketId = display_id,
+        firstName = '',
+        lastName = '',
+        userName = '',
         status = '',
-        ticketUrl = '',
-        toEmail = '',
-        ccEmail = ''
+        updateNotes = '',
+        ticketUrl = ''
     } = ticketData;
-    const subject = `Status Update: Ticket ${display_id} - ${status}`;
+    const fullName = formatUserName({ firstName, lastName, userName });
+    const subject = `[SahayaOn] Ticket Update – ${ticketId || display_id}`;
     const textContent = `
-TICKET STATUS UPDATE
+Hi ${fullName},
 
-Dear User,
+Your ticket has been updated with the latest progress.
 
-This is to inform you that the status of your ticket has been updated in our Enterprise Ticketing System.
+Ticket ID: ${ticketId || display_id}${ticketUrl ? `\nView Ticket: ${ticketUrl}` : ''}
 
-Ticket Details:
-- Ticket ID: ${display_id}
-- Subject: ${short_description}
-- New Status: ${status}
+Current Status: ${status}
 
-You can view the complete ticket history and additional details by accessing the Enterprise Ticketing Portal.
+Update Notes: ${updateNotes}
 
-If you have any questions regarding this update, please reach out to the IT Team.
+Our team is actively driving next steps to closure.
 
-Thank you,
-IT Team
-Sahayaon Technologies LLP
+Regards
+
+SahayaOn Support
+
+KriaSol Technologies
     `;
     const htmlContent = createBaseTemplate(() => `
-        <h2>Ticket Status Update</h2>
+        <p>Hi <strong>${fullName}</strong>,</p>
         
-        <p>Dear User,</p>
-        
-        <p>This is to inform you that the status of your ticket has been updated in our <strong>Enterprise Ticketing System</strong>.</p>
+        <p>Your ticket has been updated with the latest progress.</p>
         
         <div class="info-box">
-            <h3>Ticket Details</h3>
             <ul>
-                <li><strong>Ticket ID:</strong> ${display_id}</li>
-                <li><strong>Subject:</strong> ${short_description}</li>
-                <li><strong>New Status:</strong> <span class="highlight">${status}</span></li>
+                <li><strong>Ticket ID:</strong> ${ticketUrl ? `<a href="${ticketUrl}" style="color: #3182ce; text-decoration: underline;">${ticketId || display_id}</a>` : (ticketId || display_id)}</li>
+                <li><strong>Current Status:</strong> <span class="highlight">${status}</span></li>
+                <li><strong>Update Notes:</strong> ${updateNotes}</li>
             </ul>
         </div>
         
-        <p>You can view the complete ticket history and additional details by accessing the Enterprise Ticketing Portal.</p>
+        <p>Our team is actively driving next steps to closure.</p>
         
-        <div style="text-align: center;">
-            <a href="${ticketUrl}" class="button">View Ticket Details</a>
-        </div>
-        
-        <p>If you have any questions regarding this update, please reach out to the IT Team.</p>
+        <p>Regards</p>
+        <p><strong>SahayaOn Support</strong></p>
+        <p>KriaSol Technologies</p>
     `);
     return {
         subject,
@@ -584,63 +557,126 @@ Sahayaon Technologies LLP
 };
 
 /**
- * Ticket assignment email template for internal team communication
+ * Ticket closed email template
+ * @param {Object} ticketData - Ticket data object
+ * @returns {Object} Email content with subject, text, and html
+ */
+const getTicketClosedTemplate = (ticketData) => {
+    const {
+        display_id = '',
+        ticketId = display_id,
+        firstName = '',
+        lastName = '',
+        userName = '',
+        resolutionSummary = '',
+        ticketUrl = ''
+    } = ticketData;
+    const fullName = formatUserName({ firstName, lastName, userName });
+    const subject = `[SahayaOn] Ticket Resolved – ${ticketId || display_id}`;
+    const textContent = `
+Hi ${fullName},
+
+This ticket has been resolved and closed in SahayaOn.
+
+Ticket ID: ${ticketId || display_id}${ticketUrl ? `\nView Ticket: ${ticketUrl}` : ''}
+
+Resolution Summary: ${resolutionSummary}
+
+If you believe further action is required, please reopen the ticket or submit a new request through the portal.
+
+We remain committed to seamless IT support.
+
+Regards
+
+SahayaOn Support
+
+Powered by KriaSol Technologies
+    `;
+    const htmlContent = createBaseTemplate(() => `
+        <p>Hi <strong>${fullName}</strong>,</p>
+        
+        <p>This ticket has been resolved and closed in SahayaOn.</p>
+        
+        <div class="info-box">
+            <ul>
+                <li><strong>Ticket ID:</strong> ${ticketUrl ? `<a href="${ticketUrl}" style="color: #3182ce; text-decoration: underline;">${ticketId || display_id}</a>` : (ticketId || display_id)}</li>
+                <li><strong>Resolution Summary:</strong> ${resolutionSummary}</li>
+            </ul>
+        </div>
+        
+        <p>If you believe further action is required, please reopen the ticket or submit a new request through the portal.</p>
+        
+        <p>We remain committed to seamless IT support.</p>
+        
+        <p>Regards</p>
+        <p><strong>SahayaOn Support</strong></p>
+        <p>Powered by KriaSol Technologies</p>
+    `);
+    return {
+        subject,
+        text: textContent,
+        html: htmlContent
+    };
+};
+
+/**
+ * Ticket assignment email template
  * @param {Object} ticketData - Ticket data object
  * @returns {Object} Email content with subject, text, and html
  */
 const getTicketAssignmentTemplate = (ticketData) => {
     const {
         display_id = '',
-        short_description = '',
-        assignedEngineerEmail = '',
-        ticketUrl = '',
-        toEmail = '',
-        ccEmail = ''
+        ticketId = display_id,
+        engineerName = '',
+        assignedEngineerEmail = engineerName,
+        userName = '',
+        reporterName = userName,
+        priority = 'Low',
+        ticketUrl = ''
     } = ticketData;
-    const subject = `Assignment Notification: Ticket ${display_id}`;
+    const subject = `[SahayaOn] Ticket Assigned – ${ticketId || display_id}`;
     const textContent = `
-TICKET ASSIGNMENT NOTIFICATION
+Hi Team,
 
-Dear Team,
+The ticket below has been assigned for execution. Ownership is now active.
 
-This notification is to inform you that a ticket has been assigned in the Enterprise Ticketing System.
+Ticket ID: ${ticketId || display_id}${ticketUrl ? `\nView Ticket: ${ticketUrl}` : ''}
 
-Assignment Details:
-- Ticket ID: ${display_id}
-- Subject: ${short_description}
-- Assigned Engineer: ${assignedEngineerEmail}
+Assigned To: ${engineerName || assignedEngineerEmail}
 
-Please review the ticket details and take appropriate action. We kindly request that you acknowledge receipt of this assignment and provide an estimated resolution timeframe.
+Priority: ${priority}
 
-You can access the ticket and update its status through the Enterprise Ticketing Portal.
+${engineerName || assignedEngineerEmail}, please drive resolution as per SLA commitments.
 
-Thank you,
-IT Team
-Sahayaon Technologies LLP
+${userName || reporterName}, you will be notified as the ticket progresses.
+
+Regards
+
+SahayaOn Notifications
+
+KriaSol Technologies
     `;
     const htmlContent = createBaseTemplate(() => `
-        <h2>Ticket Assignment Notification</h2>
+        <p>Hi Team,</p>
         
-        <p>Dear Team,</p>
-        
-        <p>This notification is to inform you that a ticket has been assigned in the <strong>Enterprise Ticketing System</strong>.</p>
+        <p>The ticket below has been assigned for execution. Ownership is now active.</p>
         
         <div class="info-box">
-            <h3>Assignment Details</h3>
             <ul>
-                <li><strong>Ticket ID:</strong> ${display_id}</li>
-                <li><strong>Subject:</strong> ${short_description}</li>
-                <li><strong>Assigned Engineer:</strong> <span class="highlight">${assignedEngineerEmail}</span></li>
+                <li><strong>Ticket ID:</strong> ${ticketUrl ? `<a href="${ticketUrl}" style="color: #3182ce; text-decoration: underline;">${ticketId || display_id}</a>` : (ticketId || display_id)}</li>
+                <li><strong>Assigned To:</strong> <span class="highlight">${engineerName || assignedEngineerEmail}</span></li>
+                <li><strong>Priority:</strong> <span class="highlight">${priority}</span></li>
             </ul>
         </div>
         
-        <p>Please review the ticket details and take appropriate action. We kindly request that you acknowledge receipt of this assignment and provide an estimated resolution timeframe.</p>
+        <p><strong>${engineerName || assignedEngineerEmail}</strong>, please drive resolution as per SLA commitments.</p>
         
-        <div style="text-align: center;">
-            <a href="${ticketUrl}" class="button">View Assigned Ticket</a>
-        </div>
+        <p><strong>${userName || reporterName}</strong>, you will be notified as the ticket progresses.</p>
         
-        <p>You can access the ticket and update its status through the Enterprise Ticketing Portal.</p>
+        <p>Regards</p>
+        <p><strong>SahayaOn Notifications</strong></p>
+        <p>KriaSol Technologies</p>
     `);
     return {
         subject,
@@ -667,12 +703,10 @@ const getUserTicketAssignmentTemplate = (ticketData) => {
     const textContent = `
 TICKET ASSIGNMENT UPDATE
 
-Dear User,
-
 Great news! Your ticket has been assigned to an engineer and is now being worked on.
 
 Ticket Details:
-- Ticket ID: ${display_id}
+- Ticket ID: ${display_id}${ticketUrl ? `\n  View Ticket: ${ticketUrl}` : ''}
 - Subject: ${short_description}
 - Assigned Engineer: ${assignedEngineerEmail}
 
@@ -687,8 +721,6 @@ Sahayaon Technologies LLP
     const htmlContent = createBaseTemplate(() => `
         <h2>Ticket Assignment Update</h2>
         
-        <p>Dear User,</p>
-        
         <div class="success">
             <strong>Great news! Your ticket has been assigned to an engineer and is now being worked on.</strong>
         </div>
@@ -696,7 +728,7 @@ Sahayaon Technologies LLP
         <div class="info-box">
             <h3>Ticket Details</h3>
             <ul>
-                <li><strong>Ticket ID:</strong> ${display_id}</li>
+                <li><strong>Ticket ID:</strong> ${ticketUrl ? `<a href="${ticketUrl}" style="color: #3182ce; text-decoration: underline;">${display_id}</a>` : display_id}</li>
                 <li><strong>Subject:</strong> ${short_description}</li>
                 <li><strong>Assigned Engineer:</strong> <span class="highlight">${assignedEngineerEmail}</span></li>
             </ul>
@@ -734,12 +766,10 @@ const getTicketCancellationTemplate = (ticketData) => {
     const textContent = `
 TICKET CANCELLATION NOTICE
 
-Dear User,
-
 This is to inform you that your ticket has been cancelled in the Enterprise Ticketing System.
 
 Cancelled Ticket Details:
-- Ticket ID: ${display_id}
+- Ticket ID: ${display_id}${ticketUrl ? `\n  View Ticket: ${ticketUrl}` : ''}
 - Subject: ${short_description}
 
 If you believe this cancellation was made in error or have any questions regarding this action, please contact our support team immediately.
@@ -753,8 +783,6 @@ Sahayaon Technologies LLP
     const htmlContent = createBaseTemplate(() => `
         <h2>Ticket Cancellation Notice</h2>
         
-        <p>Dear User,</p>
-        
         <div class="warning">
             <strong>This is to inform you that your ticket has been cancelled in the Enterprise Ticketing System.</strong>
         </div>
@@ -762,7 +790,7 @@ Sahayaon Technologies LLP
         <div class="info-box">
             <h3>Cancelled Ticket Details</h3>
             <ul>
-                <li><strong>Ticket ID:</strong> ${display_id}</li>
+                <li><strong>Ticket ID:</strong> ${ticketUrl ? `<a href="${ticketUrl}" style="color: #3182ce; text-decoration: underline;">${display_id}</a>` : display_id}</li>
                 <li><strong>Subject:</strong> ${short_description}</li>
             </ul>
         </div>
@@ -801,12 +829,10 @@ const getTicketCommentTemplate = (ticketData) => {
     const textContent = `
 NEW COMMENT NOTIFICATION
 
-Dear User,
-
 A new comment has been added to your ticket in the Enterprise Ticketing System.
 
 Ticket Details:
-- Ticket ID: ${display_id}
+- Ticket ID: ${display_id}${ticketUrl ? `\n  View Ticket: ${ticketUrl}` : ''}
 - Subject: ${short_description}
 - Commented by: ${commenterEmail}
 
@@ -822,14 +848,12 @@ Sahayaon Technologies LLP
     const htmlContent = createBaseTemplate(() => `
         <h2>New Comment Notification</h2>
         
-        <p>Dear User,</p>
-        
         <p>A new comment has been added to your ticket in the <strong>Enterprise Ticketing System</strong>.</p>
         
         <div class="info-box">
             <h3>Ticket Details</h3>
             <ul>
-                <li><strong>Ticket ID:</strong> ${display_id}</li>
+                <li><strong>Ticket ID:</strong> ${ticketUrl ? `<a href="${ticketUrl}" style="color: #3182ce; text-decoration: underline;">${display_id}</a>` : display_id}</li>
                 <li><strong>Subject:</strong> ${short_description}</li>
                 <li><strong>Commented by:</strong> <span class="highlight">${commenterEmail}</span></li>
             </ul>
@@ -860,75 +884,60 @@ Sahayaon Technologies LLP
  */
 const getPasswordSharingTemplate = (userData) => {
     const {
+        firstName = '',
+        lastName = '',
         userName = '',
-        companyName = '',
         userEmail = '',
         newPassword = '',
-        loginUrl = ''
+        password = newPassword,
+        tempPassword = newPassword || password,
+        loginUrl = '',
+        portalUrl = loginUrl
     } = userData;
+    const fullName = formatUserName({ firstName, lastName, userName });
     
-    const subject = `Your New Password - Sahayaon Technologies Enterprise Ticketing System`;
+    const subject = `SahayaOn Password Reset Successful`;
     const textContent = `
-Dear ${userName},
+Hi ${fullName},
 
-Your password has been reset by an administrator in the Sahayaon Technologies Enterprise Ticketing System.
+Your password has been reset as requested.
 
-Your new login credentials are:
-- Email: ${userEmail}
-- New Password: ${newPassword}
-- Login URL: ${loginUrl}
+New Temporary Password: ${tempPassword || newPassword || password}
 
-SECURITY NOTICE:
-- Please log in immediately and change your password to something secure and memorable
-- Do not share this password with anyone
-- If you did not request this password reset, please contact your IT administrator immediately
+Portal URL: ${portalUrl || loginUrl}
 
-You can access the portal using the login URL above. Upon first login, you will be prompted to create a new password.
+Please log in and update your password to maintain account security.
 
-If you have any questions or need assistance, please contact your IT support team.
+Your access workflows remain uninterrupted.
 
-Best regards,
-IT Team
-Sahayaon Technologies LLP
+Regards
+
+SahayaOn System
+
+KriaSol Technologies
     `;
     
     const htmlContent = createBaseTemplate(() => `
-        <h2>Your Password Has Been Reset</h2>
+        <p>Hi <strong>${fullName}</strong>,</p>
         
-        <p>Dear <strong>${userName}</strong>,</p>
-        
-        <p>Your password has been reset by an administrator in the <strong>Sahayaon Technologies Enterprise Ticketing System</strong>.</p>
+        <p>Your password has been reset as requested.</p>
         
         <div class="info-box">
-            <h3>Your New Login Credentials</h3>
             <ul>
-                <li><strong>Email:</strong> <span class="highlight">${userEmail}</span></li>
-                <li><strong>New Password:</strong> <span class="highlight">${newPassword}</span></li>
-                <li><strong>Login URL:</strong> <a href="${loginUrl}" class="button">Access Enterprise Portal</a></li>
+                <li><strong>New Temporary Password:</strong> <span class="highlight">${tempPassword || newPassword || password}</span></li>
+                <li><strong>Portal URL:</strong> <a href="${portalUrl || loginUrl}" class="button">Access Portal</a></li>
             </ul>
         </div>
         
         <div class="warning">
-            <strong>SECURITY NOTICE:</strong> Please log in immediately and change your password to something secure and memorable. Do not share this password with anyone.
+            <strong>Please log in and update your password to maintain account security.</strong>
         </div>
         
-        <div class="info-box">
-            <h3>Next Steps</h3>
-            <ol>
-                <li>Access the portal using the login URL above</li>
-                <li>Sign in with your email and the new password provided</li>
-                <li>You will be prompted to create a new secure password</li>
-                <li>Complete your profile setup if needed</li>
-            </ol>
-        </div>
+        <p>Your access workflows remain uninterrupted.</p>
         
-        <p>If you did not request this password reset, please contact your IT administrator immediately.</p>
-        
-        <p>If you have any questions or need assistance, please contact your IT support team.</p>
-        
-        <div class="success">
-            <strong>Thank you for using the Sahayaon Technologies Enterprise Ticketing System.</strong>
-        </div>
+        <p>Regards</p>
+        <p><strong>SahayaOn System</strong></p>
+        <p>KriaSol Technologies</p>
     `);
     
     return {
@@ -959,7 +968,7 @@ ATTACHMENT UPLOAD NOTIFICATION
 An attachment has been uploaded to a ticket in the Enterprise Ticketing System.
 
 Ticket Information:
-- Ticket ID: ${display_id}
+- Ticket ID: ${display_id}${ticketUrl ? `\n  View Ticket: ${ticketUrl}` : ''}
 - Subject: ${short_description}
 - Attachment: ${fileName}
 - Uploaded by: ${uploadedBy}
@@ -980,7 +989,7 @@ Sahayaon Technologies LLP
         <div class="info-box">
             <h3>Ticket Information</h3>
             <ul>
-                <li><strong>Ticket ID:</strong> ${display_id}</li>
+                <li><strong>Ticket ID:</strong> ${ticketUrl ? `<a href="${ticketUrl}" style="color: #3182ce; text-decoration: underline;">${display_id}</a>` : display_id}</li>
                 <li><strong>Subject:</strong> ${short_description}</li>
                 <li><strong>Attachment:</strong> <span class="highlight">${fileName}</span></li>
                 <li><strong>Uploaded by:</strong> ${uploadedBy}</li>
@@ -1001,16 +1010,90 @@ Sahayaon Technologies LLP
     };
 };
 
+/**
+ * Client onboarding email template (Client Admin Account Creation)
+ * @param {Object} clientData - Client admin data object
+ * @returns {Object} Email content with subject, text, and html
+ */
+const getClientOnboardingTemplate = (clientData) => {
+    const {
+        firstName = '',
+        lastName = '',
+        adminName = '',
+        adminUsername = '',
+        adminPassword = '',
+        portalUrl = ''
+    } = clientData;
+    const fullName = formatUserName({ firstName, lastName, userName: adminName });
+    const subject = `Welcome to SahayaOn – Client Onboarding Successful`;
+    const textContent = `
+Hi ${fullName},
+
+Your organization is now fully onboarded onto SahayaOn – Powered by KriaSol Technologies.
+
+Your admin account is ready, giving you complete visibility and control over tickets raised by your teams.
+
+Admin Login Credentials:
+
+Username: ${adminUsername}
+
+Password: ${adminPassword}
+
+Portal URL: ${portalUrl}
+
+You can now manage users, view tickets, track SLAs, and monitor services in real time.
+
+We look forward to supporting your operations with enterprise-grade reliability.
+
+Regards
+
+SahayaOn Onboarding Team
+
+KriaSol Technologies
+    `;
+    const htmlContent = createBaseTemplate(() => `
+        <p>Hi <strong>${fullName}</strong>,</p>
+        
+        <p>Your organization is now fully onboarded onto SahayaOn – Powered by KriaSol Technologies.</p>
+        
+        <p>Your admin account is ready, giving you complete visibility and control over tickets raised by your teams.</p>
+        
+        <div class="info-box">
+            <h3>Admin Login Credentials:</h3>
+            <ul>
+                <li><strong>Username:</strong> <span class="highlight">${adminUsername}</span></li>
+                <li><strong>Password:</strong> <span class="highlight">${adminPassword}</span></li>
+                <li><strong>Portal URL:</strong> <a href="${portalUrl}" class="button">Access Portal</a></li>
+            </ul>
+        </div>
+        
+        <p>You can now manage users, view tickets, track SLAs, and monitor services in real time.</p>
+        
+        <p>We look forward to supporting your operations with enterprise-grade reliability.</p>
+        
+        <p>Regards</p>
+        <p><strong>SahayaOn Onboarding Team</strong></p>
+        <p>KriaSol Technologies</p>
+    `);
+    return {
+        subject,
+        text: textContent,
+        html: htmlContent
+    };
+};
+
 module.exports = {
     getWelcomeEmailTemplate,
     getPasswordResetTemplate,
     getTicketNotificationTemplate,
     getTicketStatusUpdateTemplate,
+    getTicketClosedTemplate,
     getTicketAssignmentTemplate,
     getUserTicketAssignmentTemplate,
     getTicketCancellationTemplate,
     getTicketCommentTemplate,
     getPasswordSharingTemplate,
     getAttachmentUploadTemplate,
+    getClientOnboardingTemplate,
     createBaseTemplate
 };

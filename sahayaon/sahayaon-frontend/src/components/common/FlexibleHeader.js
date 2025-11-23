@@ -96,16 +96,16 @@ const FlexibleHeader = ({
         <header className="fixed top-0 left-0 right-0 z-50 border-b border-gray-200 shadow-sm" style={{ backgroundColor: '#f0eeed' }}>
             <div className="flex items-center justify-between h-12 px-4 md:px-6">
                 {/* Left Section: Logo */}
-                <div className="flex items-center flex-shrink-0">
+                <div className="flex items-center flex-shrink-0 -ml-4">
                     {/* Logo */}
                     <Link 
                         to={currentUser ? (isAdminRole ? '/dashboard' : '/my-tickets') : '/login'} 
-                        className="flex items-center group flex-shrink-0"
+                        className="flex items-center flex-shrink-0"
                     >
                         <img 
                             src={KriasolLogo} 
                             alt="Sahayaon Logo" 
-                            className="h-9 w-auto transition-all duration-300 ease-in-out group-hover:scale-105"
+                            className="h-9 w-auto"
                             style={{
                                 objectFit: 'contain',
                                 display: 'block',
@@ -158,7 +158,7 @@ const FlexibleHeader = ({
                     <div className="relative" ref={supportMenuRef}>
                         <button
                             onClick={() => setIsSupportMenuOpen(!isSupportMenuOpen)}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium whitespace-nowrap bg-gray-50 text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-all duration-200 flex-shrink-0 focus:outline-none"
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium whitespace-nowrap bg-gray-200 text-gray-700 hover:bg-gray-300 hover:text-gray-900 transition-all duration-200 flex-shrink-0 focus:outline-none"
                         >
                             <span className="hidden sm:inline">Support</span>
                             <ChevronDown 
