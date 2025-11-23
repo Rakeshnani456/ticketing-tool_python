@@ -179,7 +179,14 @@ const CreateUserPage = ({ user }) => {
         throw new Error(errorData.error || 'Failed to create user');
       }
 
+      // Reset form to clear all fields
+      reset(initialState);
       setShowSuccess(true);
+      
+      // Show popup and redirect after 4 seconds
+      setTimeout(() => {
+        navigate('/user-management');
+      }, 4000);
     } catch (error) {
       console.error('Error creating user:', error);
       
@@ -206,6 +213,28 @@ const CreateUserPage = ({ user }) => {
 
   return (
     <div className="create-user-page">
+      {/* Success Modal */}
+      {showSuccess && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <div className="modal-icon-container">
+              <svg className="modal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 12l2 2 4-4"/>
+                <circle cx="12" cy="12" r="10"/>
+              </svg>
+            </div>
+            <h2 className="modal-title">User Created Successfully!</h2>
+            <p className="modal-message">The user has been created and all details have been saved.</p>
+            <div className="modal-loading">
+              <span>Redirecting to users page</span>
+              <span className="modal-loading-dot"></span>
+              <span className="modal-loading-dot"></span>
+              <span className="modal-loading-dot"></span>
+            </div>
+          </div>
+        </div>
+      )}
+
       <style jsx>{`
         .create-user-page {
           padding: 2rem;
@@ -517,6 +546,166 @@ const CreateUserPage = ({ user }) => {
           border-color: #ef4444 !important;
         }
         
+        /* Modal/Popup styles */
+        .modal-overlay {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: rgba(0, 0, 0, 0.5);
+          backdrop-filter: blur(2px);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 1000;
+          animation: fadeIn 0.25s ease-out;
+        }
+        
+        @keyframes fadeIn {
+          from {
+            opacity: 0;
+          }
+          to {
+            opacity: 1;
+          }
+        }
+        
+        .modal-content {
+          background: white;
+          border-radius: 0.75rem;
+          padding: 2rem;
+          max-width: 380px;
+          width: 90%;
+          box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15), 0 4px 6px rgba(0, 0, 0, 0.1);
+          text-align: center;
+          animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+          position: relative;
+          overflow: hidden;
+          border: 1px solid #e5e7eb;
+        }
+        
+        @keyframes slideUp {
+          from {
+            opacity: 0;
+            transform: translateY(20px) scale(0.96);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+        }
+        
+        .modal-content::before {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          height: 3px;
+          background: linear-gradient(90deg, #3b82f6, #2563eb);
+        }
+        
+        .modal-icon-container {
+          width: 64px;
+          height: 64px;
+          margin: 0 auto 1.25rem;
+          background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          animation: scaleIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        
+        @keyframes scaleIn {
+          0% {
+            transform: scale(0);
+            opacity: 0;
+          }
+          60% {
+            transform: scale(1.05);
+          }
+          100% {
+            transform: scale(1);
+            opacity: 1;
+          }
+        }
+        
+        .modal-icon {
+          width: 36px;
+          height: 36px;
+          color: #3b82f6;
+          animation: checkmark 0.5s ease-out 0.15s both;
+        }
+        
+        @keyframes checkmark {
+          0% {
+            stroke-dasharray: 0 40;
+            opacity: 0;
+            transform: scale(0.8);
+          }
+          100% {
+            stroke-dasharray: 40 0;
+            opacity: 1;
+            transform: scale(1);
+          }
+        }
+        
+        .modal-title {
+          font-size: 1.125rem;
+          font-weight: 600;
+          color: #374151;
+          margin-bottom: 0.5rem;
+          letter-spacing: -0.01em;
+        }
+        
+        .modal-message {
+          font-size: 0.875rem;
+          color: #6b7280;
+          margin-bottom: 1.5rem;
+          line-height: 1.5;
+        }
+        
+        .modal-loading {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.375rem;
+          color: #6b7280;
+          font-size: 0.8125rem;
+        }
+        
+        .modal-loading-dot {
+          width: 5px;
+          height: 5px;
+          border-radius: 50%;
+          background: #3b82f6;
+          animation: pulse 1.2s ease-in-out infinite;
+        }
+        
+        .modal-loading-dot:nth-child(2) {
+          animation-delay: 0.15s;
+        }
+        
+        .modal-loading-dot:nth-child(3) {
+          animation-delay: 0.3s;
+        }
+        
+        @keyframes pulse {
+          0%, 100% {
+            opacity: 0.3;
+            transform: scale(0.9);
+          }
+          50% {
+            opacity: 1;
+            transform: scale(1.1);
+          }
+        }
+        
+        .form-hidden {
+          display: none;
+        }
+        
         @media (max-width: 768px) {
           .create-user-page {
             padding: 1rem;
@@ -549,7 +738,7 @@ const CreateUserPage = ({ user }) => {
       </div>
 
       <div className="form-container">
-
+        {!showSuccess && (
         <form onSubmit={handleSubmit(onSubmit)}>
           {/* User Information Section */}
           <div className="form-section">
@@ -585,9 +774,10 @@ const CreateUserPage = ({ user }) => {
                                 }))
                             ]}
                             placeholder={loadingClients ? 'Loading companies...' : 'Select Company'}
-                            className={errors.companyName ? 'error' : ''}
+                            className={`${errors.companyName ? 'error' : ''} ${isCompanyNameReadonly ? 'readonly' : ''}`}
                             size="sm"
-                            disabled={showSuccess || loadingClients}
+                            disabled={showSuccess || loadingClients || isCompanyNameReadonly}
+                            style={isCompanyNameReadonly ? { backgroundColor: '#f5f5f5', cursor: 'not-allowed' } : {}}
                           />
                         )}
                       />
@@ -612,9 +802,9 @@ const CreateUserPage = ({ user }) => {
                     {errors.companyName && (
                       <span className="error-message">{errors.companyName.message}</span>
                     )}
-                    {isCompanyNameReadonly && !isSiteAdmin && (
+                    {isCompanyNameReadonly && (
                       <span className="info-message" style={{ fontSize: '0.8rem', color: '#666', fontStyle: 'italic' }}>
-                        Company name is pre-filled from client selection
+                        Company name is pre-filled and cannot be changed
                       </span>
                     )}
                   </div>
@@ -858,46 +1048,27 @@ const CreateUserPage = ({ user }) => {
                   {error}
                 </div>
               )}
-              {showSuccess && (
-                <div className="inline-success-message">
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <svg className="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M9 12l2 2 4-4"/>
-                      <circle cx="12" cy="12" r="10"/>
-                    </svg>
-                    <span>User created successfully!</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => navigate('/user-management')}
-                    className="success-go-back-btn"
-                  >
-                    Go Back to Users
-                  </button>
-                </div>
-              )}
             </div>
-            {!showSuccess && (
-              <div className="form-actions-right">
-                <button
-                  type="button"
-                  onClick={handleCancel}
-                  className="btn btn-secondary"
-                  disabled={isSubmitting}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  disabled={!isValid || isSubmitting}
-                >
-                  {isSubmitting ? 'Creating...' : 'Create User'}
-                </button>
-              </div>
-            )}
+            <div className="form-actions-right">
+              <button
+                type="button"
+                onClick={handleCancel}
+                className="btn btn-secondary"
+                disabled={isSubmitting}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="btn btn-primary"
+                disabled={!isValid || isSubmitting}
+              >
+                {isSubmitting ? 'Creating...' : 'Create User'}
+              </button>
+            </div>
           </div>
         </form>
+        )}
       </div>
     </div>
   );

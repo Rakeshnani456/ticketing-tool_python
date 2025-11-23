@@ -30,6 +30,8 @@ import EmailIcon from '@mui/icons-material/Email';
 import WorkIcon from '@mui/icons-material/Work';
 import PhoneIcon from '@mui/icons-material/Phone';
 import BadgeIcon from '@mui/icons-material/Badge';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import ErrorIcon from '@mui/icons-material/Error';
 import { Edit as EditIcon, Delete as DeleteIcon, LockReset as LockResetIcon, ArrowDropDown as ArrowDropDownIcon } from '@mui/icons-material';
 import { API_BASE_URL } from '../../config/constants';
 
@@ -168,6 +170,67 @@ const ClientUserCard = ({
         }
     };
 
+    // Handle toggle user status
+    const handleToggleUserStatus = async (userItem) => {
+        if (!user || !user.firebaseUser) return;
+        
+        const currentStatus = userItem.status || 'active';
+        const newStatus = currentStatus === 'active' ? 'inactive' : 'active';
+        
+        try {
+            const idToken = await user.firebaseUser.getIdToken();
+            const response = await fetch(`${API_BASE_URL}/api/users/${userItem.uid}/status`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${idToken}`
+                },
+                body: JSON.stringify({ status: newStatus }),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to update user status');
+            }
+
+            // Show success notification
+            setRoleChangeNotifications(prev => ({
+                ...prev,
+                [userItem.uid]: {
+                    type: 'success',
+                    message: `User status updated to ${newStatus}`
+                }
+            }));
+
+            // Clear notification after 3 seconds
+            setTimeout(() => {
+                setRoleChangeNotifications(prev => {
+                    const newState = { ...prev };
+                    delete newState[userItem.uid];
+                    return newState;
+                });
+            }, 3000);
+        } catch (error) {
+            console.error('Error updating user status:', error);
+            setRoleChangeNotifications(prev => ({
+                ...prev,
+                [userItem.uid]: {
+                    type: 'error',
+                    message: error.message || 'Failed to update user status'
+                }
+            }));
+
+            // Clear error notification after 5 seconds
+            setTimeout(() => {
+                setRoleChangeNotifications(prev => {
+                    const newState = { ...prev };
+                    delete newState[userItem.uid];
+                    return newState;
+                });
+            }, 5000);
+        }
+    };
+
     return (
         <Card
             variant="outlined"
@@ -288,6 +351,7 @@ const ClientUserCard = ({
                                     <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem' }}>Designation</TableCell>
                                     <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem' }}>Contact</TableCell>
                                     <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem' }}>Role</TableCell>
+                                    <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem' }}>Status</TableCell>
                                     {(showEdit || showDelete || onPasswordResetClick) && (
                                         <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem' }}>Actions</TableCell>
                                     )}
@@ -359,6 +423,16 @@ const ClientUserCard = ({
                                                     color: user.role === 'site_admin' ? '#166534' : '#1e40af',
                                                     border: user.role === 'site_admin' ? '1px solid #bbf7d0' : '1px solid #bfdbfe',
                                                 }}
+                                            />
+                                        </TableCell>
+                                        <TableCell>
+                                            <Chip
+                                                icon={(user.status || 'active') === 'active' ? <CheckCircleIcon /> : <ErrorIcon />}
+                                                label={(user.status || 'active') === 'active' ? 'Active' : 'Inactive'}
+                                                size="small"
+                                                color={(user.status || 'active') === 'active' ? 'success' : 'error'}
+                                                variant="outlined"
+                                                sx={{ fontSize: '0.65rem' }}
                                             />
                                         </TableCell>
                                                                                 {(showEdit || showDelete || onPasswordResetClick) && (

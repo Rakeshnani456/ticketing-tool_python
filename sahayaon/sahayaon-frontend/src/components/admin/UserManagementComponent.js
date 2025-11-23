@@ -52,6 +52,8 @@ import SmartCacheManager from '../../utils/smartCacheManager';
 import Checkbox from '@mui/material/Checkbox';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import { motion } from 'framer-motion';
+import FaviconIcon from '../common/FaviconIcon';
 
 // Helper for deep comparison
 const areUsersEqual = (arr1, arr2) => {
@@ -186,11 +188,92 @@ const HEADER_NAME_MAP = {
   'Company Name': 'companyName'
 };
 
+// UserCard component for grid view (similar to AssetCard)
+const UserCard = ({ user, onClick }) => {
+    const getRoleColor = (role) => {
+        switch (role) {
+            case 'super_admin': return 'bg-purple-100 text-purple-800 border-purple-300';
+            case 'admin': return 'bg-blue-100 text-blue-800 border-blue-300';
+            case 'site_admin': return 'bg-green-100 text-green-800 border-green-300';
+            default: return 'bg-gray-100 text-gray-800 border-gray-300';
+        }
+    };
 
-const UserManagementComponent = ({ user, showFlashMessage }) => {
+    return (
+        <motion.div
+            whileHover={{ y: -2 }}
+            className="bg-white rounded-lg border-2 border-gray-200 hover:border-gray-300 shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer overflow-hidden"
+            onClick={onClick}
+        >
+            <div className="p-4">
+                {/* Header */}
+                <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-center space-x-3 flex-1 min-w-0">
+                        <div className="p-2 rounded-lg bg-blue-50">
+                            <PersonIcon className="w-5 h-5 text-blue-600" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <h3 className="font-semibold text-gray-900 truncate text-sm">
+                                {user.firstName && user.lastName 
+                                    ? `${user.firstName} ${user.lastName}`
+                                    : user.name || user.email?.split('@')[0] || 'Unnamed User'}
+                            </h3>
+                            <p className="text-xs text-gray-500 truncate">
+                                {user.employeeId || user.email?.split('@')[0] || 'N/A'}
+                            </p>
+                        </div>
+                    </div>
+                    <div className={`px-2 py-1 rounded-md border text-xs font-medium ${getRoleColor(user.role)}`}>
+                        {user.role === 'user' ? 'User' : user.role === 'site_admin' ? 'Site Admin' : user.role || 'User'}
+                    </div>
+                </div>
+
+                {/* Details Grid */}
+                <div className="grid grid-cols-2 gap-2 mb-3 text-xs">
+                    {user.email && (
+                        <div className="flex items-center space-x-1 text-gray-600">
+                            <EmailIcon className="w-3 h-3" />
+                            <span className="truncate" title={user.email}>{user.email}</span>
+                        </div>
+                    )}
+                    {user.contactNumber && (
+                        <div className="flex items-center space-x-1 text-gray-600">
+                            <PhoneIcon className="w-3 h-3" />
+                            <span className="truncate">{user.contactNumber}</span>
+                        </div>
+                    )}
+                    {user.designation && (
+                        <div className="flex items-center space-x-1 text-gray-600">
+                            <WorkIcon className="w-3 h-3" />
+                            <span className="truncate">{user.designation}</span>
+                        </div>
+                    )}
+                    {user.employmentType && (
+                        <div className="flex items-center space-x-1 text-gray-600">
+                            <BadgeIcon className="w-3 h-3" />
+                            <span className="truncate">{user.employmentType}</span>
+                        </div>
+                    )}
+                </div>
+
+                {/* Footer Badges */}
+                <div className="mt-3 flex flex-wrap gap-1">
+                    {user.client_name && (
+                        <span className="px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700">
+                            {user.client_name}
+                        </span>
+                    )}
+                </div>
+            </div>
+        </motion.div>
+    );
+};
+
+const UserManagementComponent = ({ user, showFlashMessage, preFilterClient }) => {
     const [users, setUsers] = useState([]);
     const [clients, setClients] = useState([]);
     const [loading, setLoading] = useState(false);
+    const [clientsLoading, setClientsLoading] = useState(false);
     const [error, setError] = useState(null);
     const [search, setSearch] = useState('');
     const [addMode, setAddMode] = useState(false);
@@ -274,6 +357,11 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
     const [exportClientModalOpen, setExportClientModalOpen] = useState(false);
     const [selectedImportClient, setSelectedImportClient] = useState('');
     const [selectedExportClients, setSelectedExportClients] = useState([]);
+    
+    // New state for super_admin users page revamp
+    const [selectedClientForUsers, setSelectedClientForUsers] = useState(null);
+    const [clientUsers, setClientUsers] = useState([]);
+    const [assets, setAssets] = useState([]);
 
     const handleToggleClientCollapse = (client) => {
       setCollapsedClients(prev => ({ ...prev, [client]: !prev[client] }));
@@ -286,19 +374,104 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
         }));
     };
 
+    // Handle preFilterClient prop (from route parameter)
     useEffect(() => {
-        const urlParams = new URLSearchParams(location.search);
-        const clientId = urlParams.get('clientId');
-        
-        if (clientId && clients.length > 0) {
-            const client = clients.find(c => c.id === clientId);
-            if (client) {
-                setClientFilter(client.companyName);
-                setHighlightedClient(client.companyName);
-                navigate('/user-management', { replace: true });
+        if (preFilterClient) {
+            setClientFilter(preFilterClient);
+            setHighlightedClient(preFilterClient);
+            // Expand the client section when filter is applied
+            setCollapsedClients(prev => ({
+                ...prev,
+                [preFilterClient]: false
+            }));
+            
+            // For super_admin, also set selectedClientForUsers to show users view instead of client grid
+            if (user?.role === 'super_admin') {
+                if (clients.length > 0) {
+                    // Try to find exact match first
+                    let client = clients.find(c => 
+                        c.companyName === preFilterClient || 
+                        c['Client name'] === preFilterClient ||
+                        (c.companyName && c.companyName.toLowerCase() === preFilterClient.toLowerCase()) ||
+                        (c['Client name'] && c['Client name'].toLowerCase() === preFilterClient.toLowerCase())
+                    );
+                    
+                    // If not found, create a minimal client object to enable the users view
+                    if (!client) {
+                        client = {
+                            companyName: preFilterClient,
+                            'Client name': preFilterClient
+                        };
+                    }
+                    
+                    setSelectedClientForUsers(client);
+                } else {
+                    // If clients not loaded yet, create a minimal client object to enable users view
+                    // This will be updated when clients load
+                    setSelectedClientForUsers({
+                        companyName: preFilterClient,
+                        'Client name': preFilterClient
+                    });
+                }
             }
         }
-    }, [location.search, clients, navigate]);
+    }, [preFilterClient, clients, user?.role]);
+    
+    // Update selectedClientForUsers with full client object when clients load (if we had a minimal one)
+    useEffect(() => {
+        if (preFilterClient && user?.role === 'super_admin' && selectedClientForUsers && clients.length > 0) {
+            // Check if we have a minimal client object (only has companyName, no id)
+            if (!selectedClientForUsers.id) {
+                const fullClient = clients.find(c => 
+                    c.companyName === preFilterClient || 
+                    c['Client name'] === preFilterClient ||
+                    (c.companyName && c.companyName.toLowerCase() === preFilterClient.toLowerCase()) ||
+                    (c['Client name'] && c['Client name'].toLowerCase() === preFilterClient.toLowerCase())
+                );
+                if (fullClient) {
+                    setSelectedClientForUsers(fullClient);
+                }
+            }
+        }
+    }, [preFilterClient, clients, selectedClientForUsers, user?.role]);
+    
+    // Update clientUsers when preFilterClient is set and users/clients are available
+    useEffect(() => {
+        if (preFilterClient && user?.role === 'super_admin' && selectedClientForUsers && users.length > 0) {
+            const filteredUsers = users.filter(u => 
+                (u.client_name || u.companyName || u.clientname) === preFilterClient ||
+                ((u.client_name || u.companyName || u.clientname) && 
+                 (u.client_name || u.companyName || u.clientname).toLowerCase() === preFilterClient.toLowerCase())
+            );
+            setClientUsers(filteredUsers);
+        }
+    }, [preFilterClient, selectedClientForUsers, users, user?.role]);
+
+    useEffect(() => {
+        // Only handle URL params if preFilterClient is not set
+        if (preFilterClient) return;
+        
+        const urlParams = new URLSearchParams(location.search);
+        const clientParam = urlParams.get('client');
+        const clientId = urlParams.get('clientId');
+        
+        // Handle new 'client' parameter (company name) - redirect to route-based URL
+        if (clientParam) {
+            const decodedClientName = decodeURIComponent(clientParam);
+            // Redirect to route-based URL format
+            navigate(`/user-management/client/${encodeURIComponent(decodedClientName)}`, { replace: true });
+            return;
+        }
+        // Handle legacy 'clientId' parameter for backward compatibility - redirect to route-based URL
+        else if (clientId && clients.length > 0) {
+            const client = clients.find(c => c.id === clientId);
+            if (client && client.companyName) {
+                // Redirect to route-based URL format
+                navigate(`/user-management/client/${encodeURIComponent(client.companyName)}`, { replace: true });
+                return;
+            }
+        }
+    }, [location.search, clients, navigate, preFilterClient]);
 
 
     const filteredUsers = useMemo(() => {
@@ -381,13 +554,52 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
         setHighlightedClient('');
     };
 
-    const fetchClients = useCallback(async () => {
+    const fetchClients = useCallback(async (forceRefresh = false) => {
         try {
             if (!user || !user.firebaseUser) {
                 console.error("User not authenticated");
                 return;
             }
             
+            // Check cache first unless force refresh is requested
+            if (!forceRefresh) {
+                const cacheKey = `clients_data_${user?.role || 'anonymous'}`;
+                const cachedData = localStorage.getItem(cacheKey);
+                const cacheTime = localStorage.getItem(`${cacheKey}_time`);
+                const now = Date.now();
+                const CACHE_DURATION = 15 * 60 * 1000; // 15 minutes (clients don't change often)
+                
+                if (cachedData && cacheTime && (now - parseInt(cacheTime)) < CACHE_DURATION) {
+                    console.log('📦 Using cached clients data');
+                    try {
+                        const clientsData = JSON.parse(cachedData);
+                        // Only update if data is different to prevent unnecessary re-renders
+                        if (JSON.stringify(previousClientsRef.current) !== JSON.stringify(clientsData)) {
+                            setClients(clientsData);
+                            previousClientsRef.current = clientsData;
+                        }
+                        setClientsLoading(false); // Ensure loading is false when using cache
+                        // If cache is more than 5 minutes old, refresh in background (but don't wait)
+                        const cacheAge = now - parseInt(cacheTime);
+                        if (cacheAge > 5 * 60 * 1000) {
+                            // Fetch fresh data in background without blocking
+                            fetchClients(true).catch(err => console.error('Background clients fetch failed:', err));
+                        }
+                        return;
+                    } catch (parseError) {
+                        console.error("Error parsing cached clients:", parseError);
+                        // Clear invalid cache
+                        localStorage.removeItem(cacheKey);
+                        localStorage.removeItem(`${cacheKey}_time`);
+                    }
+                }
+            }
+            
+            // Only show loading spinner if we don't have cached data
+            if (previousClientsRef.current.length === 0) {
+                setClientsLoading(true);
+            }
+            console.log('🔄 Fetching fresh clients data');
             const idToken = await user.firebaseUser.getIdToken();
             const res = await fetch(`${API_BASE_URL}/api/clients`, {
                 headers: {
@@ -400,11 +612,112 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
             if (JSON.stringify(previousClientsRef.current) !== JSON.stringify(data)) {
                 setClients(data);
                 previousClientsRef.current = data;
+                
+                // Cache the data
+                const cacheKey = `clients_data_${user?.role || 'anonymous'}`;
+                localStorage.setItem(cacheKey, JSON.stringify(data));
+                localStorage.setItem(`${cacheKey}_time`, Date.now().toString());
             }
+            setClientsLoading(false);
         } catch (err) {
             console.error("Error fetching clients:", err);
+            setClientsLoading(false);
         }
     }, [user]);
+
+    // Fetch assets for user counts (similar to ClientGridManagement)
+    const fetchAssets = useCallback(async () => {
+        try {
+            if (!user || !user.firebaseUser) {
+                return;
+            }
+            const idToken = await user.firebaseUser.getIdToken();
+            const res = await fetch(`${API_BASE_URL}/api/assets`, {
+                headers: {
+                    'Authorization': `Bearer ${idToken}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+            if (!res.ok) throw new Error('Failed to fetch assets');
+            const data = await res.json();
+            setAssets(Array.isArray(data) ? data : []);
+        } catch (err) {
+            console.error("Error fetching assets:", err);
+            setAssets([]);
+        }
+    }, [user]);
+
+    // Calculate user counts per client
+    const userCounts = useMemo(() => {
+        const counts = {};
+        users.forEach(user => {
+            const clientName = user.client_name || user.companyName;
+            if (clientName) {
+                counts[clientName] = (counts[clientName] || 0) + 1;
+            }
+        });
+        return counts;
+    }, [users]);
+
+    // Calculate asset counts per client
+    const assetCounts = useMemo(() => {
+        const counts = {};
+        assets.forEach(asset => {
+            const clientName = asset.client_name;
+            if (clientName) {
+                if (!counts[clientName]) {
+                    counts[clientName] = { total: 0, hardware: 0, software: 0 };
+                }
+                counts[clientName].total += 1;
+                if (asset.asset_type === 'hardware') {
+                    counts[clientName].hardware += 1;
+                } else if (asset.asset_type === 'software') {
+                    counts[clientName].software += 1;
+                }
+            }
+        });
+        return counts;
+    }, [assets]);
+
+    // Handle client selection for super_admin
+    const handleClientClick = useCallback((client) => {
+        const clientName = client.companyName || client['Client name'];
+        const filteredUsers = users.filter(u => (u.client_name || u.companyName) === clientName);
+        setSelectedClientForUsers(client);
+        setClientUsers(filteredUsers);
+        // Navigate to client-specific URL
+        navigate(`/user-management/client/${encodeURIComponent(clientName)}`, { replace: false });
+    }, [users, navigate]);
+
+    // Update clientUsers when users change and a client is selected
+    useEffect(() => {
+        if (selectedClientForUsers && user?.role === 'super_admin') {
+            const clientName = selectedClientForUsers.companyName || selectedClientForUsers['Client name'];
+            const filteredUsers = users.filter(u => (u.client_name || u.companyName) === clientName);
+            setClientUsers(filteredUsers);
+        }
+    }, [users, selectedClientForUsers, user?.role]);
+
+    // Handle back to clients list
+    const handleBackToClients = useCallback(() => {
+        setSelectedClientForUsers(null);
+        setClientUsers([]);
+        // Navigate back to main user management
+        navigate('/user-management', { replace: false });
+    }, [navigate]);
+
+    // Handle add user for specific client
+    const handleAddUserForClient = useCallback((client) => {
+        const clientName = client.companyName || client['Client name'];
+        navigate(`/user-management/create-user?client=${encodeURIComponent(clientName)}`);
+    }, [navigate]);
+
+    // Handle import users for specific client
+    const handleImportUsersForClient = useCallback((client) => {
+        const clientName = client.companyName || client['Client name'];
+        setSelectedImportClient(clientName);
+        setImportClientModalOpen(true);
+    }, []);
 
     // Remove this useEffect as fetchClients is called in the main useEffect
 
@@ -412,6 +725,34 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
     useEffect(() => {
         if (!user || !user.firebaseUser) return;
         
+        // Load clients from cache first (needed for user mapping)
+        const clientsCacheKey = `clients_data_${user?.role || 'anonymous'}`;
+        const clientsCacheData = localStorage.getItem(clientsCacheKey);
+        const clientsCacheTime = localStorage.getItem(`${clientsCacheKey}_time`);
+        const now = Date.now();
+        const CACHE_DURATION = 15 * 60 * 1000; // 15 minutes
+        
+        if (clientsCacheData && clientsCacheTime && (now - parseInt(clientsCacheTime)) < CACHE_DURATION) {
+            console.log('✅ Loading initial clients from cache');
+            try {
+                const cachedClients = JSON.parse(clientsCacheData);
+                if (JSON.stringify(previousClientsRef.current) !== JSON.stringify(cachedClients)) {
+                    setClients(cachedClients);
+                    previousClientsRef.current = cachedClients;
+                }
+                setClientsLoading(false); // No loading spinner when using cache
+            } catch (error) {
+                console.error("Error parsing cached clients:", error);
+                localStorage.removeItem(clientsCacheKey);
+                localStorage.removeItem(`${clientsCacheKey}_time`);
+                setClientsLoading(true); // Show loading if cache is invalid
+            }
+        } else {
+            // No cache or expired - will need to fetch, show loading
+            setClientsLoading(true);
+        }
+        
+        // Load users from cache
         const cacheKey = user.role === 'site_admin' ? 
             `userManagement_cache_${user.role}_${userClientName}` : 
             `userManagement_cache_${user.role}`;
@@ -493,9 +834,12 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
         
         const setupRealTimeListener = async () => {
             try {
-                // Fetch clients first if not available
+                // Fetch clients first if not available (will use cache if available)
                 if (previousClientsRef.current.length === 0) {
-                    await fetchClients();
+                    await fetchClients(false); // false = use cache first
+                } else {
+                    // Refresh clients in background to ensure fresh data
+                    fetchClients(false); // Check cache first, fetch in background if needed
                 }
                 
                 // Use Firestore real-time listener for all user roles
@@ -654,6 +998,13 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
         };
     }, [user?.uid, user?.role, userClientName]); // Use stable userClientName to prevent unnecessary re-renders
 
+    // Fetch assets for super_admin
+    useEffect(() => {
+        if (user?.role === 'super_admin' && user?.firebaseUser) {
+            fetchAssets();
+        }
+    }, [user?.role, user?.firebaseUser, fetchAssets]);
+
     const handleAdd = () => {
         setAddMode(true);
         setAddRowData(initialUserState);
@@ -772,7 +1123,13 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
     };
 
     const handleEditClick = (user) => {
-        navigate(`/user-management/user-detail/${user.uid}?edit=true`);
+        // If viewing a specific client, include client name in URL
+        if (selectedClientForUsers) {
+            const clientName = selectedClientForUsers.companyName || selectedClientForUsers['Client name'];
+            navigate(`/user-management/client/${encodeURIComponent(clientName)}/user-detail/${user.uid}?edit=true`);
+        } else {
+            navigate(`/user-management/user-detail/${user.uid}?edit=true`);
+        }
     };
 
     const handleEditChange = (e) => {
@@ -853,7 +1210,13 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
     };
 
     const handleViewUser = (user) => {
-        navigate(`/user-management/user-detail/${user.uid}`);
+        // If viewing a specific client, include client name in URL
+        if (selectedClientForUsers) {
+            const clientName = selectedClientForUsers.companyName || selectedClientForUsers['Client name'];
+            navigate(`/user-management/client/${encodeURIComponent(clientName)}/user-detail/${user.uid}`);
+        } else {
+            navigate(`/user-management/user-detail/${user.uid}`);
+        }
     };
 
     const handleDeleteClick = (event, uid, email) => {
@@ -883,23 +1246,13 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                 throw new Error(errData.error || 'Failed to delete user');
             }
             
-            // Show inline notification for this specific user
-            setPasswordChangeNotifications(prev => ({
-              ...prev,
-              [uid]: {
-                message: 'delete-success',
-                timestamp: Date.now()
-              }
-            }));
+            // Immediately remove from clientUsers if we're viewing a client's users
+            if (selectedClientForUsers) {
+                setClientUsers(prev => prev.filter(u => u.uid !== uid));
+            }
             
-            // Auto-hide the notification after 5 seconds
-            setTimeout(() => {
-              setPasswordChangeNotifications(prev => {
-                const newState = { ...prev };
-                delete newState[uid];
-                return newState;
-              });
-            }, 5000);
+            // Show success message
+            setSnackbar({ open: true, message: 'User deleted successfully', severity: 'success' });
             
             // Real-time updates will be handled by Firestore listener
             console.log("User deleted, real-time listener will handle refresh");
@@ -1273,10 +1626,16 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
         try {
           let json = [];
           
+          // Use XLSX library for both CSV and Excel files for better parsing
           if (file.name.toLowerCase().endsWith('.csv')) {
+            // Parse CSV using XLSX library for proper handling of quoted fields and commas
             const csvText = evt.target.result;
-            const lines = csvText.split('\n');
-            const headers = lines[0].split(',').map(h => h.trim());
+            const workbook = XLSX.read(csvText, { type: 'string', raw: false });
+            const sheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[sheetName];
+            
+            // Convert to JSON - CSV will have friendly header names
+            const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: '', raw: false });
             
             // Check if headers match either field names or display names
             let expectedHeaders = [...USER_TEMPLATE_HEADERS];
@@ -1286,43 +1645,41 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
               expectedDisplayNames.splice(2, 0, 'Company Name');
             }
             
+            // Get headers from first row if available
+            const firstRow = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' })[0] || [];
+            const headers = firstRow.map(h => String(h).trim());
+            
             // Check for missing columns (accept either display names or field names)
-            const allExpected = [...expectedHeaders, ...expectedDisplayNames];
             const missingCols = expectedDisplayNames.filter(h => 
               !headers.includes(h) && !headers.includes(HEADER_NAME_MAP[h])
             );
             if (missingCols.length > 0) {
-              setImportError('Missing columns: ' + missingCols.join(', '));
+              setImportError('Missing columns: ' + missingCols.join(', ') + '. Please use the provided template.');
               setImportedUsers([]);
               setImportedPasswords([]);
               return;
             }
             
-            for (let i = 1; i < lines.length; i++) {
-              if (lines[i].trim()) {
-                const values = lines[i].split(',').map(v => v.trim());
-                const row = {};
-                headers.forEach((header, index) => {
-                  row[header] = values[index] || '';
-                });
-                
+            json = jsonData
+              .filter(row => {
+                // Check if email exists (using either friendly name or field name)
+                const email = row['Email'] || row['email'] || row.email;
+                return email && email.trim() !== '' && email.toLowerCase() !== 'email';
+              })
+              .map(row => {
                 // Map friendly names to field names
                 const mappedRow = {};
                 Object.keys(HEADER_NAME_MAP).forEach(displayName => {
                   const fieldName = HEADER_NAME_MAP[displayName];
-                  mappedRow[fieldName] = row[displayName] || row[fieldName] || '';
+                  const value = row[displayName] || row[fieldName] || '';
+                  mappedRow[fieldName] = typeof value === 'string' ? value.trim() : value;
                 });
                 // Also handle companyName if it exists
                 if (row['Company Name'] || row['companyName']) {
                   mappedRow.companyName = (row['Company Name'] || row['companyName'] || '').trim();
                 }
-                
-                const email = mappedRow.email || row.email || row['Email'];
-                if (email && email.trim() !== '' && email.toLowerCase() !== 'email') {
-                  json.push(mappedRow);
-                }
-              }
-            }
+                return mappedRow;
+              });
           } else {
             const data = new Uint8Array(evt.target.result);
             const workbook = XLSX.read(data, { type: 'array' });
@@ -1330,7 +1687,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
             const worksheet = workbook.Sheets[sheetName];
             
             // Convert to JSON - Excel will have friendly header names
-            const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+            const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: '', raw: false });
             
             // Map friendly header names back to field names
             let expectedHeaders = [...USER_TEMPLATE_HEADERS];
@@ -1361,7 +1718,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
           }
           
           if (json.length === 0) {
-            setImportError('No valid user data found in the file.');
+            setImportError('No valid user data found in the file. Please ensure the file contains at least one row with an email address.');
             setImportedUsers([]);
             setImportedPasswords([]);
             return;
@@ -1376,15 +1733,26 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
             password: u.password || '',
             contactNumber: u.contactNumber || ''
           })));
+          
+          // Reset file input to allow selecting the same file again if needed
+          if (fileInputRef.current) {
+            fileInputRef.current.value = '';
+          }
         } catch (err) {
-          setImportError('Failed to parse file. Please use the provided template.');
+          console.error('Error parsing file:', err);
+          setImportError('Failed to parse file. Please ensure you are using the provided template format. Error: ' + (err.message || 'Unknown error'));
           setImportedUsers([]);
           setImportedPasswords([]);
+          
+          // Reset file input on error too
+          if (fileInputRef.current) {
+            fileInputRef.current.value = '';
+          }
         }
       };
       
       if (file.name.toLowerCase().endsWith('.csv')) {
-        reader.readAsText(file);
+        reader.readAsText(file, 'UTF-8');
       } else {
         reader.readAsArrayBuffer(file);
       }
@@ -1636,18 +2004,29 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                 return;
             }
 
+            // Helper function to escape CSV fields
+            const escapeCSV = (field) => {
+                if (field === null || field === undefined) return '';
+                const str = String(field);
+                // If field contains comma, quote, or newline, wrap in quotes and escape internal quotes
+                if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+                    return `"${str.replace(/"/g, '""')}"`;
+                }
+                return str;
+            };
+
             // Create CSV content
-            const headers = ['Email', 'First Name', 'Last Name', 'Employee ID', 'Contact Number', 'Role', 'Active'];
+            const headers = ['Email', 'First Name', 'Last Name', 'Employee ID', 'Contact Number', 'Role', 'Status'];
             const csvContent = [
                 headers.join(','),
                 ...clientUsers.map(user => [
-                    user.email || '',
-                    user.firstName || '',
-                    user.lastName || '',
-                    user.employeeId || '',
-                    user.contactNumber || '',
-                    user.role || '',
-                    user.active !== false ? 'Yes' : 'No'
+                    escapeCSV(user.email || ''),
+                    escapeCSV(user.firstName || ''),
+                    escapeCSV(user.lastName || ''),
+                    escapeCSV(user.employeeId || ''),
+                    escapeCSV(user.contactNumber || ''),
+                    escapeCSV(user.role || ''),
+                    escapeCSV((user.status || 'active') === 'active' ? 'Active' : 'Inactive')
                 ].join(','))
             ].join('\n');
 
@@ -1666,6 +2045,62 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
         } catch (error) {
             console.error('Export failed:', error);
             showFlashMessage('Export failed. Please try again.', 'error');
+        }
+    };
+
+    // Handle toggle client status
+    const handleToggleClientStatus = async (client) => {
+        const newStatus = (client.status || 'active') === 'active' ? 'inactive' : 'active';
+        
+        try {
+            const token = user?.firebaseUser ? await user.firebaseUser.getIdToken() : await user.getIdToken();
+            const response = await fetch(`${API_BASE_URL}/api/clients/${client.id}/status`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ status: newStatus }),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to update client status');
+            }
+
+            const responseData = await response.json();
+            showFlashMessage(responseData.message || `Client status updated to ${newStatus}`, 'success');
+        } catch (error) {
+            console.error('Error updating client status:', error);
+            showFlashMessage(error.message || 'Failed to update client status', 'error');
+        }
+    };
+
+    // Handle toggle user status
+    const handleToggleUserStatus = async (userItem) => {
+        const currentStatus = userItem.status || 'active';
+        const newStatus = currentStatus === 'active' ? 'inactive' : 'active';
+        
+        try {
+            const token = user?.firebaseUser ? await user.firebaseUser.getIdToken() : await user.getIdToken();
+            const response = await fetch(`${API_BASE_URL}/api/users/${userItem.uid}/status`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ status: newStatus }),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to update user status');
+            }
+
+            showFlashMessage(`User status updated to ${newStatus}`, 'success');
+        } catch (error) {
+            console.error('Error updating user status:', error);
+            showFlashMessage(error.message || 'Failed to update user status', 'error');
         }
     };
 
@@ -1695,8 +2130,17 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
 
     // Handle open import modal with client selection
     const handleOpenImportModal = () => {
-        setSelectedImportClient('');
-        setImportClientModalOpen(true);
+        console.log('handleOpenImportModal called', { userRole: user?.role, companyName: user?.companyName });
+        // For site_admin, open import modal directly (no client selection needed)
+        if (user && user.role === 'site_admin') {
+            console.log('Opening import modal directly for site_admin');
+            openImportModal();
+        } else {
+            // For other roles, show client selection modal
+            console.log('Opening client selection modal');
+            setSelectedImportClient('');
+            setImportClientModalOpen(true);
+        }
     };
 
     // Handle open export modal with client selection
@@ -2101,6 +2545,439 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                 backgroundColor: '#f8f9fa',
                 minHeight: '100vh'
             }}>
+                {/* For super_admin: Show clients grid first, then users grid when client is selected */}
+                {user?.role === 'super_admin' && !selectedClientForUsers ? (
+                    // Clients Grid View (same as ClientGridManagement)
+                    <div className="client-management-page">
+                        <style>{`
+                            .client-management-page {
+                                padding: 1rem;
+                                background-color: #f8fafc;
+                                min-height: 100vh;
+                                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+                            }
+                            
+                            .page-header {
+                                margin-bottom: 1rem;
+                                display: flex;
+                                justify-content: space-between;
+                                align-items: center;
+                            }
+                            
+                            .page-header h1 {
+                                font-size: 1.5rem;
+                                font-weight: 600;
+                                color: #1e293b;
+                                margin: 0;
+                            }
+                            
+                            .search-filters-card {
+                                background: white;
+                                border-radius: 0.5rem;
+                                box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+                                margin-bottom: 0.75rem;
+                                padding: 0.75rem;
+                            }
+                            
+                            .data-table-card {
+                                background: white;
+                                border-radius: 0.5rem;
+                                box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+                                margin-bottom: 1rem;
+                                overflow: hidden;
+                            }
+                            
+                            .data-table {
+                                width: 100%;
+                                border-collapse: collapse;
+                            }
+                            
+                            .data-table th {
+                                background-color: #f8fafc;
+                                padding: 0.75rem;
+                                text-align: left;
+                                font-weight: 600;
+                                color: #374151;
+                                border-bottom: 1px solid #e5e7eb;
+                                font-size: 0.875rem;
+                            }
+                            
+                            .data-table td {
+                                padding: 0.75rem;
+                                border-bottom: 1px solid #f3f4f6;
+                                font-size: 0.875rem;
+                            }
+                            
+                            .data-table tr:hover {
+                                background-color: #f8fafc;
+                            }
+                            
+                            .client-info {
+                                display: flex;
+                                align-items: center;
+                                gap: 0.5rem;
+                            }
+                            
+                            .action-buttons {
+                                display: flex;
+                                gap: 0.25rem;
+                                justify-content: center;
+                            }
+                            
+                            .action-btn {
+                                width: 2rem;
+                                height: 2rem;
+                                border: none;
+                                background: none;
+                                cursor: pointer;
+                                border-radius: 0.25rem;
+                                display: flex;
+                                align-items: center;
+                                justify-content: center;
+                                font-size: 0.875rem;
+                                color: #374151;
+                            }
+                            
+                            .action-btn:hover {
+                                background-color: #f3f4f6;
+                                color: #1f2937;
+                            }
+                            
+                            .action-btn svg {
+                                width: 16px;
+                                height: 16px;
+                            }
+                        `}</style>
+                        <div className="page-header">
+                            <h1>User Management</h1>
+                        </div>
+                        <div className="search-filters-card">
+                            <TextField
+                                value={search}
+                                onChange={e => setSearch(e.target.value)}
+                                placeholder="Search clients..."
+                                size="small"
+                                sx={{ width: '100%', maxWidth: '400px' }}
+                                InputProps={{
+                                    startAdornment: (
+                                        <InputAdornment position="start">
+                                            <SearchIcon />
+                                        </InputAdornment>
+                                    )
+                                }}
+                            />
+                        </div>
+                        <div className="data-table-card">
+                            <div className="table-container" style={{ overflowX: 'auto' }}>
+                                <table className="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Company Name</th>
+                                            <th>Location</th>
+                                            <th>Contact</th>
+                                            <th style={{ textAlign: 'center' }}>Users</th>
+                                            <th style={{ textAlign: 'center' }}>Status</th>
+                                            <th style={{ textAlign: 'center' }}>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {clientsLoading ? (
+                                            <tr>
+                                                <td colSpan={6} style={{ textAlign: 'center', padding: '2rem' }}>
+                                                    <CircularProgress size={24} style={{ marginRight: '8px' }} />
+                                                    <span style={{ color: '#64748b', fontSize: '0.875rem' }}>Loading clients...</span>
+                                                </td>
+                                            </tr>
+                                        ) : clients.length === 0 ? (
+                                            <tr>
+                                                <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
+                                                    No clients found
+                                                </td>
+                                            </tr>
+                                        ) : (
+                                            clients
+                                                .filter(client => {
+                                                    const clientName = client.companyName || client['Client name'];
+                                                    return !search || clientName?.toLowerCase().includes(search.toLowerCase());
+                                                })
+                                                .map((client) => {
+                                                const clientName = client.companyName || client['Client name'];
+                                                const userCount = userCounts[clientName] || 0;
+                                                return (
+                                                    <tr
+                                                        key={client.id || clientName}
+                                                        onClick={() => handleClientClick(client)}
+                                                        style={{ cursor: 'pointer' }}
+                                                    >
+                                                        <td>
+                                                            <div className="client-info">
+                                                                <FaviconIcon 
+                                                                    websiteUrl={client.website} 
+                                                                    size="28px"
+                                                                    alt={`${clientName} favicon`}
+                                                                />
+                                                                <div>
+                                                                    <h4 style={{ margin: 0, fontSize: '0.875rem', fontWeight: 600, color: '#3b82f6' }}>
+                                                                        {clientName}
+                                                                    </h4>
+                                                                    {client.website && (
+                                                                        <a 
+                                                                            href={client.website} 
+                                                                            target="_blank" 
+                                                                            rel="noopener noreferrer"
+                                                                            onClick={(e) => e.stopPropagation()}
+                                                                            style={{ fontSize: '0.75rem', color: '#6b7280' }}
+                                                                        >
+                                                                            {client.website}
+                                                                        </a>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        </td>
+                                                        <td>{client.location || 'N/A'}</td>
+                                                        <td>{client.clientContactNumber || 'N/A'}</td>
+                                                        <td style={{ textAlign: 'center' }}>
+                                                            <span style={{
+                                                                display: 'inline-block',
+                                                                padding: '0.25rem 0.5rem',
+                                                                borderRadius: '0.25rem',
+                                                                fontSize: '0.75rem',
+                                                                fontWeight: 500,
+                                                                backgroundColor: userCount > 0 ? '#eff6ff' : '#fef2f2',
+                                                                color: userCount > 0 ? '#2563eb' : '#dc2626',
+                                                                border: `1px solid ${userCount > 0 ? '#bfdbfe' : '#fecaca'}`
+                                                            }}>
+                                                                {userCount} {userCount === 1 ? 'user' : 'users'}
+                                                            </span>
+                                                        </td>
+                                                        <td style={{ textAlign: 'center' }}>
+                                                            {['admin', 'site_admin', 'super_admin'].includes(user?.role) ? (
+                                                                <span
+                                                                    style={{
+                                                                        display: 'inline-block',
+                                                                        padding: '0.25rem 0.5rem',
+                                                                        borderRadius: '0.375rem',
+                                                                        fontSize: '0.75rem',
+                                                                        fontWeight: 500,
+                                                                        backgroundColor: (client.status || 'active') === 'active' ? '#d1fae5' : '#fee2e2',
+                                                                        color: (client.status || 'active') === 'active' ? '#065f46' : '#991b1b',
+                                                                        border: `1px solid ${(client.status || 'active') === 'active' ? '#10b981' : '#ef4444'}`,
+                                                                    }}
+                                                                    title="Click to toggle status"
+                                                                >
+                                                                    {(client.status || 'active') === 'active' ? 'Active' : 'Inactive'}
+                                                                </span>
+                                                            ) : (
+                                                                <span
+                                                                    style={{
+                                                                        display: 'inline-block',
+                                                                        padding: '0.25rem 0.5rem',
+                                                                        borderRadius: '0.375rem',
+                                                                        fontSize: '0.75rem',
+                                                                        fontWeight: 500,
+                                                                        backgroundColor: (client.status || 'active') === 'active' ? '#d1fae5' : '#fee2e2',
+                                                                        color: (client.status || 'active') === 'active' ? '#065f46' : '#991b1b',
+                                                                        border: `1px solid ${(client.status || 'active') === 'active' ? '#10b981' : '#ef4444'}`,
+                                                                    }}
+                                                                >
+                                                                    {(client.status || 'active') === 'active' ? 'Active' : 'Inactive'}
+                                                                </span>
+                                                            )}
+                                                        </td>
+                                                        <td style={{ textAlign: 'center' }}>
+                                                            <div className="action-buttons" onClick={(e) => e.stopPropagation()}>
+                                                                <button
+                                                                    className="action-btn"
+                                                                    onClick={() => handleAddUserForClient(client)}
+                                                                    data-tooltip="Add User"
+                                                                    title="Add User"
+                                                                >
+                                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                                        <line x1="12" y1="5" x2="12" y2="19"/>
+                                                                        <line x1="5" y1="12" x2="19" y2="12"/>
+                                                                    </svg>
+                                                                </button>
+                                                                <button
+                                                                    className="action-btn"
+                                                                    onClick={() => handleImportUsersForClient(client)}
+                                                                    data-tooltip="Import Users"
+                                                                    title="Import Users"
+                                                                >
+                                                                    <UploadIcon style={{ fontSize: '16px' }} />
+                                                                </button>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                ) : user?.role === 'super_admin' && selectedClientForUsers ? (
+                    // Users Table View (similar to AssetTable)
+                    <div className="p-6 space-y-4 bg-gray-100 min-h-screen">
+                        <div className="flex items-center justify-between bg-white rounded-lg p-4 shadow border border-gray-300">
+                            <div className="flex items-center gap-3">
+                                <button
+                                    onClick={handleBackToClients}
+                                    className="p-2 hover:bg-gray-100 rounded-md transition-colors"
+                                    title="Back to Clients"
+                                >
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                        <path d="M19 12H5M12 19l-7-7 7-7"/>
+                                    </svg>
+                                </button>
+                                <div>
+                                    <h1 className="text-xl font-bold text-gray-900">
+                                        {selectedClientForUsers.companyName || selectedClientForUsers['Client name']}
+                                    </h1>
+                                    <p className="text-sm text-gray-600 mt-0.5">
+                                        {clientUsers.length} {clientUsers.length === 1 ? 'user' : 'users'}
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={() => handleAddUserForClient(selectedClientForUsers)}
+                                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-md text-xs font-semibold flex items-center space-x-1.5 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                >
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                        <line x1="12" y1="5" x2="12" y2="19"/>
+                                        <line x1="5" y1="12" x2="19" y2="12"/>
+                                    </svg>
+                                    <span>Add User</span>
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        const clientName = selectedClientForUsers?.companyName || selectedClientForUsers?.['Client name'];
+                                        if (clientName) {
+                                            navigate(`/user-management/import?client=${encodeURIComponent(clientName)}`);
+                                        }
+                                    }}
+                                    className="px-3 py-1.5 bg-white hover:bg-gray-50 active:bg-gray-100 rounded-md text-xs font-semibold text-gray-700 flex items-center space-x-1.5 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-gray-400 border border-gray-300"
+                                >
+                                    <UploadIcon style={{ fontSize: '14px', width: '14px', height: '14px' }} />
+                                    <span>Import Users</span>
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        const clientName = selectedClientForUsers?.companyName || selectedClientForUsers?.['Client name'];
+                                        if (clientName) {
+                                            handleClientExportUsers(clientName);
+                                        }
+                                    }}
+                                    className="px-3 py-1.5 bg-green-600 hover:bg-green-700 active:bg-green-800 text-white rounded-md text-xs font-semibold flex items-center space-x-1.5 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-green-500"
+                                >
+                                    <DownloadIcon style={{ fontSize: '14px', width: '14px', height: '14px' }} />
+                                    <span>Export Users</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div className="bg-white rounded-lg shadow border border-gray-300 overflow-hidden">
+                            <div className="overflow-x-auto">
+                                <table className="min-w-full">
+                                    <thead>
+                                        <tr className="bg-gray-50 border-b-2 border-gray-300">
+                                            <th className="px-4 py-3 text-left text-xs font-bold text-gray-800 uppercase tracking-wider">
+                                                User
+                                            </th>
+                                            <th className="px-4 py-3 text-left text-xs font-bold text-gray-800 uppercase tracking-wider">
+                                                Email
+                                            </th>
+                                            <th className="px-4 py-3 text-left text-xs font-bold text-gray-800 uppercase tracking-wider">
+                                                Employee ID
+                                            </th>
+                                            <th className="px-4 py-3 text-left text-xs font-bold text-gray-800 uppercase tracking-wider">
+                                                Contact
+                                            </th>
+                                            <th className="px-4 py-3 text-left text-xs font-bold text-gray-800 uppercase tracking-wider">
+                                                Designation
+                                            </th>
+                                            <th className="px-4 py-3 text-left text-xs font-bold text-gray-800 uppercase tracking-wider">
+                                                Role
+                                            </th>
+                                            <th className="px-4 py-3 text-left text-xs font-bold text-gray-800 uppercase tracking-wider">
+                                                Status
+                                            </th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="bg-white divide-y divide-gray-200">
+                                        {clientUsers.length === 0 ? (
+                                            <tr>
+                                                <td colSpan="7" className="px-4 py-12 text-center">
+                                                    <div className="flex flex-col items-center">
+                                                        <PersonIcon style={{ fontSize: '48px', color: '#9ca3af' }} />
+                                                        <p className="text-sm font-medium text-gray-600 mt-2">No users found for this client</p>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ) : (
+                                            clientUsers.map((userItem) => (
+                                                <tr
+                                                    key={userItem.uid}
+                                                    className="hover:bg-blue-50 cursor-pointer transition-colors"
+                                                    onClick={() => handleViewUser(userItem)}
+                                                >
+                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                        <div className="flex items-center">
+                                                            <div className="flex-shrink-0 h-10 w-10 flex items-center justify-center rounded-full bg-blue-600 text-white text-sm font-semibold">
+                                                                {userItem.firstName?.[0] || userItem.name?.[0] || userItem.email?.[0]?.toUpperCase() || 'U'}
+                                                            </div>
+                                                            <div className="ml-3">
+                                                                <div className="text-sm font-semibold text-gray-900">
+                                                                    {userItem.firstName && userItem.lastName 
+                                                                        ? `${userItem.firstName} ${userItem.lastName}`
+                                                                        : userItem.name || userItem.email?.split('@')[0] || 'Unnamed User'}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                        <div className="text-sm text-gray-700">{userItem.email || 'N/A'}</div>
+                                                    </td>
+                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                        <div className="text-sm font-medium text-gray-900">
+                                                            {userItem.employeeId || 'N/A'}
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                        <div className="text-sm text-gray-700">{userItem.contactNumber || 'N/A'}</div>
+                                                    </td>
+                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                        <div className="text-sm text-gray-900">
+                                                            {userItem.designation || 'N/A'}
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                        <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-gray-100 text-gray-800 capitalize">
+                                                            {userItem.role || 'user'}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                        <span
+                                                            className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold"
+                                                            style={{
+                                                                backgroundColor: (userItem.status || 'active') === 'active' ? '#dcfce7' : '#fee2e2',
+                                                                color: (userItem.status || 'active') === 'active' ? '#166534' : '#991b1b',
+                                                            }}
+                                                        >
+                                                            {(userItem.status || 'active') === 'active' ? 'Active' : 'Inactive'}
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                            ))
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                ) : (
+                    // Original view for non-super_admin users
+                    <div>
                 {/* Header Section */}
                 <Box sx={{ 
                     display: 'flex', 
@@ -2149,8 +3026,21 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                             Add
                         </button>
                         <button
-                            onClick={handleOpenImportModal}
-                            disabled={uniqueClients.length === 0}
+                            onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                try {
+                                    handleOpenImportModal();
+                                } catch (error) {
+                                    console.error('Error opening import modal:', error);
+                                    if (showFlashMessage) {
+                                        showFlashMessage('Failed to open import dialog. Please try again.', 'error');
+                                    } else {
+                                        setSnackbar({ open: true, message: 'Failed to open import dialog. Please try again.', severity: 'error' });
+                                    }
+                                }
+                            }}
+                            disabled={!user || (user.role !== 'site_admin' && uniqueClients.length === 0)}
                             style={{
                                 display: 'inline-flex',
                                 alignItems: 'center',
@@ -2162,19 +3052,19 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                                 backgroundColor: 'white',
                                 border: '1px solid #d1d5db',
                                 borderRadius: '4px',
-                                cursor: uniqueClients.length === 0 ? 'not-allowed' : 'pointer',
+                                cursor: (!user || (user.role !== 'site_admin' && uniqueClients.length === 0)) ? 'not-allowed' : 'pointer',
                                 height: '28px',
-                                opacity: uniqueClients.length === 0 ? 0.5 : 1,
+                                opacity: (!user || (user.role !== 'site_admin' && uniqueClients.length === 0)) ? 0.5 : 1,
                                 transition: 'all 0.2s ease'
                             }}
                             onMouseEnter={(e) => {
-                                if (uniqueClients.length > 0) {
+                                if (user && (user.role === 'site_admin' || uniqueClients.length > 0)) {
                                     e.target.style.backgroundColor = '#f9fafb';
                                     e.target.style.borderColor = '#9ca3af';
                                 }
                             }}
                             onMouseLeave={(e) => {
-                                if (uniqueClients.length > 0) {
+                                if (user && (user.role === 'site_admin' || uniqueClients.length > 0)) {
                                     e.target.style.backgroundColor = 'white';
                                     e.target.style.borderColor = '#d1d5db';
                                 }
@@ -3923,7 +4813,7 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                                         Choose File
                                     </Button>
                                     <Typography variant="body2" sx={{ mt: 1, color: '#666', fontSize: '0.75rem' }}>
-                                        Select .csv file to import
+                                        Select .xlsx, .xls, or .csv file to import
                                     </Typography>
                                 </Box>
                             </>
@@ -4711,15 +5601,17 @@ const UserManagementComponent = ({ user, showFlashMessage }) => {
                         </Button>
                     </DialogActions>
                 </Dialog>
+                    </div>
+                )}
                 
-                {/* Snackbar */}
+                {/* Snackbar - outside conditional rendering */}
                 <Snackbar 
                     open={snackbar.open} 
                     autoHideDuration={3000} 
                     onClose={() => setSnackbar({ ...snackbar, open: false })}
                     anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
                     sx={{ 
-                        top: '80px !important', // Position below the header/tabs
+                        top: '80px !important',
                         '& .MuiAlert-root': {
                             minWidth: '300px',
                             borderRadius: '8px',

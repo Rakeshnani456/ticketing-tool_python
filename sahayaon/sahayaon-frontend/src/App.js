@@ -106,6 +106,7 @@ import { ReactComponent as CreateTicketIcon } from './assets/icons/CreateTicketI
 // Import feature components
 import LoginComponent from './components/auth/LoginComponent';
 import RegisterComponent from './components/auth/RegisterComponent';
+import AccessDenied from './components/auth/AccessDenied';
 import CreateTicketComponent from './components/tickets/CreateTicketComponent';
 import CreateTicketPage from './components/tickets/CreateTicketPage';
 import MyTicketsComponent from './components/tickets/MyTicketsComponent';
@@ -118,6 +119,7 @@ import AccessDeniedComponent from './components/AccessDeniedComponent';
 import ChangePasswordComponent from './components/ChangePasswordComponent';
 import InitialPasswordChangeComponent from './components/auth/InitialPasswordChangeComponent';
 import UserManagementComponent from './components/admin/UserManagementComponent';
+import ClientUserManagement from './components/admin/ClientUserManagement';
 import CreateUserPage from './components/admin/CreateUserPage';
 import ClientImportPage from './components/admin/ClientImportPage';
 import UserDetailView from './components/admin/UserDetailView';
@@ -554,10 +556,63 @@ const AppContent = () => {
                         },
                         // Removed email from body - already in token
                     });
-                    const data = await response.json();
+                    
+                    // Parse response data - handle empty responses
+                    let data = {};
+                    try {
+                        // Try to parse as JSON directly - response.json() will work for JSON responses
+                        data = await response.json();
+                    } catch (parseError) {
+                        // If JSON parsing fails, try text
+                        try {
+                            const text = await response.text();
+                            if (text && text.trim()) {
+                                data = JSON.parse(text);
+                            } else {
+                                console.error('Empty response body');
+                            }
+                        } catch (textParseError) {
+                            console.error('Error parsing login response:', textParseError);
+                            console.error('Response status:', response.status);
+                            console.error('Response statusText:', response.statusText);
+                            data = { error: 'Failed to parse server response' };
+                        }
+                    }
+                    
+                    console.log('Auth state check login response:', { status: response.status, data });
+                    
+                    // Check for ACCESS_DENIED first before checking response.ok
+                    if (response.status === 403 && (data.error === 'ACCESS_DENIED' || data.reason === 'inactive_user' || data.status === 'inactive')) {
+                        // User is inactive - redirect to access denied page
+                        console.log("User is inactive, redirecting to access denied page", data);
+                        
+                        // Set sessionStorage flag to authorize access to /access-denied page
+                        sessionStorage.setItem('access_denied', 'true');
+                        
+                        await authClient.signOut();
+                        setCurrentUser(null);
+                        setIsAuthLoading(false);
+                        navigate('/access-denied');
+                        return;
+                    }
+                    
                     if (response.ok) {
+                        // Check if user is inactive - redirect to access denied page (double check)
+                        if (data.user && data.user.status === 'inactive') {
+                            console.log('User is inactive, redirecting to access denied page');
+                            
+                            // Set sessionStorage flag to authorize access to /access-denied page
+                            sessionStorage.setItem('access_denied', 'true');
+                            
+                            await authClient.signOut();
+                            setCurrentUser(null);
+                            setIsAuthLoading(false);
+                            navigate('/access-denied');
+                            return;
+                        }
+
                         // On successful verification, set currentUser state with Firebase user and role
-                        let userProfile = { firebaseUser, role: data.user.role, email: firebaseUser.email, uid: firebaseUser.uid };
+                        let userProfile = { firebaseUser, role: data.user.role, email: firebaseUser.email, uid: firebaseUser.uid, status: data.user.status || 'active' };
                         
                         // Include client_name if provided in response (optimized - backend now includes it for site_admin)
                         if (data.user.client_name) {
@@ -572,6 +627,21 @@ const AppContent = () => {
                                     const userData = userDoc.data();
                                     userProfile.client_name = userData.client_name || userData.companyName;
                                     userProfile.companyName = userData.client_name || userData.companyName;
+                                    // Check status from Firestore if not in response
+                                    if (!userProfile.status) {
+                                        userProfile.status = userData.status || 'active';
+                                        // If user is inactive, log them out immediately
+                                        if (userProfile.status === 'inactive') {
+                                            // Set sessionStorage flag to authorize access to /access-denied page
+                                            sessionStorage.setItem('access_denied', 'true');
+                                            
+                                            await authClient.signOut();
+                                            setCurrentUser(null);
+                                            setIsAuthLoading(false);
+                                            navigate('/access-denied');
+                                            return;
+                                        }
+                                    }
                                 }
                             } catch (error) {
                                 console.error('Error fetching site admin profile:', error);
@@ -637,7 +707,8 @@ const AppContent = () => {
                 setCurrentUser(null);
                 setIsAuthLoading(false);
                 // Ensure we are on a public route if no user is logged in
-                if (location.pathname !== '/login' && location.pathname !== '/register' && location.pathname !== '/initial-password-change') {
+                // Allow /access-denied page to be shown without redirecting
+                if (location.pathname !== '/login' && location.pathname !== '/register' && location.pathname !== '/initial-password-change' && location.pathname !== '/access-denied') {
                     navigate('/login');
                 }
                 setTicketCounts({ active_tickets: 0, assigned_to_me: 0, total_tickets: 0 }); // Reset counts
@@ -649,6 +720,58 @@ const AppContent = () => {
             unsubscribeAuth(); // Cleanup the auth state listener on component unmount
         };
     }, [navigate, location.pathname]); // Removed fetchNotifications from dependency array
+
+    // Periodic check for user status changes (check every 30 seconds for logged-in users)
+    useEffect(() => {
+        if (!currentUser || !currentUser.firebaseUser || location.pathname === '/access-denied') return;
+
+        const checkUserStatus = async () => {
+            try {
+                const idToken = await currentUser.firebaseUser.getIdToken(false);
+                const response = await fetch(`${API_BASE_URL}/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${idToken}`
+                    }
+                });
+
+                const data = await response.json();
+                
+                // If user is now inactive, log them out immediately
+                if (response.status === 403 && data.error === 'ACCESS_DENIED') {
+                    console.log('User status changed to inactive, logging out...');
+                    
+                    // Set sessionStorage flag to authorize access to /access-denied page
+                    sessionStorage.setItem('access_denied', 'true');
+                    
+                    await authClient.signOut();
+                    setCurrentUser(null);
+                    navigate('/access-denied');
+                } else if (response.ok && data.user && data.user.status === 'inactive') {
+                    console.log('User status changed to inactive, logging out...');
+                    
+                    // Set sessionStorage flag to authorize access to /access-denied page
+                    sessionStorage.setItem('access_denied', 'true');
+                    
+                    await authClient.signOut();
+                    setCurrentUser(null);
+                    navigate('/access-denied');
+                }
+            } catch (error) {
+                // Silently fail - don't disrupt user experience on network errors
+                console.log('Status check failed:', error.message);
+            }
+        };
+
+        // Check immediately and then every 30 seconds
+        checkUserStatus();
+        const statusCheckInterval = setInterval(checkUserStatus, 30000); // Check every 30 seconds
+
+        return () => {
+            clearInterval(statusCheckInterval);
+        };
+    }, [currentUser, navigate, location.pathname]);
 
     // Effect hook to handle clicks outside the notification menu
     // useEffect(() => {
@@ -2105,6 +2228,7 @@ const AppContent = () => {
                         {/* Public Routes (Login/Register) */}
                         <Route path="/login" element={<LoginComponent onLoginSuccess={handleLoginSuccess} navigateTo={navigateTo} showFlashMessage={showFlashMessage} />} />
                         <Route path="/register" element={<RegisterComponent currentUser={currentUser} navigateTo={navigateTo} showFlashMessage={showFlashMessage} />} />
+                        <Route path="/access-denied" element={<AccessDenied />} />
                         <Route path="/initial-password-change" element={<InitialPasswordChangeComponent navigateTo={navigateTo} showFlashMessage={showFlashMessage} />} />
 
                         {/* Protected Routes (require currentUser) */}
@@ -2162,6 +2286,11 @@ const AppContent = () => {
                                         <UserManagementComponent user={currentUser} showFlashMessage={showFlashMessage} navigateTo={navigateTo} /> :
                                         <AccessDeniedComponent />
                                 } />
+                                <Route path="/user-management/client/:clientName" element={
+                                    (['admin', 'site_admin', 'super_admin'].includes(currentUser.role)) ?
+                                        <ClientUserManagement user={currentUser} showFlashMessage={showFlashMessage} navigateTo={navigateTo} /> :
+                                        <AccessDeniedComponent />
+                                } />
                                 <Route path="/user-management/create-user" element={
                                     (['admin', 'site_admin', 'super_admin'].includes(currentUser.role)) ?
                                         <CreateUserPage user={currentUser} /> :
@@ -2170,6 +2299,11 @@ const AppContent = () => {
                                 <Route path="/user-management/import" element={
                                     (['admin', 'site_admin', 'super_admin'].includes(currentUser.role)) ?
                                         <ClientImportPage user={currentUser} /> :
+                                        <AccessDeniedComponent />
+                                } />
+                                <Route path="/user-management/client/:clientName/user-detail/:userId" element={
+                                    (['admin', 'site_admin', 'super_admin'].includes(currentUser.role)) ?
+                                        <UserDetailView user={currentUser} /> :
                                         <AccessDeniedComponent />
                                 } />
                                 <Route path="/user-management/user-detail/:userId" element={

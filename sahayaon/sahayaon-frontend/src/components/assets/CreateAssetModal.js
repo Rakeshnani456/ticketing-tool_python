@@ -297,7 +297,7 @@ const CreateAssetModal = ({ isOpen, onClose, onSuccess, currentUser, preselected
                 }}
             />
             <div 
-                className="fixed inset-0 flex items-center justify-center p-4 pt-16 pointer-events-none" 
+                className="fixed inset-0 flex items-center justify-center p-4 pointer-events-none" 
                 style={{ 
                     position: 'fixed',
                     zIndex: 100000

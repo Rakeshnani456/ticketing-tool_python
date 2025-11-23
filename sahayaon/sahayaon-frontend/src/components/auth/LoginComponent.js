@@ -13,6 +13,7 @@ import LinkButton from '../common/LinkButton';
 import { authClient, dbClient } from '../../config/firebase';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { API_BASE_URL } from '../../config/constants';
+import { useNavigate } from 'react-router-dom';
 
 /**
  * Simple Security Alert Component
@@ -169,6 +170,7 @@ const NetworkStatus = ({ isOnline }) => {
  * Enhanced Login Component with improved error handling and user feedback
  */
 const LoginComponent = ({ onLoginSuccess, navigateTo, showFlashMessage }) => {
+    const navigate = useNavigate();
     // Form state
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -347,10 +349,49 @@ const LoginComponent = ({ onLoginSuccess, navigateTo, showFlashMessage }) => {
             });
 
             clearTimeout(timeoutId);
-            const data = await response.json();
+            
+            // Parse response data - handle empty responses
+            let data = {};
+            try {
+                // Try to parse as JSON directly - response.json() will work for JSON responses
+                data = await response.json();
+            } catch (parseError) {
+                // If JSON parsing fails, try text
+                try {
+                    const text = await response.text();
+                    if (text && text.trim()) {
+                        data = JSON.parse(text);
+                    } else {
+                        console.error('Empty response body');
+                    }
+                } catch (textParseError) {
+                    console.error('Error parsing response:', textParseError);
+                    console.error('Response status:', response.status);
+                    console.error('Response statusText:', response.statusText);
+                    data = { error: 'Failed to parse server response' };
+                }
+            }
 
-            // 3. Handle response
-            if (response.ok) {
+            console.log('Login response:', { status: response.status, data });
+
+            // 3. Handle response - check ACCESS_DENIED FIRST before response.ok
+            if (response.status === 403 && (data.error === 'ACCESS_DENIED' || data.reason === 'inactive_user' || data.status === 'inactive')) {
+                // User is inactive - redirect immediately to access denied page
+                console.log('User is inactive, redirecting to access denied page', data);
+                setLoading(false);
+                
+                // Set sessionStorage flag to authorize access to /access-denied page
+                sessionStorage.setItem('access_denied', 'true');
+                
+                // Sign out user (will trigger auth state change, but /access-denied is now allowed)
+                authClient.signOut().catch(err => {
+                    console.error('Error signing out:', err);
+                });
+                
+                // Navigate to access denied page immediately
+                navigate('/access-denied', { replace: true });
+                return; // Exit early to prevent further processing
+            } else if (response.ok) {
                 showToast('Login successful! Welcome back.', 'success');
                 // Include client_name if provided (for site_admin users)
                 const userData = {
@@ -371,8 +412,9 @@ const LoginComponent = ({ onLoginSuccess, navigateTo, showFlashMessage }) => {
                 setShowSecurityAlert(true);
                 // Don't call onLoginSuccess - user should stay on login page
             } else {
-                const errorMsg = data.error || 'Login verification failed. Please try again.';
+                const errorMsg = data.error || data.message || 'Login verification failed. Please try again.';
                 setFormError(errorMsg);
+                showToast(errorMsg, 'error');
                 await authClient.signOut();
                 
                 if (attemptCount >= 2) {

@@ -36,7 +36,8 @@ module.exports = (db, clientsCollection, usersCollection, verifyFirebaseToken) =
                         siteLastName: data.siteLastName || '',
                         siteEmail: data.siteEmail || '',
                         siteContactNumber: data.siteContactNumber || '',
-                        siteDesignation: data.siteDesignation || ''
+                        siteDesignation: data.siteDesignation || '',
+                        status: data.status || 'active' // Include status, default to 'active' if not set
                     };
                 } else {
                     // For support and engineer, return only companyName and id for filtering
@@ -84,7 +85,8 @@ module.exports = (db, clientsCollection, usersCollection, verifyFirebaseToken) =
                 siteDesignation: data.siteDesignation || '',
                 clientContactCountryCode: data.clientContactCountryCode || '',
                 authContactCountryCode: data.authContactCountryCode || '',
-                siteContactCountryCode: data.siteContactCountryCode || ''
+                siteContactCountryCode: data.siteContactCountryCode || '',
+                status: data.status || 'active' // Include status, default to 'active' if not set
             };
             
             res.json(client);
@@ -135,7 +137,8 @@ module.exports = (db, clientsCollection, usersCollection, verifyFirebaseToken) =
                 siteEmail,
                 siteContactCountryCode,
                 siteContactNumber,
-                siteDesignation
+                siteDesignation,
+                status: 'active' // Default status for new clients
             };
             const docRef = await clientsCollection.add(newClient);
 
@@ -194,7 +197,8 @@ module.exports = (db, clientsCollection, usersCollection, verifyFirebaseToken) =
                     employmentType: userData.employmentType,
                     designation: userData.designation,
                     mustChangePassword: true,
-                    isSiteAdmin: true // <-- Set site admin flag
+                    isSiteAdmin: true, // <-- Set site admin flag
+                    status: 'active' // Default status for new users
                 });
             } catch (userErr) {
                 // Rollback client creation
@@ -240,7 +244,7 @@ module.exports = (db, clientsCollection, usersCollection, verifyFirebaseToken) =
                 'companyName', 'website', 'location', 'clientContactCountryCode', 'clientContactNumber',
                 'authFirstName', 'authLastName', 'authContactCountryCode', 'authContactNumber', 
                 'authOfficeEmail', 'authPersonalEmail', 'authDesignation', 'siteFirstName', 
-                'siteLastName', 'siteEmail', 'siteContactCountryCode', 'siteContactNumber', 'siteDesignation'
+                'siteLastName', 'siteEmail', 'siteContactCountryCode', 'siteContactNumber', 'siteDesignation', 'status'
             ];
             
             fields.forEach(field => {
@@ -248,6 +252,28 @@ module.exports = (db, clientsCollection, usersCollection, verifyFirebaseToken) =
                     updateData[field] = req.body[field];
                 }
             });
+            
+            // If status is being changed to inactive, cascade to all users
+            if (updateData.status === 'inactive') {
+                const clientDoc = await clientsCollection.doc(id).get();
+                if (clientDoc.exists) {
+                    const clientData = clientDoc.data();
+                    const companyName = updateData.companyName || clientData.companyName;
+                    
+                    // Update all users for this client to inactive
+                    if (companyName) {
+                        const usersSnapshot = await usersCollection.where('client_name', '==', companyName).get();
+                        const batch = db.batch();
+                        usersSnapshot.docs.forEach(doc => {
+                            batch.update(doc.ref, { status: 'inactive' });
+                        });
+                        if (usersSnapshot.docs.length > 0) {
+                            await batch.commit();
+                        }
+                    }
+                }
+            }
+            
             await clientsCollection.doc(id).update(updateData);
             res.status(200).json({ id, ...updateData });
         } catch (err) {
@@ -268,6 +294,61 @@ module.exports = (db, clientsCollection, usersCollection, verifyFirebaseToken) =
         } catch (err) {
             console.error('Error deleting client:', err);
             res.status(500).json({ error: 'Failed to delete client' });
+        }
+    });
+
+    // PUT /api/clients/:id/status - Update client status and cascade to users
+    router.put('/:id/status', verifyFirebaseToken, async (req, res) => {
+        try {
+            const { id } = req.params;
+            const { status } = req.body;
+            
+            // Validate status
+            if (!status || !['active', 'inactive'].includes(status)) {
+                return res.status(400).json({ error: 'Invalid status. Must be "active" or "inactive".' });
+            }
+
+            // Check permissions - only super_admin, admin can change client status
+            const allowedRoles = ['super_admin', 'admin'];
+            if (!allowedRoles.includes(req.user.role)) {
+                return res.status(403).json({ error: 'Insufficient permissions to change client status' });
+            }
+
+            // Get client document
+            const clientDoc = await clientsCollection.doc(id).get();
+            if (!clientDoc.exists) {
+                return res.status(404).json({ error: 'Client not found' });
+            }
+
+            const clientData = clientDoc.data();
+            const companyName = clientData.companyName;
+
+            // Update client status
+            await clientsCollection.doc(id).update({ status });
+
+            // If client is being set to inactive, set all its users to inactive
+            if (status === 'inactive' && companyName) {
+                const usersSnapshot = await usersCollection
+                    .where('client_name', '==', companyName)
+                    .get();
+                
+                // Update all users to inactive in batch
+                const batch = db.batch();
+                usersSnapshot.docs.forEach(doc => {
+                    batch.update(doc.ref, { status: 'inactive' });
+                });
+                await batch.commit();
+
+                res.status(200).json({ 
+                    message: `Client status updated to ${status} and ${usersSnapshot.docs.length} user(s) set to inactive.`,
+                    usersUpdated: usersSnapshot.docs.length
+                });
+            } else {
+                res.status(200).json({ message: `Client status updated to ${status}.` });
+            }
+        } catch (err) {
+            console.error('Error updating client status:', err);
+            res.status(500).json({ error: 'Failed to update client status' });
         }
     });
 

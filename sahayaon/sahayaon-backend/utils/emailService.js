@@ -104,10 +104,22 @@ class EmailService {
                     // Provide helpful error message for cloud platform connection issues
                     if ((error.code === 'ESOCKET' || error.code === 'ETIMEDOUT') && (process.env.RENDER || process.env.HEROKU)) {
                         console.error(`[EmailService] 💡 Cloud Platform Connection Issue Detected`);
-                        console.error(`[EmailService] Try these solutions:`);
-                        console.error(`[EmailService]   1. Use port 587 instead of 465 (SMTP_PORT=587, SMTP_SECURE=false)`);
-                        console.error(`[EmailService]   2. Verify SMTP outbound connections are allowed by your cloud provider`);
-                        console.error(`[EmailService]   3. Consider using a relay service (SendGrid, Mailgun) if SMTP is blocked`);
+                        if (process.env.RENDER) {
+                            console.error(`[EmailService] ⚠️  RENDER FREE TIER BLOCKS SMTP PORTS (25, 465, 587)!`);
+                            console.error(`[EmailService] This is a known limitation - SMTP ports are blocked on free tier.`);
+                            console.error(`[EmailService] Solutions:`);
+                            console.error(`[EmailService]   1. ✅ USE SENDGRID (Recommended - Already built-in)`);
+                            console.error(`[EmailService]      Set EMAIL_TRANSPORT=SENDGRID`);
+                            console.error(`[EmailService]      Set SENDGRID_API_KEY=your-api-key`);
+                            console.error(`[EmailService]      Set DISTRIBUTION_EMAIL=your-sender-email`);
+                            console.error(`[EmailService]   2. Upgrade Render to paid tier (allows SMTP)`);
+                            console.error(`[EmailService]   3. Use Mailgun or Postmark API services`);
+                        } else {
+                            console.error(`[EmailService] Try these solutions:`);
+                            console.error(`[EmailService]   1. Use port 587 instead of 465 (SMTP_PORT=587, SMTP_SECURE=false)`);
+                            console.error(`[EmailService]   2. Verify SMTP outbound connections are allowed by your cloud provider`);
+                            console.error(`[EmailService]   3. Consider using a relay service (SendGrid, Mailgun) if SMTP is blocked`);
+                        }
                     }
                 }
             }

@@ -18,6 +18,7 @@ let ticketsCollection;
 let notificationsCollection;
 let clientsCollection;
 let assetsCollection;
+let vendorsCollection;
 let dbConnected = false;
 
 try {
@@ -51,6 +52,7 @@ try {
     notificationsCollection = db.collection('notifications');
     clientsCollection = db.collection('clients');
     assetsCollection = db.collection('assets');
+    vendorsCollection = db.collection('vendors');
     console.log("Connected to Firebase Firestore successfully!");
     dbConnected = true;
     app.locals.admin = admin; // Make admin available in routes
@@ -132,6 +134,23 @@ if (EMAIL_TRANSPORT === 'SENDGRID') {
         console.warn(`⚠️  WARNING: Port 465 is often blocked on cloud platforms like Render!`);
         console.warn(`   Port 465 may cause connection timeouts. Recommended: Use port 587 instead.`);
         console.warn(`   Set SMTP_PORT=587 and SMTP_SECURE=false in your environment variables.`);
+    }
+    
+    // Critical warning for Render free tier - SMTP ports are blocked
+    if (process.env.RENDER && !process.env.RENDER_PAID_TIER && EMAIL_TRANSPORT !== 'SENDGRID') {
+        console.error(`\n❌ CRITICAL: Render free tier blocks SMTP ports (25, 465, 587) as of Sept 2025!`);
+        console.error(`   ALL SMTP connections (including Office365) will FAIL on Render free tier.`);
+        console.error(`   Your current Office365 SMTP setup will timeout!`);
+        console.error(`\n   SOLUTIONS:`);
+        console.error(`   1. ✅ Upgrade Render to paid tier (recommended - keeps using Office365)`);
+        console.error(`      This will allow SMTP connections to work normally`);
+        console.error(`\n   2. Switch to SendGrid SMTP (also uses port 587, may work on paid tier)`);
+        console.error(`      Set: EMAIL_TRANSPORT=SENDGRID`);
+        console.error(`      Set: SENDGRID_API_KEY=your-sendgrid-api-key`);
+        console.error(`      Set: DISTRIBUTION_EMAIL=your-verified-sender-email`);
+        console.error(`      Note: SendGrid SMTP also uses port 587, so upgrade Render first!`);
+        console.error(`\n   3. Use Microsoft Graph API or SendGrid REST API (requires code changes)`);
+        console.error(`\n`);
     }
     
     // Disable connection pooling on cloud platforms by default to avoid connection reuse issues
@@ -713,6 +732,7 @@ const readStatesRoutes = require('./routes/readStatesRoutes');
 const gdprRoutes = require('./routes/gdprRoutes');
 const emailToTicketRoutes = require('./routes/emailToTicketRoutes');
 const assetRoutes = require('./routes/assetRoutes');
+const vendorRoutes = require('./routes/vendorRoutes');
 
 
 app.use('/', authRoutes(db, admin, usersCollection, authenticateToken));
@@ -738,6 +758,9 @@ if (emailToTicketService) {
 
 // Asset Management routes
 app.use('/api/assets', assetRoutes(db, admin, assetsCollection, usersCollection, clientsCollection, authenticateToken, checkRole));
+
+// Vendor Management routes
+app.use('/api/vendors', vendorRoutes(db, admin, vendorsCollection, usersCollection, clientsCollection, authenticateToken, checkRole));
 
 // Add cache statistics endpoint
 app.get('/api/cache/stats', (req, res) => {

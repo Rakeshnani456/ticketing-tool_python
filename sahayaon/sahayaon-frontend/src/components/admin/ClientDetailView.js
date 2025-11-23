@@ -1,74 +1,26 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import {
-  Box,
-  Card,
-  CardContent,
-  Typography,
-  Grid,
-  Button,
-  IconButton,
-  Chip,
-  Avatar,
-  Divider,
-  Paper,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Alert,
-  Snackbar,
-  Breadcrumbs,
-  Link,
-  Tab,
-  Tabs,
-  Tooltip,
-  Badge,
-  LinearProgress,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
-} from '@mui/material';
+import React, { useState, useEffect } from 'react';
 import {
   ArrowBack as ArrowBackIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
   Business as BusinessIcon,
-  LocationOn as LocationIcon,
   Language as WebsiteIcon,
-  Phone as PhoneIcon,
-  Email as EmailIcon,
   Person as PersonIcon,
   AdminPanelSettings as AdminIcon,
   Group as GroupIcon,
   Add as AddIcon,
-  FileDownload as FileDownloadIcon,
-  Refresh as RefreshIcon,
-  MoreVert as MoreVertIcon,
   PersonAdd as PersonAddIcon,
   Assessment as AssessmentIcon,
-  History as HistoryIcon,
-  ContactPhone as ContactPhoneIcon,
-  ContactMail as ContactMailIcon,
-  Badge as BadgeIcon,
-  Work as WorkIcon,
   CheckCircle as CheckCircleIcon,
-  Warning as WarningIcon,
   Error as ErrorIcon,
 } from '@mui/icons-material';
-import { Handshake } from 'lucide-react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { doc, onSnapshot, getFirestore, collection, query, where } from 'firebase/firestore';
 import { app } from '../../config/firebase';
 import { API_BASE_URL } from '../../config/constants';
 import CustomDropdown from '../common/CustomDropdown';
-import { getCountryOptions, getDefaultCountry } from '../../services/countryService';
+import { getCountryOptions } from '../../services/countryService';
+import VendorManagement from './VendorManagement';
 
 const ClientDetailView = ({ user }) => {
   const { clientId } = useParams();
@@ -76,62 +28,22 @@ const ClientDetailView = ({ user }) => {
   const [searchParams] = useSearchParams();
   const db = getFirestore(app);
 
-  // State management
   const [client, setClient] = useState(null);
   const [clientUsers, setClientUsers] = useState([]);
   const [clientAssets, setClientAssets] = useState([]);
+  const [clientVendors, setClientVendors] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [activeTab, setActiveTab] = useState(0);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
-  const [deleteButtonRef, setDeleteButtonRef] = useState(null);
-  const [deleteButtonPosition, setDeleteButtonPosition] = useState({ top: 0, left: 0 });
-  const [popupRef, setPopupRef] = useState(null);
-  
-  // Edit mode state
   const [isEditMode, setIsEditMode] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [editError, setEditError] = useState(null);
   const [formData, setFormData] = useState({});
+  const [activeTab, setActiveTab] = useState(0);
 
-  // Designation is now a text input field, no dropdown options needed
-
-  // Inject styles to completely disable animations
-  useEffect(() => {
-    const style = document.createElement('style');
-    style.textContent = `
-      .client-detail-page * {
-        transition: none !important;
-        transform: none !important;
-        animation: none !important;
-        -webkit-transform: none !important;
-        -moz-transform: none !important;
-        -webkit-transition: none !important;
-        -moz-transition: none !important;
-      }
-      .client-detail-page *:hover,
-      .client-detail-page *:focus,
-      .client-detail-page *:active {
-        transition: none !important;
-        transform: translateY(0px) !important;
-        animation: none !important;
-        -webkit-transform: translateY(0px) !important;
-        -moz-transform: translateY(0px) !important;
-        -webkit-transition: none !important;
-        -moz-transition: none !important;
-      }
-    `;
-    document.head.appendChild(style);
-    
-    return () => {
-      document.head.removeChild(style);
-    };
-  }, []);
-
-  // Check for edit mode from URL parameters
   useEffect(() => {
     const editMode = searchParams.get('edit') === 'true';
     if (editMode && client) {
@@ -140,10 +52,8 @@ const ClientDetailView = ({ user }) => {
     }
   }, [searchParams, client]);
 
-  // Fetch client data
   useEffect(() => {
     if (!clientId) return;
-
     const unsubscribeClient = onSnapshot(
       doc(db, 'clients', clientId),
       (docSnapshot) => {
@@ -157,59 +67,51 @@ const ClientDetailView = ({ user }) => {
       (error) => {
         console.error('Error fetching client:', error);
         setError('Failed to load client data');
-      setLoading(false);
-    }
+        setLoading(false);
+      }
     );
-
     return () => unsubscribeClient();
   }, [clientId, db]);
 
-  // Fetch client assets
   useEffect(() => {
     if (!client?.companyName) return;
-
     const unsubscribeAssets = onSnapshot(
-      query(
-        collection(db, 'assets'),
-        where('client_name', '==', client.companyName)
-      ),
+      query(collection(db, 'assets'), where('client_name', '==', client.companyName)),
       (snapshot) => {
-        const assets = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
+        const assets = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         setClientAssets(assets);
       },
-      (error) => {
-        console.error('Error fetching assets:', error);
-      }
+      (error) => console.error('Error fetching assets:', error)
     );
-
     return () => unsubscribeAssets();
   }, [client?.companyName, db]);
 
-  // Fetch client users
   useEffect(() => {
     if (!client?.companyName) return;
-
     const unsubscribeUsers = onSnapshot(
       query(collection(db, 'users'), where('client_name', '==', client.companyName)),
       (snapshot) => {
-        const users = snapshot.docs.map(doc => ({
-          uid: doc.id,
-          ...doc.data()
-        }));
+        const users = snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() }));
         setClientUsers(users);
       },
-      (error) => {
-        console.error('Error fetching client users:', error);
-      }
+      (error) => console.error('Error fetching client users:', error)
     );
-
     return () => unsubscribeUsers();
   }, [client?.companyName, db]);
 
-  // Handle edit client
+  useEffect(() => {
+    if (!client?.companyName) return;
+    const unsubscribeVendors = onSnapshot(
+      query(collection(db, 'vendors'), where('client_name', '==', client.companyName)),
+      (snapshot) => {
+        const vendors = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setClientVendors(vendors);
+      },
+      (error) => console.error('Error fetching vendors:', error)
+    );
+    return () => unsubscribeVendors();
+  }, [client?.companyName, db]);
+
   const handleEditClient = () => {
     setIsEditMode(true);
     setFormData({ ...client });
@@ -217,7 +119,6 @@ const ClientDetailView = ({ user }) => {
     setShowSuccess(false);
   };
 
-  // Handle cancel edit
   const handleCancelEdit = () => {
     setIsEditMode(false);
     setFormData({});
@@ -225,37 +126,26 @@ const ClientDetailView = ({ user }) => {
     setShowSuccess(false);
   };
 
-  // Handle form field changes
   const handleFieldChange = (field, value) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: value
-    }));
+    setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  // Handle save client
   const handleSaveClient = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
     setEditError(null);
-
     try {
       const response = await fetch(`${API_BASE_URL}/api/clients/${clientId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
       });
-
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error || 'Failed to update client');
       }
-
       setShowSuccess(true);
-      
-      // Update the client state with new data
       setClient(prev => ({ ...prev, ...formData }));
-      
     } catch (error) {
       console.error('Error updating client:', error);
       let errorMessage = error.message || 'Failed to update client. Please try again.';
@@ -268,350 +158,121 @@ const ClientDetailView = ({ user }) => {
     }
   };
 
-  // Handle delete client
-  const handleDeleteClient = async (event) => {
-    if (event) event.stopPropagation();
+  const handleDeleteClient = async () => {
     setDeleting(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/clients/${clientId}`, {
-        method: 'DELETE',
-      });
-
+      const response = await fetch(`${API_BASE_URL}/api/clients/${clientId}`, { method: 'DELETE' });
       if (!response.ok) throw new Error('Failed to delete client');
-
-      setSnackbar({
-        open: true,
-        message: 'Client deleted successfully',
-        severity: 'success'
-      });
-
-      // Navigate back to client list after deletion
-      setTimeout(() => {
-      navigate('/clients');
-      }, 1500);
+      setSnackbar({ open: true, message: 'Client deleted successfully', severity: 'success' });
+      setTimeout(() => navigate('/clients'), 1500);
     } catch (error) {
       console.error('Error deleting client:', error);
-      setSnackbar({
-        open: true,
-        message: 'Failed to delete client',
-        severity: 'error'
-      });
+      setSnackbar({ open: true, message: 'Failed to delete client', severity: 'error' });
     } finally {
       setDeleting(false);
       setShowDeleteDialog(false);
     }
   };
 
-  const handleCancelDelete = (event) => {
-    if (event) event.stopPropagation();
-    setShowDeleteDialog(false);
-  };
-
-  // Close popup when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (showDeleteDialog && popupRef && !popupRef.contains(event.target)) {
-        setShowDeleteDialog(false);
-      }
-    };
-
-    if (showDeleteDialog) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [showDeleteDialog, popupRef]);
-
-  const handleDeleteClick = (event) => {
-    event.stopPropagation();
-    const buttonRect = event.currentTarget.getBoundingClientRect();
-    const viewportHeight = window.innerHeight;
-    const popupHeight = 200; // Approximate popup height
-    
-    // Check if there's enough space below the button
-    const spaceBelow = viewportHeight - buttonRect.bottom;
-    const spaceAbove = buttonRect.top;
-    
-    let top, left;
-    
-    if (spaceBelow >= popupHeight || spaceBelow > spaceAbove) {
-      // Position below the button
-      top = buttonRect.bottom + window.scrollY + 8;
-    } else {
-      // Position above the button
-      top = buttonRect.top + window.scrollY - popupHeight - 8;
-    }
-    
-    left = buttonRect.right - 280 + window.scrollX;
-    
-    setDeleteButtonPosition({ top, left });
-    setShowDeleteDialog(true);
-  };
-
-  // Handle add user
   const handleAddUser = () => {
     navigate(`/user-management/create-user?client=${encodeURIComponent(client.companyName)}`);
   };
 
-  // Handle manage users
   const handleManageUsers = () => {
-    navigate(`/user-management?clientId=${clientId}&clientName=${encodeURIComponent(client.companyName)}`);
+    navigate(`/user-management/client/${encodeURIComponent(client.companyName)}`);
   };
 
-
-   // Users Table Component
-   const UsersTable = () => (
-     <Card sx={{ width: '100%' }}>
-       <CardContent>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          <Typography variant="h6" sx={{ fontWeight: 600 }}>
-            Users ({clientUsers.length})
-          </Typography>
-          <Box sx={{ display: 'flex', gap: 1 }}>
-            <button
-              className="btn btn-soft btn-small"
-              onClick={handleManageUsers}
-            >
-              Manage Users
-            </button>
-            <button
-              className="btn btn-primary btn-small"
-              onClick={handleAddUser}
-            >
-              <PersonAddIcon fontSize="small" />
-              Add User
-            </button>
-          </Box>
-        </Box>
-        
-        {clientUsers.length === 0 ? (
-          <Box sx={{ textAlign: 'center', py: 4 }}>
-            <GroupIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
-            <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
-              No users found for this client
-            </Typography>
-            <button
-              className="btn btn-primary"
-              onClick={handleAddUser}
-            >
-              <PersonAddIcon fontSize="small" />
-              Add First User
-            </button>
-          </Box>
-        ) : (
-          <TableContainer>
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>User</TableCell>
-                  <TableCell>Email</TableCell>
-                  <TableCell>Employee ID</TableCell>
-                  <TableCell>Role</TableCell>
-                  <TableCell>Contact</TableCell>
-                  <TableCell>Status</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {clientUsers.map((clientUser) => (
-                  <TableRow 
-                    key={clientUser.uid} 
-                    hover
-                    sx={{
-                      backgroundColor: user && (user.uid === clientUser.uid || user.email === clientUser.email) 
-                        ? 'rgba(76, 175, 80, 0.08)' 
-                        : 'transparent'
-                    }}
-                  >
-                    <TableCell>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Avatar sx={{ width: 32, height: 32, fontSize: '0.8rem' }}>
-                          {clientUser.firstName?.charAt(0) || clientUser.email?.charAt(0) || 'U'}
-                        </Avatar>
-                        <Box sx={{ flex: 1 }}>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                              {clientUser.firstName} {clientUser.lastName}
-                            </Typography>
-                            {user && (user.uid === clientUser.uid || user.email === clientUser.email) && (
-                              <Chip
-                                label="You"
-                                size="small"
-                                sx={{
-                                  height: '18px',
-                                  fontSize: '10px',
-                                  fontWeight: 600,
-                                  backgroundColor: '#4CAF50',
-                                  color: 'white',
-                                  '& .MuiChip-label': { px: 1 }
-                                }}
-                              />
-                            )}
-                          </Box>
-                          <Typography variant="caption" color="text.secondary">
-                            {clientUser.designation || 'N/A'}
-                          </Typography>
-                        </Box>
-                      </Box>
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="body2">{clientUser.email}</Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="body2">{clientUser.employeeId || 'N/A'}</Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Chip
-                        label={clientUser.role === 'site_admin' ? 'Site Admin' : 'User'}
-                        size="small"
-                        color={clientUser.role === 'site_admin' ? 'primary' : 'default'}
-                        variant={clientUser.role === 'site_admin' ? 'filled' : 'outlined'}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="body2">{clientUser.contactNumber || 'N/A'}</Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Chip
-                        icon={<CheckCircleIcon />}
-                        label="Active"
-                        size="small"
-                        color="success"
-                        variant="outlined"
-                      />
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        )}
-      </CardContent>
-    </Card>
-  );
-
-
-  // Loading state
   if (loading) {
     return (
-      <Box sx={{ p: 3 }}>
-        <LinearProgress />
-        <Typography variant="body2" sx={{ mt: 2, color: 'text.secondary' }}>
-          Loading client details...
-        </Typography>
-      </Box>
+      <div style={{ padding: '2rem' }}>
+        <div style={{ height: '4px', background: '#e5e7eb', borderRadius: '2px', overflow: 'hidden' }}>
+          <div style={{ height: '100%', background: '#3b82f6', width: '30%', animation: 'loading 1.5s ease-in-out infinite' }}></div>
+        </div>
+        <p style={{ marginTop: '1rem', color: '#6b7280', fontSize: '0.875rem' }}>Loading client details...</p>
+      </div>
     );
   }
 
-  // Error state
-  if (error) {
+  if (error || !client) {
     return (
-      <Box sx={{ p: 3 }}>
-        <Alert severity="error" sx={{ mb: 2 }}>
-          {error}
-        </Alert>
-          <button
-          className="btn btn-secondary"
-            onClick={() => navigate('/clients')}
+      <div style={{ padding: '2rem' }}>
+        <div style={{ 
+          padding: '1rem', 
+          background: '#fef2f2', 
+          border: '1px solid #fecaca', 
+          borderRadius: '0.5rem', 
+          color: '#dc2626',
+          marginBottom: '1rem'
+        }}>
+          {error || 'Client not found'}
+        </div>
+        <button 
+          onClick={() => navigate('/clients')} 
+          style={{ 
+            display: 'inline-flex', 
+            alignItems: 'center', 
+            gap: '0.5rem', 
+            padding: '0.5rem 1rem',
+            border: '1px solid #d1d5db',
+            borderRadius: '0.375rem',
+            background: 'white',
+            cursor: 'pointer',
+            fontSize: '0.875rem'
+          }}
         >
           <ArrowBackIcon fontSize="small" />
           Back to Client Management
-          </button>
-      </Box>
+        </button>
+      </div>
     );
   }
-
-  if (!client) {
-    return (
-      <Box sx={{ p: 3 }}>
-        <Alert severity="warning">
-          Client not found
-        </Alert>
-      </Box>
-    );
-  }
-
-  const authPersonData = [
-    { icon: <BadgeIcon fontSize="small" />, label: 'Name', value: `${client.authFirstName || ''} ${client.authLastName || ''}`.trim() },
-    { icon: <WorkIcon fontSize="small" />, label: 'Designation', value: client.authDesignation },
-    { icon: <ContactMailIcon fontSize="small" />, label: 'Office Email', value: client.authOfficeEmail, isEmail: true },
-    { icon: <ContactMailIcon fontSize="small" />, label: 'Personal Email', value: client.authPersonalEmail, isEmail: true },
-    { icon: <ContactPhoneIcon fontSize="small" />, label: 'Contact', value: client.authContactNumber, isPhone: true },
-  ];
-
-  const siteAdminData = [
-    { icon: <BadgeIcon fontSize="small" />, label: 'Name', value: `${client.siteFirstName || ''} ${client.siteLastName || ''}`.trim() },
-    { icon: <WorkIcon fontSize="small" />, label: 'Designation', value: client.siteDesignation },
-    { icon: <ContactMailIcon fontSize="small" />, label: 'Email', value: client.siteEmail, isEmail: true },
-    { icon: <ContactPhoneIcon fontSize="small" />, label: 'Contact', value: client.siteContactNumber, isPhone: true },
-  ];
 
   return (
-    <Box 
-      className="client-detail-page"
-      sx={{ 
-        p: { xs: 1, sm: 2, md: 3 }, 
-        bgcolor: '#f8fafc', 
-      minHeight: '100vh',
-        '& *': { 
-          transition: 'none !important',
-          transform: 'none !important',
-          animation: 'none !important',
-          WebkitTransform: 'none !important',
-          MozTransform: 'none !important'
-        },
-        '&:hover *': {
-          transition: 'none !important',
-          transform: 'none !important',
-          animation: 'none !important',
-          WebkitTransform: 'none !important',
-          MozTransform: 'none !important'
-        },
-        '& .MuiCard-root': {
-          transform: 'none !important',
-          transition: 'none !important'
-        },
-        '& .MuiCard-root:hover': {
-          transform: 'translateY(0px) !important',
-          transition: 'none !important',
-          WebkitTransform: 'translateY(0px) !important'
-        }
-      }}
-    >
+    <div style={{ padding: '1rem', background: '#f9fafb', minHeight: '100vh' }}>
       <style>{`
+        @keyframes loading {
+          0% { transform: translateX(-100%); }
+          100% { transform: translateX(400%); }
+        }
+        
+        .page-header {
+          background: white;
+          padding: 1rem 1.5rem;
+          margin: -1rem -1rem 1.5rem -1rem;
+          border-bottom: 1px solid #e5e7eb;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+        
+        .page-title {
+          font-size: 1.25rem;
+          font-weight: 600;
+          color: #374151;
+          margin: 0;
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+        }
+        
         .btn {
-          padding: 0.625rem 1.25rem;
+          padding: 0.375rem 0.75rem;
           border-radius: 0.375rem;
-          font-size: 0.75rem;
+          font-size: 0.8125rem;
           font-weight: 500;
           cursor: pointer;
           display: inline-flex;
           align-items: center;
           gap: 0.375rem;
-          text-decoration: none;
-          border: none;
-          transition: all 0.2s;
-        }
-        
-        .btn-secondary {
+          border: 1px solid #d1d5db;
           background: white;
           color: #374151;
-          border: 1px solid #d1d5db;
+          transition: all 0.2s;
+          height: auto;
+          line-height: 1.4;
         }
         
-        .btn-soft {
-          background: #f3f4f6;
-          color: #1f2937;
-          border: 1px solid #e5e7eb;
-        }
-        
-        .btn-soft:hover {
-          background: #e5e7eb;
-          border-color: #d1d5db;
-        }
-        
-        .btn-secondary:hover {
+        .btn:hover {
           background: #f9fafb;
           border-color: #9ca3af;
         }
@@ -619,21 +280,23 @@ const ClientDetailView = ({ user }) => {
         .btn-primary {
           background: #3b82f6;
           color: white;
+          border-color: #3b82f6;
         }
         
         .btn-primary:hover {
           background: #2563eb;
+          border-color: #2563eb;
         }
         
         .btn-danger {
-          background: #dc2626;
+          background: #ef4444;
           color: white;
-          border: 1px solid #dc2626;
+          border-color: #ef4444;
         }
         
         .btn-danger:hover {
-          background: #b91c1c;
-          border-color: #b91c1c;
+          background: #dc2626;
+          border-color: #dc2626;
         }
         
         .btn:disabled {
@@ -641,181 +304,124 @@ const ClientDetailView = ({ user }) => {
           cursor: not-allowed;
         }
         
-        .btn-small {
-          padding: 0.25rem 0.625rem;
-          font-size: 0.7rem;
+        .stat-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+          gap: 1rem;
+          margin-bottom: 1.5rem;
         }
         
-        .form-actions {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          gap: 0.75rem;
-          padding: 0.75rem;
-          background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
-          border-top: 1px solid #0ea5e9;
-        }
-        
-        .form-actions-left {
-          flex: 1;
-        }
-        
-        .form-actions-right {
-          display: flex;
-          gap: 0.5rem;
-        }
-        
-        /* Info Tags */
-        .tag-container {
-          display: flex;
-          align-items: center;
-          min-height: 2.5rem;
-        }
-        
-        .info-tag {
-          display: inline-flex;
-          align-items: center;
-          gap: 0.5rem;
-          padding: 0.5rem 0.75rem;
-          border-radius: 0.375rem;
-          font-size: 0.875rem;
-          font-weight: 500;
-          text-decoration: none;
-          transition: all 0.2s ease;
-          border: 1px solid;
-        }
-        
-        .info-tag.location-tag {
-          background: #f0f9ff;
-          color: #0369a1;
-          border-color: #bae6fd;
-        }
-        
-        .info-tag.website-tag {
-          background: #eff6ff;
-          color: #1d4ed8;
-          border-color: #bfdbfe;
-          font-size: 0.75rem;
-          padding: 0.375rem 0.5rem;
-        }
-        
-        .info-tag.website-tag:hover {
-          background: #dbeafe;
-          color: #1e40af;
-        }
-        
-        .info-tag.users-tag {
-          background: #fef3c7;
-          color: #92400e;
-          border-color: #fde68a;
-        }
-        
-        .info-tag.no-data {
-          background: #fef3c7;
-          color: #92400e;
-          border-color: #fde68a;
-          font-style: italic;
-        }
-        
-        .tag-icon {
-          width: 1rem;
-          height: 1rem;
-          flex-shrink: 0;
-        }
-        
-        /* Tab styling for user count */
-        .MuiTab-root {
-          position: relative;
-        }
-        
-        .MuiTab-root[aria-selected="true"] {
-          color: #3b82f6 !important;
-        }
-        
-        /* Reduce form input sizes */
-        .form-input {
-          padding: 0.5rem;
-          height: 2.25rem;
-          font-size: 0.8rem;
-        }
-        
-        .form-label {
-          font-size: 0.7rem;
-          margin-bottom: 0.25rem;
-        }
-        
-        .form-grid {
-          gap: 0.5rem;
-        }
-        
-        .form-group {
-          margin-bottom: 0.5rem;
-        }
-        
-        .profile-section {
+        .stat-item {
           background: white;
+          border: 1px solid #e5e7eb;
           border-radius: 0.5rem;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+          padding: 1rem;
+          text-align: center;
+        }
+        
+        .stat-value {
+          font-size: 1.75rem;
+          font-weight: 700;
+          color: #111827;
+          margin: 0.5rem 0;
+        }
+        
+        .stat-label {
+          font-size: 0.75rem;
+          color: #6b7280;
+          font-weight: 500;
+        }
+        
+        .tabs-container {
+          background: white;
+          border: 1px solid #e5e7eb;
+          border-radius: 0.5rem;
           margin-bottom: 1rem;
           overflow: hidden;
-          border: 1px solid #e5e7eb;
         }
         
-        .profile-header {
-          background: #f8fafc;
+        .tabs-header {
+          display: flex;
+          border-bottom: 1px solid #e5e7eb;
+          background: #f9fafb;
+        }
+        
+        .tab-button {
           padding: 0.75rem 1.25rem;
+          border: none;
+          background: transparent;
+          cursor: pointer;
+          font-size: 0.8125rem;
+          font-weight: 500;
+          color: #6b7280;
+          border-bottom: 2px solid transparent;
+          transition: all 0.2s;
+        }
+        
+        .tab-button:hover {
+          color: #374151;
+          background: #f3f4f6;
+        }
+        
+        .tab-button.active {
+          color: #3b82f6;
+          border-bottom-color: #3b82f6;
+          background: white;
+        }
+        
+        .tab-content {
+          padding: 1.5rem;
+        }
+        
+        .info-card {
+          background: white;
+          border: 1px solid #e5e7eb;
+          border-radius: 0.5rem;
+          padding: 1.25rem;
+          margin-bottom: 1rem;
+        }
+        
+        .section-title {
+          font-size: 0.875rem;
+          font-weight: 600;
+          color: #374151;
+          margin: 0 0 1rem 0;
+          padding-bottom: 0.75rem;
           border-bottom: 1px solid #e5e7eb;
           display: flex;
           align-items: center;
           gap: 0.5rem;
         }
         
-        .profile-header h3 {
-          font-size: 0.875rem;
+        .section-title.edit-mode {
           font-weight: 600;
-          color: #374151;
-          margin: 0;
+          color: #1e40af;
+          font-size: 0.9375rem;
+          border-bottom-color: #e5e7eb;
         }
         
-        .profile-content {
-          padding: 1rem;
-        }
-        
-        .info-item {
-          display: flex;
-          align-items: center;
-          gap: 0.75rem;
-          padding: 0.5rem 0;
+        .info-row {
+          display: grid;
+          grid-template-columns: 140px 1fr;
+          gap: 1rem;
+          padding: 0.75rem 0;
           border-bottom: 1px solid #f3f4f6;
         }
         
-        .info-item:last-child {
+        .info-row:last-child {
           border-bottom: none;
-        }
-        
-        .info-icon {
-          width: 1.5rem;
-          height: 1.5rem;
-          color: #6b7280;
-          flex-shrink: 0;
-        }
-        
-        .info-content {
-          flex: 1;
-          min-width: 0;
         }
         
         .info-label {
           font-size: 0.75rem;
-          font-weight: 500;
           color: #6b7280;
-          margin-bottom: 0.25rem;
+          font-weight: 500;
         }
         
         .info-value {
           font-size: 0.875rem;
-          color: #374151;
-          word-break: break-word;
+          color: #111827;
+          font-weight: 400;
         }
         
         .info-value a {
@@ -827,878 +433,875 @@ const ClientDetailView = ({ user }) => {
           text-decoration: underline;
         }
         
-        .client-detail-layout {
-          width: 100%;
-          max-width: none;
-          padding: 0;
-        }
-        
-        .form-section {
-          background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-          border-radius: 0;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-          margin-bottom: 0.75rem;
-          overflow: hidden;
-          border: 1px solid #e2e8f0;
-        }
-        
-        .section-header {
-          background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
-          padding: 0.5rem 0.75rem;
-          border-bottom: 1px solid #9ca3af;
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-        }
-        
-        .section-icon {
-          width: 1.25rem;
-          height: 1.25rem;
-          color: #ffffff;
-        }
-        
-        .section-header h3 {
-          font-size: 0.8rem;
-          font-weight: 500;
-          color: #ffffff;
-          margin: 0;
-        }
-        
-        .section-content {
-          padding: 0.75rem;
-        }
-        
-        .form-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-          gap: 0.75rem;
-        }
-        
         .form-group {
-          display: flex;
-          flex-direction: column;
+          margin-bottom: 1rem;
         }
         
         .form-label {
+          display: block;
           font-size: 0.75rem;
           font-weight: 500;
           color: #374151;
           margin-bottom: 0.375rem;
         }
         
+        .form-label.edit-mode {
+          font-weight: 500;
+          color: #1e40af;
+          font-size: 0.8125rem;
+        }
+        
         .form-input {
+          width: 100%;
           padding: 0.625rem;
           border: 1px solid #d1d5db;
           border-radius: 0.375rem;
           font-size: 0.875rem;
-          background: #ffffff;
-          transition: all 0.2s ease;
-          width: 100%;
-          height: 2.5rem;
+          background: white;
           box-sizing: border-box;
-          min-height: 2.5rem;
+          color: #111827;
+          font-weight: 400;
         }
         
-        .form-input:focus {
-          outline: none;
-          border-color: #6b7280;
-          box-shadow: 0 0 0 3px rgba(107, 114, 128, 0.1);
-          background: #ffffff;
-        }
-        
-        .form-input:hover {
-          border-color: #9ca3af;
-        }
-        
-        .form-input.display-only {
-          background-color: #f9fafb;
-          color: #374151;
-          border-color: #e5e7eb;
-          cursor: default;
-          display: flex;
-          align-items: center;
-          height: 2.5rem;
-          min-height: 2.5rem;
-        }
-        
-        .form-input.display-only a {
-          color: #3b82f6;
-          text-decoration: none;
+        .form-input.edit-mode {
           font-weight: 500;
-        }
-        
-        .form-input.display-only a:hover {
-          text-decoration: underline;
-        }
-        
-        .delete-bubble {
-          position: fixed;
+          color: #1e293b;
+          border-color: #d1d5db;
           background: white;
-          border: 1px solid #e5e7eb;
-          border-radius: 0.5rem;
-          box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
-          padding: 1rem;
-          z-index: 10000;
-          min-width: 280px;
-          max-width: 320px;
         }
         
-        .delete-bubble::before {
-          content: '';
-          position: absolute;
-          top: -8px;
-          right: 20px;
-          width: 0;
-          height: 0;
-          border-left: 8px solid transparent;
-          border-right: 8px solid transparent;
-          border-bottom: 8px solid #e5e7eb;
-        }
-        
-        .delete-bubble::after {
-          content: '';
-          position: absolute;
-          top: -7px;
-          right: 21px;
-          width: 0;
-          height: 0;
-          border-left: 7px solid transparent;
-          border-right: 7px solid transparent;
-          border-bottom: 7px solid white;
-        }
-        
-        .delete-bubble h4 {
-          margin: 0 0 0.5rem 0;
-          font-size: 0.875rem;
+        .form-input.edit-mode:focus {
+          outline: none;
+          border-color: #9ca3af;
+          box-shadow: 0 0 0 3px rgba(156, 163, 175, 0.1);
+          background: white;
           font-weight: 600;
-          color: #1f2937;
+          color: #0f172a;
         }
         
-        .delete-bubble p {
-          margin: 0 0 1rem 0;
-          font-size: 0.8rem;
-          color: #6b7280;
-          line-height: 1.4;
+        .form-grid {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 1rem;
         }
         
-        .delete-bubble-actions {
-          display: flex;
-          gap: 0.5rem;
-          justify-content: flex-end;
+        .form-grid-full {
+          grid-column: 1 / -1;
         }
         
-        .btn-bubble-cancel {
-          padding: 0.375rem 0.75rem;
-          border: 1px solid #d1d5db;
-          background: white;
-          border-radius: 0.375rem;
-          cursor: pointer;
-          font-size: 0.75rem;
-          color: #374151;
+        .form-grid-2x2 {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 1rem;
         }
         
-        .btn-bubble-cancel:hover {
-          background-color: #f9fafb;
+        .form-grid-2x2 .form-group-full {
+          grid-column: 1 / -1;
         }
         
-        .btn-bubble-delete {
-          padding: 0.375rem 0.75rem;
-          border: 1px solid #dc2626;
-          background: #dc2626;
-          border-radius: 0.375rem;
-          cursor: pointer;
-          font-size: 0.75rem;
-          color: white;
-        }
-        
-        .btn-bubble-delete:hover {
-          background: #b91c1c;
-          border-color: #b91c1c;
-        }
-        
-        .btn-bubble-delete:disabled {
-          opacity: 0.5;
-          cursor: not-allowed;
+        .two-column-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 1rem;
         }
         
         @media (max-width: 768px) {
+          .two-column-grid {
+            grid-template-columns: 1fr;
+          }
+          
           .form-grid {
             grid-template-columns: 1fr;
-            gap: 0.75rem;
-          }
-          
-          .section-content {
-            padding: 0.75rem;
-          }
-          
-          .delete-bubble {
-            right: -50px;
-            min-width: 250px;
           }
         }
+        
+        .table-container {
+          background: white;
+          border: 1px solid #e5e7eb;
+          border-radius: 0.5rem;
+          overflow: hidden;
+        }
+        
+        .table-container table {
+          width: 100%;
+          border-collapse: collapse;
+        }
+        
+        .table-container thead {
+          background: #f9fafb;
+        }
+        
+        .table-container th {
+          font-size: 0.75rem;
+          font-weight: 600;
+          color: #374151;
+          padding: 0.75rem;
+          text-align: left;
+          border-bottom: 1px solid #e5e7eb;
+        }
+        
+        .table-container td {
+          padding: 0.75rem;
+          font-size: 0.875rem;
+          color: #111827;
+          border-bottom: 1px solid #f3f4f6;
+        }
+        
+        .table-container tbody tr:hover {
+          background: #f9fafb;
+        }
+        
+        .table-container tbody tr:last-child td {
+          border-bottom: none;
+        }
+        
+        .chip {
+          display: inline-flex;
+          align-items: center;
+          padding: 0.25rem 0.625rem;
+          border-radius: 0.375rem;
+          font-size: 0.75rem;
+          font-weight: 500;
+          border: 1px solid;
+        }
+        
+        .chip-success {
+          background: #f0fdf4;
+          color: #16a34a;
+          border-color: #bbf7d0;
+        }
+        
+        .chip-error {
+          background: #fef2f2;
+          color: #dc2626;
+          border-color: #fecaca;
+        }
+        
+        .chip-primary {
+          background: #eff6ff;
+          color: #2563eb;
+          border-color: #bfdbfe;
+        }
+        
+        .chip-default {
+          background: #f9fafb;
+          color: #374151;
+          border-color: #e5e7eb;
+        }
+        
+        .avatar {
+          width: 32px;
+          height: 32px;
+          border-radius: 50%;
+          background: #3b82f6;
+          color: white;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 0.875rem;
+          font-weight: 600;
+        }
+        
+        .alert {
+          padding: 1rem;
+          border-radius: 0.5rem;
+          margin-bottom: 1rem;
+        }
+        
+        .alert-success {
+          background: #f0fdf4;
+          border: 1px solid #bbf7d0;
+          color: #16a34a;
+        }
+        
+        .alert-error {
+          background: #fef2f2;
+          border: 1px solid #fecaca;
+          color: #dc2626;
+        }
+        
+        .modal-overlay {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: rgba(0, 0, 0, 0.5);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 1300;
+        }
+        
+        .modal-content {
+          background: white;
+          border-radius: 0.5rem;
+          padding: 1.5rem;
+          max-width: 400px;
+          width: 90%;
+          box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+        }
+        
+        .snackbar {
+          position: fixed;
+          bottom: 1rem;
+          right: 1rem;
+          padding: 1rem 1.5rem;
+          border-radius: 0.5rem;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+          z-index: 1400;
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+          min-width: 300px;
+        }
+        
+        .snackbar-success {
+          background: #10b981;
+          color: white;
+        }
+        
+        .snackbar-error {
+          background: #ef4444;
+          color: white;
+        }
       `}</style>
+
       {/* Header */}
-      <Box sx={{ mb: 2 }}>
-        {/* Breadcrumbs */}
-        <Breadcrumbs sx={{ mb: 1 }}>
-          <Link
-            component="button"
-            variant="body2"
-            onClick={() => navigate('/clients')}
-            sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}
-          >
-            <Handshake size={16} />
-            Client Management
-          </Link>
-          <Typography variant="body2" color="text.primary">
+      <div className="page-header">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <button onClick={() => navigate('/clients')} className="btn">
+            <ArrowBackIcon fontSize="small" />
+            Back
+          </button>
+          <h1 className="page-title">
+            <BusinessIcon style={{ fontSize: '1.5rem', color: '#6b7280' }} />
             {client.companyName}
-          </Typography>
-        </Breadcrumbs>
-
-        {/* Title and Actions */}
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <button
-              className="btn btn-secondary btn-small"
-              onClick={() => navigate('/clients')}
-            >
-              <ArrowBackIcon fontSize="small" />
-              Back to Clients
-            </button>
-            <Box>
-              <Typography variant="h6" sx={{ fontWeight: 500, color: '#1e293b', mb: 0.25, fontSize: '1.1rem' }}>
-                {client.companyName}
-              </Typography>
-            </Box>
-          </Box>
-          
-          {/* Action Buttons */}
-          {['admin', 'site_admin', 'super_admin'].includes(user?.role) && (
-            <Box sx={{ display: 'flex', gap: 1 }}>
-              {isEditMode && !showSuccess ? (
-                <>
-                <button
-                    className="btn btn-secondary btn-small"
-                    onClick={handleCancelEdit}
-                    disabled={isSubmitting}
-                  >
-                    Cancel
+          </h1>
+          <span className={`chip ${(client.status || 'active') === 'active' ? 'chip-success' : 'chip-error'}`}>
+            {(client.status || 'active') === 'active' ? (
+              <>
+                <CheckCircleIcon style={{ fontSize: '0.875rem', marginRight: '0.25rem' }} />
+                Active
+              </>
+            ) : (
+              <>
+                <ErrorIcon style={{ fontSize: '0.875rem', marginRight: '0.25rem' }} />
+                Inactive
+              </>
+            )}
+          </span>
+        </div>
+        {['admin', 'site_admin', 'super_admin'].includes(user?.role) && (
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            {isEditMode ? (
+              <>
+                <button className="btn" onClick={handleCancelEdit} disabled={isSubmitting}>Cancel</button>
+                <button className="btn btn-primary" onClick={handleSaveClient} disabled={isSubmitting}>
+                  {isSubmitting ? 'Saving...' : 'Save'}
                 </button>
-                <button
-                    className="btn btn-primary btn-small"
-                    onClick={handleSaveClient}
-                    disabled={isSubmitting}
-                  >
-                    {isSubmitting ? 'Updating...' : 'Update Client'}
+              </>
+            ) : (
+              <>
+                <button className="btn" onClick={handleEditClient}>
+                  <EditIcon fontSize="small" />
+                  Edit
                 </button>
-                </>
-              ) : !isEditMode ? (
-                <>
-                <button
-                    className="btn btn-secondary btn-small"
-                    onClick={handleEditClient}
-                  >
-                    <EditIcon fontSize="small" />
-                    Edit
+                <button className="btn btn-danger" onClick={() => setShowDeleteDialog(true)}>
+                  <DeleteIcon fontSize="small" />
+                  Delete
                 </button>
-                  <button
-                    className="btn btn-danger btn-small"
-                    onClick={handleDeleteClick}
-                    ref={setDeleteButtonRef}
-                  >
-                    <DeleteIcon fontSize="small" />
-                    Delete
-                  </button>
-                </>
-              ) : null}
-            </Box>
-          )}
-        </Box>
-      </Box>
-
-      {/* Main Content */}
-      <Box sx={{ mb: 2 }}>
-         {/* Success Message */}
-         {isEditMode && showSuccess && (
-        <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-             justifyContent: 'space-between',
-             gap: '0.5rem', 
-             padding: '0.5rem 0.75rem', 
-             backgroundColor: 'white', 
-             border: '1px solid #10b981', 
-             borderRadius: '0.375rem', 
-             marginBottom: '1rem',
-             color: '#065f46',
-             fontSize: '0.8rem',
-             fontWeight: '500',
-             height: '2.5rem'
-           }}>
-             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-               <svg style={{ width: '1rem', height: '1rem', color: '#10b981' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                 <path d="M9 12l2 2 4-4"/>
-                 <circle cx="12" cy="12" r="10"/>
-               </svg>
-               <span>Client updated successfully!</span>
-                </div>
-              <button
-               type="button"
-               onClick={() => navigate('/clients')}
-                style={{
-                 backgroundColor: '#10b981', 
-                 color: 'white', 
-                  border: 'none',
-                 padding: '0.25rem 0.5rem',
-                 borderRadius: '0.25rem',
-                 fontSize: '0.7rem',
-                  fontWeight: '500',
-                 cursor: 'pointer',
-                 height: '1.75rem'
-                }}
-              >
-               Go Back to Clients
-              </button>
-          </div>
-         )}
-
-         <Tabs value={activeTab} onChange={(e, newValue) => setActiveTab(newValue)} sx={{ mb: 1, minHeight: '32px', '& .MuiTab-root': { minHeight: '32px', padding: '6px 8px', fontSize: '0.75rem', fontWeight: '500', marginRight: '4px' }, '& .MuiTabs-indicator': { height: '2px' } }}>
-           <Tab label="Overview" />
-           <Tab label={`Users (${clientUsers.length})`} />
-           <Tab label={`Assets (${clientAssets.length})`} />
-         </Tabs>
-
-        {/* Tab Content */}
-         {activeTab === 0 && (
-           <div className="client-detail-layout">
-             {/* Company Information Section */}
-             <div className="form-section">
-               <div className="section-header">
-                 <Handshake className="section-icon" />
-                 <h3>Company Information</h3>
-               </div>
-               <div className="section-content">
-                 <div className="form-grid">
-                   <div className="form-group">
-                     <label className="form-label">Company Name</label>
-                     {isEditMode ? (
-                    <input
-                      type="text"
-                         className="form-input"
-                         value={formData.companyName || ''}
-                         onChange={(e) => handleFieldChange('companyName', e.target.value)}
-                         disabled={showSuccess}
-                    />
-                  ) : (
-                       <div className="form-input display-only">{client.companyName}</div>
-                  )}
-                </div>
-                   <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-                     <label className="form-label">Address</label>
-                     {isEditMode ? (
-                       <textarea
-                         className="form-input"
-                         value={formData.location || ''}
-                         onChange={(e) => handleFieldChange('location', e.target.value)}
-                         disabled={showSuccess}
-                         rows={3}
-                         placeholder="Enter full address"
-                         style={{ height: '4.5rem', minHeight: '4.5rem' }}
-                       />
-                     ) : (
-                       <div className="form-input display-only" style={{ height: '4.5rem', minHeight: '4.5rem', whiteSpace: 'pre-wrap' }}>
-                         {client.location || 'No address provided'}
-                    </div>
-                  )}
-                </div>
-                   <div className="form-group">
-                     <label className="form-label">Website</label>
-                     {isEditMode ? (
-                    <input
-                         type="url"
-                         className="form-input"
-                         value={formData.website || ''}
-                         onChange={(e) => handleFieldChange('website', e.target.value)}
-                         disabled={showSuccess}
-                    />
-                  ) : (
-                       <div className="tag-container">
-                         {client.website ? (
-                           <a href={client.website} target="_blank" rel="noopener noreferrer" className="info-tag website-tag">
-                             <WebsiteIcon className="tag-icon" />
-                             {client.website}
-                           </a>
-                         ) : (
-                           <span className="info-tag no-data">No website set</span>
-                         )}
-                    </div>
-                  )}
-                </div>
-                   <div className="form-group">
-                     <label className="form-label">Contact Number</label>
-                     {isEditMode ? (
-                       <input
-                         type="tel"
-                         className="form-input"
-                         value={formData.clientContactNumber || ''}
-                         onChange={(e) => handleFieldChange('clientContactNumber', e.target.value)}
-                         disabled={showSuccess}
-                       />
-                     ) : (
-                       <div className="form-input display-only">
-                         {client.clientContactNumber ? (
-                           <a href={`tel:${client.clientContactNumber}`}>
-                             {client.clientContactNumber}
-                           </a>
-                         ) : (
-                           'N/A'
-                         )}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-                </div>
-
-
-             {/* Authorized Person Section */}
-             <div className="form-section">
-               <div className="section-header">
-                 <PersonIcon className="section-icon" />
-                 <h3>Authorized Person</h3>
-               </div>
-               <div className="section-content">
-                 <div className="form-grid">
-                   <div className="form-group">
-                     <label className="form-label">First Name</label>
-                     {isEditMode ? (
-                    <input
-                      type="text"
-                         className="form-input"
-                         value={formData.authFirstName || ''}
-                         onChange={(e) => handleFieldChange('authFirstName', e.target.value)}
-                         disabled={showSuccess}
-                    />
-                  ) : (
-                       <div className="form-input display-only">{client.authFirstName || 'N/A'}</div>
-                  )}
-                </div>
-                   <div className="form-group">
-                     <label className="form-label">Last Name</label>
-                     {isEditMode ? (
-                    <input
-                         type="text"
-                         className="form-input"
-                         value={formData.authLastName || ''}
-                         onChange={(e) => handleFieldChange('authLastName', e.target.value)}
-                         disabled={showSuccess}
-                    />
-                  ) : (
-                       <div className="form-input display-only">{client.authLastName || 'N/A'}</div>
-                  )}
-                </div>
-                   <div className="form-group">
-                     <label className="form-label">Designation</label>
-                     {isEditMode ? (
-                       <input
-                         type="text"
-                         className="form-input"
-                         value={formData.authDesignation || ''}
-                         onChange={(e) => handleFieldChange('authDesignation', e.target.value)}
-                         placeholder="Enter designation"
-                         disabled={showSuccess}
-                       />
-                  ) : (
-                       <div className="form-input display-only">{client.authDesignation || 'N/A'}</div>
-                  )}
-                </div>
-                   <div className="form-group">
-                     <label className="form-label">Office Email</label>
-                     {isEditMode ? (
-                    <input
-                         type="email"
-                         className="form-input"
-                         value={formData.authOfficeEmail || ''}
-                         onChange={(e) => handleFieldChange('authOfficeEmail', e.target.value)}
-                         disabled={showSuccess}
-                    />
-                  ) : (
-                       <div className="form-input display-only">
-                         {client.authOfficeEmail ? (
-                           <a href={`mailto:${client.authOfficeEmail}`}>
-                             {client.authOfficeEmail}
-                           </a>
-                         ) : (
-                           'N/A'
-                         )}
-                    </div>
-                  )}
-                </div>
-                   <div className="form-group">
-                     <label className="form-label">Personal Email</label>
-                     {isEditMode ? (
-                    <input
-                      type="email"
-                         className="form-input"
-                         value={formData.authPersonalEmail || ''}
-                         onChange={(e) => handleFieldChange('authPersonalEmail', e.target.value)}
-                         disabled={showSuccess}
-                    />
-                  ) : (
-                       <div className="form-input display-only">
-                         {client.authPersonalEmail ? (
-                           <a href={`mailto:${client.authPersonalEmail}`}>
-                             {client.authPersonalEmail}
-                           </a>
-                         ) : (
-                           'N/A'
-                         )}
-                    </div>
-                  )}
-                </div>
-                   <div className="form-group">
-                     <label className="form-label">Country Code</label>
-                     {isEditMode ? (
-                       <CustomDropdown
-                         value={formData.authContactCountryCode || ''}
-                         onChange={(value) => handleFieldChange('authContactCountryCode', value)}
-                         options={getCountryOptions()}
-                         placeholder="Select country code"
-                         size="sm"
-                         disabled={showSuccess}
-                       />
-                     ) : (
-                       <div className="form-input display-only">{client.authContactCountryCode || 'N/A'}</div>
-                     )}
-                   </div>
-                   <div className="form-group">
-                     <label className="form-label">Contact Number</label>
-                     {isEditMode ? (
-                    <input
-                      type="tel"
-                         className="form-input"
-                         value={formData.authContactNumber || ''}
-                         onChange={(e) => handleFieldChange('authContactNumber', e.target.value)}
-                         disabled={showSuccess}
-                    />
-                  ) : (
-                       <div className="form-input display-only">
-                         {client.authContactNumber ? (
-                           <a href={`tel:${client.authContactNumber}`}>
-                             {client.authContactNumber}
-                           </a>
-                         ) : (
-                           'N/A'
-                         )}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-
-             {/* Site Administrator Section */}
-             <div className="form-section">
-               <div className="section-header">
-                 <AdminIcon className="section-icon" />
-                 <h3>Site Administrator</h3>
-               </div>
-               <div className="section-content">
-                 <div className="form-grid">
-                   <div className="form-group">
-                     <label className="form-label">First Name</label>
-                     {isEditMode ? (
-                  <input
-                    type="text"
-                         className="form-input"
-                         value={formData.siteFirstName || ''}
-                         onChange={(e) => handleFieldChange('siteFirstName', e.target.value)}
-                         disabled={showSuccess}
-                  />
-                ) : (
-                       <div className="form-input display-only">{client.siteFirstName || 'N/A'}</div>
-                )}
-              </div>
-                   <div className="form-group">
-                     <label className="form-label">Last Name</label>
-                     {isEditMode ? (
-                  <input
-                    type="text"
-                         className="form-input"
-                         value={formData.siteLastName || ''}
-                         onChange={(e) => handleFieldChange('siteLastName', e.target.value)}
-                         disabled={showSuccess}
-                  />
-                ) : (
-                       <div className="form-input display-only">{client.siteLastName || 'N/A'}</div>
-                )}
-              </div>
-                   <div className="form-group">
-                     <label className="form-label">Designation</label>
-                     {isEditMode ? (
-                       <input
-                         type="text"
-                         className="form-input"
-                         value={formData.siteDesignation || ''}
-                         onChange={(e) => handleFieldChange('siteDesignation', e.target.value)}
-                         placeholder="Enter designation"
-                         disabled={showSuccess}
-                       />
-                ) : (
-                       <div className="form-input display-only">{client.siteDesignation || 'N/A'}</div>
-                )}
-              </div>
-                   <div className="form-group">
-                     <label className="form-label">Email</label>
-                     {isEditMode ? (
-                  <input
-                         type="email"
-                         className="form-input"
-                         value={formData.siteEmail || ''}
-                         onChange={(e) => handleFieldChange('siteEmail', e.target.value)}
-                         disabled={showSuccess}
-                  />
-                ) : (
-                       <div className="form-input display-only">
-                         {client.siteEmail ? (
-                           <a href={`mailto:${client.siteEmail}`}>
-                             {client.siteEmail}
-                           </a>
-                         ) : (
-                           'N/A'
-                         )}
-                  </div>
-                )}
-              </div>
-                   <div className="form-group">
-                     <label className="form-label">Country Code</label>
-                     {isEditMode ? (
-                       <CustomDropdown
-                         value={formData.siteContactCountryCode || ''}
-                         onChange={(value) => handleFieldChange('siteContactCountryCode', value)}
-                         options={getCountryOptions()}
-                         placeholder="Select country code"
-                         size="sm"
-                         disabled={showSuccess}
-                  />
-                ) : (
-                       <div className="form-input display-only">{client.siteContactCountryCode || 'N/A'}</div>
-                )}
-              </div>
-                   <div className="form-group">
-                     <label className="form-label">Contact Number</label>
-                     {isEditMode ? (
-                  <input
-                         type="tel"
-                         className="form-input"
-                         value={formData.siteContactNumber || ''}
-                         onChange={(e) => handleFieldChange('siteContactNumber', e.target.value)}
-                         disabled={showSuccess}
-                  />
-                ) : (
-                       <div className="form-input display-only">
-                         {client.siteContactNumber ? (
-                           <a href={`tel:${client.siteContactNumber}`}>
-                             {client.siteContactNumber}
-                           </a>
-                         ) : (
-                           'N/A'
-                         )}
-          </div>
-        )}
-                  </div>
-                  </div>
-                </div>
-                  </div>
-
-             {/* Error Messages */}
-             {isEditMode && editError && (
-               <div className="form-section">
-                 <div className="section-content">
-                   <div className="inline-error-message">
-                     <svg className="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                       <circle cx="12" cy="12" r="10"/>
-                       <line x1="15" y1="9" x2="9" y2="15"/>
-                       <line x1="9" y1="9" x2="15" y2="15"/>
-                     </svg>
-                     {editError}
-              </div>
-            </div>
+              </>
+            )}
           </div>
         )}
       </div>
-         )}
 
-         {activeTab === 1 && <UsersTable />}
+      <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
+        {isEditMode && showSuccess && (
+          <div className="alert alert-success">Client updated successfully!</div>
+        )}
+        {isEditMode && editError && (
+          <div className="alert alert-error">{editError}</div>
+        )}
 
-         {activeTab === 2 && (
-           <Box sx={{ mt: 2 }}>
-             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-               <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                 Client Assets ({clientAssets.length})
-               </Typography>
-               <Button
-                 variant="contained"
-                 size="small"
-                 startIcon={<AddIcon />}
-                 onClick={() => navigate(`/assets?client=${encodeURIComponent(client.companyName)}`)}
-                 sx={{ textTransform: 'none' }}
-               >
-                 View All Assets
-               </Button>
-             </Box>
+        {/* Stats */}
+        <div className="stat-grid">
+          <div className="stat-item">
+            <div className="stat-label">Total Users</div>
+            <div className="stat-value">{clientUsers.length}</div>
+          </div>
+          <div className="stat-item">
+            <div className="stat-label">Total Assets</div>
+            <div className="stat-value">{clientAssets.length}</div>
+          </div>
+          <div className="stat-item">
+            <div className="stat-label">Total Vendors</div>
+            <div className="stat-value">{clientVendors.length}</div>
+          </div>
+          <div className="stat-item">
+            <div className="stat-label">Status</div>
+            <div className="stat-value" style={{ fontSize: '1.25rem' }}>
+              {(client.status || 'active') === 'active' ? 'Active' : 'Inactive'}
+            </div>
+          </div>
+        </div>
 
-             {clientAssets.length === 0 ? (
-               <Card sx={{ p: 3, textAlign: 'center' }}>
-                 <Typography variant="body2" color="text.secondary">
-                   No assets found for this client.
-                 </Typography>
-                 <Button
-                   variant="outlined"
-                   size="small"
-                   startIcon={<AddIcon />}
-                   onClick={() => navigate(`/assets?client=${encodeURIComponent(client.companyName)}`)}
-                   sx={{ mt: 2, textTransform: 'none' }}
-                 >
-                   Add Asset
-                 </Button>
-               </Card>
-             ) : (
-               <TableContainer component={Paper} sx={{ boxShadow: 'none', border: '1px solid #e5e7eb' }}>
-                 <Table size="small">
-                   <TableHead sx={{ bgcolor: '#f9fafb' }}>
-                     <TableRow>
-                       <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem' }}>Asset Name</TableCell>
-                       <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem' }}>Asset ID</TableCell>
-                       <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem' }}>Type</TableCell>
-                       <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem' }}>Status</TableCell>
-                       <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem' }}>Owner</TableCell>
-                       <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem' }}>Warranty</TableCell>
-                     </TableRow>
-                   </TableHead>
-                   <TableBody>
-                     {clientAssets.slice(0, 10).map((asset) => (
-                       <TableRow
-                         key={asset.id}
-                         hover
-                         sx={{ cursor: 'pointer' }}
-                         onClick={() => navigate(`/assets?client=${encodeURIComponent(client.companyName)}`)}
-                       >
-                         <TableCell sx={{ fontSize: '0.8rem' }}>
-                           {asset.asset_name || asset.name || 'Unnamed Asset'}
-                         </TableCell>
-                         <TableCell sx={{ fontSize: '0.8rem', fontFamily: 'monospace' }}>
-                           {asset.asset_id || asset.id?.substring(0, 8)}
-                         </TableCell>
-                         <TableCell>
-                           <Chip
-                             label={asset.asset_type || 'Unknown'}
-                             size="small"
-                             color={asset.asset_type === 'hardware' ? 'primary' : 'secondary'}
-                             sx={{ fontSize: '0.7rem', height: '20px' }}
-                           />
-                         </TableCell>
-                         <TableCell>
-                           <Chip
-                             label={asset.status || 'Active'}
-                             size="small"
-                             color={
-                               asset.status === 'Active' ? 'success' :
-                               asset.status === 'Under Repair' ? 'warning' :
-                               asset.status === 'Retired' ? 'default' : 'info'
-                             }
-                             sx={{ fontSize: '0.7rem', height: '20px' }}
-                           />
-                         </TableCell>
-                         <TableCell sx={{ fontSize: '0.8rem' }}>
-                           {asset.owner_name || asset.owner_email || 'Unassigned'}
-                         </TableCell>
-                         <TableCell sx={{ fontSize: '0.8rem' }}>
-                           {asset.warranty_end ? (
-                             (() => {
-                               try {
-                                 const date = asset.warranty_end?.toDate ? asset.warranty_end.toDate() : new Date(asset.warranty_end);
-                                 return date.toLocaleDateString();
-                               } catch {
-                                 return 'N/A';
-                               }
-                             })()
-                           ) : 'N/A'}
-                         </TableCell>
-                       </TableRow>
-                     ))}
-                   </TableBody>
-                 </Table>
-                 {clientAssets.length > 10 && (
-                   <Box sx={{ p: 2, textAlign: 'center', borderTop: '1px solid #e5e7eb' }}>
-                     <Button
-                       variant="text"
-                       size="small"
-                       onClick={() => navigate(`/assets?client=${encodeURIComponent(client.companyName)}`)}
-                       sx={{ textTransform: 'none' }}
-                     >
-                       View All {clientAssets.length} Assets →
-                     </Button>
-                   </Box>
-                 )}
-               </TableContainer>
-             )}
-           </Box>
-         )}
-      </Box>
+        {/* Tabs */}
+        <div className="tabs-container">
+          <div className="tabs-header">
+            <button 
+              className={`tab-button ${activeTab === 0 ? 'active' : ''}`}
+              onClick={() => setActiveTab(0)}
+            >
+              About
+            </button>
+            <button 
+              className={`tab-button ${activeTab === 1 ? 'active' : ''}`}
+              onClick={() => setActiveTab(1)}
+            >
+              Users ({clientUsers.length})
+            </button>
+            <button 
+              className={`tab-button ${activeTab === 2 ? 'active' : ''}`}
+              onClick={() => setActiveTab(2)}
+            >
+              Assets ({clientAssets.length})
+            </button>
+            <button 
+              className={`tab-button ${activeTab === 3 ? 'active' : ''}`}
+              onClick={() => setActiveTab(3)}
+            >
+              Vendors ({clientVendors.length})
+            </button>
+          </div>
 
+          {/* About Tab */}
+          {activeTab === 0 && (
+            <div className="tab-content">
+              <div className="info-card">
+                <h2 className={`section-title ${isEditMode ? 'edit-mode' : ''}`}>
+                  <BusinessIcon style={{ fontSize: '1rem' }} />
+                  Company Information
+                </h2>
+                {isEditMode ? (
+                  <form onSubmit={handleSaveClient}>
+                    <div className="form-grid-2x2">
+                      <div className="form-group">
+                        <label className="form-label edit-mode">Company Name</label>
+                        <input
+                          type="text"
+                          className="form-input edit-mode"
+                          value={formData.companyName || ''}
+                          onChange={(e) => handleFieldChange('companyName', e.target.value)}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label edit-mode">Website</label>
+                        <input
+                          type="url"
+                          className="form-input edit-mode"
+                          value={formData.website || ''}
+                          onChange={(e) => handleFieldChange('website', e.target.value)}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label edit-mode">Contact Number</label>
+                        <input
+                          type="tel"
+                          className="form-input edit-mode"
+                          value={formData.clientContactNumber || ''}
+                          onChange={(e) => handleFieldChange('clientContactNumber', e.target.value)}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label edit-mode">Status</label>
+                        <select
+                          className="form-input edit-mode"
+                          value={formData.status || 'active'}
+                          onChange={(e) => handleFieldChange('status', e.target.value)}
+                        >
+                          <option value="active">Active</option>
+                          <option value="inactive">Inactive</option>
+                        </select>
+                      </div>
+                      <div className="form-group form-group-full">
+                        <label className="form-label edit-mode">Address</label>
+                        <textarea
+                          className="form-input edit-mode"
+                          value={formData.location || ''}
+                          onChange={(e) => handleFieldChange('location', e.target.value)}
+                          rows={3}
+                        />
+                      </div>
+                    </div>
+                  </form>
+                ) : (
+                  <>
+                    <div className="info-row">
+                      <span className="info-label">Company Name</span>
+                      <span className="info-value">{client.companyName}</span>
+                    </div>
+                    <div className="info-row">
+                      <span className="info-label">Address</span>
+                      <span className="info-value">{client.location || 'Not specified'}</span>
+                    </div>
+                    {client.website && (
+                      <div className="info-row">
+                        <span className="info-label">Website</span>
+                        <span className="info-value">
+                          <a href={client.website} target="_blank" rel="noopener noreferrer">{client.website}</a>
+                        </span>
+                      </div>
+                    )}
+                    {client.clientContactNumber && (
+                      <div className="info-row">
+                        <span className="info-label">Contact Number</span>
+                        <span className="info-value">
+                          <a href={`tel:${client.clientContactNumber}`}>{client.clientContactNumber}</a>
+                        </span>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
 
+              {/* Authorized Person and Site Admin Side by Side */}
+              <div className="two-column-grid">
+                <div className="info-card">
+                  <h2 className={`section-title ${isEditMode ? 'edit-mode' : ''}`}>
+                    <PersonIcon style={{ fontSize: '1rem' }} />
+                    Authorized Person
+                  </h2>
+                  {isEditMode ? (
+                    <div className="form-grid">
+                      <div className="form-group">
+                        <label className="form-label edit-mode">First Name</label>
+                        <input
+                          type="text"
+                          className="form-input edit-mode"
+                          value={formData.authFirstName || ''}
+                          onChange={(e) => handleFieldChange('authFirstName', e.target.value)}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label edit-mode">Last Name</label>
+                        <input
+                          type="text"
+                          className="form-input edit-mode"
+                          value={formData.authLastName || ''}
+                          onChange={(e) => handleFieldChange('authLastName', e.target.value)}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label edit-mode">Designation</label>
+                        <input
+                          type="text"
+                          className="form-input edit-mode"
+                          value={formData.authDesignation || ''}
+                          onChange={(e) => handleFieldChange('authDesignation', e.target.value)}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label edit-mode">Office Email</label>
+                        <input
+                          type="email"
+                          className="form-input edit-mode"
+                          value={formData.authOfficeEmail || ''}
+                          onChange={(e) => handleFieldChange('authOfficeEmail', e.target.value)}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label edit-mode">Personal Email</label>
+                        <input
+                          type="email"
+                          className="form-input edit-mode"
+                          value={formData.authPersonalEmail || ''}
+                          onChange={(e) => handleFieldChange('authPersonalEmail', e.target.value)}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label edit-mode">Country Code</label>
+                        <CustomDropdown
+                          value={formData.authContactCountryCode || ''}
+                          onChange={(value) => handleFieldChange('authContactCountryCode', value)}
+                          options={getCountryOptions()}
+                          placeholder="Select country code"
+                          size="sm"
+                          focusStyle="gray"
+                        />
+                      </div>
+                      <div className="form-group form-grid-full">
+                        <label className="form-label edit-mode">Contact Number</label>
+                        <input
+                          type="tel"
+                          className="form-input edit-mode"
+                          value={formData.authContactNumber || ''}
+                          onChange={(e) => handleFieldChange('authContactNumber', e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="info-row">
+                        <span className="info-label">Name</span>
+                        <span className="info-value">
+                          {`${client.authFirstName || ''} ${client.authLastName || ''}`.trim() || 'Not specified'}
+                        </span>
+                      </div>
+                      {client.authDesignation && (
+                        <div className="info-row">
+                          <span className="info-label">Designation</span>
+                          <span className="info-value">{client.authDesignation}</span>
+                        </div>
+                      )}
+                      {client.authOfficeEmail && (
+                        <div className="info-row">
+                          <span className="info-label">Office Email</span>
+                          <span className="info-value">
+                            <a href={`mailto:${client.authOfficeEmail}`}>{client.authOfficeEmail}</a>
+                          </span>
+                        </div>
+                      )}
+                      {client.authPersonalEmail && (
+                        <div className="info-row">
+                          <span className="info-label">Personal Email</span>
+                          <span className="info-value">
+                            <a href={`mailto:${client.authPersonalEmail}`}>{client.authPersonalEmail}</a>
+                          </span>
+                        </div>
+                      )}
+                      {client.authContactNumber && (
+                        <div className="info-row">
+                          <span className="info-label">Contact</span>
+                          <span className="info-value">
+                            <a href={`tel:${client.authContactNumber}`}>
+                              {client.authContactCountryCode ? `${client.authContactCountryCode} ` : ''}
+                              {client.authContactNumber}
+                            </a>
+                          </span>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
 
-      {/* Delete Confirmation Bubble - Smart Positioning */}
+                <div className="info-card">
+                  <h2 className={`section-title ${isEditMode ? 'edit-mode' : ''}`}>
+                    <AdminIcon style={{ fontSize: '1rem' }} />
+                    Site Administrator
+                  </h2>
+                  {isEditMode ? (
+                    <div className="form-grid">
+                      <div className="form-group">
+                        <label className="form-label edit-mode">First Name</label>
+                        <input
+                          type="text"
+                          className="form-input edit-mode"
+                          value={formData.siteFirstName || ''}
+                          onChange={(e) => handleFieldChange('siteFirstName', e.target.value)}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label edit-mode">Last Name</label>
+                        <input
+                          type="text"
+                          className="form-input edit-mode"
+                          value={formData.siteLastName || ''}
+                          onChange={(e) => handleFieldChange('siteLastName', e.target.value)}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label edit-mode">Designation</label>
+                        <input
+                          type="text"
+                          className="form-input edit-mode"
+                          value={formData.siteDesignation || ''}
+                          onChange={(e) => handleFieldChange('siteDesignation', e.target.value)}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label edit-mode">Email</label>
+                        <input
+                          type="email"
+                          className="form-input edit-mode"
+                          value={formData.siteEmail || ''}
+                          onChange={(e) => handleFieldChange('siteEmail', e.target.value)}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label edit-mode">Country Code</label>
+                        <CustomDropdown
+                          value={formData.siteContactCountryCode || ''}
+                          onChange={(value) => handleFieldChange('siteContactCountryCode', value)}
+                          options={getCountryOptions()}
+                          placeholder="Select country code"
+                          size="sm"
+                          focusStyle="gray"
+                        />
+                      </div>
+                      <div className="form-group form-grid-full">
+                        <label className="form-label edit-mode">Contact Number</label>
+                        <input
+                          type="tel"
+                          className="form-input edit-mode"
+                          value={formData.siteContactNumber || ''}
+                          onChange={(e) => handleFieldChange('siteContactNumber', e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="info-row">
+                        <span className="info-label">Name</span>
+                        <span className="info-value">
+                          {`${client.siteFirstName || ''} ${client.siteLastName || ''}`.trim() || 'Not specified'}
+                        </span>
+                      </div>
+                      {client.siteDesignation && (
+                        <div className="info-row">
+                          <span className="info-label">Designation</span>
+                          <span className="info-value">{client.siteDesignation}</span>
+                        </div>
+                      )}
+                      {client.siteEmail && (
+                        <div className="info-row">
+                          <span className="info-label">Email</span>
+                          <span className="info-value">
+                            <a href={`mailto:${client.siteEmail}`}>{client.siteEmail}</a>
+                          </span>
+                        </div>
+                      )}
+                      {client.siteContactNumber && (
+                        <div className="info-row">
+                          <span className="info-label">Contact</span>
+                          <span className="info-value">
+                            <a href={`tel:${client.siteContactNumber}`}>
+                              {client.siteContactCountryCode ? `${client.siteContactCountryCode} ` : ''}
+                              {client.siteContactNumber}
+                            </a>
+                          </span>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Users Tab */}
+          {activeTab === 1 && (
+            <div className="tab-content">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 600, color: '#111827' }}>
+                  Users ({clientUsers.length})
+                </h3>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button className="btn" onClick={handleManageUsers}>
+                    <GroupIcon fontSize="small" />
+                    Manage Users
+                  </button>
+                  <button className="btn btn-primary" onClick={handleAddUser}>
+                    <AddIcon fontSize="small" />
+                    Add User
+                  </button>
+                </div>
+              </div>
+              {clientUsers.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '3rem 2rem' }}>
+                  <p style={{ color: '#6b7280', marginBottom: '1rem' }}>No users found for this client</p>
+                  <button className="btn btn-primary" onClick={handleAddUser}>
+                    <PersonAddIcon fontSize="small" />
+                    Add First User
+                  </button>
+                </div>
+              ) : (
+                <div className="table-container">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>User</th>
+                        <th>Email</th>
+                        <th>Role</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {clientUsers.slice(0, 10).map((clientUser) => (
+                        <tr key={clientUser.uid}>
+                          <td>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                              <div className="avatar">
+                                {clientUser.firstName?.charAt(0) || clientUser.email?.charAt(0) || 'U'}
+                              </div>
+                              <div>
+                                <div style={{ fontWeight: 500, fontSize: '0.875rem' }}>
+                                  {clientUser.firstName} {clientUser.lastName}
+                                </div>
+                                <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>
+                                  {clientUser.designation || 'N/A'}
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                          <td>{clientUser.email}</td>
+                          <td>
+                            <span className={`chip ${clientUser.role === 'site_admin' ? 'chip-primary' : 'chip-default'}`}>
+                              {clientUser.role === 'site_admin' ? 'Site Admin' : 'User'}
+                            </span>
+                          </td>
+                          <td>
+                            <span className={`chip ${(clientUser.status || 'active') === 'active' ? 'chip-success' : 'chip-error'}`}>
+                              {(clientUser.status || 'active') === 'active' ? (
+                                <>
+                                  <CheckCircleIcon style={{ fontSize: '0.75rem', marginRight: '0.25rem' }} />
+                                  Active
+                                </>
+                              ) : (
+                                <>
+                                  <ErrorIcon style={{ fontSize: '0.75rem', marginRight: '0.25rem' }} />
+                                  Inactive
+                                </>
+                              )}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {clientUsers.length > 10 && (
+                    <div style={{ padding: '1rem', textAlign: 'center', borderTop: '1px solid #e5e7eb' }}>
+                      <button className="btn" onClick={handleManageUsers}>
+                        View All {clientUsers.length} Users →
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Assets Tab */}
+          {activeTab === 2 && (
+            <div className="tab-content">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 600, color: '#111827' }}>
+                  Assets ({clientAssets.length})
+                </h3>
+                <button className="btn btn-primary" onClick={() => navigate(`/assets?client=${encodeURIComponent(client.companyName)}`)}>
+                  <AssessmentIcon fontSize="small" />
+                  Manage Assets
+                </button>
+              </div>
+              {clientAssets.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '3rem 2rem' }}>
+                  <p style={{ color: '#6b7280', marginBottom: '1rem' }}>No assets found for this client</p>
+                  <button className="btn btn-primary" onClick={() => navigate(`/assets?client=${encodeURIComponent(client.companyName)}`)}>
+                    <AddIcon fontSize="small" />
+                    Add Asset
+                  </button>
+                </div>
+              ) : (
+                <div className="table-container">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Asset Name</th>
+                        <th>Asset ID</th>
+                        <th>Type</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {clientAssets.slice(0, 10).map((asset) => (
+                        <tr 
+                          key={asset.id} 
+                          style={{ cursor: 'pointer' }} 
+                          onClick={() => navigate(`/assets?client=${encodeURIComponent(client.companyName)}`)}
+                        >
+                          <td>{asset.asset_name || asset.name || 'Unnamed Asset'}</td>
+                          <td style={{ fontFamily: 'monospace', fontSize: '0.8125rem' }}>
+                            {asset.asset_id || asset.id?.substring(0, 8)}
+                          </td>
+                          <td>
+                            <span className={`chip ${asset.asset_type === 'hardware' ? 'chip-primary' : 'chip-default'}`}>
+                              {asset.asset_type || 'Unknown'}
+                            </span>
+                          </td>
+                          <td>
+                            <span className={`chip ${
+                              asset.status === 'Active' ? 'chip-success' : 
+                              asset.status === 'Under Repair' ? 'chip-default' : 
+                              'chip-default'
+                            }`}>
+                              {asset.status || 'Active'}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {clientAssets.length > 10 && (
+                    <div style={{ padding: '1rem', textAlign: 'center', borderTop: '1px solid #e5e7eb' }}>
+                      <button className="btn" onClick={() => navigate(`/assets?client=${encodeURIComponent(client.companyName)}`)}>
+                        View All {clientAssets.length} Assets →
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Vendors Tab */}
+          {activeTab === 3 && (
+            <div className="tab-content">
+              <VendorManagement clientName={client.companyName} user={user} />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Delete Dialog */}
       {showDeleteDialog && (
-        <div 
-          ref={setPopupRef}
-          className="delete-bubble"
-          style={{
-            top: `${deleteButtonPosition.top}px`,
-            left: `${deleteButtonPosition.left}px`
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <h4>Delete Client</h4>
-          <p>
-            Are you sure you want to delete <strong>{client.companyName}</strong>? 
-            This action cannot be undone and may affect associated users.
-          </p>
-          <div className="delete-bubble-actions">
-            <button 
-              className="btn-bubble-cancel" 
-              onClick={handleCancelDelete}
-              disabled={deleting}
-            >
-              Cancel
-            </button>
-            <button 
-              className="btn-bubble-delete" 
-              onClick={handleDeleteClient}
-              disabled={deleting}
-            >
-              {deleting ? 'Deleting...' : 'Delete Client'}
-            </button>
+        <div className="modal-overlay" onClick={() => setShowDeleteDialog(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.125rem', fontWeight: 600 }}>Delete Client</h3>
+            <p style={{ margin: '0 0 1.5rem 0', color: '#6b7280', fontSize: '0.875rem' }}>
+              Are you sure you want to delete <strong>{client.companyName}</strong>? This action cannot be undone.
+            </p>
+            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+              <button className="btn" onClick={() => setShowDeleteDialog(false)} disabled={deleting}>Cancel</button>
+              <button className="btn btn-danger" onClick={handleDeleteClient} disabled={deleting}>
+                {deleting ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
           </div>
         </div>
       )}
 
       {/* Snackbar */}
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={6000}
-        onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}
-      >
-        <Alert
-          onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}
-          severity={snackbar.severity}
-          sx={{ width: '100%' }}
-        >
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
-    </Box>
+      {snackbar.open && (
+        <div className={`snackbar ${snackbar.severity === 'success' ? 'snackbar-success' : 'snackbar-error'}`}>
+          <span>{snackbar.message}</span>
+          <button 
+            onClick={() => setSnackbar(prev => ({ ...prev, open: false }))}
+            style={{ 
+              background: 'transparent', 
+              border: 'none', 
+              color: 'white', 
+              cursor: 'pointer',
+              fontSize: '1.25rem',
+              padding: '0',
+              marginLeft: 'auto'
+            }}
+          >
+            ×
+          </button>
+        </div>
+      )}
+    </div>
   );
 };
 

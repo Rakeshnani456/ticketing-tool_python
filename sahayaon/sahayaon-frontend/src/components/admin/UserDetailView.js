@@ -169,10 +169,21 @@ const roleOptions = [
 
 
 const UserDetailView = ({ user }) => {
-  const { userId } = useParams();
+  const { userId, clientName } = useParams();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const db = getFirestore(app);
+  
+  // Get decoded client name if present
+  const decodedClientName = clientName ? decodeURIComponent(clientName) : null;
+  
+  // Helper function to get the back navigation URL
+  const getBackUrl = () => {
+    if (decodedClientName) {
+      return `/user-management/client/${encodeURIComponent(decodedClientName)}`;
+    }
+    return '/user-management';
+  };
 
   // State management
   const [userData, setUserData] = useState(null);
@@ -370,7 +381,7 @@ const UserDetailView = ({ user }) => {
 
       // Navigate back to user list after deletion
       setTimeout(() => {
-        navigate('/user-management');
+        navigate(getBackUrl());
       }, 1500);
     } catch (error) {
       console.error('Error deleting user:', error);
@@ -441,28 +452,38 @@ const UserDetailView = ({ user }) => {
   }, [roleDropdownOpen]);
 
   const handleDeleteClick = (event) => {
-    event.stopPropagation();
-    const buttonRect = event.currentTarget.getBoundingClientRect();
-    const viewportHeight = window.innerHeight;
-    const popupHeight = 200; // Approximate popup height
-    
-    // Check if there's enough space below the button
-    const spaceBelow = viewportHeight - buttonRect.bottom;
-    const spaceAbove = buttonRect.top;
-    
-    let top, left;
-    
-    if (spaceBelow >= popupHeight || spaceBelow > spaceAbove) {
-      // Position below the button
-      top = buttonRect.bottom + window.scrollY + 8;
-    } else {
-      // Position above the button
-      top = buttonRect.top + window.scrollY - popupHeight - 8;
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
     }
     
-    left = buttonRect.right - 280 + window.scrollX;
+    if (!deleteButtonRef) {
+      // Fallback positioning if ref is not available
+      setDeleteButtonPosition({ top: window.innerHeight / 2, left: window.innerWidth / 2 - 140 });
+    } else {
+      const buttonRect = deleteButtonRef.getBoundingClientRect();
+      const viewportHeight = window.innerHeight;
+      const popupHeight = 200; // Approximate popup height
+      
+      // Check if there's enough space below the button
+      const spaceBelow = viewportHeight - buttonRect.bottom;
+      const spaceAbove = buttonRect.top;
+      
+      let top, left;
+      
+      if (spaceBelow >= popupHeight || spaceBelow > spaceAbove) {
+        // Position below the button
+        top = buttonRect.bottom + window.scrollY + 8;
+      } else {
+        // Position above the button
+        top = buttonRect.top + window.scrollY - popupHeight - 8;
+      }
+      
+      left = buttonRect.right - 280 + window.scrollX;
+      
+      setDeleteButtonPosition({ top, left });
+    }
     
-    setDeleteButtonPosition({ top, left });
     setShowDeleteDialog(true);
   };
 
@@ -578,7 +599,7 @@ const UserDetailView = ({ user }) => {
         </Alert>
         <Button
           variant="outlined"
-          onClick={() => navigate('/user-management')}
+          onClick={() => navigate(getBackUrl())}
           startIcon={<ArrowBackIcon />}
         >
           Back to User Management
@@ -812,7 +833,7 @@ const UserDetailView = ({ user }) => {
           <Link
             component="button"
             variant="body2"
-            onClick={() => navigate('/user-management')}
+            onClick={() => navigate(getBackUrl())}
             sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}
           >
             <GroupIcon size={16} />
@@ -828,7 +849,7 @@ const UserDetailView = ({ user }) => {
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             <button
               className="btn btn-secondary btn-small"
-              onClick={() => navigate('/user-management')}
+              onClick={() => navigate(getBackUrl())}
             >
               <ArrowBackIcon fontSize="small" />
               Back to Users
@@ -872,8 +893,13 @@ const UserDetailView = ({ user }) => {
                     Reset Password
                 </div>
                   <button
+                    type="button"
                     className="btn btn-danger btn-small"
-                    onClick={handleDeleteClick}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleDeleteClick(e);
+                    }}
                     ref={setDeleteButtonRef}
                     style={{ fontFamily: 'Source Sans 3', fontWeight: 400 }}
                   >
@@ -1182,6 +1208,31 @@ const UserDetailView = ({ user }) => {
                         size="small"
                         color={userData.role === 'site_admin' ? 'primary' : 'default'}
                         variant={userData.role === 'site_admin' ? 'filled' : 'outlined'}
+                      />
+                    )}
+                  </div>
+                </div>
+
+                <div className="field-item">
+                  <div className="field-label">Status</div>
+                  <div className="field-value">
+                    {isEditMode ? (
+                      <select
+                        className="edit-input"
+                        value={formData.status || 'active'}
+                        onChange={(e) => handleFieldChange('status', e.target.value)}
+                        disabled={showSuccess}
+                      >
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                      </select>
+                    ) : (
+                      <Chip
+                        icon={(userData.status || 'active') === 'active' ? <CheckCircleIcon /> : <ErrorIcon />}
+                        label={(userData.status || 'active') === 'active' ? 'Active' : 'Inactive'}
+                        size="small"
+                        color={(userData.status || 'active') === 'active' ? 'success' : 'error'}
+                        variant="outlined"
                       />
                     )}
                   </div>

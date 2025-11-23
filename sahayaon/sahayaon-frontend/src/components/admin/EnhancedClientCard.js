@@ -258,7 +258,7 @@ const EnhancedClientCard = ({
   const navigate = useNavigate();
 
   const handleUserCountClick = () => {
-    navigate(`/user-management?clientId=${client.id}&clientName=${encodeURIComponent(client.companyName)}`);
+    navigate(`/user-management/client/${encodeURIComponent(client.companyName)}`);
   };
 
   const handleMenuClose = () => {

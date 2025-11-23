@@ -96,11 +96,24 @@ module.exports = (db, admin, usersCollection, verifyFirebaseToken) => {
             }
 
             const userProfile = userDoc.data();
+            const userStatus = userProfile.status || 'active'; // Default to 'active' for backward compatibility
+            
+            // Check if user is inactive - reject login immediately
+            if (userStatus === 'inactive') {
+                return res.status(403).json({
+                    error: 'ACCESS_DENIED',
+                    message: 'Your account access has been revoked. Please contact your administrator for assistance.',
+                    reason: 'inactive_user',
+                    status: 'inactive'
+                });
+            }
+
             const loggedInUser = {
                 id: uid,
                 email: emailFromToken,
                 role: userProfile.role || 'user',
-                mustChangePassword: userProfile.mustChangePassword || false
+                mustChangePassword: userProfile.mustChangePassword || false,
+                status: userStatus // Include status in response
             };
             
             // Include client_name for site_admin users to avoid extra Firestore read on frontend
@@ -244,6 +257,46 @@ module.exports = (db, admin, usersCollection, verifyFirebaseToken) => {
             console.error(`Error fetching user profile for ${requestedUid}: ${error.message}`);
             return res.status(500).json({ error: `Failed to fetch user profile: ${error.message}` });
         }
+    });
+
+    // @route   GET /access-denied
+    // @desc    Get access denied information for inactive users
+    // @access  Public
+    router.get('/access-denied', async (req, res) => {
+        const authHeader = req.headers.authorization;
+        let userInfo = null;
+        
+        // If user is authenticated, get their info for personalized message
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+            try {
+                const idToken = authHeader.split(' ')[1];
+                const decodedToken = await admin.auth().verifyIdToken(idToken, false);
+                const uid = decodedToken.uid;
+                const userDoc = await usersCollection.doc(uid).get();
+                
+                if (userDoc.exists) {
+                    const userData = userDoc.data();
+                    userInfo = {
+                        email: decodedToken.email,
+                        firstName: userData.firstName,
+                        lastName: userData.lastName,
+                        status: userData.status || 'active',
+                        clientName: userData.client_name || userData.companyName
+                    };
+                }
+            } catch (error) {
+                // Silently fail - user info is optional
+                console.log('Could not fetch user info for access denied page:', error.message);
+            }
+        }
+        
+        res.status(200).json({
+            message: 'Access Denied',
+            reason: 'Account access has been revoked',
+            details: 'Your account has been deactivated. Please contact your system administrator for assistance.',
+            supportContact: process.env.SUPPORT_EMAIL || 'support@sahayaon.com',
+            userInfo: userInfo
+        });
     });
 
     return router;

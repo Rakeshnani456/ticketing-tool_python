@@ -173,6 +173,64 @@ service cloud.firestore {
     }
     // --- END NEW RULES FOR 'assets' COLLECTION ---
 
+    // --- NEW RULES FOR 'vendors' COLLECTION ---
+    // Helper: site_admin can read vendors from their own company/client
+    function isSiteAdminForVendor() {
+      let userDoc = get(/databases/$(database)/documents/users/$(getUserId()));
+      return exists(/databases/$(database)/documents/users/$(getUserId())) &&
+        userDoc.data.role == 'site_admin' &&
+        userDoc.data.get('client_name', '') != '' &&
+        resource.data.get('client_name', '') != '' &&
+        userDoc.data.client_name == resource.data.client_name;
+    }
+
+    match /vendors/{vendorId} {
+      // Allow read access:
+      // - Site admins can read vendors for their client (where client_name matches)
+      // - Admin/Super Admin can read all vendors
+      // - Regular users cannot access vendors
+      allow read: if isAuthenticated() && (
+        hasSupportAdminOrSuperAdminRole() ||
+        isSiteAdminForVendor()
+      );
+
+      // Allow list queries based on role:
+      // - Site admins can list vendors for their client (where client_name matches)
+      // - Admin/Super Admin can list all vendors
+      allow list: if isAuthenticated() && (
+        hasSupportAdminOrSuperAdminRole() ||
+        isSiteAdminForVendor()
+      );
+
+      // Allow create: admin, super_admin, or site_admin can create vendors
+      // Site admin can only create for their client
+      allow create: if isAuthenticated() && (
+        hasSupportAdminOrSuperAdminRole() ||
+        (exists(/databases/$(database)/documents/users/$(getUserId())) &&
+         get(/databases/$(database)/documents/users/$(getUserId())).data.role == 'site_admin' &&
+         get(/databases/$(database)/documents/users/$(getUserId())).data.get('client_name', '') != '' &&
+         request.resource.data.get('client_name', '') != '' &&
+         get(/databases/$(database)/documents/users/$(getUserId())).data.client_name == request.resource.data.client_name)
+      );
+
+      // Allow update:
+      // - Site admins can update vendors for their client
+      // - Admin/Super Admin can update any vendor
+      allow update: if isAuthenticated() && (
+        hasSupportAdminOrSuperAdminRole() ||
+        isSiteAdminForVendor()
+      );
+
+      // Allow delete:
+      // - Site admins can delete vendors for their client
+      // - Admin/Super Admin can delete any vendor
+      allow delete: if isAuthenticated() && (
+        hasSupportAdminOrSuperAdminRole() ||
+        isSiteAdminForVendor()
+      );
+    }
+    // --- END NEW RULES FOR 'vendors' COLLECTION ---
+
     // Public artifacts (e.g., app-wide configurations if any)
     match /artifacts/{appId}/public/data/{document=**} {
       allow read: if true;

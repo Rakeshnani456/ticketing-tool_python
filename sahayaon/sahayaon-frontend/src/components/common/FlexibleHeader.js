@@ -77,6 +77,17 @@ const FlexibleHeader = ({
         }
 
         if (location.pathname.startsWith('/user-management/')) {
+            // Handle client-specific route: /user-management/client/:clientName
+            if (location.pathname.startsWith('/user-management/client/')) {
+                const clientName = decodeURIComponent(location.pathname.split('/').pop() || '');
+                return (
+                    <>
+                        <span className="text-gray-700 font-medium">Users</span>
+                        <span className="text-gray-400">/</span>
+                        <span className="text-gray-700 font-medium truncate max-w-32">{clientName}</span>
+                    </>
+                );
+            }
             const lastSegment = location.pathname.split('/').pop()?.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
             return <span className="text-gray-700 font-medium">Users / {lastSegment}</span>;
         }

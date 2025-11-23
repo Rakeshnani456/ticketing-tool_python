@@ -207,7 +207,7 @@ const ClientCard = ({ client, index, onEdit, onRemove, showEdit, showRemove, use
   const navigate = useNavigate();
 
   const handleUserCountClick = () => {
-    navigate(`/user-management?clientId=${client.id}`);
+    navigate(`/user-management/client/${encodeURIComponent(client.companyName)}`);
   };
 
   return (

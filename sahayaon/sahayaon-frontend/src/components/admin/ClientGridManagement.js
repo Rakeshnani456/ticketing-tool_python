@@ -15,7 +15,6 @@ const ClientGridManagement = ({ user }) => {
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [showFilterMenu, setShowFilterMenu] = useState(false);
-  const [selectedClients, setSelectedClients] = useState([]);
   const [orderBy, setOrderBy] = useState('companyName');
   const [order, setOrder] = useState('asc');
   const [page, setPage] = useState(0);
@@ -303,21 +302,6 @@ const ClientGridManagement = ({ user }) => {
     }
   };
 
-  const handleSelectAll = (event) => {
-    if (event.target.checked) {
-      setSelectedClients(paginatedClients.map(client => client.id));
-    } else {
-      setSelectedClients([]);
-    }
-  };
-
-  const handleSelectClient = (clientId) => {
-    setSelectedClients(prev => 
-      prev.includes(clientId) 
-        ? prev.filter(id => id !== clientId)
-        : [...prev, clientId]
-    );
-  };
 
   const handleChangePage = (event, newPage) => {
     setPage(newPage);
@@ -359,7 +343,44 @@ const ClientGridManagement = ({ user }) => {
       'Site Admin': `${client.siteFirstName} ${client.siteLastName}`,
       'Site Email': client.siteEmail,
       'User Count': userCounts[client.companyName] || 0,
+      'Status': client.status || 'active',
     }));
+  };
+
+  // Handle toggle client status
+  const handleToggleClientStatus = async (client) => {
+    const newStatus = (client.status || 'active') === 'active' ? 'inactive' : 'active';
+    
+    try {
+      const token = user?.firebaseUser ? await user.firebaseUser.getIdToken() : await user.getIdToken();
+      const response = await fetch(`${API_BASE_URL}/api/clients/${client.id}/status`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ status: newStatus }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to update client status');
+      }
+
+      const responseData = await response.json();
+      setSnackbar({
+        open: true,
+        message: responseData.message || `Client status updated to ${newStatus}`,
+        severity: 'success'
+      });
+    } catch (error) {
+      console.error('Error updating client status:', error);
+      setSnackbar({
+        open: true,
+        message: error.message || 'Failed to update client status',
+        severity: 'error'
+      });
+    }
   };
 
   const getUserStatusChip = (userCount) => {
@@ -605,12 +626,6 @@ const ClientGridManagement = ({ user }) => {
         .sort-icon.active {
           opacity: 1;
           color: #3b82f6;
-        }
-        
-        .checkbox {
-          width: 1rem;
-          height: 1rem;
-          cursor: pointer;
         }
         
         .client-info {
@@ -1103,14 +1118,6 @@ const ClientGridManagement = ({ user }) => {
             <thead>
               <tr>
                 <th>
-                  <input
-                    type="checkbox"
-                    className="checkbox"
-                    checked={paginatedClients.length > 0 && selectedClients.length === paginatedClients.length}
-                    onChange={handleSelectAll}
-                  />
-                </th>
-                <th>
                   <div 
                     className="sortable-header"
                     onClick={() => handleRequestSort('companyName')}
@@ -1166,32 +1173,20 @@ const ClientGridManagement = ({ user }) => {
                     </span>
                   </div>
                 </th>
-                <th style={{ textAlign: 'center' }}>Assets</th>
+                <th style={{ textAlign: 'center' }}>Status</th>
                 <th style={{ textAlign: 'center' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {paginatedClients.map((client) => {
-                const isSelected = selectedClients.includes(client.id);
                 const userCount = userCounts[client.companyName] || 0;
-                const assetInfo = assetCounts[client.companyName] || { total: 0, hardware: 0, software: 0 };
                 
                 return (
                   <tr
                     key={client.id}
-                    className={isSelected ? 'selected' : ''}
                     onClick={() => handleViewClient(client)}
                     style={{ cursor: 'pointer' }}
                   >
-                    <td>
-                      <input
-                        type="checkbox"
-                        className="checkbox"
-                        checked={isSelected}
-                        onChange={() => handleSelectClient(client.id)}
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                    </td>
                     <td>
                       <div className="client-info">
                         <div className="client-avatar">
@@ -1269,40 +1264,37 @@ const ClientGridManagement = ({ user }) => {
                       {getUserStatusChip(userCount)}
                     </td>
                     <td style={{ textAlign: 'center' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', alignItems: 'center' }}>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            navigate(`/assets?client=${encodeURIComponent(client.companyName)}`);
-                          }}
+                      {['admin', 'site_admin', 'super_admin'].includes(user?.role) ? (
+                        <span
                           style={{
+                            display: 'inline-block',
                             padding: '0.25rem 0.5rem',
-                            background: '#3b82f6',
-                            color: 'white',
-                            border: 'none',
                             borderRadius: '0.375rem',
                             fontSize: '0.75rem',
                             fontWeight: 500,
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.25rem'
+                            backgroundColor: (client.status || 'active') === 'active' ? '#d1fae5' : '#fee2e2',
+                            color: (client.status || 'active') === 'active' ? '#065f46' : '#991b1b',
+                            border: `1px solid ${(client.status || 'active') === 'active' ? '#10b981' : '#ef4444'}`,
                           }}
-                          title="View Assets"
                         >
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                            <line x1="9" y1="3" x2="9" y2="21"/>
-                          </svg>
-                          {assetInfo.total}
-                        </button>
-                        {assetInfo.total > 0 && (
-                          <div style={{ fontSize: '0.65rem', color: '#6b7280', display: 'flex', gap: '0.5rem' }}>
-                            <span>H: {assetInfo.hardware}</span>
-                            <span>S: {assetInfo.software}</span>
-                          </div>
-                        )}
-                      </div>
+                          {(client.status || 'active') === 'active' ? 'Active' : 'Inactive'}
+                        </span>
+                      ) : (
+                        <span
+                          style={{
+                            display: 'inline-block',
+                            padding: '0.25rem 0.5rem',
+                            borderRadius: '0.375rem',
+                            fontSize: '0.75rem',
+                            fontWeight: 500,
+                            backgroundColor: (client.status || 'active') === 'active' ? '#d1fae5' : '#fee2e2',
+                            color: (client.status || 'active') === 'active' ? '#065f46' : '#991b1b',
+                            border: `1px solid ${(client.status || 'active') === 'active' ? '#10b981' : '#ef4444'}`,
+                          }}
+                        >
+                          {(client.status || 'active') === 'active' ? 'Active' : 'Inactive'}
+                        </span>
+                      )}
                     </td>
                     <td style={{ textAlign: 'center' }}>
                       <div className="action-buttons">

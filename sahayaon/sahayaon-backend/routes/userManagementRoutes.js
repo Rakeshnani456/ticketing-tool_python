@@ -144,7 +144,7 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
             name, asset_id, joined_date, role,
             firstName, lastName, companyName, client_name,
             contactNumber, managerEmail, employmentType, designation, employeeId,
-            password // If you want to allow password update here (optional)
+            password, status // If you want to allow password update here (optional)
         } = req.body;
 
         // Build updateData with all fields that are present
@@ -162,6 +162,13 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
         if (employmentType) updateData.employmentType = employmentType;
         if (designation) updateData.designation = designation;
         if (employeeId) updateData.employeeId = employeeId; // Add employee ID to update fields
+        if (status !== undefined) {
+            // Validate status
+            if (!['active', 'inactive'].includes(status)) {
+                return res.status(400).json({ error: 'Invalid status. Must be "active" or "inactive".' });
+            }
+            updateData.status = status;
+        }
         // Optionally handle password update here if needed (not recommended for Firestore, should be done via Auth)
 
         if (Object.keys(updateData).length === 0) {
@@ -212,8 +219,11 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
                     designation,
                     employeeId: employeeId,
                     role,
+                    companyName: 'Kriasol Technologies LLP', // All engineers belong to Kriasol Technologies LLP
+                    client_name: 'Kriasol Technologies LLP', // All engineers belong to Kriasol Technologies LLP
                     mustChangePassword: true,
-                    isSiteAdmin: false // Always false for users created here
+                    isSiteAdmin: false, // Always false for users created here
+                    status: 'active' // Default status for new users
                 };
                 await userRef.set(userData);
                 
@@ -291,7 +301,8 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
                     designation,
                     employeeId, // Add employee ID field
                     mustChangePassword: true, // <-- enforce password change on first login
-                    isSiteAdmin: false // Always false for users created here
+                    isSiteAdmin: false, // Always false for users created here
+                    status: 'active' // Default status for new users
                 };
                 await userRef.set(userData);
                 
@@ -368,6 +379,7 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
                     designation,
                     employeeId,
                     role: 'site_admin', // Set role as site_admin
+                    status: 'active', // Default status for new users
                     createdAt: admin.firestore.FieldValue.serverTimestamp(),
                     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
                 });
@@ -450,31 +462,53 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
             return res.status(400).json({ error: 'Password must be at least 6 characters.' });
         }
         try {
+            // Check if user exists and is active
+            const userDoc = await usersCollection.doc(uid).get();
+            if (!userDoc.exists) {
+                return res.status(404).json({ error: 'User not found' });
+            }
+            
+            const userData = userDoc.data();
+            const userStatus = userData.status || 'active';
+            
+            // Prevent password changes for inactive users
+            if (userStatus === 'inactive') {
+                return res.status(403).json({ 
+                    error: 'ACCESS_DENIED',
+                    message: 'Password reset is disabled for inactive accounts. Please contact your administrator.' 
+                });
+            }
+            
             await admin.auth().updateUser(uid, { password });
             // Also update mustChangePassword in Firestore if requested
             if (mustChangePassword) {
                 await usersCollection.doc(uid).update({ mustChangePassword: true });
             }
             
-            // Send email if requested
+            // Send email if requested - but only for active users
             let emailSent = false;
             if (sendEmail && emailService) {
                 try {
-                    const userDoc = await usersCollection.doc(uid).get();
-                    if (userDoc.exists) {
-                        const userData = userDoc.data();
-                        if (userData.email) {
+                    const userDocCheck = await usersCollection.doc(uid).get();
+                    if (userDocCheck.exists) {
+                        const userDataCheck = userDocCheck.data();
+                        const userStatusCheck = userDataCheck.status || 'active';
+                        // Don't send emails to inactive users
+                        if (userStatusCheck === 'inactive') {
+                            console.log(`Email not sent - user ${uid} is inactive`);
+                            emailSent = false;
+                        } else if (userDataCheck.email) {
                             const loginUrl = process.env.FRONTEND_URL || 'https://tt.kriasol.com/';
-                            const firstName = userData.firstName || '';
-                            const lastName = userData.lastName || '';
-                            const fullUserName = (firstName && lastName) ? `${firstName} ${lastName}` : (userData.name || userData.email);
+                            const firstName = userDataCheck.firstName || '';
+                            const lastName = userDataCheck.lastName || '';
+                            const fullUserName = (firstName && lastName) ? `${firstName} ${lastName}` : (userDataCheck.name || userDataCheck.email);
                             
                             const emailData = {
                                 firstName: firstName,
                                 lastName: lastName,
                                 userName: fullUserName,
-                                companyName: userData.client_name || userData.companyName || 'Company',
-                                userEmail: userData.email,
+                                companyName: userDataCheck.client_name || userDataCheck.companyName || 'Company',
+                                userEmail: userDataCheck.email,
                                 newPassword: password,
                                 password: password,
                                 tempPassword: password,
@@ -484,9 +518,9 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
                             
                             emailSent = await emailService.sendPasswordSharingEmail(emailData);
                             if (emailSent) {
-                                console.log(`Password reset email sent successfully to ${userData.email}`);
+                                console.log(`Password reset email sent successfully to ${userDataCheck.email}`);
                             } else {
-                                console.error(`Failed to send password reset email to ${userData.email}`);
+                                console.error(`Failed to send password reset email to ${userDataCheck.email}`);
                             }
                         }
                     }
@@ -518,6 +552,15 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
             }
             
             const userData = userDoc.data();
+            const userStatus = userData.status || 'active';
+            
+            // Prevent password resets for inactive users
+            if (userStatus === 'inactive') {
+                return res.status(403).json({ 
+                    error: 'ACCESS_DENIED',
+                    message: 'Password reset is disabled for inactive accounts. Please contact your administrator.' 
+                });
+            }
             
             // Generate a new password: 8 characters (4 from "Sahayaon" letters + 4 random characters)
             const sahayaonLetters = ['S', 'a', 'h', 'y', 'o', 'n'];
@@ -549,9 +592,9 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
             // Set mustChangePassword to true in Firestore
             await usersCollection.doc(uid).update({ mustChangePassword: true });
             
-            // Automatically send password reset email
+            // Automatically send password reset email - but only for active users
             let emailSent = false;
-            if (emailService && userData.email) {
+            if (emailService && userData.email && userStatus === 'active') {
                 try {
                     const loginUrl = process.env.FRONTEND_URL || 'https://tt.kriasol.com/';
                     const firstName = userData.firstName || '';
@@ -581,6 +624,8 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
                     console.error('Error sending password reset email:', emailError);
                     // Don't fail the password reset if email fails
                 }
+            } else if (userStatus === 'inactive') {
+                console.log(`Email not sent - user ${uid} is inactive`);
             }
             
             return res.status(200).json({ 
@@ -689,7 +734,8 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
                     designation,
                     employeeId, // Add employee ID field
                     mustChangePassword: true, // <-- enforce password change on first login
-                    isSiteAdmin: false // Always false for users created here
+                    isSiteAdmin: false, // Always false for users created here
+                    status: 'active' // Default status for new users
                 };
                 await userRef.set(userData);
                 results.push({ email, success: true });
@@ -771,6 +817,45 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
                 return res.status(500).json({ error: `Firebase Auth error: ${err.message}` });
             }
             return res.status(500).json({ error: err.message || 'Failed to delete user.' });
+        }
+    });
+
+    // PUT /api/users/:uid/status - Update user status
+    router.put('/:uid/status', verifyFirebaseToken, async (req, res) => {
+        try {
+            const { uid } = req.params;
+            const { status } = req.body;
+            
+            // Validate status
+            if (!status || !['active', 'inactive'].includes(status)) {
+                return res.status(400).json({ error: 'Invalid status. Must be "active" or "inactive".' });
+            }
+
+            // Check if user exists
+            const userDoc = await usersCollection.doc(uid).get();
+            if (!userDoc.exists) {
+                return res.status(404).json({ error: 'User not found' });
+            }
+
+            // Check permissions - only super_admin, admin, and site_admin can change user status
+            // Site admin can only change status of users from their own client
+            const allowedRoles = ['super_admin', 'admin', 'site_admin'];
+            if (!allowedRoles.includes(req.user.role)) {
+                return res.status(403).json({ error: 'Insufficient permissions to change user status' });
+            }
+
+            const userData = userDoc.data();
+            if (req.user.role === 'site_admin' && userData.client_name !== req.user.client_name) {
+                return res.status(403).json({ error: 'You can only change status for users from your own client' });
+            }
+
+            // Update user status
+            await usersCollection.doc(uid).update({ status });
+
+            return res.status(200).json({ message: `User status updated to ${status}.` });
+        } catch (err) {
+            console.error('Error updating user status:', err);
+            return res.status(500).json({ error: 'Failed to update user status' });
         }
     });
 
