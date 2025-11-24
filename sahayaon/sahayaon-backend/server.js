@@ -412,13 +412,27 @@ const corsOptions = {
         const allowedOrigins = [
             'https://ticketingtoolv2.web.app',
             'https://ticketingtoolv2.firebaseapp.com',
+            'https://it-ticketing-tool-dd679.web.app',
+            'https://it-ticketing-tool-dd679.firebaseapp.com',
             'https://tt.kriasol.com',
             'http://localhost:3000',
             'http://localhost:3001',
-            'https://my.sahayaon.com'
+            'https://my.sahayaon.com',
+            // Allow Render domains (for frontend hosted on Render)
+            /^https:\/\/.*\.onrender\.com$/
         ];
         
-        if (allowedOrigins.indexOf(origin) !== -1) {
+        // Check if origin matches any allowed origin (string or regex)
+        const isAllowed = allowedOrigins.some(allowedOrigin => {
+            if (typeof allowedOrigin === 'string') {
+                return allowedOrigin === origin;
+            } else if (allowedOrigin instanceof RegExp) {
+                return allowedOrigin.test(origin);
+            }
+            return false;
+        });
+        
+        if (isAllowed) {
             callback(null, true);
         } else {
             console.log('CORS blocked origin:', origin);
