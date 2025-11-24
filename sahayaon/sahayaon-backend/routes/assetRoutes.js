@@ -11,7 +11,7 @@ module.exports = (db, admin, assetsCollection, usersCollection, clientsCollectio
 
     // Helper function to check if user can access asset
     const canAccessAsset = async (user, asset) => {
-        if (user.role === 'super_admin' || user.role === 'admin' || user.role === 'site_admin') {
+        if (user.role === 'super_admin' || user.role === 'admin' || user.role === 'support' || user.role === 'site_admin') {
             return true;
         }
         if (user.role === 'user' && asset.owner_uid === user.uid) {
@@ -41,7 +41,7 @@ module.exports = (db, admin, assetsCollection, usersCollection, clientsCollectio
                     query = query.where('client_name', '==', req.user.client_name);
                 }
             }
-            // super_admin and admin can see all assets (no filter)
+            // super_admin, admin, and support can see all assets (no filter)
 
             // Apply additional filters from query params
             if (req.query.client_name) {
@@ -134,6 +134,7 @@ module.exports = (db, admin, assetsCollection, usersCollection, clientsCollectio
             } else if (req.user.role === 'site_admin' && req.user.client_name) {
                 query = query.where('client_name', '==', req.user.client_name);
             }
+            // super_admin, admin, and support can see all assets (no filter)
 
             const snapshot = await query.get();
             // Only extract fields needed for summary to reduce processing time
@@ -522,7 +523,7 @@ module.exports = (db, admin, assetsCollection, usersCollection, clientsCollectio
     router.get('/user/:uid', authenticateToken, async (req, res) => {
         try {
             // Check if user has permission
-            if (req.user.role !== 'super_admin' && req.user.role !== 'admin' && req.user.role !== 'site_admin' && req.user.uid !== req.params.uid) {
+            if (req.user.role !== 'super_admin' && req.user.role !== 'admin' && req.user.role !== 'support' && req.user.role !== 'site_admin' && req.user.uid !== req.params.uid) {
                 return res.status(403).json({ error: 'Access denied' });
             }
 

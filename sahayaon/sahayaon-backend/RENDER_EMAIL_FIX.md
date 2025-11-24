@@ -121,3 +121,4 @@ Render (and many cloud platforms) block outbound SMTP connections on port 587 to
 
 **Use SendGrid** - it's free for up to 100 emails/day, reliable, and designed for cloud platforms. Your emails will work consistently.
 
+

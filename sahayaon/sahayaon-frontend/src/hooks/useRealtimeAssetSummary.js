@@ -96,3 +96,4 @@ const useRealtimeAssetSummary = (assets, currentUser) => {
 
 export default useRealtimeAssetSummary;
 
+
