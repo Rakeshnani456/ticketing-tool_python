@@ -245,16 +245,45 @@ module.exports = (db, admin, assetsCollection, usersCollection, clientsCollectio
                 return res.status(404).json({ error: 'Asset not found' });
             }
 
+            const assetData = assetDoc.data();
             const asset = {
                 id: assetDoc.id,
-                ...assetDoc.data(),
-                created_at: assetDoc.data().created_at?.toDate?.()?.toISOString() || assetDoc.data().created_at,
-                updated_at: assetDoc.data().updated_at?.toDate?.()?.toISOString() || assetDoc.data().updated_at,
-                warranty_start: assetDoc.data().warranty_start?.toDate?.()?.toISOString() || assetDoc.data().warranty_start,
-                warranty_end: assetDoc.data().warranty_end?.toDate?.()?.toISOString() || assetDoc.data().warranty_end,
-                subscription_start: assetDoc.data().subscription_start?.toDate?.()?.toISOString() || assetDoc.data().subscription_start,
-                subscription_end: assetDoc.data().subscription_end?.toDate?.()?.toISOString() || assetDoc.data().subscription_end,
+                ...assetData,
+                created_at: assetData.created_at?.toDate?.()?.toISOString() || assetData.created_at,
+                updated_at: assetData.updated_at?.toDate?.()?.toISOString() || assetData.updated_at,
+                warranty_start: assetData.warranty_start?.toDate?.()?.toISOString() || assetData.warranty_start,
+                warranty_end: assetData.warranty_end?.toDate?.()?.toISOString() || assetData.warranty_end,
+                subscription_start: assetData.subscription_start?.toDate?.()?.toISOString() || assetData.subscription_start,
+                subscription_end: assetData.subscription_end?.toDate?.()?.toISOString() || assetData.subscription_end,
+                assigned_date: assetData.assigned_date?.toDate?.()?.toISOString() || assetData.assigned_date,
+                // Ensure owner_uid is included (even if null/undefined)
+                owner_uid: assetData.owner_uid || null,
             };
+
+            // Fetch owner email and name if owner_uid exists (similar to list endpoint)
+            if (asset.owner_uid) {
+                try {
+                    const ownerDoc = await usersCollection.doc(asset.owner_uid).get();
+                    if (ownerDoc.exists) {
+                        const ownerData = ownerDoc.data();
+                        asset.owner_name = `${ownerData.firstName || ''} ${ownerData.lastName || ''}`.trim() || ownerData.name || '';
+                        asset.owner_email = ownerData.email || '';
+                        
+                        // If email is still empty, try Firebase Auth as fallback
+                        if (!asset.owner_email) {
+                            try {
+                                const authUser = await admin.auth().getUser(asset.owner_uid);
+                                asset.owner_email = authUser.email || '';
+                            } catch (authErr) {
+                                console.warn(`Could not fetch email from Auth for owner ${asset.owner_uid}:`, authErr.message);
+                            }
+                        }
+                    }
+                } catch (ownerErr) {
+                    console.warn(`Error fetching owner info for asset ${req.params.id}:`, ownerErr.message);
+                    // Continue without owner info - frontend will handle fallback
+                }
+            }
 
             // Check access permission
             const hasAccess = await canAccessAsset(req.user, asset);
@@ -334,26 +363,71 @@ module.exports = (db, admin, assetsCollection, usersCollection, clientsCollectio
                 await assetsCollection.doc(req.params.id).update(updateData);
             } else {
                 // Admins can update all fields
-                const updateData = {
-                    ...req.body,
-                    updated_at: admin.firestore.FieldValue.serverTimestamp(),
-                };
+                const updateData = {};
+                const deleteFields = [];
 
-                // Convert date strings to Firestore timestamps
-                if (updateData.warranty_start && typeof updateData.warranty_start === 'string') {
-                    updateData.warranty_start = admin.firestore.Timestamp.fromDate(new Date(updateData.warranty_start));
-                }
-                if (updateData.warranty_end && typeof updateData.warranty_end === 'string') {
-                    updateData.warranty_end = admin.firestore.Timestamp.fromDate(new Date(updateData.warranty_end));
-                }
-                if (updateData.subscription_start && typeof updateData.subscription_start === 'string') {
-                    updateData.subscription_start = admin.firestore.Timestamp.fromDate(new Date(updateData.subscription_start));
-                }
-                if (updateData.subscription_end && typeof updateData.subscription_end === 'string') {
-                    updateData.subscription_end = admin.firestore.Timestamp.fromDate(new Date(updateData.subscription_end));
+                // Process each field from request body
+                Object.keys(req.body).forEach(key => {
+                    if (key === 'id') return; // Skip id field
+                    
+                    const value = req.body[key];
+                    
+                    // Handle date fields - convert strings to Firestore timestamps
+                    if (['warranty_start', 'warranty_end', 'subscription_start', 'subscription_end', 'assigned_date'].includes(key)) {
+                        if (typeof value === 'string' && value.trim() !== '') {
+                            try {
+                                const date = new Date(value);
+                                if (!isNaN(date.getTime())) {
+                                    updateData[key] = admin.firestore.Timestamp.fromDate(date);
+                                }
+                            } catch (error) {
+                                console.error(`Error converting date for ${key}:`, error);
+                                // Skip invalid dates
+                            }
+                        } else if (value === null || value === '' || value === undefined) {
+                            // Delete date fields if null/empty
+                            deleteFields.push(key);
+                        }
+                    } else if (key === 'owner_uid') {
+                        // Special handling for owner_uid - can be null to unassign
+                        if (value === null || value === '' || value === undefined) {
+                            deleteFields.push(key);
+                            // Also delete assigned_date when unassigning
+                            if (!deleteFields.includes('assigned_date')) {
+                                deleteFields.push('assigned_date');
+                            }
+                        } else {
+                            // Valid owner_uid - save it
+                            updateData[key] = value;
+                        }
+                    } else {
+                        // For other fields
+                        if (value === null || value === undefined) {
+                            // Mark for deletion if explicitly null
+                            deleteFields.push(key);
+                        } else if (value !== '' || ['asset_id', 'serial_number', 'category', 'version'].includes(key)) {
+                            // Include non-empty values or required fields
+                            updateData[key] = value;
+                        }
+                    }
+                });
+
+                // Always update the updated_at timestamp
+                updateData.updated_at = admin.firestore.FieldValue.serverTimestamp();
+
+                // Handle field deletions separately
+                if (deleteFields.length > 0) {
+                    deleteFields.forEach(field => {
+                        updateData[field] = admin.firestore.FieldValue.delete();
+                    });
                 }
 
-                delete updateData.id; // Remove id from update data
+                console.log('Updating asset:', req.params.id);
+                console.log('Update data keys:', Object.keys(updateData));
+                console.log('Owner UID in request:', req.body.owner_uid);
+                console.log('Owner UID in updateData:', updateData.owner_uid);
+                console.log('Delete fields:', deleteFields);
+                
                 await assetsCollection.doc(req.params.id).update(updateData);
             }
 

@@ -21,6 +21,7 @@ import {
 import { API_BASE_URL } from '../../config/constants';
 import { authClient } from '../../config/firebase';
 import AddToRepairQueueModal from './AddToRepairQueueModal';
+import EditAssetModal from './EditAssetModal';
 
 const AssetDetailPage = ({ currentUser, showFlashMessage }) => {
     const { assetId } = useParams();
@@ -29,6 +30,7 @@ const AssetDetailPage = ({ currentUser, showFlashMessage }) => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [isRepairQueueModalOpen, setIsRepairQueueModalOpen] = useState(false);
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [createdByName, setCreatedByName] = useState(null);
 
     useEffect(() => {
@@ -51,22 +53,92 @@ const AssetDetailPage = ({ currentUser, showFlashMessage }) => {
 
             const data = await response.json();
             
+            console.log('Asset data received:', { id: data.id, owner_uid: data.owner_uid, asset_type: data.asset_type });
+            
             // Fetch owner information if owner_uid exists
             if (data.owner_uid) {
+                // Preserve any existing owner_name/owner_email from asset data
+                const existingOwnerName = data.owner_name || null;
+                const existingOwnerEmail = data.owner_email || null;
+                
+                console.log('Fetching owner info for UID:', data.owner_uid, 'Existing email:', existingOwnerEmail);
+                
                 try {
                     const userResponse = await fetch(`${API_BASE_URL}/api/users/${data.owner_uid}`, {
                         headers: {
                             'Authorization': `Bearer ${token}`,
                         },
                     });
+                    
                     if (userResponse.ok) {
                         const userData = await userResponse.json();
-                        data.owner_name = `${userData.firstName || ''} ${userData.lastName || ''}`.trim() || userData.name || '';
-                        data.owner_email = userData.email || '';
+                        console.log('User API response:', userData);
+                        
+                        // Extract email - try multiple possible fields and ensure it's a valid email
+                        let email = userData.email || 
+                                   userData.userEmail || 
+                                   userData.user_email ||
+                                   existingOwnerEmail || 
+                                   '';
+                        
+                        // Validate email format
+                        if (email && !email.includes('@')) {
+                            console.warn('Invalid email format received:', email);
+                            email = existingOwnerEmail || '';
+                        }
+                        
+                        // Extract name - try multiple fields
+                        const name = userData.fullName || 
+                                    userData.name || 
+                                    `${userData.firstName || ''} ${userData.lastName || ''}`.trim() || 
+                                    existingOwnerName ||
+                                    '';
+                        
+                        data.owner_email = email;
+                        data.owner_name = name;
+                        
+                        console.log('Owner info extracted:', { 
+                            owner_uid: data.owner_uid,
+                            owner_name: data.owner_name, 
+                            owner_email: data.owner_email,
+                            rawResponse: userData 
+                        });
+                        
+                        // If email is still empty after all attempts, log detailed warning
+                        if (!data.owner_email || !data.owner_email.includes('@')) {
+                            console.error('CRITICAL: User email not found or invalid after fetch:', {
+                                owner_uid: data.owner_uid,
+                                userData: userData,
+                                existingOwnerEmail: existingOwnerEmail
+                            });
+                        }
+                    } else {
+                        const errorText = await userResponse.text();
+                        console.error('Failed to fetch owner info from API:', {
+                            status: userResponse.status,
+                            statusText: userResponse.statusText,
+                            owner_uid: data.owner_uid,
+                            error: errorText
+                        });
+                        // Keep existing owner_name/owner_email if available
+                        data.owner_name = existingOwnerName;
+                        data.owner_email = existingOwnerEmail;
                     }
                 } catch (err) {
-                    console.error('Error fetching owner info:', err);
+                    console.error('Exception while fetching owner info:', {
+                        error: err.message,
+                        stack: err.stack,
+                        owner_uid: data.owner_uid
+                    });
+                    // Keep existing owner_name/owner_email if available
+                    data.owner_name = existingOwnerName;
+                    data.owner_email = existingOwnerEmail;
                 }
+            } else {
+                // Explicitly set to null/empty if no owner
+                data.owner_name = null;
+                data.owner_email = null;
+                console.log('No owner_uid found in asset data');
             }
 
             // Fetch created by user information if created_by_uid exists
@@ -108,6 +180,14 @@ const AssetDetailPage = ({ currentUser, showFlashMessage }) => {
         }
         fetchAssetDetails();
     };
+
+    const handleEditSuccess = () => {
+        if (showFlashMessage) {
+            showFlashMessage('Asset updated successfully', 'success');
+        }
+        fetchAssetDetails();
+    };
+
 
     const getWarrantyStatus = () => {
         if (!asset?.warranty_end) return { status: 'unknown', color: 'text-gray-500', label: 'No warranty info' };
@@ -251,17 +331,10 @@ const AssetDetailPage = ({ currentUser, showFlashMessage }) => {
                                 </div>
                             </div>
                         </div>
-                        {(currentUser?.role === 'super_admin' || currentUser?.role === 'site_admin') && (
+                        {(currentUser?.role === 'super_admin' || currentUser?.role === 'admin') && (
                             <div className="flex items-center space-x-2 shrink-0">
                                 <button
-                                    onClick={() => {
-                                        // Handle edit - navigate to edit page or open edit modal
-                                        console.log('Edit asset:', asset);
-                                        // TODO: Implement edit functionality
-                                        if (showFlashMessage) {
-                                            showFlashMessage('Edit functionality coming soon', 'info');
-                                        }
-                                    }}
+                                    onClick={() => setIsEditModalOpen(true)}
                                     className="px-3 py-1.5 text-xs font-semibold text-gray-700 bg-white hover:bg-gray-50 hover:text-gray-900 rounded-md transition-all duration-150 active:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-400 flex items-center space-x-1.5"
                                     title="Edit Asset"
                                     type="button"
@@ -363,7 +436,23 @@ const AssetDetailPage = ({ currentUser, showFlashMessage }) => {
                             {asset.asset_type === 'hardware' && (
                                 <InfoRow label="Client" value={asset.client_name} icon={BuildingIcon} />
                             )}
-                            <InfoRow label={asset.asset_type === 'software' ? 'Assigned To' : 'Owner'} value={asset.owner_name || asset.owner_email} icon={UserIcon} />
+                            <InfoRow 
+                                label={asset.asset_type === 'software' ? 'Assigned To' : 'Owner'} 
+                                value={
+                                    // If owner_uid exists, there IS an owner assigned
+                                    asset.owner_uid
+                                        ? (
+                                            // Prioritize email - it's the most important identifier
+                                            asset.owner_email && asset.owner_email.includes('@')
+                                                ? asset.owner_email
+                                                : asset.owner_name
+                                                    ? asset.owner_name
+                                                    : `Owner (UID: ${asset.owner_uid.substring(0, 8)}...)`
+                                          )
+                                        : 'Unassigned'
+                                } 
+                                icon={UserIcon} 
+                            />
                             {asset.asset_type === 'software' && asset.owner_name && asset.owner_email && asset.owner_email !== asset.owner_name && (
                                 <InfoRow label="User Email" value={asset.owner_email} icon={UserIcon} />
                             )}
@@ -825,6 +914,17 @@ const AssetDetailPage = ({ currentUser, showFlashMessage }) => {
                     assetId={assetId}
                     assetName={asset.asset_name || asset.name}
                     onSuccess={handleRepairQueueSuccess}
+                />
+            )}
+
+            {/* Edit Asset Modal */}
+            {asset && (
+                <EditAssetModal
+                    isOpen={isEditModalOpen}
+                    onClose={() => setIsEditModalOpen(false)}
+                    onSuccess={handleEditSuccess}
+                    currentUser={currentUser}
+                    asset={asset}
                 />
             )}
         </div>

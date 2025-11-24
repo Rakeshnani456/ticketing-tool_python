@@ -55,20 +55,82 @@ module.exports = (db, clientsCollection, usersCollection, verifyFirebaseToken) =
         }
     });
 
-    // GET /api/clients/:id - Get a single client by ID
-    router.get('/:id', async (req, res) => {
+    // GET /api/clients/:id - Get a single client by ID or company name
+    router.get('/:id', verifyFirebaseToken, async (req, res) => {
         try {
             const { id } = req.params;
-            const clientDoc = await clientsCollection.doc(id).get();
+            const userRole = req.user?.role;
+            const userClientName = req.user?.client_name || req.user?.companyName;
             
+            console.log(`[GET /api/clients/:id] Looking up client with ID/name: ${id}, user role: ${userRole}, user client: ${userClientName}`);
+            
+            // Check basic permissions
+            if (!['super_admin', 'admin', 'support', 'engineer', 'site_admin'].includes(userRole)) {
+                return res.status(403).json({ error: 'Insufficient permissions to access client data' });
+            }
+            
+            // First, try to fetch by document ID
+            let clientDoc = await clientsCollection.doc(id).get();
+            
+            // If not found by ID, try to find by company name
             if (!clientDoc.exists) {
-                return res.status(404).json({ error: 'Client not found' });
+                console.log(`[GET /api/clients/:id] Not found by document ID, trying company name lookup...`);
+                
+                // Try exact match first
+                let clientsSnapshot = await clientsCollection.where('companyName', '==', id).limit(1).get();
+                
+                // If not found, try case-insensitive by fetching all and filtering
+                if (clientsSnapshot.empty) {
+                    console.log(`[GET /api/clients/:id] Exact match failed, trying case-insensitive search...`);
+                    const allClientsSnapshot = await clientsCollection.get();
+                    const matchingDoc = allClientsSnapshot.docs.find(doc => {
+                        const data = doc.data();
+                        const companyName = (data.companyName || '').toLowerCase().trim();
+                        const clientName = (data.client_name || '').toLowerCase().trim();
+                        const searchId = id.toLowerCase().trim();
+                        return companyName === searchId || clientName === searchId;
+                    });
+                    
+                    if (matchingDoc) {
+                        clientDoc = matchingDoc;
+                        console.log(`[GET /api/clients/:id] Found client by case-insensitive match: ${matchingDoc.id}`);
+                    } else {
+                        console.log(`[GET /api/clients/:id] Client not found. Searched for: "${id}"`);
+                        // Log available clients for debugging (limited to first 5)
+                        const allClients = allClientsSnapshot.docs.slice(0, 5).map(doc => ({
+                            id: doc.id,
+                            companyName: doc.data().companyName,
+                            client_name: doc.data().client_name
+                        }));
+                        console.log(`[GET /api/clients/:id] Sample clients:`, allClients);
+                        return res.status(404).json({ error: 'Client not found' });
+                    }
+                } else {
+                    // Found by exact match
+                    clientDoc = clientsSnapshot.docs[0];
+                    console.log(`[GET /api/clients/:id] Found client by exact company name match: ${clientDoc.id}`);
+                }
+            } else {
+                console.log(`[GET /api/clients/:id] Found client by document ID: ${clientDoc.id}`);
             }
             
             const data = clientDoc.data();
+            
+            // For site_admin, verify they can only access their own client (after lookup)
+            if (userRole === 'site_admin' && userClientName) {
+                const clientName = (data.companyName || data.client_name || '').toLowerCase().trim();
+                const userClient = userClientName.toLowerCase().trim();
+                
+                if (clientName && userClient && clientName !== userClient) {
+                    console.log(`[GET /api/clients/:id] Site admin tried to access different client. User client: "${userClient}", Requested: "${clientName}"`);
+                    return res.status(403).json({ error: 'Access denied: You can only access your own client' });
+                }
+            }
             const client = {
                 id: clientDoc.id,
+                client_id: clientDoc.id, // Add client_id for consistency
                 companyName: data.companyName || '',
+                client_name: data.companyName || data.client_name || '', // Add client_name for consistency
                 website: data.website || '',
                 location: data.location || '',
                 clientContactNumber: data.clientContactNumber || '',

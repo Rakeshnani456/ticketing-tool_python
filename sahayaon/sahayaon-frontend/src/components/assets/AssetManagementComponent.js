@@ -15,15 +15,16 @@ const AssetManagementComponent = ({ currentUser }) => {
         return <div>Loading...</div>;
     }
 
-    // Route based on user role
-    if (currentUser.role === 'super_admin' || currentUser.role === 'admin') {
+    // Route based on user role - show full management view
+    if (currentUser.role === 'super_admin' || currentUser.role === 'admin' || currentUser.role === 'engineer' || currentUser.role === 'support') {
+        // Super admin, admin, engineer, support see all assets
         return <SuperAdminAssetManagement currentUser={currentUser} clientFilter={clientFilter} userFilter={userFilter} />;
     } else if (currentUser.role === 'site_admin') {
+        // Site admin sees all assets for their client
         return <SiteAdminAssetManagement currentUser={currentUser} clientFilter={clientFilter} userFilter={userFilter} />;
-    } else if (currentUser.role === 'user') {
-        return <UserAssetManagement currentUser={currentUser} />;
     } else {
-        return <AccessDeniedComponent />;
+        // For other roles (user, etc.), show their own assets
+        return <UserAssetManagement currentUser={currentUser} />;
     }
 };
 

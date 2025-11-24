@@ -136,6 +136,59 @@ module.exports = (db, admin, usersCollection, clientsCollection, verifyFirebaseT
         }
     });
 
+    // GET /api/users/:uid - Get a single user by UID
+    router.get('/:uid', verifyFirebaseToken, async (req, res) => {
+        try {
+            const { uid } = req.params;
+            const userDoc = await usersCollection.doc(uid).get();
+            
+            if (!userDoc.exists) {
+                return res.status(404).json({ error: 'User not found' });
+            }
+
+            const userData = userDoc.data();
+            
+            // Try to get email from Firestore first, then from Firebase Auth
+            let email = userData.email || '';
+            if (!email) {
+                try {
+                    const authUser = await admin.auth().getUser(uid);
+                    email = authUser.email || '';
+                } catch (authErr) {
+                    console.warn(`Could not fetch email from Auth for user ${uid}:`, authErr.message);
+                    // Keep email as empty string if Auth fetch fails
+                }
+            }
+            
+            // Build full name from firstName/lastName or name field
+            let fullName = '';
+            if (userData.firstName || userData.lastName) {
+                fullName = `${userData.firstName || ''} ${userData.lastName || ''}`.trim();
+            } else if (userData.name) {
+                fullName = userData.name;
+            }
+
+            // Return user data in expected format
+            const response = {
+                uid: uid,
+                email: email,
+                name: fullName,
+                fullName: fullName,
+                firstName: userData.firstName || '',
+                lastName: userData.lastName || '',
+                role: userData.role || '',
+                client_name: userData.client_name || userData.companyName || '',
+                companyName: userData.companyName || userData.client_name || '',
+            };
+
+            console.log(`[GET /api/users/:uid] Returning user data for ${uid}:`, { email, fullName });
+            return res.status(200).json(response);
+        } catch (err) {
+            console.error('Error fetching user:', err);
+            return res.status(500).json({ error: err.message || 'Failed to fetch user.' });
+        }
+    });
+
     // PUT /api/users/:uid - Update user fields
     router.put('/:uid', verifyFirebaseToken, async (req, res) => {
         const { uid } = req.params;

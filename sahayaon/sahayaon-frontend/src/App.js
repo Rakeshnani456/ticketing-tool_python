@@ -142,6 +142,8 @@ import TermsOfServicePage from './components/legal/TermsOfServicePage';
 import AssetManagementComponent from './components/assets/AssetManagementComponent';
 import AssetDetailPage from './components/assets/AssetDetailPage';
 import RepairQueueWorkflow from './components/assets/RepairQueueWorkflow';
+import ClientAssetsPage from './components/assets/ClientAssetsPage';
+import UserAssetManagement from './components/assets/UserAssetManagement';
 
 
 
@@ -1519,23 +1521,37 @@ const AppContent = () => {
                                         <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate" style={{ color: location.pathname === '/engineer-management' ? '#ffffff' : '#d1d5db' }}>Engineers</motion.span>
                                     </Link>
 
-                                    {/* Asset Management - temporarily hidden for site_admin */}
-                                    {currentUser.role !== 'site_admin' && (
-                                        <Link to="/assets" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/assets' || location.pathname.startsWith('/assets/') ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
-                                            { !isSidebarExpanded ? (
-                                                <LeftMenuTooltipBubble title="Assets">
-                                                    <div className="flex items-center justify-center w-7 h-7">
-                                                        <Package size={23} className="flex-shrink-0" style={{ color: (location.pathname === '/assets' || location.pathname.startsWith('/assets/')) ? '#ffffff' : '#d1d5db' }} />
-                                                    </div>
-                                                </LeftMenuTooltipBubble>
-                                            ) : (
-                                                <div className="flex items-center justify-center w-5 h-5 mr-3">
-                                                    <Package size={19} className="flex-shrink-0" style={{ color: (location.pathname === '/assets' || location.pathname.startsWith('/assets/')) ? '#ffffff' : '#d1d5db' }} />
+                                    {/* Asset Management - Full view */}
+                                    <Link to="/assets" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/assets' || (location.pathname.startsWith('/assets/') && !location.pathname.startsWith('/assets/clients/')) ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                        { !isSidebarExpanded ? (
+                                            <LeftMenuTooltipBubble title="Assets">
+                                                <div className="flex items-center justify-center w-7 h-7">
+                                                    <Package size={23} className="flex-shrink-0" style={{ color: (location.pathname === '/assets' || (location.pathname.startsWith('/assets/') && !location.pathname.startsWith('/assets/clients/'))) ? '#ffffff' : '#d1d5db' }} />
                                                 </div>
-                                            )}
-                                            <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate" style={{ color: (location.pathname === '/assets' || location.pathname.startsWith('/assets/')) ? '#ffffff' : '#d1d5db' }}>Assets</motion.span>
-                                        </Link>
-                                    )}
+                                            </LeftMenuTooltipBubble>
+                                        ) : (
+                                            <div className="flex items-center justify-center w-5 h-5 mr-3">
+                                                <Package size={19} className="flex-shrink-0" style={{ color: (location.pathname === '/assets' || (location.pathname.startsWith('/assets/') && !location.pathname.startsWith('/assets/clients/'))) ? '#ffffff' : '#d1d5db' }} />
+                                            </div>
+                                        )}
+                                        <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate" style={{ color: (location.pathname === '/assets' || (location.pathname.startsWith('/assets/') && !location.pathname.startsWith('/assets/clients/'))) ? '#ffffff' : '#d1d5db' }}>Assets</motion.span>
+                                    </Link>
+
+                                    {/* My Assets - Engineer/Support own assets */}
+                                    <Link to="/my-assets" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/my-assets' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                        { !isSidebarExpanded ? (
+                                            <LeftMenuTooltipBubble title="My Assets">
+                                                <div className="flex items-center justify-center w-7 h-7">
+                                                    <Package size={23} className="flex-shrink-0" style={{ color: location.pathname === '/my-assets' ? '#ffffff' : '#d1d5db' }} />
+                                                </div>
+                                            </LeftMenuTooltipBubble>
+                                        ) : (
+                                            <div className="flex items-center justify-center w-5 h-5 mr-3">
+                                                <Package size={19} className="flex-shrink-0" style={{ color: location.pathname === '/my-assets' ? '#ffffff' : '#d1d5db' }} />
+                                            </div>
+                                        )}
+                                        <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate" style={{ color: location.pathname === '/my-assets' ? '#ffffff' : '#d1d5db' }}>My Assets</motion.span>
+                                    </Link>
 
                                     {/* Personal Notes - hidden for site_admin */}
                                     {currentUser.role !== 'site_admin' && (
@@ -1750,23 +1766,37 @@ const AppContent = () => {
                                         <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate" style={{ color: (location.pathname === '/user-management' || location.pathname.startsWith('/user-management/')) ? '#ffffff' : '#d1d5db' }}>Users</motion.span>
                                     </Link>
 
-                                    {/* Asset Management for Site Admin - temporarily hidden */}
-                                    {false && (
-                                        <Link to="/assets" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/assets' || location.pathname.startsWith('/assets/') ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
-                                            { !isSidebarExpanded ? (
-                                                <LeftMenuTooltipBubble title="Assets">
-                                                    <div className="flex items-center justify-center w-7 h-7">
-                                                        <Package size={23} className="flex-shrink-0" style={{ color: (location.pathname === '/assets' || location.pathname.startsWith('/assets/')) ? '#ffffff' : '#d1d5db' }} />
-                                                    </div>
-                                                </LeftMenuTooltipBubble>
-                                            ) : (
-                                                <div className="flex items-center justify-center w-5 h-5 mr-3">
-                                                    <Package size={19} className="flex-shrink-0" style={{ color: (location.pathname === '/assets' || location.pathname.startsWith('/assets/')) ? '#ffffff' : '#d1d5db' }} />
+                                    {/* Asset Management for Site Admin - Full view */}
+                                    <Link to="/assets" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/assets' || (location.pathname.startsWith('/assets/') && !location.pathname.startsWith('/assets/clients/')) ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                        { !isSidebarExpanded ? (
+                                            <LeftMenuTooltipBubble title="Assets">
+                                                <div className="flex items-center justify-center w-7 h-7">
+                                                    <Package size={23} className="flex-shrink-0" style={{ color: (location.pathname === '/assets' || (location.pathname.startsWith('/assets/') && !location.pathname.startsWith('/assets/clients/'))) ? '#ffffff' : '#d1d5db' }} />
                                                 </div>
-                                            )}
-                                            <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate" style={{ color: (location.pathname === '/assets' || location.pathname.startsWith('/assets/')) ? '#ffffff' : '#d1d5db' }}>Assets</motion.span>
-                                        </Link>
-                                    )}
+                                            </LeftMenuTooltipBubble>
+                                        ) : (
+                                            <div className="flex items-center justify-center w-5 h-5 mr-3">
+                                                <Package size={19} className="flex-shrink-0" style={{ color: (location.pathname === '/assets' || (location.pathname.startsWith('/assets/') && !location.pathname.startsWith('/assets/clients/'))) ? '#ffffff' : '#d1d5db' }} />
+                                            </div>
+                                        )}
+                                        <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate" style={{ color: (location.pathname === '/assets' || (location.pathname.startsWith('/assets/') && !location.pathname.startsWith('/assets/clients/'))) ? '#ffffff' : '#d1d5db' }}>Assets</motion.span>
+                                    </Link>
+
+                                    {/* My Assets - Site Admin's own assets */}
+                                    <Link to="/my-assets" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/my-assets' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                        { !isSidebarExpanded ? (
+                                            <LeftMenuTooltipBubble title="My Assets">
+                                                <div className="flex items-center justify-center w-7 h-7">
+                                                    <Package size={23} className="flex-shrink-0" style={{ color: location.pathname === '/my-assets' ? '#ffffff' : '#d1d5db' }} />
+                                                </div>
+                                            </LeftMenuTooltipBubble>
+                                        ) : (
+                                            <div className="flex items-center justify-center w-5 h-5 mr-3">
+                                                <Package size={19} className="flex-shrink-0" style={{ color: location.pathname === '/my-assets' ? '#ffffff' : '#d1d5db' }} />
+                                            </div>
+                                        )}
+                                        <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate" style={{ color: location.pathname === '/my-assets' ? '#ffffff' : '#d1d5db' }}>My Assets</motion.span>
+                                    </Link>
                                     
                                     {/* Personal Notes - hidden for site_admin */}
                                     {currentUser.role !== 'site_admin' && (
@@ -1950,23 +1980,37 @@ const AppContent = () => {
                                                 <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate" style={{ color: (location.pathname === '/user-management' || location.pathname.startsWith('/user-management/')) ? '#ffffff' : '#d1d5db' }}>Users</motion.span>
                                             </Link>
 
-                                            {/* Asset Management for admin and site_admin roles - temporarily hidden for site_admin */}
-                                            {currentUser.role !== 'site_admin' && (
-                                                <Link to="/assets" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/assets' || location.pathname.startsWith('/assets/') ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
-                                                    { !isSidebarExpanded ? (
-                                                        <LeftMenuTooltipBubble title="Assets">
-                                                            <div className="flex items-center justify-center w-7 h-7">
-                                                                <Package size={23} className="flex-shrink-0" style={{ color: (location.pathname === '/assets' || location.pathname.startsWith('/assets/')) ? '#ffffff' : '#d1d5db' }} />
-                                                            </div>
-                                                        </LeftMenuTooltipBubble>
-                                                    ) : (
-                                                        <div className="flex items-center justify-center w-5 h-5 mr-3">
-                                                            <Package size={19} className="flex-shrink-0" style={{ color: (location.pathname === '/assets' || location.pathname.startsWith('/assets/')) ? '#ffffff' : '#d1d5db' }} />
+                                            {/* Asset Management for admin and site_admin roles - Full view */}
+                                            <Link to="/assets" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/assets' || (location.pathname.startsWith('/assets/') && !location.pathname.startsWith('/assets/clients/')) ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                                { !isSidebarExpanded ? (
+                                                    <LeftMenuTooltipBubble title="Assets">
+                                                        <div className="flex items-center justify-center w-7 h-7">
+                                                            <Package size={23} className="flex-shrink-0" style={{ color: (location.pathname === '/assets' || (location.pathname.startsWith('/assets/') && !location.pathname.startsWith('/assets/clients/'))) ? '#ffffff' : '#d1d5db' }} />
                                                         </div>
-                                                    )}
-                                                    <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate" style={{ color: (location.pathname === '/assets' || location.pathname.startsWith('/assets/')) ? '#ffffff' : '#d1d5db' }}>Assets</motion.span>
-                                                </Link>
-                                            )}
+                                                    </LeftMenuTooltipBubble>
+                                                ) : (
+                                                    <div className="flex items-center justify-center w-5 h-5 mr-3">
+                                                        <Package size={19} className="flex-shrink-0" style={{ color: (location.pathname === '/assets' || (location.pathname.startsWith('/assets/') && !location.pathname.startsWith('/assets/clients/'))) ? '#ffffff' : '#d1d5db' }} />
+                                                    </div>
+                                                )}
+                                                <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate" style={{ color: (location.pathname === '/assets' || (location.pathname.startsWith('/assets/') && !location.pathname.startsWith('/assets/clients/'))) ? '#ffffff' : '#d1d5db' }}>Assets</motion.span>
+                                            </Link>
+
+                                            {/* My Assets - Admin's own assets */}
+                                            <Link to="/my-assets" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/my-assets' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                                { !isSidebarExpanded ? (
+                                                    <LeftMenuTooltipBubble title="My Assets">
+                                                        <div className="flex items-center justify-center w-7 h-7">
+                                                            <Package size={23} className="flex-shrink-0" style={{ color: location.pathname === '/my-assets' ? '#ffffff' : '#d1d5db' }} />
+                                                        </div>
+                                                    </LeftMenuTooltipBubble>
+                                                ) : (
+                                                    <div className="flex items-center justify-center w-5 h-5 mr-3">
+                                                        <Package size={19} className="flex-shrink-0" style={{ color: location.pathname === '/my-assets' ? '#ffffff' : '#d1d5db' }} />
+                                                    </div>
+                                                )}
+                                                <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate" style={{ color: location.pathname === '/my-assets' ? '#ffffff' : '#d1d5db' }}>My Assets</motion.span>
+                                            </Link>
                                         </>
                                     )}
                                     
@@ -2093,23 +2137,37 @@ const AppContent = () => {
                                         <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate" style={{ color: location.pathname === '/create-ticket' ? '#ffffff' : '#d1d5db' }}>Create Ticket</motion.span>
                                     </Link>
 
-                                    {/* Asset Management - temporarily hidden for user role */}
-                                    {currentUser.role !== 'user' && (
-                                        <Link to="/assets" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/assets' || location.pathname.startsWith('/assets/') ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
-                                            { !isSidebarExpanded ? (
-                                                <LeftMenuTooltipBubble title="My Assets">
-                                                    <div className="flex items-center justify-center w-7 h-7">
-                                                        <Package size={23} className="flex-shrink-0" style={{ color: (location.pathname === '/assets' || location.pathname.startsWith('/assets/')) ? '#ffffff' : '#d1d5db' }} />
-                                                    </div>
-                                                </LeftMenuTooltipBubble>
-                                            ) : (
-                                                <div className="flex items-center justify-center w-5 h-5 mr-3">
-                                                    <Package size={19} className="flex-shrink-0" style={{ color: (location.pathname === '/assets' || location.pathname.startsWith('/assets/')) ? '#ffffff' : '#d1d5db' }} />
+                                    {/* Asset Management - Full view */}
+                                    <Link to="/assets" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/assets' || (location.pathname.startsWith('/assets/') && !location.pathname.startsWith('/assets/clients/')) ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                        { !isSidebarExpanded ? (
+                                            <LeftMenuTooltipBubble title="Assets">
+                                                <div className="flex items-center justify-center w-7 h-7">
+                                                    <Package size={23} className="flex-shrink-0" style={{ color: (location.pathname === '/assets' || (location.pathname.startsWith('/assets/') && !location.pathname.startsWith('/assets/clients/'))) ? '#ffffff' : '#d1d5db' }} />
                                                 </div>
-                                            )}
-                                            <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate" style={{ color: (location.pathname === '/assets' || location.pathname.startsWith('/assets/')) ? '#ffffff' : '#d1d5db' }}>My Assets</motion.span>
-                                        </Link>
-                                    )}
+                                            </LeftMenuTooltipBubble>
+                                        ) : (
+                                            <div className="flex items-center justify-center w-5 h-5 mr-3">
+                                                <Package size={19} className="flex-shrink-0" style={{ color: (location.pathname === '/assets' || (location.pathname.startsWith('/assets/') && !location.pathname.startsWith('/assets/clients/'))) ? '#ffffff' : '#d1d5db' }} />
+                                            </div>
+                                        )}
+                                        <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate" style={{ color: (location.pathname === '/assets' || (location.pathname.startsWith('/assets/') && !location.pathname.startsWith('/assets/clients/'))) ? '#ffffff' : '#d1d5db' }}>Assets</motion.span>
+                                    </Link>
+
+                                    {/* My Assets - User's own assets */}
+                                    <Link to="/my-assets" className={`group flex items-center px-3 py-2.5  text-sm font-semibold menu-item hover:bg-gray-700 hover:text-white ${location.pathname === '/my-assets' ? 'active' : ''} ${isSidebarExpanded ? 'justify-start' : 'justify-center'}`}>
+                                        { !isSidebarExpanded ? (
+                                            <LeftMenuTooltipBubble title="My Assets">
+                                                <div className="flex items-center justify-center w-7 h-7">
+                                                    <Package size={23} className="flex-shrink-0" style={{ color: location.pathname === '/my-assets' ? '#ffffff' : '#d1d5db' }} />
+                                                </div>
+                                            </LeftMenuTooltipBubble>
+                                        ) : (
+                                            <div className="flex items-center justify-center w-5 h-5 mr-3">
+                                                <Package size={19} className="flex-shrink-0" style={{ color: location.pathname === '/my-assets' ? '#ffffff' : '#d1d5db' }} />
+                                            </div>
+                                        )}
+                                        <motion.span variants={textVariants} animate={isSidebarExpanded ? "expanded" : "collapsed"} className="whitespace-nowrap overflow-hidden truncate" style={{ color: location.pathname === '/my-assets' ? '#ffffff' : '#d1d5db' }}>My Assets</motion.span>
+                                    </Link>
                                     
                                     {/* Personal Notes - hidden for 'user' and 'site_admin' roles */}
                                     {currentUser.role !== 'user' && currentUser.role !== 'site_admin' && (
@@ -2354,6 +2412,8 @@ const AppContent = () => {
                                 <Route path="/clients/edit-client/:clientId" element={currentUser.role === 'super_admin' ? <EditClientPage user={currentUser} /> : <AccessDeniedComponent />} />
                                 <Route path="/clients/client-detail/:clientId" element={currentUser.role === 'super_admin' ? <ClientDetailView user={currentUser} /> : <AccessDeniedComponent />} />
                                 <Route path="/assets" element={<AssetManagementComponent currentUser={currentUser} />} />
+                                <Route path="/my-assets" element={<UserAssetManagement currentUser={currentUser} />} />
+                                <Route path="/assets/clients/:clientId" element={currentUser.role === 'super_admin' || currentUser.role === 'admin' ? <ClientAssetsPage currentUser={currentUser} /> : <AccessDeniedComponent />} />
                                 <Route path="/assets/:assetId" element={<AssetDetailPage currentUser={currentUser} showFlashMessage={showFlashMessage} />} />
                                 <Route path="/assets/:assetId/repair-queue/:queueId" element={<RepairQueueWorkflow currentUser={currentUser} showFlashMessage={showFlashMessage} />} />
 

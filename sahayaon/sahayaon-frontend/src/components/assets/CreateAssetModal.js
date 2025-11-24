@@ -1,51 +1,57 @@
 // components/assets/CreateAssetModal.js
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { CloseIcon, SaveIcon, PackageIcon, LaptopIcon, CalendarIcon, UploadIcon, ImageIcon, PlusIcon } from './AssetIcons';
+import { CloseIcon, PackageIcon, LaptopIcon, PlusIcon } from './AssetIcons';
 import { motion, AnimatePresence } from 'framer-motion';
 import { API_BASE_URL } from '../../config/constants';
 import { authClient } from '../../config/firebase';
 
-const CreateAssetModal = ({ isOpen, onClose, onSuccess, currentUser, preselectedClient = null, preselectedOwner = null }) => {
+const CreateAssetModal = ({ isOpen, onClose, onSuccess, currentUser, preselectedClient = null, preselectedOwner = null, defaultClient = null }) => {
+    // Get client name from defaultClient prop
+    const getClientName = () => {
+        if (defaultClient) {
+            return defaultClient.companyName || defaultClient.client_name || '';
+        }
+        return preselectedClient || '';
+    };
+
     const [formData, setFormData] = useState({
-        asset_name: '',
         asset_id: '',
         asset_type: 'hardware',
         category: '',
         manufacturer: '',
         model: '',
         serial_number: '',
-        client_name: preselectedClient || '',
+        client_name: getClientName(),
         owner_uid: preselectedOwner || '',
-        status: 'Active',
         warranty_start: '',
         warranty_end: '',
         subscription_start: '',
         subscription_end: '',
-        license_type: '',
+        billing_type: '',
+        license_quantity: '',
         version: '',
         configuration: '',
         notes: '',
-        risk_level: 'Low',
-        flagged: false,
     });
     const [errors, setErrors] = useState({});
     const [loading, setLoading] = useState(false);
     const [clients, setClients] = useState([]);
     const [users, setUsers] = useState([]);
-    const [imageFile, setImageFile] = useState(null);
-    const [imagePreview, setImagePreview] = useState(null);
-    const [uploadingImage, setUploadingImage] = useState(false);
-    const fileInputRef = useRef(null);
 
     useEffect(() => {
         if (isOpen) {
-            fetchClients();
-            if (formData.client_name) {
+            const clientName = getClientName();
+            if (clientName) {
+                setFormData(prev => ({ ...prev, client_name: clientName }));
+                // Fetch users for this specific client
+                fetchUsersForClient(clientName);
+            } else if (formData.client_name) {
+                // Fallback: if client_name is already in formData, fetch users for it
                 fetchUsersForClient(formData.client_name);
             }
         }
-    }, [isOpen, formData.client_name]);
+    }, [isOpen, defaultClient]);
 
     const fetchClients = async () => {
         try {
@@ -65,8 +71,13 @@ const CreateAssetModal = ({ isOpen, onClose, onSuccess, currentUser, preselected
     };
 
     const fetchUsersForClient = async (clientName) => {
+        if (!clientName) {
+            setUsers([]);
+            return;
+        }
         try {
             const token = await authClient.currentUser?.getIdToken();
+            // Fetch users filtered by client_name
             const response = await fetch(`${API_BASE_URL}/api/users?client_name=${encodeURIComponent(clientName)}`, {
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -74,10 +85,18 @@ const CreateAssetModal = ({ isOpen, onClose, onSuccess, currentUser, preselected
             });
             if (response.ok) {
                 const data = await response.json();
-                setUsers(Array.isArray(data) ? data : []);
+                // Filter users to ensure they belong to the client (double-check)
+                const filteredUsers = Array.isArray(data) ? data.filter(user => {
+                    const userClientName = user.client_name || user.companyName;
+                    return userClientName === clientName;
+                }) : [];
+                setUsers(filteredUsers);
+            } else {
+                setUsers([]);
             }
         } catch (error) {
-            console.error('Error fetching users:', error);
+            console.error('Error fetching users for client:', error);
+            setUsers([]);
         }
     };
 
@@ -107,20 +126,26 @@ const CreateAssetModal = ({ isOpen, onClose, onSuccess, currentUser, preselected
     const validate = () => {
         const newErrors = {};
         
-        if (!formData.asset_name.trim()) {
-            newErrors.asset_name = 'Asset name is required';
-        }
-        if (!formData.asset_id.trim()) {
-            newErrors.asset_id = 'Asset ID is required';
-        }
-        if (!formData.asset_type) {
-            newErrors.asset_type = 'Asset type is required';
-        }
-        if (!formData.client_name) {
+        // Ensure client_name is set from context
+        const clientName = getClientName();
+        if (!clientName && !formData.client_name) {
             newErrors.client_name = 'Client is required';
         }
-        if (formData.asset_type === 'software' && !formData.version) {
-            newErrors.version = 'Version is required for software';
+        
+        if (formData.asset_type === 'hardware') {
+            if (!formData.asset_id.trim()) {
+                newErrors.asset_id = 'Asset ID is required';
+            }
+            if (!formData.category) {
+                newErrors.category = 'Category is required';
+            }
+            if (!formData.serial_number.trim()) {
+                newErrors.serial_number = 'Serial Number is required';
+            }
+        } else if (formData.asset_type === 'software') {
+            if (!formData.version) {
+                newErrors.version = 'Version is required for software';
+            }
         }
 
         setErrors(newErrors);
@@ -137,25 +162,30 @@ const CreateAssetModal = ({ isOpen, onClose, onSuccess, currentUser, preselected
         setLoading(true);
         try {
             const token = await authClient.currentUser?.getIdToken();
-            
-            // Upload image first if it's a hardware asset
-            let imageUrl = null;
-            if (formData.asset_type === 'hardware' && imageFile) {
-                imageUrl = await uploadImage();
-                if (!imageUrl) {
-                    throw new Error('Failed to upload image. Please try again.');
-                }
+
+            // Ensure client_name is set from context
+            const clientName = getClientName() || formData.client_name;
+            if (!clientName) {
+                setErrors({ submit: 'Client is required. Please navigate from a client page or select a client.' });
+                setLoading(false);
+                return;
             }
 
             // Prepare data for submission
             const submitData = {
                 ...formData,
-                image_url: imageUrl,
+                client_name: clientName, // Always use client from context
+                status: 'Active', // Default status
                 warranty_start: formData.warranty_start || null,
                 warranty_end: formData.warranty_end || null,
                 subscription_start: formData.subscription_start || null,
                 subscription_end: formData.subscription_end || null,
             };
+            
+            // Remove owner_uid for software
+            if (formData.asset_type === 'software') {
+                delete submitData.owner_uid;
+            }
 
             const response = await fetch(`${API_BASE_URL}/api/assets`, {
                 method: 'POST',
@@ -182,96 +212,28 @@ const CreateAssetModal = ({ isOpen, onClose, onSuccess, currentUser, preselected
         }
     };
 
-    const handleImageChange = (e) => {
-        const file = e.target.files[0];
-        if (file) {
-            // Validate file type
-            const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
-            if (!validTypes.includes(file.type)) {
-                setErrors({ ...errors, image: 'Please select a valid image file (JPG, PNG, or WEBP)' });
-                return;
-            }
-            
-            // Validate file size (5MB max)
-            if (file.size > 5 * 1024 * 1024) {
-                setErrors({ ...errors, image: 'Image size must be less than 5MB' });
-                return;
-            }
-
-            setImageFile(file);
-            setErrors({ ...errors, image: null });
-            
-            // Create preview
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                setImagePreview(reader.result);
-            };
-            reader.readAsDataURL(file);
-        }
-    };
-
-    const uploadImage = async () => {
-        if (!imageFile) return null;
-
-        setUploadingImage(true);
-        try {
-            const token = await authClient.currentUser?.getIdToken();
-            const formDataObj = new FormData();
-            formDataObj.append('image', imageFile);
-
-            const response = await fetch(`${API_BASE_URL}/api/assets/upload-image`, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                },
-                body: formDataObj,
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || 'Failed to upload image');
-            }
-
-            const data = await response.json();
-            return data.image.url;
-        } catch (error) {
-            console.error('Error uploading image:', error);
-            setErrors({ ...errors, image: error.message || 'Failed to upload image' });
-            return null;
-        } finally {
-            setUploadingImage(false);
-        }
-    };
 
     const handleClose = () => {
         setFormData({
-            asset_name: '',
             asset_id: '',
             asset_type: 'hardware',
             category: '',
             manufacturer: '',
             model: '',
             serial_number: '',
-            client_name: preselectedClient || '',
+            client_name: getClientName(),
             owner_uid: preselectedOwner || '',
-            status: 'Active',
             warranty_start: '',
             warranty_end: '',
             subscription_start: '',
             subscription_end: '',
-            license_type: '',
+            billing_type: '',
+            license_quantity: '',
             version: '',
             configuration: '',
             notes: '',
-            risk_level: 'Low',
-            flagged: false,
         });
         setErrors({});
-        setImageFile(null);
-        setImagePreview(null);
-        if (fileInputRef.current) {
-            fileInputRef.current.value = '';
-        }
         onClose();
     };
 
@@ -311,16 +273,16 @@ const CreateAssetModal = ({ isOpen, onClose, onSuccess, currentUser, preselected
                     onClick={(e) => e.stopPropagation()}
                 >
                         {/* Header */}
-                        <div className="sticky top-0 bg-white px-4 py-3 flex items-center justify-between z-10 border-b border-gray-200">
+                        <div className="sticky top-0 bg-gradient-to-r from-blue-50 to-indigo-50 px-4 py-3 flex items-center justify-between z-10 border-b-2 border-blue-200">
                             <div className="flex items-center space-x-2">
-                                <div className="p-1.5 bg-blue-50 rounded-md">
-                                    <PackageIcon className="w-4 h-4 text-blue-600" />
+                                <div className="p-2 bg-blue-500 rounded-lg shadow-sm">
+                                    <PackageIcon className="w-4 h-4 text-white" />
                                 </div>
                                 <div className="flex items-center space-x-2">
-                                    <PlusIcon className="w-4 h-4 text-gray-600" />
+                                    <PlusIcon className="w-4 h-4 text-blue-600" />
                                     <div>
                                         <h2 className="text-base font-bold text-gray-900">Create New Asset</h2>
-                                        <p className="text-xs text-gray-500">Add a new hardware or software asset</p>
+                                        <p className="text-xs text-gray-600 font-medium">Add a new hardware or software asset</p>
                                     </div>
                                 </div>
                             </div>
@@ -343,33 +305,33 @@ const CreateAssetModal = ({ isOpen, onClose, onSuccess, currentUser, preselected
 
                             {/* Asset Type Selection */}
                             <div className="space-y-2">
-                                <h3 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Select Asset Type</h3>
+                                <h3 className="text-xs font-bold text-indigo-700 uppercase tracking-wider">Select Asset Type</h3>
                                 <div className="grid grid-cols-2 gap-2">
                                     <button
                                         type="button"
                                         onClick={() => setFormData(prev => ({ ...prev, asset_type: 'hardware' }))}
-                                        className={`p-3 rounded-md transition-all ${
+                                        className={`p-3 rounded-lg transition-all border-2 ${
                                             formData.asset_type === 'hardware'
-                                                ? 'bg-blue-50'
-                                                : 'bg-gray-50 hover:bg-gray-100'
+                                                ? 'bg-blue-50 border-blue-400 shadow-sm'
+                                                : 'bg-gray-50 border-gray-200 hover:bg-gray-100 hover:border-gray-300'
                                         }`}
                                     >
-                                        <LaptopIcon className="w-5 h-5 mx-auto mb-1.5 text-gray-600" />
-                                        <p className="text-xs font-semibold text-gray-900">Hardware</p>
-                                        <p className="text-xs text-gray-500 mt-0.5">Physical devices</p>
+                                        <LaptopIcon className={`w-5 h-5 mx-auto mb-1.5 ${formData.asset_type === 'hardware' ? 'text-blue-600' : 'text-gray-500'}`} />
+                                        <p className={`text-xs font-bold ${formData.asset_type === 'hardware' ? 'text-blue-900' : 'text-gray-700'}`}>Hardware</p>
+                                        <p className="text-xs text-gray-500 mt-0.5 font-normal">Physical devices</p>
                                     </button>
                                     <button
                                         type="button"
                                         onClick={() => setFormData(prev => ({ ...prev, asset_type: 'software' }))}
-                                        className={`p-3 rounded-md transition-all ${
+                                        className={`p-3 rounded-lg transition-all border-2 ${
                                             formData.asset_type === 'software'
-                                                ? 'bg-blue-50'
-                                                : 'bg-gray-50 hover:bg-gray-100'
+                                                ? 'bg-purple-50 border-purple-400 shadow-sm'
+                                                : 'bg-gray-50 border-gray-200 hover:bg-gray-100 hover:border-gray-300'
                                         }`}
                                     >
-                                        <PackageIcon className="w-5 h-5 mx-auto mb-1.5 text-gray-600" />
-                                        <p className="text-xs font-semibold text-gray-900">Software</p>
-                                        <p className="text-xs text-gray-500 mt-0.5">Applications & licenses</p>
+                                        <PackageIcon className={`w-5 h-5 mx-auto mb-1.5 ${formData.asset_type === 'software' ? 'text-purple-600' : 'text-gray-500'}`} />
+                                        <p className={`text-xs font-bold ${formData.asset_type === 'software' ? 'text-purple-900' : 'text-gray-700'}`}>Software</p>
+                                        <p className="text-xs text-gray-500 mt-0.5 font-normal">Applications & licenses</p>
                                     </button>
                                 </div>
                             </div>
@@ -379,31 +341,15 @@ const CreateAssetModal = ({ isOpen, onClose, onSuccess, currentUser, preselected
                                 <>
                                     {/* Basic Information */}
                                     <div className="space-y-2">
-                                        <h3 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Hardware Information</h3>
+                                        <h3 className="text-xs font-bold text-blue-700 uppercase tracking-wider flex items-center space-x-2">
+                                            <div className="w-1 h-4 bg-blue-500 rounded"></div>
+                                            <span>Hardware Information</span>
+                                        </h3>
                                         
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                                             <div>
-                                                <label className="block text-xs font-semibold text-gray-700 mb-1">
-                                                    Asset Name <span className="text-red-600">*</span>
-                                                </label>
-                                                <input
-                                                    type="text"
-                                                    name="asset_name"
-                                                    value={formData.asset_name}
-                                                    onChange={handleChange}
-                                                    className={`w-full px-2.5 py-1.5 text-sm rounded-md focus:ring-2 focus:ring-blue-500 ${
-                                                        errors.asset_name ? 'bg-red-50' : 'bg-white'
-                                                    }`}
-                                                    placeholder="e.g., Dell Laptop XPS 15"
-                                                />
-                                                {errors.asset_name && (
-                                                    <p className="mt-0.5 text-xs text-red-600">{errors.asset_name}</p>
-                                                )}
-                                            </div>
-
-                                            <div>
-                                                <label className="block text-xs font-semibold text-gray-700 mb-1">
-                                                    Asset ID <span className="text-red-600">*</span>
+                                                <label className="block text-xs font-bold text-gray-800 mb-1.5">
+                                                    Asset ID <span className="text-red-600 font-bold">*</span>
                                                 </label>
                                                 <input
                                                     type="text"
@@ -411,9 +357,8 @@ const CreateAssetModal = ({ isOpen, onClose, onSuccess, currentUser, preselected
                                                     value={formData.asset_id}
                                                     onChange={handleChange}
                                                     className={`w-full px-2.5 py-1.5 text-sm rounded-md focus:ring-2 focus:ring-blue-500 ${
-                                                        errors.asset_id ? 'bg-red-50' : 'bg-white'
-                                                    }`}
-                                                    placeholder="e.g., ASSET-001"
+                                                        errors.asset_id ? 'bg-red-50 border-red-300' : 'bg-white border-gray-300'
+                                                    } border`}
                                                 />
                                                 {errors.asset_id && (
                                                     <p className="mt-0.5 text-xs text-red-600">{errors.asset_id}</p>
@@ -421,21 +366,38 @@ const CreateAssetModal = ({ isOpen, onClose, onSuccess, currentUser, preselected
                                             </div>
 
                                             <div>
-                                                <label className="block text-xs font-semibold text-gray-700 mb-1">
-                                                    Category
+                                                <label className="block text-xs font-bold text-gray-800 mb-1.5">
+                                                    Category <span className="text-red-600 font-bold">*</span>
                                                 </label>
-                                                <input
-                                                    type="text"
+                                                <select
                                                     name="category"
                                                     value={formData.category}
                                                     onChange={handleChange}
-                                                    className="w-full px-2.5 py-1.5 text-sm rounded-md focus:ring-2 focus:ring-blue-500 bg-white"
-                                                    placeholder="e.g., Laptop, Desktop, Mobile, Server"
-                                                />
+                                                    className={`w-full px-2.5 py-1.5 text-sm rounded-md focus:ring-2 focus:ring-blue-500 border ${
+                                                        errors.category ? 'bg-red-50 border-red-300' : 'bg-white border-gray-300'
+                                                    }`}
+                                                >
+                                                    <option value="">Select Category</option>
+                                                    <option value="laptop">Laptop</option>
+                                                    <option value="desktop">Desktop</option>
+                                                    <option value="mouse">Mouse</option>
+                                                    <option value="keyboard">Keyboard</option>
+                                                    <option value="server">Server</option>
+                                                    <option value="printer">Printer</option>
+                                                    <option value="scanner">Scanner</option>
+                                                    <option value="monitor">Monitor</option>
+                                                    <option value="firewall">Firewall</option>
+                                                    <option value="headset">Headset</option>
+                                                    <option value="network switch">Network Switch</option>
+                                                    <option value="access points">Access Points</option>
+                                                </select>
+                                                {errors.category && (
+                                                    <p className="mt-0.5 text-xs text-red-600">{errors.category}</p>
+                                                )}
                                             </div>
 
                                             <div>
-                                                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                                                <label className="block text-xs font-semibold text-gray-600 mb-1.5">
                                                     Manufacturer
                                                 </label>
                                                 <input
@@ -443,13 +405,12 @@ const CreateAssetModal = ({ isOpen, onClose, onSuccess, currentUser, preselected
                                                     name="manufacturer"
                                                     value={formData.manufacturer}
                                                     onChange={handleChange}
-                                                    className="w-full px-2.5 py-1.5 text-sm rounded-md focus:ring-2 focus:ring-blue-500 bg-white"
-                                                    placeholder="e.g., Dell, HP, Apple, Lenovo"
+                                                    className="w-full px-2.5 py-1.5 text-sm rounded-md focus:ring-2 focus:ring-blue-500 bg-white border border-gray-300 font-medium"
                                                 />
                                             </div>
 
                                             <div>
-                                                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                                                <label className="block text-xs font-semibold text-gray-600 mb-1.5">
                                                     Model
                                                 </label>
                                                 <input
@@ -457,89 +418,25 @@ const CreateAssetModal = ({ isOpen, onClose, onSuccess, currentUser, preselected
                                                     name="model"
                                                     value={formData.model}
                                                     onChange={handleChange}
-                                                    className="w-full px-2.5 py-1.5 text-sm rounded-md focus:ring-2 focus:ring-blue-500 bg-white"
-                                                    placeholder="e.g., XPS 15, MacBook Pro"
+                                                    className="w-full px-2.5 py-1.5 text-sm rounded-md focus:ring-2 focus:ring-blue-500 bg-white border border-gray-300 font-medium"
                                                 />
                                             </div>
 
                                             <div>
-                                                <label className="block text-xs font-semibold text-gray-700 mb-1">
-                                                    Serial Number
+                                                <label className="block text-xs font-bold text-gray-800 mb-1.5">
+                                                    Serial Number <span className="text-red-600 font-bold">*</span>
                                                 </label>
                                                 <input
                                                     type="text"
                                                     name="serial_number"
                                                     value={formData.serial_number}
                                                     onChange={handleChange}
-                                                    className="w-full px-2.5 py-1.5 text-sm rounded-md focus:ring-2 focus:ring-blue-500 bg-white"
-                                                    placeholder="Device serial number"
+                                                    className={`w-full px-2.5 py-1.5 text-sm rounded-md focus:ring-2 focus:ring-blue-500 border ${
+                                                        errors.serial_number ? 'bg-red-50 border-red-300' : 'bg-white border-gray-300'
+                                                    }`}
                                                 />
-                                            </div>
-
-                                            <div>
-                                                <label className="block text-xs font-semibold text-gray-700 mb-1">
-                                                    Status
-                                                </label>
-                                                <select
-                                                    name="status"
-                                                    value={formData.status}
-                                                    onChange={handleChange}
-                                                    className="w-full px-2.5 py-1.5 text-sm rounded-md focus:ring-2 focus:ring-blue-500 bg-white"
-                                                >
-                                                    <option value="Active">Active</option>
-                                                    <option value="Retired">Retired</option>
-                                                    <option value="Under Repair">Under Repair</option>
-                                                    <option value="Pending">Pending</option>
-                                                </select>
-                                            </div>
-                                        </div>
-
-                                        {/* Image Upload */}
-                                        <div>
-                                            <label className="block text-xs font-semibold text-gray-700 mb-1">
-                                                Asset Image
-                                            </label>
-                                            <div className="space-y-1.5">
-                                                {imagePreview ? (
-                                                    <div className="relative">
-                                                        <img 
-                                                            src={imagePreview} 
-                                                            alt="Preview" 
-                                                            className="w-full h-32 object-cover rounded-md"
-                                                        />
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => {
-                                                                setImagePreview(null);
-                                                                setImageFile(null);
-                                                                if (fileInputRef.current) {
-                                                                    fileInputRef.current.value = '';
-                                                                }
-                                                            }}
-                                                            className="absolute top-1.5 right-1.5 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
-                                                        >
-                                                            <CloseIcon className="w-3 h-3" />
-                                                        </button>
-                                                    </div>
-                                                ) : (
-                                                    <div 
-                                                        onClick={() => fileInputRef.current?.click()}
-                                                        className="border-2 border-dashed border-gray-300 rounded-md p-4 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors"
-                                                    >
-                                                        <ImageIcon className="w-6 h-6 mx-auto text-gray-400 mb-1" />
-                                                        <p className="text-xs text-gray-600 mb-0.5">Click to upload image</p>
-                                                        <p className="text-xs text-gray-400">JPG, PNG, or WEBP (max 5MB)</p>
-                                                    </div>
-                                                )}
-                                                <input
-                                                    ref={fileInputRef}
-                                                    type="file"
-                                                    accept="image/jpeg,image/jpg,image/png,image/webp"
-                                                    onChange={handleImageChange}
-                                                    className="hidden"
-                                                />
-                                                {errors.image && (
-                                                    <p className="text-xs text-red-600">{errors.image}</p>
+                                                {errors.serial_number && (
+                                                    <p className="mt-0.5 text-xs text-red-600">{errors.serial_number}</p>
                                                 )}
                                             </div>
                                         </div>
@@ -547,11 +444,14 @@ const CreateAssetModal = ({ isOpen, onClose, onSuccess, currentUser, preselected
 
                                     {/* Warranty Information */}
                                     <div className="space-y-2">
-                                        <h3 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Warranty Information</h3>
+                                        <h3 className="text-xs font-bold text-orange-700 uppercase tracking-wider flex items-center space-x-2">
+                                            <div className="w-1 h-4 bg-orange-500 rounded"></div>
+                                            <span>Warranty Information</span>
+                                        </h3>
                                         
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                                             <div>
-                                                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                                                <label className="block text-xs font-semibold text-gray-600 mb-1.5">
                                                     Warranty Start
                                                 </label>
                                                 <input
@@ -559,12 +459,12 @@ const CreateAssetModal = ({ isOpen, onClose, onSuccess, currentUser, preselected
                                                     name="warranty_start"
                                                     value={formData.warranty_start}
                                                     onChange={handleChange}
-                                                    className="w-full px-2.5 py-1.5 text-sm rounded-md focus:ring-2 focus:ring-blue-500 bg-white"
+                                                    className="w-full px-2.5 py-1.5 text-sm rounded-md focus:ring-2 focus:ring-orange-500 bg-white border border-gray-300 font-medium"
                                                 />
                                             </div>
 
                                             <div>
-                                                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                                                <label className="block text-xs font-semibold text-gray-600 mb-1.5">
                                                     Warranty End
                                                 </label>
                                                 <input
@@ -572,7 +472,7 @@ const CreateAssetModal = ({ isOpen, onClose, onSuccess, currentUser, preselected
                                                     name="warranty_end"
                                                     value={formData.warranty_end}
                                                     onChange={handleChange}
-                                                    className="w-full px-2.5 py-1.5 text-sm rounded-md focus:ring-2 focus:ring-blue-500 bg-white"
+                                                    className="w-full px-2.5 py-1.5 text-sm rounded-md focus:ring-2 focus:ring-orange-500 bg-white border border-gray-300 font-medium"
                                                 />
                                             </div>
                                         </div>
@@ -585,63 +485,14 @@ const CreateAssetModal = ({ isOpen, onClose, onSuccess, currentUser, preselected
                                 <>
                                     {/* Basic Information */}
                                     <div className="space-y-2">
-                                        <h3 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Software Information</h3>
+                                        <h3 className="text-xs font-bold text-purple-700 uppercase tracking-wider flex items-center space-x-2">
+                                            <div className="w-1 h-4 bg-purple-500 rounded"></div>
+                                            <span>Software Information</span>
+                                        </h3>
                                         
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                                             <div>
-                                                <label className="block text-xs font-semibold text-gray-700 mb-1">
-                                                    Asset Name <span className="text-red-600">*</span>
-                                                </label>
-                                                <input
-                                                    type="text"
-                                                    name="asset_name"
-                                                    value={formData.asset_name}
-                                                    onChange={handleChange}
-                                                    className={`w-full px-2.5 py-1.5 text-sm rounded-md focus:ring-2 focus:ring-blue-500 ${
-                                                        errors.asset_name ? 'bg-red-50' : 'bg-white'
-                                                    }`}
-                                                    placeholder="e.g., Microsoft Office 365"
-                                                />
-                                                {errors.asset_name && (
-                                                    <p className="mt-0.5 text-xs text-red-600">{errors.asset_name}</p>
-                                                )}
-                                            </div>
-
-                                            <div>
-                                                <label className="block text-xs font-semibold text-gray-700 mb-1">
-                                                    Asset ID <span className="text-red-600">*</span>
-                                                </label>
-                                                <input
-                                                    type="text"
-                                                    name="asset_id"
-                                                    value={formData.asset_id}
-                                                    onChange={handleChange}
-                                                    className={`w-full px-2.5 py-1.5 text-sm rounded-md focus:ring-2 focus:ring-blue-500 ${
-                                                        errors.asset_id ? 'bg-red-50' : 'bg-white'
-                                                    }`}
-                                                    placeholder="e.g., ASSET-001"
-                                                />
-                                                {errors.asset_id && (
-                                                    <p className="mt-0.5 text-xs text-red-600">{errors.asset_id}</p>
-                                                )}
-                                            </div>
-
-                                            <div>
-                                                <label className="block text-xs font-semibold text-gray-700 mb-1">
-                                                    Category
-                                                </label>
-                                                <input
-                                                    type="text"
-                                                    name="category"
-                                                    value={formData.category}
-                                                    onChange={handleChange}
-                                                    className="w-full px-2.5 py-1.5 text-sm rounded-md focus:ring-2 focus:ring-blue-500 bg-white"
-                                                    placeholder="e.g., Operating System, Application, Security"
-                                                />
-                                            </div>
-
-                                            <div>
-                                                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                                                <label className="block text-xs font-semibold text-gray-600 mb-1.5">
                                                     Manufacturer/Vendor
                                                 </label>
                                                 <input
@@ -649,24 +500,22 @@ const CreateAssetModal = ({ isOpen, onClose, onSuccess, currentUser, preselected
                                                     name="manufacturer"
                                                     value={formData.manufacturer}
                                                     onChange={handleChange}
-                                                    className="w-full px-2.5 py-1.5 text-sm rounded-md focus:ring-2 focus:ring-blue-500 bg-white"
-                                                    placeholder="e.g., Microsoft, Adobe, Oracle"
+                                                    className="w-full px-2.5 py-1.5 text-sm rounded-md focus:ring-2 focus:ring-purple-500 bg-white border border-gray-300 font-medium"
                                                 />
                                             </div>
 
                                             <div>
-                                                <label className="block text-xs font-semibold text-gray-700 mb-1">
-                                                    Version <span className="text-red-600">*</span>
+                                                <label className="block text-xs font-bold text-gray-800 mb-1.5">
+                                                    Version <span className="text-red-600 font-bold">*</span>
                                                 </label>
                                                 <input
                                                     type="text"
                                                     name="version"
                                                     value={formData.version}
                                                     onChange={handleChange}
-                                                    className={`w-full px-2.5 py-1.5 text-sm rounded-md focus:ring-2 focus:ring-blue-500 ${
-                                                        errors.version ? 'bg-red-50' : 'bg-white'
+                                                    className={`w-full px-2.5 py-1.5 text-sm rounded-md focus:ring-2 focus:ring-blue-500 border ${
+                                                        errors.version ? 'bg-red-50 border-red-300' : 'bg-white border-gray-300'
                                                     }`}
-                                                    placeholder="e.g., 11.0.1, 2023"
                                                 />
                                                 {errors.version && (
                                                     <p className="mt-0.5 text-xs text-red-600">{errors.version}</p>
@@ -674,51 +523,34 @@ const CreateAssetModal = ({ isOpen, onClose, onSuccess, currentUser, preselected
                                             </div>
 
                                             <div>
-                                                <label className="block text-xs font-semibold text-gray-700 mb-1">
-                                                    License Type
+                                                <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                                                    Billing Type
                                                 </label>
                                                 <input
                                                     type="text"
-                                                    name="license_type"
-                                                    value={formData.license_type}
+                                                    name="billing_type"
+                                                    value={formData.billing_type}
                                                     onChange={handleChange}
-                                                    className="w-full px-2.5 py-1.5 text-sm rounded-md focus:ring-2 focus:ring-blue-500 bg-white"
-                                                    placeholder="e.g., Perpetual, Annual, Monthly"
+                                                    className="w-full px-2.5 py-1.5 text-sm rounded-md focus:ring-2 focus:ring-purple-500 bg-white border border-gray-300 font-medium"
                                                 />
                                             </div>
 
                                             <div>
-                                                <label className="block text-xs font-semibold text-gray-700 mb-1">
-                                                    License Key/Serial Number
+                                                <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                                                    License Quantity
                                                 </label>
                                                 <input
-                                                    type="text"
-                                                    name="serial_number"
-                                                    value={formData.serial_number}
+                                                    type="number"
+                                                    name="license_quantity"
+                                                    value={formData.license_quantity}
                                                     onChange={handleChange}
-                                                    className="w-full px-2.5 py-1.5 text-sm rounded-md focus:ring-2 focus:ring-blue-500 bg-white"
-                                                    placeholder="License key or serial number"
+                                                    className="w-full px-2.5 py-1.5 text-sm rounded-md focus:ring-2 focus:ring-purple-500 bg-white border border-gray-300 font-medium"
+                                                    min="1"
                                                 />
                                             </div>
 
                                             <div>
-                                                <label className="block text-xs font-semibold text-gray-700 mb-1">
-                                                    Status
-                                                </label>
-                                                <select
-                                                    name="status"
-                                                    value={formData.status}
-                                                    onChange={handleChange}
-                                                    className="w-full px-2.5 py-1.5 text-sm rounded-md focus:ring-2 focus:ring-blue-500 bg-white"
-                                                >
-                                                    <option value="Active">Active</option>
-                                                    <option value="Retired">Retired</option>
-                                                    <option value="Pending">Pending</option>
-                                                </select>
-                                            </div>
-
-                                            <div>
-                                                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                                                <label className="block text-xs font-semibold text-gray-600 mb-1.5">
                                                     Subscription Start
                                                 </label>
                                                 <input
@@ -726,12 +558,12 @@ const CreateAssetModal = ({ isOpen, onClose, onSuccess, currentUser, preselected
                                                     name="subscription_start"
                                                     value={formData.subscription_start}
                                                     onChange={handleChange}
-                                                    className="w-full px-2.5 py-1.5 text-sm rounded-md focus:ring-2 focus:ring-blue-500 bg-white"
+                                                    className="w-full px-2.5 py-1.5 text-sm rounded-md focus:ring-2 focus:ring-purple-500 bg-white border border-gray-300 font-medium"
                                                 />
                                             </div>
 
                                             <div>
-                                                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                                                <label className="block text-xs font-semibold text-gray-600 mb-1.5">
                                                     Subscription End
                                                 </label>
                                                 <input
@@ -739,7 +571,7 @@ const CreateAssetModal = ({ isOpen, onClose, onSuccess, currentUser, preselected
                                                     name="subscription_end"
                                                     value={formData.subscription_end}
                                                     onChange={handleChange}
-                                                    className="w-full px-2.5 py-1.5 text-sm rounded-md focus:ring-2 focus:ring-blue-500 bg-white"
+                                                    className="w-full px-2.5 py-1.5 text-sm rounded-md focus:ring-2 focus:ring-purple-500 bg-white border border-gray-300 font-medium"
                                                 />
                                             </div>
                                         </div>
@@ -748,63 +580,48 @@ const CreateAssetModal = ({ isOpen, onClose, onSuccess, currentUser, preselected
                             )}
 
                             {/* Assignment - Common for both */}
-                            <div className="space-y-2">
-                                <h3 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Assignment</h3>
-                                
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                            {formData.asset_type === 'hardware' && (
+                                <div className="space-y-2">
+                                    <h3 className="text-xs font-bold text-green-700 uppercase tracking-wider flex items-center space-x-2">
+                                        <div className="w-1 h-4 bg-green-500 rounded"></div>
+                                        <span>Assignment</span>
+                                    </h3>
+                                    
                                     <div>
-                                        <label className="block text-xs font-semibold text-gray-700 mb-1">
-                                            Client <span className="text-red-600">*</span>
-                                        </label>
-                                        <select
-                                            name="client_name"
-                                            value={formData.client_name}
-                                            onChange={handleChange}
-                                            className={`w-full px-2.5 py-1.5 text-sm rounded-md focus:ring-2 focus:ring-blue-500 ${
-                                                errors.client_name ? 'bg-red-50' : 'bg-white'
-                                            }`}
-                                            disabled={!!preselectedClient}
-                                        >
-                                            <option value="">Select Client</option>
-                                            {clients.map(client => (
-                                                <option key={client.id || client.companyName} value={client.companyName || client.client_name}>
-                                                    {client.companyName || client.client_name}
-                                                </option>
-                                            ))}
-                                        </select>
-                                        {errors.client_name && (
-                                            <p className="mt-0.5 text-xs text-red-600">{errors.client_name}</p>
-                                        )}
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-xs font-semibold text-gray-700 mb-1">
+                                        <label className="block text-xs font-semibold text-gray-600 mb-1.5">
                                             Owner (User)
                                         </label>
                                         <select
                                             name="owner_uid"
                                             value={formData.owner_uid}
                                             onChange={handleChange}
-                                            className="w-full px-2.5 py-1.5 text-sm rounded-md focus:ring-2 focus:ring-blue-500 bg-white"
-                                            disabled={!formData.client_name || !!preselectedOwner}
+                                            className="w-full px-2.5 py-1.5 text-sm rounded-md focus:ring-2 focus:ring-green-500 bg-white border border-gray-300 font-medium"
+                                            disabled={!getClientName() && !formData.client_name || !!preselectedOwner}
                                         >
                                             <option value="">Unassigned</option>
-                                            {users.map(user => (
-                                                <option key={user.uid} value={user.uid}>
-                                                    {user.name || user.email}
-                                                </option>
-                                            ))}
+                                            {users.length > 0 ? (
+                                                users.map(user => (
+                                                    <option key={user.uid} value={user.uid}>
+                                                        {user.name || user.email}
+                                                    </option>
+                                                ))
+                                            ) : (
+                                                <option value="" disabled>No users found for this client</option>
+                                            )}
                                         </select>
                                     </div>
                                 </div>
-                            </div>
+                            )}
 
                             {/* Additional Information - Common for both */}
                             <div className="space-y-2">
-                                <h3 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Additional Information</h3>
+                                <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center space-x-2">
+                                    <div className="w-1 h-4 bg-gray-400 rounded"></div>
+                                    <span>Additional Information</span>
+                                </h3>
                                 
                                 <div>
-                                    <label className="block text-xs font-semibold text-gray-700 mb-1">
+                                    <label className="block text-xs font-semibold text-gray-600 mb-1.5">
                                         Configuration / Specifications
                                     </label>
                                     <textarea
@@ -812,13 +629,12 @@ const CreateAssetModal = ({ isOpen, onClose, onSuccess, currentUser, preselected
                                         value={formData.configuration}
                                         onChange={handleChange}
                                         rows={2}
-                                        className="w-full px-2.5 py-1.5 text-xs rounded-md focus:ring-2 focus:ring-blue-500 bg-white"
-                                        placeholder="Technical specifications, configuration details, etc."
+                                        className="w-full px-2.5 py-1.5 text-xs rounded-md focus:ring-2 focus:ring-gray-500 bg-white border border-gray-300 font-normal"
                                     />
                                 </div>
 
                                 <div>
-                                    <label className="block text-xs font-semibold text-gray-700 mb-1">
+                                    <label className="block text-xs font-semibold text-gray-600 mb-1.5">
                                         Notes
                                     </label>
                                     <textarea
@@ -826,41 +642,8 @@ const CreateAssetModal = ({ isOpen, onClose, onSuccess, currentUser, preselected
                                         value={formData.notes}
                                         onChange={handleChange}
                                         rows={2}
-                                        className="w-full px-2.5 py-1.5 text-xs rounded-md focus:ring-2 focus:ring-blue-500 bg-white"
-                                        placeholder="Additional notes or comments"
+                                        className="w-full px-2.5 py-1.5 text-xs rounded-md focus:ring-2 focus:ring-gray-500 bg-white border border-gray-300 font-normal"
                                     />
-                                </div>
-
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                    <div>
-                                        <label className="block text-xs font-semibold text-gray-700 mb-1">
-                                            Risk Level
-                                        </label>
-                                        <select
-                                            name="risk_level"
-                                            value={formData.risk_level}
-                                            onChange={handleChange}
-                                            className="w-full px-2.5 py-1.5 text-sm rounded-md focus:ring-2 focus:ring-blue-500 bg-white"
-                                        >
-                                            <option value="Low">Low</option>
-                                            <option value="Medium">Medium</option>
-                                            <option value="High">High</option>
-                                        </select>
-                                    </div>
-
-                                    <div className="flex items-center space-x-2 pt-6">
-                                        <input
-                                            type="checkbox"
-                                            name="flagged"
-                                            id="flagged"
-                                            checked={formData.flagged}
-                                            onChange={handleChange}
-                                            className="w-3.5 h-3.5 text-blue-600 rounded focus:ring-blue-500"
-                                        />
-                                        <label htmlFor="flagged" className="text-xs font-semibold text-gray-700">
-                                            Flagged for Attention
-                                        </label>
-                                    </div>
                                 </div>
                             </div>
 
@@ -878,13 +661,13 @@ const CreateAssetModal = ({ isOpen, onClose, onSuccess, currentUser, preselected
                             <button
                                 type="submit"
                                 form="create-asset-form"
-                                disabled={loading || uploadingImage}
+                                disabled={loading}
                                 className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-md text-xs font-semibold flex items-center space-x-1.5 transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
                             >
-                                    {(loading || uploadingImage) ? (
+                                    {loading ? (
                                         <>
                                             <div className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-white border-t-transparent"></div>
-                                            <span>{uploadingImage ? 'Uploading...' : 'Creating...'}</span>
+                                            <span>Creating...</span>
                                         </>
                                     ) : (
                                         <span>Create Asset</span>

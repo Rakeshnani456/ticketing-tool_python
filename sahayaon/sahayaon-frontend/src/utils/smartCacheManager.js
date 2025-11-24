@@ -8,7 +8,8 @@ export class SmartCacheManager {
         ANALYTICS: 5 * 60 * 1000,     // 5 minutes
         REPORTS: 3 * 60 * 1000,       // 3 minutes
         TICKETS: 2 * 60 * 1000,       // 2 minutes
-        NOTIFICATIONS: 1 * 60 * 1000  // 1 minute
+        NOTIFICATIONS: 1 * 60 * 1000,  // 1 minute
+        ASSETS: 10 * 60 * 1000        // 10 minutes
     };
 
     static CACHE_KEYS = {
@@ -19,7 +20,8 @@ export class SmartCacheManager {
         ANALYTICS: 'analytics_data',
         REPORTS: 'reports_data',
         TICKETS: 'tickets_data',
-        NOTIFICATIONS: 'notifications_data'
+        NOTIFICATIONS: 'notifications_data',
+        ASSETS: 'assets_data'
     };
 
     /**

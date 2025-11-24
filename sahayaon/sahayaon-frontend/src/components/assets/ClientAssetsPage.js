@@ -1,30 +1,287 @@
-// components/assets/SiteAdminAssetManagement.js
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+// components/assets/ClientAssetsPage.js
+import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { 
     PackageIcon,
     LaptopIcon,
     AlertTriangleIcon,
     PlusIcon,
-    WrenchIcon,
     FileTextIcon
 } from './AssetIcons';
 import { motion } from 'framer-motion';
 import AssetTable from './AssetTable';
 import DynamicAssetFilters from './DynamicAssetFilters';
-import useRealtimeAssets from '../../hooks/useRealtimeAssets';
-import useRealtimeUsers from '../../hooks/useRealtimeUsers';
+import CreateAssetModal from './CreateAssetModal';
+import { authClient } from '../../config/firebase';
+import { API_BASE_URL } from '../../config/constants';
 
-const SiteAdminAssetManagement = ({ currentUser }) => {
+const ClientAssetsPage = ({ currentUser }) => {
+    const { clientId } = useParams();
     const navigate = useNavigate();
-    
-    // Use real-time hooks for optimized Firebase reads
-    const { assets, summary, loading, error, refresh } = useRealtimeAssets(currentUser);
-    const { users } = useRealtimeUsers(currentUser?.client_name);
-    
+    const [assets, setAssets] = useState([]);
+    const [clients, setClients] = useState([]);
+    const [users, setUsers] = useState([]);
+    const [summary, setSummary] = useState(null);
+    const [clientInfo, setClientInfo] = useState(null);
+    const [loading, setLoading] = useState(true);
     const [selectedAssets, setSelectedAssets] = useState([]);
     const [mainTab, setMainTab] = useState('hardware'); // 'hardware' or 'software'
     const [hardwareSubTab, setHardwareSubTab] = useState('allocated'); // 'allocated', 'available', 'repair-queue', 'retired'
+    const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+    const [filters, setFilters] = useState({
+        asset_type: 'all',
+        status: 'all',
+        client_name: 'all',
+        owner_uid: 'all',
+        warranty_status: 'all',
+    });
+
+    useEffect(() => {
+        setLoading(true);
+        fetchClientInfo();
+        fetchClients();
+    }, [clientId]);
+
+    useEffect(() => {
+        if (clientInfo) {
+            fetchUsers();
+        }
+    }, [clientInfo]);
+
+    useEffect(() => {
+        // Fetch assets and summary when clientInfo is available or filters change
+        if (clientInfo) {
+            fetchAssets();
+            fetchSummary();
+        }
+    }, [filters, clientInfo]);
+
+    const getAuthToken = async () => {
+        return await authClient.currentUser?.getIdToken(false);
+    };
+
+    const fetchClientInfo = async () => {
+        try {
+            const token = await getAuthToken();
+            console.log(`[ClientAssetsPage] Fetching client info for: ${clientId}`);
+            
+            // Try to fetch by ID/name first
+            let response = await fetch(`${API_BASE_URL}/api/clients/${encodeURIComponent(clientId)}`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                },
+            });
+            
+            if (response.ok) {
+                const client = await response.json();
+                console.log(`[ClientAssetsPage] Client found:`, client);
+                
+                // For site_admin, verify they can only access their own client
+                if (currentUser?.role === 'site_admin') {
+                    const userClientName = currentUser?.client_name || currentUser?.companyName;
+                    const clientName = client.companyName || client.client_name;
+                    
+                    if (userClientName && clientName && userClientName !== clientName) {
+                        console.warn(`[ClientAssetsPage] Site admin tried to access different client. User client: ${userClientName}, Requested: ${clientName}`);
+                        setLoading(false);
+                        return;
+                    }
+                }
+                
+                setClientInfo(client);
+                if (client) {
+                    const clientName = client.companyName || client.client_name;
+                    setFilters(prev => ({ ...prev, client_name: clientName }));
+                }
+            } else {
+                const errorText = await response.text();
+                console.error(`[ClientAssetsPage] Failed to fetch client: ${response.status} - ${errorText}`);
+                
+                // Fallback: fetch all clients and find by id or name
+                response = await fetch(`${API_BASE_URL}/api/clients`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                    },
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                const clientsArray = Array.isArray(data) ? data : [];
+                
+                // Try to find by ID first
+                let client = clientsArray.find(c => c.id === clientId);
+                
+                // If not found by ID, try to find by company name (case-insensitive)
+                if (!client) {
+                    client = clientsArray.find(c => {
+                        const companyName = (c.companyName || '').toLowerCase().trim();
+                        const clientName = (c.client_name || '').toLowerCase().trim();
+                        const searchId = clientId.toLowerCase().trim();
+                        return companyName === searchId || clientName === searchId;
+                    });
+                }
+                
+                if (client) {
+                    console.log(`[ClientAssetsPage] Client found via fallback:`, client);
+                    
+                    // For site_admin, verify they can only access their own client
+                    if (currentUser?.role === 'site_admin') {
+                        const userClientName = currentUser?.client_name || currentUser?.companyName;
+                        const clientName = client.companyName || client.client_name;
+                        
+                        if (userClientName && clientName && userClientName !== clientName) {
+                            console.warn(`[ClientAssetsPage] Site admin tried to access different client. User client: ${userClientName}, Requested: ${clientName}`);
+                            setLoading(false);
+                            return;
+                        }
+                    }
+                    
+                    setClientInfo(client);
+                    const clientName = client.companyName || client.client_name;
+                    setFilters(prev => ({ ...prev, client_name: clientName }));
+                } else {
+                    console.error(`[ClientAssetsPage] Client not found in fallback search. Searched for: ${clientId}`);
+                    console.log(`[ClientAssetsPage] Available clients:`, clientsArray.map(c => ({ id: c.id, companyName: c.companyName, client_name: c.client_name })));
+                    setLoading(false);
+                }
+            }
+        } catch (error) {
+            console.error('[ClientAssetsPage] Error fetching client info:', error);
+            setLoading(false);
+        }
+    };
+
+    const fetchAssets = async () => {
+        if (!clientInfo) {
+            console.log('ClientAssetsPage: clientInfo not available yet, skipping fetchAssets');
+            return;
+        }
+        
+        try {
+            setLoading(true);
+            const token = await getAuthToken();
+            const queryParams = new URLSearchParams();
+            
+            // Always filter by client name
+            const clientName = clientInfo.companyName || clientInfo.client_name;
+            if (!clientName) {
+                console.error('ClientAssetsPage: No client name available');
+                setLoading(false);
+                return;
+            }
+            
+            queryParams.append('client_name', clientName);
+            console.log('ClientAssetsPage: Fetching assets for client:', clientName);
+            
+            Object.keys(filters).forEach(key => {
+                const value = filters[key];
+                if (value && value !== 'all' && key !== 'client_name') {
+                    // Don't override client_name filter
+                    if (Array.isArray(value)) {
+                        value.forEach(v => {
+                            if (v && v !== 'all') {
+                                queryParams.append(key, v);
+                            }
+                        });
+                    } else {
+                        queryParams.append(key, value);
+                    }
+                }
+            });
+
+            const response = await fetch(`${API_BASE_URL}/api/assets?${queryParams}`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                },
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const data = await response.json();
+            console.log('ClientAssetsPage: Fetched assets:', Array.isArray(data) ? data.length : 0);
+            setAssets(Array.isArray(data) ? data : []);
+        } catch (error) {
+            console.error('Error fetching assets:', error);
+            setAssets([]);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const fetchClients = async () => {
+        try {
+            const token = await getAuthToken();
+            const response = await fetch(`${API_BASE_URL}/api/clients`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                },
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const data = await response.json();
+            setClients(Array.isArray(data) ? data : []);
+        } catch (error) {
+            console.error('Error fetching clients:', error);
+            setClients([]);
+        }
+    };
+
+    const fetchUsers = async () => {
+        try {
+            const token = await getAuthToken();
+            if (clientInfo) {
+                const clientName = clientInfo.companyName || clientInfo.client_name;
+                if (clientName) {
+                    const response = await fetch(`${API_BASE_URL}/api/users?client_name=${encodeURIComponent(clientName)}`, {
+                        headers: {
+                            'Authorization': `Bearer ${token}`,
+                        },
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    
+                    const data = await response.json();
+                    setUsers(Array.isArray(data) ? data : []);
+                }
+            }
+        } catch (error) {
+            console.error('Error fetching users:', error);
+            setUsers([]);
+        }
+    };
+
+    const fetchSummary = async () => {
+        try {
+            const token = await getAuthToken();
+            const queryParams = new URLSearchParams();
+            if (clientInfo) {
+                const clientName = clientInfo.companyName || clientInfo.client_name;
+                if (clientName) {
+                    queryParams.append('client_name', clientName);
+                }
+            }
+            
+            const response = await fetch(`${API_BASE_URL}/api/assets/summary?${queryParams}`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                },
+            });
+            const data = await response.json();
+            setSummary(data);
+        } catch (error) {
+            console.error('Error fetching summary:', error);
+        }
+    };
 
     // Get hardware assets
     const getHardwareAssets = () => {
@@ -69,8 +326,49 @@ const SiteAdminAssetManagement = ({ currentUser }) => {
     };
 
     const handleAssetClick = (asset) => {
-        // Navigate to asset detail page
         navigate(`/assets/${asset.id || asset.asset_id}`);
+    };
+
+    const handleFilterChange = (key, value) => {
+        setFilters(prev => ({ ...prev, [key]: value }));
+    };
+
+    const handleClearFilters = () => {
+        setFilters({
+            asset_type: 'all',
+            status: 'all',
+            client_name: clientInfo ? (clientInfo.client_name || clientInfo.companyName) : 'all',
+            owner_uid: 'all',
+            warranty_status: 'all',
+        });
+    };
+
+    const handleBulkAction = async (action, data = {}) => {
+        if (selectedAssets.length === 0) return;
+
+        try {
+            const token = await authClient.currentUser?.getIdToken();
+            const response = await fetch(`${API_BASE_URL}/api/assets/bulk-action`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                    asset_ids: selectedAssets,
+                    action,
+                    data,
+                }),
+            });
+
+            if (response.ok) {
+                fetchAssets();
+                fetchSummary();
+                setSelectedAssets([]);
+            }
+        } catch (error) {
+            console.error('Error performing bulk action:', error);
+        }
     };
 
     const SummaryCard = ({ title, value, icon: Icon, color = 'blue', subtitle }) => {
@@ -130,8 +428,6 @@ const SiteAdminAssetManagement = ({ currentUser }) => {
         };
 
         const getLicenseAllocation = (software) => {
-            // For software, we'll use quantity as total licenses
-            // and count assets with same name and assigned owner as allocated
             const totalLicenses = software.quantity || 0;
             const allocatedLicenses = softwareAssets.filter(s => 
                 s.name === software.name && 
@@ -244,18 +540,17 @@ const SiteAdminAssetManagement = ({ currentUser }) => {
         );
     };
 
-    // Show error if there's an issue with real-time connection
-    if (error) {
+    if (!clientInfo && !loading) {
         return (
             <div className="p-4">
                 <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                    <h2 className="text-red-800 font-bold mb-2">Connection Error</h2>
-                    <p className="text-red-700 text-sm">{error}</p>
+                    <h2 className="text-red-800 font-bold mb-2">Client Not Found</h2>
+                    <p className="text-red-700 text-sm">The requested client could not be found.</p>
                     <button 
-                        onClick={refresh}
+                        onClick={() => navigate('/assets')}
                         className="mt-3 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md text-sm font-semibold"
                     >
-                        Retry Connection
+                        Back to Assets
                     </button>
                 </div>
             </div>
@@ -267,10 +562,31 @@ const SiteAdminAssetManagement = ({ currentUser }) => {
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white rounded-lg p-4 shadow-sm">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900">Asset Management</h1>
+                    <button
+                        onClick={() => navigate('/assets')}
+                        className="text-sm text-blue-600 hover:text-blue-800 mb-2 block"
+                    >
+                        ← Back to Assets
+                    </button>
+                    <h1 className="text-2xl font-bold">
+                        <span className="text-gray-400 font-normal">Asset Management</span>
+                        {' '}
+                        <span className="text-blue-600 font-semibold">
+                            {clientInfo ? (clientInfo.companyName || clientInfo.client_name) : 'Loading...'}
+                        </span>
+                    </h1>
                     <p className="text-xs text-gray-600 mt-0.5">
-                        Manage assets for {currentUser?.client_name || 'your organization'}
+                        Manage assets for this client organization
                     </p>
+                </div>
+                <div className="flex items-center space-x-2">
+                    <button 
+                        onClick={() => setIsCreateModalOpen(true)}
+                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-md text-xs font-semibold flex items-center space-x-1.5 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                        <PlusIcon className="w-3.5 h-3.5" />
+                        <span>Add Asset</span>
+                    </button>
                 </div>
             </div>
 
@@ -436,9 +752,22 @@ const SiteAdminAssetManagement = ({ currentUser }) => {
                     </div>
                 )}
             </div>
+
+            {/* Create Asset Modal */}
+            <CreateAssetModal
+                isOpen={isCreateModalOpen}
+                onClose={() => setIsCreateModalOpen(false)}
+                onSuccess={(result) => {
+                    fetchAssets();
+                    fetchSummary();
+                    setIsCreateModalOpen(false);
+                }}
+                currentUser={currentUser}
+                defaultClient={clientInfo}
+            />
         </div>
     );
 };
 
-export default SiteAdminAssetManagement;
+export default ClientAssetsPage;
 

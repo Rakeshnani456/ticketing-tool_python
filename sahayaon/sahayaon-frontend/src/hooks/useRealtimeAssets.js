@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { dbClient } from '../config/firebase';
+import SmartCacheManager from '../utils/smartCacheManager';
 
 /**
  * Custom hook for real-time asset management with optimized Firebase reads
@@ -22,9 +23,12 @@ const useRealtimeAssets = (currentUser) => {
     const lastUpdateTime = useRef(Date.now());
     const updateBuffer = useRef([]);
     const updateTimerRef = useRef(null);
+    const unsubscribeRef = useRef(null);
     
     // Debounce interval in milliseconds (group updates within this window)
     const DEBOUNCE_INTERVAL = 300;
+    const CACHE_KEY = SmartCacheManager.CACHE_KEYS.ASSETS;
+    const CACHE_TYPE = 'ASSETS';
 
     useEffect(() => {
         if (!currentUser || !currentUser.uid) {
@@ -32,7 +36,13 @@ const useRealtimeAssets = (currentUser) => {
             return;
         }
 
-        let unsubscribe = null;
+        // Check cache first
+        const cached = SmartCacheManager.getCachedData(CACHE_KEY, CACHE_TYPE, currentUser.uid);
+        if (cached && cached.data) {
+            setAssets(cached.data);
+            setLoading(false);
+            console.log(`📦 Using cached assets data (age: ${Math.round(cached.age / 1000)}s)`);
+        }
 
         const setupRealtimeListener = async () => {
             try {
@@ -56,7 +66,7 @@ const useRealtimeAssets = (currentUser) => {
                 }
 
                 // Set up real-time listener with snapshot
-                unsubscribe = onSnapshot(
+                unsubscribeRef.current = onSnapshot(
                     q,
                     {
                         // Enable source options for better performance
@@ -89,6 +99,7 @@ const useRealtimeAssets = (currentUser) => {
 
                         // Update cache
                         processedDocsCache.current = newDocIds;
+                        SmartCacheManager.setCachedData(CACHE_KEY, assetsList, CACHE_TYPE, currentUser.uid);
 
                         // Debounced update strategy
                         // If updates are coming rapidly, buffer them
@@ -138,8 +149,8 @@ const useRealtimeAssets = (currentUser) => {
 
         // Cleanup function - unsubscribe from listener on unmount
         return () => {
-            if (unsubscribe) {
-                unsubscribe();
+            if (unsubscribeRef.current) {
+                unsubscribeRef.current();
                 console.log('🔌 Unsubscribed from assets real-time listener');
             }
             if (updateTimerRef.current) {
