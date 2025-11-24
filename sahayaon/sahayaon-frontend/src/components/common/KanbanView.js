@@ -17,6 +17,7 @@ import {
   UserPlus
 } from 'lucide-react';
 import CompactDropdown from './CompactDropdown';
+import Spinner from './Spinner';
 
 // Status configuration with colors and icons
 const STATUS_CONFIG = {
@@ -317,7 +318,7 @@ const KanbanCard = ({
       {/* Loading Overlay */}
       {(isChangingStatus || isAssigning) && (
         <div className="absolute inset-0 bg-white bg-opacity-75 rounded flex items-center justify-center">
-          <div className="animate-spin rounded-full h-5 w-5 border-2 border-blue-500 border-t-transparent"></div>
+          <Spinner size="md" />
         </div>
       )}
 
@@ -559,7 +560,7 @@ const KanbanView = ({
     return (
       <div className="flex items-center justify-center h-96">
         <div className="flex flex-col items-center gap-3">
-          <div className="animate-spin rounded-full h-10 w-10 border-3 border-blue-500 border-t-transparent"></div>
+          <Spinner size="lg" />
           <span className="text-sm text-gray-500">Loading kanban board...</span>
         </div>
       </div>

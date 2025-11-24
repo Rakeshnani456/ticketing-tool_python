@@ -16,6 +16,7 @@ import {
   Minus
 } from 'lucide-react';
 import { clsx } from 'clsx';
+import Spinner from './Spinner';
 
 // Modern status badge component
 const StatusBadge = ({ status, size = 'sm' }) => {
@@ -270,7 +271,7 @@ const ModernTicketGrid = ({
       <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
         <div className="p-8 text-center">
           <div className="inline-flex items-center gap-2 text-gray-500">
-            <div className="animate-spin rounded-full h-4 w-4 border-2 border-gray-300 border-t-blue-600"></div>
+            <Spinner size="sm" />
             Loading tickets...
           </div>
         </div>

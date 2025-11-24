@@ -54,6 +54,7 @@ import TicketDetailHeader from './TicketDetailHeader';
 import TicketDetailsSection from './TicketDetailsSection';
 import TicketProgressSection from './TicketProgressSection';
 import TicketUpdatesSection from './TicketUpdatesSection';
+import Spinner from '../common/Spinner';
 
 const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
     const { ticketId } = useParams();
@@ -1637,7 +1638,7 @@ const TicketDetailComponent = ({ navigateTo, user, showFlashMessage }) => {
     if (!ticket || loading) return (
         <div className="flex justify-center items-center min-h-screen bg-gray-50">
             <div className="bg-white rounded-xl shadow-lg p-8 border border-gray-200 max-w-md mx-auto">
-                <Loader2 className="animate-spin text-blue-600 mx-auto mb-4" size={48} />
+                <Spinner size="lg" className="mx-auto mb-4" />
                 <p className="text-gray-700 text-center font-medium">Loading ticket details...</p>
                 <p className="text-gray-500 text-center text-sm mt-2">Preparing ticket view...</p>
             </div>

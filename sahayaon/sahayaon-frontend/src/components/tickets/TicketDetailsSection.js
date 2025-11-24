@@ -3,6 +3,7 @@
 import React from 'react';
 import { User, Calendar, Paperclip, Download, MessageSquare, Upload, AlertCircle, X } from 'lucide-react';
 import UserProfilePopup from '../common/UserProfilePopup';
+import Spinner from '../common/Spinner';
 
 // Import file icons
 import PdfIcon from '../../assets/icons/PdfIcon.svg';
@@ -470,11 +471,7 @@ const TicketDetailsSection = ({
                                 >
                                     {isUploading ? (
                                         <>
-                                            <div className="animate-spin h-3 w-3">
-                                                <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
-                                                </svg>
-                                            </div>
+                                            <Spinner size="sm" color="white" />
                                             <span>Uploading...</span>
                                         </>
                                     ) : (
@@ -631,11 +628,7 @@ const TicketDetailsSection = ({
                                             </div>
                                             {attachment.type === 'uploading' ? (
                                                 <div className="flex-shrink-0 flex items-center justify-center">
-                                                    <div className="animate-spin h-4 w-4">
-                                                        <svg className="w-4 h-4 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
-                                                        </svg>
-                                                    </div>
+                                                    <Spinner size="sm" />
                                                 </div>
                                             ) : attachment.type === 'transitioning' ? (
                                                 <div className="flex-shrink-0 flex items-center justify-center">

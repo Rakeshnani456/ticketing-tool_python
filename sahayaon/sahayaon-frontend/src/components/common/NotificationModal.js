@@ -1,5 +1,6 @@
 import React, { useMemo, useEffect, useRef } from 'react';
 import { Bell, Eye, CheckCircle, X, Info, AlertCircle, Mail, Loader2, Check, Trash2 } from 'lucide-react';
+import Spinner from './Spinner';
 
 // Helper for relative time
 const getRelativeTime = (dateString) => {
@@ -133,7 +134,7 @@ const NotificationModal = ({ isOpen, onClose, notifications = [], onClearAll, on
                 <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-200 scrollbar-track-gray-50" style={{ scrollbarWidth: 'thin', scrollbarColor: '#e5e7eb #f9fafb' }}>
                     {isLoading ? (
                         <div className="flex flex-col items-center justify-center h-32 text-gray-500 text-xs">
-                            <Loader2 size={20} className="animate-spin mb-2" />
+                            <Spinner size="md" className="mb-2" />
                             <span className="text-[11px]">Loading...</span>
                         </div>
                     ) : uniqueNotifications.length === 0 ? (

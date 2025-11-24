@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import CustomDropdown from './common/CustomDropdown';
 import { API_BASE_URL } from '../config/constants';
+import Spinner from './common/Spinner';
 import { 
     Plus, 
     Search, 
@@ -683,7 +684,7 @@ const PersonalNotesComponent = ({ user, showFlashMessage }) => {
             <div className="personal-notes-container">
                 <div className="flex items-center justify-center py-20">
                     <div className="flex flex-col items-center gap-3">
-                        <Loader2 className="w-8 h-8 text-orange-500 animate-spin" />
+                        <Spinner size="md" />
                         <p className="text-sm text-gray-500">Loading your notes...</p>
                     </div>
                 </div>
@@ -797,7 +798,7 @@ const PersonalNotesComponent = ({ user, showFlashMessage }) => {
                                 >
                                     {addingNote ? (
                                         <>
-                                            <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                                            <Spinner size="sm" className="mr-1" />
                                             {editingNote ? 'Updating...' : 'Adding...'}
                                         </>
                                     ) : (

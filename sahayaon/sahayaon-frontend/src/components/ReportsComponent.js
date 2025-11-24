@@ -18,6 +18,7 @@ import {
 import { useRealTimeAnalytics } from '../hooks/useRealTimeAnalytics';
 import { websocketClient } from '../utils/websocketClient';
 import { API_BASE_URL } from '../config/constants';
+import Spinner from './common/Spinner';
 import { Bar } from 'react-chartjs-2';
 import {
     Chart as ChartJS,
@@ -297,7 +298,7 @@ const ReportsComponent = ({ user, showFlashMessage }) => {
                                 disabled={isLoading}
                                 className="flex items-center px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                             >
-                                <RefreshCw className={`mr-2 ${isLoading ? 'animate-spin' : ''}`} size={16} />
+                                {isLoading ? <Spinner size="sm" className="mr-2" /> : <RefreshCw className="mr-2" size={16} />}
                                 {isLoading ? 'Generating...' : 'Generate Report'}
                             </button>
                         </div>
@@ -467,7 +468,7 @@ const TicketsTab = ({ data, isLoading, error, onDownloadExcel, onDownloadPDF }) 
     if (isLoading) {
         return (
             <div className="flex items-center justify-center py-12">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600"></div>
+                <Spinner size="md" />
                 <span className="ml-3 text-gray-600">Loading ticket data...</span>
             </div>
         );

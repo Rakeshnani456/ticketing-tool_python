@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { XCircle, Clock, FileText, AlertCircle, Loader2, Ticket, User } from 'lucide-react';
+import Spinner from './Spinner';
 
 const ResolutionModal = ({
     isOpen,
@@ -465,7 +466,7 @@ const ResolutionModal = ({
                             disabled={loading}
                             className="px-3 py-1.5 text-xs font-semibold text-white bg-gradient-to-r from-green-600 to-green-700 rounded-md hover:from-green-700 hover:to-green-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                         >
-                            {loading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                            {loading && <Spinner size="sm" />}
                             {loading ? 'Resolving...' : 'Resolve Ticket'}
                         </button>
                     </div>

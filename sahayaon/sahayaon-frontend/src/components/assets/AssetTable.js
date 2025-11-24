@@ -17,6 +17,7 @@ import {
     LinkIcon
 } from './AssetIcons';
 import { motion, AnimatePresence } from 'framer-motion';
+import Spinner from '../common/Spinner';
 
 const AssetTable = ({ 
     assets, 
@@ -133,7 +134,7 @@ const AssetTable = ({
     if (loading) {
         return (
             <div className="flex flex-col items-center justify-center py-16">
-                <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-200 border-t-blue-600 mb-4"></div>
+                <Spinner size="lg" className="mb-4" />
                 <p className="text-sm text-gray-600 font-medium">Loading assets...</p>
             </div>
         );

@@ -24,6 +24,7 @@ import CustomDropdown from './common/CustomDropdown';
 import CompactDropdown from './common/CompactDropdown';
 import UpdatesComponent from './common/UpdatesComponent';
 import StatusDistributionChart from './charts/StatusDistributionChart';
+import Spinner from './common/Spinner';
 import { collection, query, orderBy, limit, getFirestore, where, onSnapshot } from 'firebase/firestore';
 import { dbClient } from '../config/firebase';
 import { COLORS } from '../config/constants';
@@ -1261,7 +1262,7 @@ const ModernDashboard = ({ user, navigateTo, showFlashMessage }) => {
   if (loading || dashboardLoading) {
     return (
       <div className={`flex justify-center items-center h-screen ${bgClass}`}>
-        <RefreshCw className="animate-spin h-12 w-12 text-blue-500" />
+        <Spinner size="lg" />
         <span className={`ml-4 ${textClass}`}>Loading dashboard...</span>
       </div>
     );

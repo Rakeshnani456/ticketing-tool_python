@@ -10,6 +10,7 @@ import FormSelect from '../common/FormSelect';
 import CustomDropdown from '../common/CustomDropdown';
 import PrimaryButton from '../common/PrimaryButton';
 import SecondaryButton from '../common/SecondaryButton';
+import Spinner from '../common/Spinner';
 
 // Import API Base URL from constants
 import { API_BASE_URL } from '../../config/constants';
@@ -565,7 +566,7 @@ const CreateTicketPage = ({ user, showFlashMessage, navigateTo }) => {
                                 >
                                     {loading || uploadingAttachments ? (
                                         <>
-                                            <Loader2 size={16} className="animate-spin" />
+                                            <Spinner size="sm" />
                                             <span>{uploadingAttachments ? "Uploading..." : "Creating..."}</span>
                                         </>
                                     ) : (

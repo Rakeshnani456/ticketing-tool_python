@@ -5,6 +5,7 @@ import { CloseIcon, UserIcon } from './AssetIcons';
 import { motion, AnimatePresence } from 'framer-motion';
 import { API_BASE_URL } from '../../config/constants';
 import { authClient } from '../../config/firebase';
+import Spinner from '../common/Spinner';
 
 const AssignAssetModal = ({ isOpen, onClose, onSuccess, asset }) => {
     const [selectedUserId, setSelectedUserId] = useState('');
@@ -198,7 +199,7 @@ const AssignAssetModal = ({ isOpen, onClose, onSuccess, asset }) => {
                             </label>
                             {fetchingUsers ? (
                                 <div className="flex items-center justify-center py-4">
-                                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
+                                    <Spinner size="md" />
                                 </div>
                             ) : (
                                 <select
@@ -239,7 +240,7 @@ const AssignAssetModal = ({ isOpen, onClose, onSuccess, asset }) => {
                             >
                                 {loading ? (
                                     <>
-                                        <div className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-white border-t-transparent"></div>
+                                        <Spinner size="sm" color="white" />
                                         <span>{selectedUserId ? 'Assigning...' : 'Unassigning...'}</span>
                                     </>
                                 ) : (

@@ -17,6 +17,7 @@ import ModernTicketGrid from '../common/ModernTicketGrid';
 import SmartFilterDropdown from '../common/SmartFilterDropdown';
 import { useTickets } from '../../hooks/useDataManager';
 import { useSmartFilters } from '../../hooks/useSmartFilters';
+import Spinner from '../common/Spinner';
 
 // NotesTooltipBubble component for notes button - positions tooltip to the left
 function NotesTooltipBubble({ title, children }) {
@@ -3365,7 +3366,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                 {displayedTickets.length === 0 ? (
                     loading || ticketsLoading ? (
                         <div className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50">
-                            <RefreshCw className="animate-spin h-8 w-8 text-blue-500 mb-3" />
+                            <Spinner size="md" className="mb-3" />
                             <p className="text-gray-600 text-sm">Loading tickets...</p>
                         </div>
                     ) : (
@@ -3515,7 +3516,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                                             >
                                                 {addingNote ? (
                                                     <>
-                                                        <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                                                        <Spinner size="sm" className="mr-1" />
                                                         {editingNote ? 'Updating...' : 'Adding...'}
                                                     </>
                                                 ) : (
@@ -3675,7 +3676,7 @@ const AllTicketsComponent = ({ navigateTo, showFlashMessage, user, searchKeyword
                             <>
                                 {notesLoading ? (
                                     <div className="flex items-center justify-center py-8">
-                                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                                        <Spinner size="md" />
                                     </div>
                                 ) : (pinnedNotes.length === 0 && unpinnedNotes.length === 0) ? (
                                     <div className="text-center py-8">

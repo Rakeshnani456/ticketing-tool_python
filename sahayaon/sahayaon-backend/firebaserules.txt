@@ -97,8 +97,15 @@ service cloud.firestore {
     // Rules for the 'users' collection
     match /users/{userId} {
       // Allow users to read their own profile data (e.g., roles)
+      // Support, Admin, and Super Admin can read all users
+      // Site Admin can read users from their own client
       allow read: if isAuthenticated() && (
         getUserId() == userId || 
+        hasSupportAdminOrSuperAdminRole() ||
+        isSiteAdminForUser()
+      );
+      // Allow list queries for the same roles
+      allow list: if isAuthenticated() && (
         hasSupportAdminOrSuperAdminRole() ||
         isSiteAdminForUser()
       );
@@ -108,10 +115,28 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Helper: support or engineer role
+    function hasSupportOrEngineerRole() {
+      return exists(/databases/$(database)/documents/users/$(getUserId())) && (
+        get(/databases/$(database)/documents/users/$(getUserId())).data.role == 'support' ||
+        get(/databases/$(database)/documents/users/$(getUserId())).data.role == 'engineer'
+      );
+    }
+
     // --- NEW RULES FOR 'clients' COLLECTION ---
     match /clients/{clientId} {
-      // Allow only Super Admins to read client data (site_admin should not access clients collection)
-      allow read: if hasSuperAdminRole();
+      // Allow Super Admins, Support, and Engineer roles to read client data
+      // Backend API filters the data returned (full data for super_admin, limited for support/engineer)
+      // Note: This matches the backend route permission check in clientRoutes.js
+      allow read: if isAuthenticated() && (
+        hasSuperAdminRole() ||
+        hasSupportOrEngineerRole()
+      );
+      // Allow list queries for the same roles
+      allow list: if isAuthenticated() && (
+        hasSuperAdminRole() ||
+        hasSupportOrEngineerRole()
+      );
       // Allow only Super Admins to create, update, or delete client documents.
       allow create, update, delete: if hasSuperAdminRole();
     }

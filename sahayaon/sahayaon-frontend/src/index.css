@@ -638,12 +638,161 @@ textarea.max-w-none.w-full::-webkit-scrollbar-corner {
   box-shadow: 0 10px 25px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
   transition: none; /* Instant navigation */
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
-  height: calc(100vh - 44px);
-  overflow-y: auto;
+  height: calc(100vh - 48px) !important; /* Match inline style - header is 48px */
+  overflow-y: hidden !important; /* Changed to hidden - navigation area will scroll instead */
   overflow-x: hidden;
   box-sizing: border-box;
   border-right: 1px solid #374151; /* Gray-700 border */
   position: relative;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+/* Make the navigation menu area scrollable, but keep collapse button visible */
+.sidebar-glass > .flex-1.flex.flex-col,
+.sidebar-glass > div.flex-1 {
+  flex: 1 1 auto !important;
+  overflow-y: auto !important; /* Always allow scrolling when content overflows */
+  overflow-x: hidden !important;
+  min-height: 0 !important; /* Critical for flexbox scrolling */
+  max-height: 100% !important; /* Ensure it respects parent height */
+  display: flex !important;
+  flex-direction: column !important;
+  /* Custom scrollbar styling - always visible when content overflows */
+  scrollbar-width: thin !important;
+  scrollbar-color: rgba(156, 163, 175, 0.5) rgba(17, 24, 39, 0.2) !important;
+}
+
+/* Ensure the inner navigation content area can scroll */
+.sidebar-glass > .flex-1.flex.flex-col > .space-y-2.flex-1,
+.sidebar-glass > div.flex-1 > .space-y-2.flex-1 {
+  flex: 1;
+  min-height: 0;
+  overflow-y: visible; /* Let parent handle scrolling */
+}
+
+/* Reduce vertical spacing between menu items */
+.sidebar-glass .space-y-2 > * + * {
+  margin-top: 0.25rem !important; /* Reduced from 0.5rem (space-y-2) to 0.25rem */
+}
+
+.sidebar-glass .space-y-1\.5 > * + * {
+  margin-top: 0.125rem !important; /* Reduced from 0.375rem (space-y-1.5) to 0.125rem */
+}
+
+/* Ensure the bottom section with collapse button stays visible */
+.sidebar-glass > .flex-1.flex.flex-col > .mt-auto,
+.sidebar-glass > div.flex-1 > .mt-auto {
+  flex-shrink: 0 !important; /* Prevent collapse button from shrinking */
+  margin-top: auto;
+  padding-bottom: 0.5rem; /* Add bottom padding */
+  padding-top: 0.5rem; /* Add top padding */
+  position: relative;
+  z-index: 10;
+}
+
+/* Ensure navigation menu wrapper allows proper scrolling - more specific selector */
+.sidebar-glass > div.flex-1.px-1.py-1.flex.flex-col,
+.sidebar-glass > div[class*="flex-1"][class*="flex"][class*="flex-col"] {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  position: relative;
+  /* Force scrollbar to be visible when content overflows */
+  scrollbar-width: thin !important;
+  scrollbar-color: rgba(156, 163, 175, 0.5) rgba(17, 24, 39, 0.2) !important;
+}
+
+/* Ensure sidebar content has proper top padding to prevent icons from being hidden */
+.sidebar-glass > .flex.flex-col {
+  padding-top: 0.5rem !important; /* Add top padding to prevent icons from being cut off */
+}
+
+/* Ensure navigation menu container has proper spacing - target by flex-col class */
+.sidebar-glass .flex.flex-col[class*="space-y"] {
+  padding-top: 0.5rem !important; /* Ensure icons are visible below header */
+  padding-bottom: 0.5rem !important; /* Add bottom padding for consistency */
+}
+
+/* Ensure first menu item has proper spacing */
+.sidebar-glass .menu-item:first-of-type,
+.sidebar-glass .space-y-2 .menu-item:first-of-type,
+.sidebar-glass > .flex > .space-y-2 > .menu-item:first-of-type {
+  margin-top: 0.125rem !important; /* Reduced top margin for first menu item */
+}
+
+/* Ensure section headers don't push content too high */
+.sidebar-glass .sidebar-section-header:first-of-type {
+  margin-top: 0.5rem !important; /* Proper top spacing for first section header */
+}
+
+/* Hide scrollbar when sidebar is collapsed - check for narrow width or collapsed state */
+.sidebar-glass[style*="width: 56px"],
+.sidebar-glass[style*="width:56px"],
+.sidebar-glass[style*="width:56"],
+.sidebar-glass:has(> div > .menu-item.justify-center:first-child) {
+  overflow-y: hidden !important;
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+.sidebar-glass[style*="width: 56px"]::-webkit-scrollbar,
+.sidebar-glass[style*="width:56px"]::-webkit-scrollbar,
+.sidebar-glass[style*="width:56"]::-webkit-scrollbar,
+.sidebar-glass:has(> div > .menu-item.justify-center:first-child)::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+}
+
+/* Hide scrollbar in collapsed state for the scrollable content area */
+.sidebar-glass[style*="width: 56px"] > .flex-1.flex.flex-col,
+.sidebar-glass[style*="width:56px"] > .flex-1.flex.flex-col,
+.sidebar-glass[style*="width:56"] > .flex-1.flex.flex-col,
+.sidebar-glass[style*="width: 56px"] > div.flex-1,
+.sidebar-glass[style*="width:56px"] > div.flex-1,
+.sidebar-glass[style*="width:56"] > div.flex-1 {
+  overflow-y: auto !important; /* Still allow scrolling when collapsed if needed */
+  scrollbar-width: thin !important;
+  -ms-overflow-style: auto !important;
+}
+
+.sidebar-glass[style*="width: 56px"] > .flex-1.flex.flex-col::-webkit-scrollbar,
+.sidebar-glass[style*="width:56px"] > .flex-1.flex.flex-col::-webkit-scrollbar,
+.sidebar-glass[style*="width:56"] > .flex-1.flex.flex-col::-webkit-scrollbar,
+.sidebar-glass[style*="width: 56px"] > div.flex-1::-webkit-scrollbar,
+.sidebar-glass[style*="width:56px"] > div.flex-1::-webkit-scrollbar,
+.sidebar-glass[style*="width:56"] > div.flex-1::-webkit-scrollbar {
+  display: block !important;
+  width: 4px !important; /* Thinner scrollbar when collapsed */
+}
+
+/* Custom scrollbar styling for expanded sidebar - only on scrollable content area */
+.sidebar-glass > .flex-1.flex.flex-col::-webkit-scrollbar,
+.sidebar-glass > div.flex-1::-webkit-scrollbar,
+.sidebar-glass > div.flex-1.px-1.py-1.flex.flex-col::-webkit-scrollbar {
+  width: 6px !important;
+  display: block !important;
+}
+
+.sidebar-glass > .flex-1.flex.flex-col::-webkit-scrollbar-track,
+.sidebar-glass > div.flex-1::-webkit-scrollbar-track,
+.sidebar-glass > div.flex-1.px-1.py-1.flex.flex-col::-webkit-scrollbar-track {
+  background: rgba(17, 24, 39, 0.4) !important;
+  border-radius: 3px;
+}
+
+.sidebar-glass > .flex-1.flex.flex-col::-webkit-scrollbar-thumb,
+.sidebar-glass > div.flex-1::-webkit-scrollbar-thumb,
+.sidebar-glass > div.flex-1.px-1.py-1.flex.flex-col::-webkit-scrollbar-thumb {
+  background: rgba(156, 163, 175, 0.6) !important;
+  border-radius: 3px;
+}
+
+.sidebar-glass > .flex-1.flex.flex-col::-webkit-scrollbar-thumb:hover,
+.sidebar-glass > div.flex-1::-webkit-scrollbar-thumb:hover,
+.sidebar-glass > div.flex-1.px-1.py-1.flex.flex-col::-webkit-scrollbar-thumb:hover {
+  background: rgba(156, 163, 175, 0.8) !important;
 }
 
 /* Disable all scaling and transform effects for sidebar menu items */
@@ -685,14 +834,14 @@ textarea.max-w-none.w-full::-webkit-scrollbar-corner {
   animation: none !important; /* No animations */
   font-weight: 500;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
-  padding: 0.875rem 1.25rem; /* Increased padding for better touch targets */
-  margin: 0.125rem 0.75rem; /* Consistent margins for all states */
+  padding: 0.5rem 1rem; /* Further reduced padding for tighter layout */
+  margin: 0 0.5rem; /* Reduced margins - no vertical margin */
   font-size: 0.95rem; /* Slightly smaller for modern look */
   box-sizing: border-box;
   max-width: 100%;
   overflow: visible; /* Allow count badges to extend beyond menu item */
   position: relative;
-  min-height: 2.75rem; /* Ensure minimum height for count badges */
+  min-height: 2.25rem; /* Further reduced minimum height */
 }
 
 /* Add subtle glow effect on hover */
@@ -712,7 +861,7 @@ textarea.max-w-none.w-full::-webkit-scrollbar-corner {
 
 .sidebar-glass .menu-item:hover {
   background: rgba(69, 91, 85, 0.5); /* #455b55 with 50% opacity */
-  color: #ffffff;
+  /* Remove color override - let inline styles control text color */
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(69, 91, 85, 0.2);
   transform: none !important; /* Remove slide animation for instant response */
   transition: background 0.15s ease-in-out !important; /* Smooth background transition */
@@ -726,26 +875,26 @@ textarea.max-w-none.w-full::-webkit-scrollbar-corner {
 /* Click/Active state for menu items */
 .sidebar-glass .menu-item:active {
   background: #4b5563 !important; /* Grey for click */
-  color: #ffffff !important;
+  /* Remove color override - let inline styles control text color */
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(75, 85, 99, 0.3) !important;
   transform: none !important;
   transition: background 0.1s ease-in-out !important;
 }
 
 .sidebar-glass .menu-item:active svg {
-  color: #ffffff !important;
+  /* Remove color override - let inline styles control icon color */
   stroke-width: 1.75 !important;
 }
 
 .sidebar-glass .menu-item:active span,
 .sidebar-glass .menu-item:active .motion.span {
-  color: #ffffff !important;
+  /* Remove color override - let inline styles control text color */
   font-weight: 500 !important;
 }
 
 /* Hover state for icons */
 .sidebar-glass .menu-item:hover svg {
-  color: #ffffff !important; /* White icons on hover */
+  /* Remove color override - let inline styles control icon color */
   stroke-width: 1.75 !important;
   transform: none !important; /* No scaling on hover */
   scale: 1 !important; /* Prevent scaling */
@@ -753,7 +902,7 @@ textarea.max-w-none.w-full::-webkit-scrollbar-corner {
 
 /* Hover state for text */
 .sidebar-glass .menu-item:hover span {
-  color: #ffffff !important; /* White text on hover */
+  /* Remove color override - let inline styles control text color */
   font-weight: 500 !important;
   transform: none !important; /* No scaling on hover */
   scale: 1 !important; /* Prevent scaling */
@@ -842,10 +991,10 @@ textarea.max-w-none.w-full::-webkit-scrollbar-corner {
 
 
 .sidebar-glass .menu-item.active, .sidebar-glass .menu-item[aria-current="page"] {
-  background: #455b55 !important; /* Dark green-grey for active state */
-  color: #ffffff !important; /* Pure white text for active items */
+  background: rgba(69, 91, 85, 0.3) !important; /* Consistent opacity for active state */
+  /* CRITICAL: Do NOT set color here - inline styles will control color */
   border-radius: 0 !important; /* Remove rounded corners */
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(69, 91, 85, 0.3) !important; /* Subtle inset shadow for depth with matte border */
+  box-shadow: inset 0 0 0 1px rgba(69, 91, 85, 0.25) !important; /* Consistent focus ring */
   border: none !important; /* No border for active state */
   position: relative;
   z-index: 1;
@@ -857,18 +1006,19 @@ textarea.max-w-none.w-full::-webkit-scrollbar-corner {
 
 .sidebar-glass .menu-item.active svg,
 .sidebar-glass .menu-item[aria-current="page"] svg {
-  color: #ffffff !important; /* White icons for active state */
+  /* No color rule - inline styles will control icon color */
   stroke-width: 1.75 !important; /* Refined stroke for active state */
 }
 
 /* All menu icons should have consistent active styling */
 
-/* Ensure text color is applied with high specificity */
+/* Ensure text color is applied with high specificity - but don't force white */
+/* Don't set color at all - let inline styles control text color */
 .sidebar-glass .menu-item.active span,
 .sidebar-glass .menu-item[aria-current="page"] span,
 .sidebar-glass .menu-item.active .motion.span,
 .sidebar-glass .menu-item[aria-current="page"] .motion.span {
-  color: #ffffff !important; /* Pure white for active text */
+  /* No color rule - inline styles will control color */
   font-weight: 500 !important; /* Medium weight for active state */
 }
 
@@ -877,37 +1027,37 @@ textarea.max-w-none.w-full::-webkit-scrollbar-corner {
 .sidebar-glass .menu-item:focus-visible {
   outline: none;
   border-radius: 0;
-  box-shadow: inset 0 0 0 1px rgba(69, 91, 85, 0.5) !important; /* Single clean focus ring */
+  box-shadow: inset 0 0 0 1px rgba(69, 91, 85, 0.25) !important; /* Reduced opacity focus ring */
   border: none;
-  background: #455b55 !important; /* Dark green-grey focus background */
-  color: #ffffff !important; /* White text for focus */
+  background: rgba(69, 91, 85, 0.25) !important; /* Reduced opacity focus background */
+  /* Don't override color - let inline styles control text and icon colors */
 }
 
-/* Focus state for icons */
+/* Focus state for icons - preserve inline styles, don't override colors */
 .sidebar-glass .menu-item:focus svg,
 .sidebar-glass .menu-item:focus-visible svg {
-  color: #ffffff !important; /* White icons for focus */
+  /* Don't override color - let inline styles control icon color */
   stroke-width: 1.75 !important; /* Refined stroke width */
 }
 
-/* Focus state for text */
+/* Focus state for text - preserve inline styles, don't override colors */
 .sidebar-glass .menu-item:focus span,
 .sidebar-glass .menu-item:focus-visible span,
 .sidebar-glass .menu-item:focus .motion.span,
 .sidebar-glass .menu-item:focus-visible .motion.span {
-  color: #ffffff !important; /* Pure white text for focus */
+  /* Don't override color - let inline styles control text color */
   font-weight: 500 !important; /* Medium weight for focus state */
 }
 
-/* Persistent focus for active menu items */
+/* Persistent focus for active menu items - match active state exactly */
 .sidebar-glass .menu-item.active:focus,
 .sidebar-glass .menu-item[aria-current="page"]:focus {
   outline: none;
   border-radius: 0;
-  box-shadow: inset 0 0 0 1px rgba(69, 91, 85, 0.5) !important; /* Single clean focus ring */
+  box-shadow: inset 0 0 0 1px rgba(69, 91, 85, 0.25) !important; /* Same as active state */
   border: none;
-  background: #455b55 !important; /* Dark green-grey focus background */
-  color: #ffffff !important; /* White text */
+  background: rgba(69, 91, 85, 0.3) !important; /* Same as active state - consistent opacity */
+  /* Don't override color - let inline styles control text and icon colors */
 }
 
 .sidebar-glass .menu-item.active .sidebar-count-badge {
@@ -939,30 +1089,41 @@ textarea.max-w-none.w-full::-webkit-scrollbar-corner {
   pointer-events: none; /* Prevent interference with clicks */
 }
 
-/* Orange count badges for "My Tickets" and "All Tickets" */
+/* Count badges - match their respective icon colors */
+/* All Tickets - Red (#ef4444) - default for sidebar-count-badge-orange */
 .sidebar-glass .sidebar-count-badge-orange {
-  color: #f97316 !important; /* Orange color */
-  background: transparent !important; /* No background */
-  border: none !important; /* No border/outline */
+  color: #ef4444 !important; /* Red color to match All Tickets icon */
+  background: transparent !important;
+  border: none !important;
   border-radius: 0 !important;
   padding: 0 !important;
   font-weight: 700 !important;
   box-shadow: none !important;
   min-width: auto !important;
   min-height: auto !important;
-  /* Position at top-right, away from icon - well within hover area */
-  top: -0.5rem !important; /* Position at top */
-  right: -0.5rem !important; /* Position at right edge, away from centered icon */
+  top: -0.5rem !important;
+  right: -0.5rem !important;
   font-size: 0.75rem !important;
   line-height: 1 !important;
 }
 
-/* Orange count badges when active (parent menu item is active) */
-.sidebar-glass .menu-item.active .sidebar-count-badge-orange,
-.sidebar-glass .menu-item[aria-current="page"] .sidebar-count-badge-orange {
-  color: #f97316 !important; /* Orange color */
-  background: transparent !important; /* No background */
-  border: none !important; /* No border */
+/* My Tickets - Cyan (#06b6d4) - target badge in My Tickets menu item */
+.sidebar-glass a[href="/my-tickets"] .sidebar-count-badge,
+.sidebar-glass a[href="/my-tickets"] .sidebar-count-badge-orange {
+  color: #06b6d4 !important; /* Cyan color to match My Tickets icon */
+}
+
+/* My Queue - Amber (#f59e0b) - target badge in My Queue menu item */
+.sidebar-glass a[href="/assigned-to-me"] .sidebar-count-badge {
+  color: #f59e0b !important; /* Amber color to match My Queue icon */
+}
+
+/* Count badges when active - keep icon colors */
+.sidebar-glass .menu-item.active .sidebar-count-badge,
+.sidebar-glass .menu-item[aria-current="page"] .sidebar-count-badge {
+  /* Colors are set by parent selectors above */
+  background: transparent !important;
+  border: none !important;
 }
 
 .sidebar-glass .sidebar-section-header {
@@ -970,11 +1131,11 @@ textarea.max-w-none.w-full::-webkit-scrollbar-corner {
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  margin-top: 0;
-  margin-bottom: 0.375rem;
+  margin-top: 0.5rem !important; /* Further reduced from 0.75rem to 0.5rem */
+  margin-bottom: 0.125rem !important; /* Reduced bottom margin */
   padding-left: 0.75rem;
-  padding-top: 0.5rem;
-  padding-bottom: 0.375rem;
+  padding-top: 0.25rem; /* Reduced top padding */
+  padding-bottom: 0.125rem; /* Reduced bottom padding */
   color: #6b7280; /* Gray-500 for section headers */
   border-bottom: none;
   margin-left: 0;
@@ -987,8 +1148,8 @@ textarea.max-w-none.w-full::-webkit-scrollbar-corner {
   background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 16px;
-  margin: 1.5rem 0.5rem 0 0.5rem;
-  padding: 1rem;
+  margin: 1rem 0.5rem 0.75rem 0.5rem; /* Reduced top margin, added bottom margin */
+  padding: 0.875rem; /* Reduced padding */
   display: flex;
   align-items: center;
   gap: 0.75rem;
@@ -1001,8 +1162,8 @@ textarea.max-w-none.w-full::-webkit-scrollbar-corner {
   color: #94a3b8;
   border: 1px solid rgba(99, 102, 241, 0.2);
   border-radius: 0; /* Remove rounded corners */
-  padding: 0.75rem 1rem;
-  margin: 1.5rem 0.5rem 0 0.5rem;
+  padding: 0.625rem 1rem; /* Reduced padding */
+  margin: 1rem 0.5rem 0.75rem 0.5rem; /* Reduced top margin, added bottom margin */
   display: block;
   cursor: pointer;
   transition: none; /* Instant collapse button response */
@@ -1016,15 +1177,50 @@ textarea.max-w-none.w-full::-webkit-scrollbar-corner {
   box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
 }
 
-.sidebar-glass .menu-item svg {
-  color: #d1d5db; /* Gray-300 color for icons */
+/* Default icon color - only applies if no inline style is present */
+.sidebar-glass .menu-item svg:not([style*="color"]) {
+  color: #d1d5db; /* Gray-300 color for icons without inline styles */
+  transition: none; /* Instant icon changes */
+  stroke-width: 1.5; /* Balanced stroke width */
+}
+
+/* Icons with inline styles should keep their colors */
+.sidebar-glass .menu-item svg[style*="color"] {
+  /* Let inline styles control icon color - icons should always have their colors */
   transition: none; /* Instant icon changes */
   stroke-width: 1.5; /* Balanced stroke width */
 }
 
 /* Collapse button text should be grey to match the icon - but not count badges or active items */
-.sidebar-glass .menu-item:not(.active):not([aria-current="page"]):not(:focus):not(:focus-visible) span:not(.sidebar-count-badge) {
+/* Only apply to inactive items without inline color styles - active items will use inline styles */
+.sidebar-glass .menu-item:not(.active):not([aria-current="page"]):not(:focus):not(:focus-visible) span:not(.sidebar-count-badge):not([style*="color"]) {
   color: #d1d5db !important; /* Gray-300 text for inactive items */
+}
+
+/* CRITICAL: Ensure active items use inline styles, not CSS */
+.sidebar-glass .menu-item.active span[style],
+.sidebar-glass .menu-item[aria-current="page"] span[style],
+.sidebar-glass .menu-item.active .motion.span[style],
+.sidebar-glass .menu-item[aria-current="page"] .motion.span[style] {
+  /* Inline styles have highest specificity - no CSS color rule needed */
+}
+
+.sidebar-glass .menu-item.active svg[style],
+.sidebar-glass .menu-item[aria-current="page"] svg[style] {
+  /* Inline styles have highest specificity - no CSS color rule needed */
+}
+
+/* Force inline styles to override CSS for active menu items - highest specificity */
+.sidebar-glass .menu-item.active span[style],
+.sidebar-glass .menu-item[aria-current="page"] span[style],
+.sidebar-glass .menu-item.active .motion.span[style],
+.sidebar-glass .menu-item[aria-current="page"] .motion.span[style] {
+  /* Let inline style attribute take precedence */
+}
+
+.sidebar-glass .menu-item.active svg[style],
+.sidebar-glass .menu-item[aria-current="page"] svg[style] {
+  /* Let inline style attribute take precedence */
 }
 
 /* Ensure proper vertical alignment for collapsed sidebar icons */

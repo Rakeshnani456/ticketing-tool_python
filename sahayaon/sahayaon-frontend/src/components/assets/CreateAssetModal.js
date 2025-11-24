@@ -5,6 +5,7 @@ import { CloseIcon, PackageIcon, LaptopIcon, PlusIcon } from './AssetIcons';
 import { motion, AnimatePresence } from 'framer-motion';
 import { API_BASE_URL } from '../../config/constants';
 import { authClient } from '../../config/firebase';
+import Spinner from '../common/Spinner';
 
 const CreateAssetModal = ({ isOpen, onClose, onSuccess, currentUser, preselectedClient = null, preselectedOwner = null, defaultClient = null }) => {
     // Get client name from defaultClient prop
@@ -666,7 +667,7 @@ const CreateAssetModal = ({ isOpen, onClose, onSuccess, currentUser, preselected
                             >
                                     {loading ? (
                                         <>
-                                            <div className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-white border-t-transparent"></div>
+                                            <Spinner size="sm" color="white" />
                                             <span>Creating...</span>
                                         </>
                                     ) : (

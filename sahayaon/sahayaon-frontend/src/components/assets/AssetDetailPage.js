@@ -22,6 +22,7 @@ import { API_BASE_URL } from '../../config/constants';
 import { authClient } from '../../config/firebase';
 import AddToRepairQueueModal from './AddToRepairQueueModal';
 import EditAssetModal from './EditAssetModal';
+import Spinner from '../common/Spinner';
 
 const AssetDetailPage = ({ currentUser, showFlashMessage }) => {
     const { assetId } = useParams();
@@ -259,7 +260,7 @@ const AssetDetailPage = ({ currentUser, showFlashMessage }) => {
         return (
             <div className="flex items-center justify-center min-h-screen bg-gray-50">
                 <div className="text-center">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
+                    <Spinner size="md" className="mx-auto mb-2" />
                     <p className="text-sm text-gray-600">Loading asset details...</p>
                 </div>
             </div>

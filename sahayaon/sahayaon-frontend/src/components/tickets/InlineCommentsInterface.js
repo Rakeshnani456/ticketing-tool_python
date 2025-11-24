@@ -1,5 +1,6 @@
 import React, { useRef, useEffect } from 'react';
 import { MessageSquare, Send } from 'lucide-react';
+import Spinner from '../common/Spinner';
 
 const EnhancedCommentsInterface = ({ 
     comments = [], 
@@ -203,7 +204,7 @@ const EnhancedCommentsInterface = ({
                             >
                                 {loading ? (
                                     <>
-                                        <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                        <Spinner size="sm" color="white" />
                                         <span className="text-white font-bold">Posting</span>
                                     </>
                                 ) : (

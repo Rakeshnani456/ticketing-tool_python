@@ -14,6 +14,7 @@ import AssetTable from './AssetTable';
 import DynamicAssetFilters from './DynamicAssetFilters';
 import useRealtimeAssets from '../../hooks/useRealtimeAssets';
 import useRealtimeUsers from '../../hooks/useRealtimeUsers';
+import Spinner from '../common/Spinner';
 
 const SiteAdminAssetManagement = ({ currentUser }) => {
     const navigate = useNavigate();
@@ -156,7 +157,7 @@ const SiteAdminAssetManagement = ({ currentUser }) => {
         if (loading) {
             return (
                 <div className="flex items-center justify-center py-12">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                    <Spinner size="md" />
                 </div>
             );
         }

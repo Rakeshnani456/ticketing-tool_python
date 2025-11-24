@@ -5,6 +5,7 @@ import { getFirestore, collection, onSnapshot } from 'firebase/firestore';
 import { app } from '../../config/firebase';
 import { CSVLink } from 'react-csv';
 import FaviconIcon from '../common/FaviconIcon';
+import Spinner from '../common/Spinner';
 
 const ClientGridManagement = ({ user }) => {
   // State management
@@ -403,7 +404,7 @@ const ClientGridManagement = ({ user }) => {
           <h1>Client Management</h1>
         </div>
         <div className="loading-container">
-          <div className="loading-spinner"></div>
+          <Spinner size="lg" />
         </div>
         <style>{`
           .loading-container {
@@ -411,20 +412,6 @@ const ClientGridManagement = ({ user }) => {
             justify-content: center;
             align-items: center;
             min-height: 200px;
-          }
-          
-          .loading-spinner {
-            width: 40px;
-            height: 40px;
-            border: 4px solid #e5e7eb;
-            border-top: 4px solid #3b82f6;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-          }
-          
-          @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
           }
         `}</style>
       </div>

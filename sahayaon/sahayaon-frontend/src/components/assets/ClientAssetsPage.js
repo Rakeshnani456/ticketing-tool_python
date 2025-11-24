@@ -14,6 +14,7 @@ import DynamicAssetFilters from './DynamicAssetFilters';
 import CreateAssetModal from './CreateAssetModal';
 import { authClient } from '../../config/firebase';
 import { API_BASE_URL } from '../../config/constants';
+import Spinner from '../common/Spinner';
 
 const ClientAssetsPage = ({ currentUser }) => {
     const { clientId } = useParams();
@@ -452,7 +453,7 @@ const ClientAssetsPage = ({ currentUser }) => {
         if (loading) {
             return (
                 <div className="flex items-center justify-center py-12">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                    <Spinner size="md" />
                 </div>
             );
         }

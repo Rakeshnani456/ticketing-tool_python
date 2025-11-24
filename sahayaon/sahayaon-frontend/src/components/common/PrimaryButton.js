@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { Loader2 } from 'lucide-react'; // Icon for loading state
+import Spinner from './Spinner';
 
 /**
  * Reusable Primary Button component.
@@ -25,7 +26,7 @@ const PrimaryButton = ({ children, onClick, loading, Icon, type = 'button', disa
     >
         {loading ? (
             <>
-                <Loader2 size={16} className="animate-spin" />
+                <Spinner size="sm" />
                 <span>{typeof loading === 'string' ? loading : 'Loading...'}</span>
             </>
         ) : (

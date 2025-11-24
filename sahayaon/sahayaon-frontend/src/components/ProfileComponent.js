@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Loader2, XCircle, User, Mail, Phone, Briefcase, Building, IdCard, Tag, Key } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { API_BASE_URL } from '../config/constants';
+import Spinner from './common/Spinner';
 
 // Cache keys
 const PROFILE_CACHE_KEY = 'user_profile_cache';
@@ -154,7 +155,7 @@ const ProfileComponent = ({ user, showFlashMessage, navigateTo, handleLogout }) 
         return (
             <div className="min-h-screen bg-gray-50 flex items-center justify-center">
                 <div className="flex flex-col items-center">
-                    <Loader2 className="animate-spin text-gray-400" size={32} />
+                    <Spinner size="lg" />
                     <p className="mt-4 text-sm text-gray-600">Loading profile...</p>
                 </div>
             </div>
@@ -510,7 +511,7 @@ const ProfileComponent = ({ user, showFlashMessage, navigateTo, handleLogout }) 
                             <div className="section-content">
                                 {loadingManager ? (
                                     <div className="flex items-center justify-center py-8">
-                                        <Loader2 className="animate-spin text-gray-400" size={20} />
+                                        <Spinner size="md" />
                                     </div>
                                 ) : (
                                     <div className="fields-grid">

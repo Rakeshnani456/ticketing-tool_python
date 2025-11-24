@@ -4,6 +4,7 @@ import CustomDropdown from '../common/CustomDropdown';
 
 // Import API Base URL from constants
 import { API_BASE_URL } from '../../config/constants';
+import Spinner from '../common/Spinner';
 
 /**
  * Component for creating a new support ticket with enterprise-style layout.
@@ -720,7 +721,7 @@ const CreateTicketComponent = ({ user, onClose, showFlashMessage, onTicketCreate
                     >
                         {loading || uploadingAttachments ? (
                             <>
-                                <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                                <Spinner size="sm" color="white" />
                                 {uploadingAttachments ? 'Uploading...' : 'Creating...'}
                             </>
                         ) : (

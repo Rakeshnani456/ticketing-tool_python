@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Search, X, Clock, FileText, ChevronRight } from 'lucide-react';
 import { API_BASE_URL } from '../../config/constants';
 import { authClient } from '../../config/firebase';
+import Spinner from './Spinner';
 
 /**
  * Advanced search component with integrated search window
@@ -311,7 +312,7 @@ const AdvancedSearchComponent = ({
                     {isLoading && (
                         <div className="p-6 text-center text-gray-500">
                             <div className="inline-flex items-center space-x-3">
-                                <div className="animate-spin rounded-full h-5 w-5 border-2 border-blue-500 border-t-transparent"></div>
+                                <Spinner size="md" />
                                 <span className="text-sm font-medium" style={{ fontFamily: 'Manrope, sans-serif' }}>Searching...</span>
                             </div>
                         </div>

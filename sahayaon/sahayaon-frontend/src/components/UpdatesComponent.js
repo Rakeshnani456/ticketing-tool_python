@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { collection, query, orderBy, limit, getFirestore, where, getDocs } from 'firebase/firestore';
 import { dbClient } from '../config/firebase';
+import Spinner from './common/Spinner';
 
 const UpdatesComponent = ({ user, navigateTo, darkMode = false }) => {
   const [updates, setUpdates] = useState([]);
@@ -266,7 +267,7 @@ const UpdatesComponent = ({ user, navigateTo, darkMode = false }) => {
     return (
       <div className={`rounded-xl border ${borderClass} ${cardBgClass} p-6`}>
         <div className="flex items-center justify-center h-32">
-          <RefreshCw className="animate-spin h-8 w-8 text-blue-500" />
+          <Spinner size="md" />
           <span className={`ml-3 ${textClass}`}>Loading updates...</span>
         </div>
       </div>

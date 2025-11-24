@@ -6,6 +6,7 @@ import UserProfilePopup from '../common/UserProfilePopup';
 import InlineCommentsInterface from './InlineCommentsInterface';
 import sendMailIcon from '../../assets/icons/send_mail.png';
 import { API_BASE_URL } from '../../config/constants';
+import Spinner from '../common/Spinner';
 
 const EditableTextarea = ({ id, value, onChange, rows = 3, className = "", disabled, hasError = false, inputRef, maxLength }) => (
     <textarea
@@ -222,7 +223,7 @@ const TicketUpdatesSection = ({
                                     >
                                         {addingNote ? (
                                             <>
-                                                <Loader2 className="w-3 h-3 animate-spin" />
+                                                <Spinner size="sm" />
                                                 <span className="hidden sm:inline">Adding...</span>
                                             </>
                                         ) : (

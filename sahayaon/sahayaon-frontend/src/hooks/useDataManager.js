@@ -1,7 +1,7 @@
 // Custom hook for centralized data management with websockets and caching
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { DataManager } from '../utils/firebaseOptimizer';
-import { collection, query, where, orderBy, limit, getDocs, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, orderBy, limit, getDocs, onSnapshot, doc, getDoc } from 'firebase/firestore';
 import { dbClient } from '../config/firebase';
 
 /**
@@ -322,10 +322,11 @@ export const useTicketCounts = (userId, userRole, clientName) => {
 
         try {
             // Get user email first (one-time fetch)
-            const userQuery = query(usersRef, where('uid', '==', userId));
-            getDocs(userQuery).then((userSnapshot) => {
+            // Use document ID directly since userId is the document ID
+            const userDocRef = doc(usersRef, userId);
+            getDoc(userDocRef).then((userDoc) => {
                 if (!isMountedRef.current) return;
-                userEmailRef.current = userSnapshot.empty ? null : userSnapshot.docs[0]?.data()?.email;
+                userEmailRef.current = userDoc.exists() ? userDoc.data()?.email : null;
                 
                 // Build queries based on role
                 let activeQuery, totalQuery;

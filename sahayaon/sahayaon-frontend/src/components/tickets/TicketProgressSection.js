@@ -4,6 +4,7 @@ import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
 import UserProfilePopup from '../common/UserProfilePopup';
 import CustomDropdown from '../common/CustomDropdown';
+import Spinner from '../common/Spinner';
 
 const FieldBox = ({ children, className = "", isDisplayOnly = false, hasError = false }) => (
     <div className={`FieldBox border px-2 sm:px-3 py-1.5 sm:py-2 h-auto min-h-[36px] sm:h-9 flex items-center rounded-md shadow-sm transition-all duration-200
@@ -150,7 +151,7 @@ const TicketProgressSection = ({
                         >
                             {updateModeLoading ? (
                                 <>
-                                    <Loader2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 animate-spin flex-shrink-0" />
+                                    <Spinner size="sm" className="flex-shrink-0" />
                                     <span className="hidden sm:inline">Saving...</span>
                                 </>
                             ) : (

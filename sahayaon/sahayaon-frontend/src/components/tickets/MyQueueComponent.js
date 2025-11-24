@@ -5,6 +5,7 @@ import { Loader2 } from 'lucide-react';
 import { collection, query, onSnapshot, where } from 'firebase/firestore';
 import { dbClient } from '../../config/firebase';
 import ModernTicketGrid from '../common/ModernTicketGrid';
+import Spinner from '../common/Spinner';
 
 /**
  * Component to display tickets assigned to the current user (My Queue)
@@ -93,7 +94,7 @@ const MyQueueComponent = ({ user, navigateTo, showFlashMessage }) => {
     if (loading) {
         return (
             <div className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50">
-                <Loader2 className="animate-spin h-8 w-8 text-blue-500 mb-3" />
+                <Spinner size="md" className="mb-3" />
                 <p className="text-gray-600 text-sm">Loading your queue...</p>
             </div>
         );

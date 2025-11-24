@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { API_BASE_URL } from '../config/constants';
 import { authClient } from '../config/firebase';
+import Spinner from './common/Spinner';
 
 const KnowledgeBaseComponent = ({ currentUser, showFlashMessage }) => {
     const [activeTab, setActiveTab] = useState('documents');
@@ -380,7 +381,7 @@ const KnowledgeBaseComponent = ({ currentUser, showFlashMessage }) => {
         return (
             <div className="p-6 max-w-7xl mx-auto">
                 <div className="flex justify-center items-center py-12">
-                    <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                    <Spinner size="md" />
                 </div>
             </div>
         );
@@ -414,7 +415,7 @@ const KnowledgeBaseComponent = ({ currentUser, showFlashMessage }) => {
                         className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
                     >
                         {isSearching ? (
-                            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                            <Spinner size="sm" color="white" />
                         ) : (
                             <Search className="w-5 h-5" />
                         )}
@@ -498,7 +499,7 @@ const KnowledgeBaseComponent = ({ currentUser, showFlashMessage }) => {
             {/* Content */}
             {loading ? (
                 <div className="flex justify-center items-center py-12">
-                    <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                    <Spinner size="md" />
                 </div>
             ) : (
                 <div className="space-y-6">

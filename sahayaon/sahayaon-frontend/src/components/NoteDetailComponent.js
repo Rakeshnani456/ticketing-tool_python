@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { API_BASE_URL } from '../config/constants';
+import Spinner from './common/Spinner';
 import { 
     ArrowLeft, 
     Edit3, 
@@ -177,7 +178,7 @@ const NoteDetailComponent = ({ user, showFlashMessage }) => {
     if (loading) {
         return (
             <div className="flex items-center justify-center h-64">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                <Spinner size="md" />
             </div>
         );
     }

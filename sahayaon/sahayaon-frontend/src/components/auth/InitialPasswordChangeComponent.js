@@ -8,6 +8,7 @@ import { Shield, Lock, Eye, EyeOff, AlertCircle, CheckCircle2, X, ArrowRight, XC
 // Import common UI components
 import FormInput from '../common/FormInput';
 import PrimaryButton from '../common/PrimaryButton';
+import Spinner from '../common/Spinner';
 
 // Import Firebase auth client from config
 import { authClient } from '../../config/firebase';
@@ -391,7 +392,7 @@ const InitialPasswordChangeComponent = ({ navigateTo, showFlashMessage }) => {
         return (
             <div className="flex items-center justify-center min-h-screen bg-gray-50">
                 <div className="flex flex-col items-center space-y-4">
-                    <div className="animate-spin rounded-full h-8 w-8 border-2 border-gray-400 border-t-transparent"></div>
+                    <Spinner size="md" />
                     <p className="text-gray-600 text-sm">Loading...</p>
                 </div>
             </div>
@@ -666,7 +667,7 @@ const InitialPasswordChangeComponent = ({ navigateTo, showFlashMessage }) => {
                                     You will be redirected to the login page in a few moments. Please sign in with your new password.
                                 </p>
                                 <div className="flex justify-center">
-                                    <div className="animate-spin rounded-full h-6 w-6 border-2 border-gray-400 border-t-transparent"></div>
+                                    <Spinner size="md" />
                                 </div>
                             </div>
                         </div>
